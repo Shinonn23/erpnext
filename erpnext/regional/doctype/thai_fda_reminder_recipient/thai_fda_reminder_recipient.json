@@ -1,0 +1,15 @@
+{
+ "doctype": "DocType",
+ "istable": 1,
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": ["user", "enabled"],
+ "fields": [
+  {"fieldname": "user", "fieldtype": "Link", "label": "ผู้รับแจ้งเตือน", "options": "User", "in_list_view": 1, "reqd": 1},
+  {"fieldname": "enabled", "fieldtype": "Check", "label": "เปิดใช้งาน", "default": "1", "in_list_view": 1}
+ ],
+ "module": "Regional",
+ "name": "Thai FDA Reminder Recipient",
+ "permissions": [],
+ "row_format": "Dynamic"
+}

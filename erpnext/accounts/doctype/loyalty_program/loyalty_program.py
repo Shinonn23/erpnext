@@ -26,7 +26,6 @@ class LoyaltyProgram(Document):
 		collection_rules: DF.Table[LoyaltyProgramCollection]
 		company: DF.Link | None
 		conversion_factor: DF.Float
-		cost_center: DF.Link | None
 		customer_group: DF.Link | None
 		customer_territory: DF.Link | None
 		expense_account: DF.Link | None
@@ -214,8 +213,6 @@ def validate_loyalty_points(ref_doc, points_to_redeem):
 			if not ref_doc.loyalty_redemption_account:
 				ref_doc.loyalty_redemption_account = loyalty_program_details.expense_account
 
-			if not ref_doc.loyalty_redemption_cost_center:
-				ref_doc.loyalty_redemption_cost_center = loyalty_program_details.cost_center
 
 		elif ref_doc.doctype == "Sales Order":
 			return loyalty_amount

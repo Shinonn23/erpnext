@@ -3,7 +3,10 @@
 
 import frappe
 
-from erpnext.accounts.doctype.pos_invoice.test_pos_invoice import POSInvoiceTestMixin, create_pos_invoice
+from erpnext.accounts.doctype.pos_invoice.test_pos_invoice import (
+	POSInvoiceTestMixin,
+	create_pos_invoice,
+)
 from erpnext.stock.doctype.item.test_item import make_item
 from erpnext.stock.doctype.purchase_receipt.test_purchase_receipt import make_purchase_receipt
 from erpnext.tests.utils import ERPNextTestSuite
@@ -39,12 +42,10 @@ class TestPOSInvoiceMerging(POSInvoiceTestMixin):
 		pos_inv.append("payments", {"mode_of_payment": "Cash", "amount": 270})
 		pos_inv.save()
 		pos_inv.submit()
-
 		pos_inv2 = create_pos_invoice(rate=3200, do_not_submit=1)
 		pos_inv2.append("payments", {"mode_of_payment": "Cash", "amount": 3200})
 		pos_inv2.save()
 		pos_inv2.submit()
-
 		closing_entry = make_closing_entry_from_opening(self.opening_entry)
 		consolidate_pos_invoices(closing_entry=closing_entry)  # does DB commit
 
@@ -71,7 +72,6 @@ class TestPOSInvoiceMerging(POSInvoiceTestMixin):
 			{
 				"charge_type": "On Net Total",
 				"account_head": "_Test Account Service Tax - _TC",
-				"cost_center": "_Test Cost Center - _TC",
 				"description": "Service Tax",
 				"rate": 14,
 				"included_in_print_rate": 1,
@@ -79,7 +79,6 @@ class TestPOSInvoiceMerging(POSInvoiceTestMixin):
 		)
 		pos_inv.save()
 		pos_inv.submit()
-
 		pos_inv2 = create_pos_invoice(rate=300, qty=2, do_not_submit=1)
 		pos_inv2.additional_discount_percentage = 10
 		pos_inv2.append("payments", {"mode_of_payment": "Cash", "amount": 540})
@@ -88,7 +87,6 @@ class TestPOSInvoiceMerging(POSInvoiceTestMixin):
 			{
 				"charge_type": "On Net Total",
 				"account_head": "_Test Account Service Tax - _TC",
-				"cost_center": "_Test Cost Center - _TC",
 				"description": "Service Tax",
 				"rate": 14,
 				"included_in_print_rate": 1,
@@ -96,7 +94,6 @@ class TestPOSInvoiceMerging(POSInvoiceTestMixin):
 		)
 		pos_inv2.save()
 		pos_inv2.submit()
-
 		self.closing_entry = make_closing_entry_from_opening(self.opening_entry)
 		consolidate_pos_invoices(closing_entry=self.closing_entry)  # does DB commit
 
@@ -130,7 +127,6 @@ class TestPOSInvoiceMerging(POSInvoiceTestMixin):
 			{
 				"charge_type": "On Net Total",
 				"account_head": "_Test Account Service Tax - _TC",
-				"cost_center": "_Test Cost Center - _TC",
 				"description": "Service Tax",
 				"rate": 14,
 				"included_in_print_rate": 1,
@@ -145,7 +141,6 @@ class TestPOSInvoiceMerging(POSInvoiceTestMixin):
 			{
 				"charge_type": "On Net Total",
 				"account_head": "_Test Account Service Tax - _TC",
-				"cost_center": "_Test Cost Center - _TC",
 				"description": "Service Tax",
 				"rate": 14,
 				"included_in_print_rate": 1,
@@ -153,7 +148,6 @@ class TestPOSInvoiceMerging(POSInvoiceTestMixin):
 		)
 		pos_inv2.save()
 		pos_inv2.submit()
-
 		self.closing_entry = make_closing_entry_from_opening(self.opening_entry)
 		consolidate_pos_invoices(closing_entry=self.closing_entry)  # does DB commit
 

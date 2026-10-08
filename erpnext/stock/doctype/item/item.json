@@ -15,6 +15,7 @@
   "item_code",
   "item_name",
   "item_group",
+  "product_group",
   "stock_uom",
   "image",
   "column_break0",
@@ -25,6 +26,7 @@
   "is_grouped_asset",
   "asset_category",
   "asset_naming_series",
+  "demo_asset_item_code",
   "section_break_zlmj",
   "is_sales_item",
   "allow_alternative_item",
@@ -214,6 +216,15 @@
    "reqd": 1
   },
   {
+   "fieldname": "product_group",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Product Group",
+   "options": "Product Group",
+   "search_index": 1
+  },
+  {
    "fieldname": "column_break0",
    "fieldtype": "Column Break"
   },
@@ -302,6 +313,13 @@
    "fieldname": "asset_naming_series",
    "fieldtype": "Select",
    "label": "Asset Naming Series"
+  },
+  {
+   "depends_on": "eval:doc.is_stock_item",
+   "fieldname": "demo_asset_item_code",
+   "fieldtype": "Link",
+   "label": "Demo Asset Item Code",
+   "options": "Item"
   },
   {
    "fieldname": "image",

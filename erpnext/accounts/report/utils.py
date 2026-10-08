@@ -303,7 +303,6 @@ def get_payment_entries(filters, args):
 			pe.paid_amount_after_tax.as_("base_grand_total"),
 			pe.mode_of_payment,
 			pe.project,
-			pe.cost_center,
 			pe.payment_type,
 			pe.source_exchange_rate,
 			pe.target_exchange_rate,
@@ -350,15 +349,7 @@ def apply_common_conditions(filters, query, doctype, child_doctype=None, payment
 	if filters.get("to_date"):
 		query = query.where(parent_doc.posting_date <= filters.to_date)
 
-	if payments:
-		if doctype == "Journal Entry" and filters.get("cost_center"):
-			query = query.where(child_doc.cost_center == filters.cost_center)
-		elif filters.get("cost_center"):
-			query = query.where(parent_doc.cost_center == filters.cost_center)
-	else:
-		if filters.get("cost_center"):
-			query = query.where(child_doc.cost_center == filters.cost_center)
-			join_required = True
+	if not payments:
 		if filters.get("warehouse"):
 			query = query.where(child_doc.warehouse == filters.warehouse)
 			join_required = True

@@ -609,10 +609,6 @@ def apply_additional_conditions(doctype, query, from_date, ignore_closing_entrie
 
 			query = query.where(gl_entry.project.isin(filters.project))
 
-		if filters.get("cost_center"):
-			filters.cost_center = get_cost_centers_with_children(filters.cost_center)
-			query = query.where(gl_entry.cost_center.isin(filters.cost_center))
-
 		if filters.get("include_default_book_entries"):
 			company_fb = frappe.get_cached_value("Company", filters.company, "default_finance_book")
 
@@ -643,21 +639,6 @@ def apply_additional_conditions(doctype, query, from_date, ignore_closing_entrie
 
 	return query
 
-
-def get_cost_centers_with_children(cost_centers):
-	if not isinstance(cost_centers, list):
-		cost_centers = [d.strip() for d in cost_centers.strip().split(",") if d]
-
-	all_cost_centers = []
-	for d in cost_centers:
-		if frappe.db.exists("Cost Center", d):
-			lft, rgt = frappe.db.get_value("Cost Center", d, ["lft", "rgt"])
-			children = frappe.get_all("Cost Center", filters={"lft": [">=", lft], "rgt": ["<=", rgt]})
-			all_cost_centers += [c.name for c in children]
-		else:
-			frappe.throw(_("Cost Center: {0} does not exist").format(d))
-
-	return list(set(all_cost_centers))
 
 
 def get_columns(periodicity, period_list, accumulated_values=1, company=None, cash_flow=False):

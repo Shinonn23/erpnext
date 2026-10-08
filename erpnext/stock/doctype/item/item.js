@@ -7,6 +7,11 @@ const SALES_DOCTYPES = ["Quotation", "Sales Order", "Delivery Note", "Sales Invo
 const PURCHASE_DOCTYPES = ["Purchase Order", "Purchase Receipt", "Purchase Invoice"];
 
 frappe.ui.form.on("Item", {
+	setup(frm) {
+		frm.set_query("demo_asset_item_code", () => ({
+			filters: { is_stock_item: 0, is_fixed_asset: 1 },
+		}));
+	},
 	stock_uom(frm) {
 		// Each factor is relative to Stock UOM and becomes invalid when it changes.
 		frm.clear_table("uoms");
@@ -505,34 +510,6 @@ $.extend(erpnext.item, {
 					report_type: "Profit and Loss",
 					company: row.company,
 					is_group: 0,
-				},
-			};
-		};
-
-		frm.fields_dict["item_defaults"].grid.get_field("buying_cost_center").get_query = function (
-			doc,
-			cdt,
-			cdn
-		) {
-			const row = locals[cdt][cdn];
-			return {
-				filters: {
-					is_group: 0,
-					company: row.company,
-				},
-			};
-		};
-
-		frm.fields_dict["item_defaults"].grid.get_field("selling_cost_center").get_query = function (
-			doc,
-			cdt,
-			cdn
-		) {
-			const row = locals[cdt][cdn];
-			return {
-				filters: {
-					is_group: 0,
-					company: row.company,
 				},
 			};
 		};

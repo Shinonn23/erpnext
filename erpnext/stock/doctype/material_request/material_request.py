@@ -68,6 +68,9 @@ class MaterialRequest(BuyingController):
 			"Manufacture",
 			"Subcontracting",
 			"Customer Provided",
+			"Customer Demo",
+			"Customer Borrow / Loan",
+			"Asset Transfer",
 		]
 		naming_series: DF.Literal["MAT-MR-.YYYY.-"]
 		per_ordered: DF.Percent

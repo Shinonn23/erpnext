@@ -1,0 +1,1 @@
+from erpnext.loan.doctype.custody_loan.custody_loan_core import CustodyLoan

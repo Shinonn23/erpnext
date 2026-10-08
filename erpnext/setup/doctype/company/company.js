@@ -61,6 +61,10 @@ frappe.ui.form.on("Company", {
 			};
 		});
 
+		frm.set_query("default_in_transit_location", function () {
+			return { filters: { is_group: 0, is_in_transit_location: 1 } };
+		});
+
 		frm.set_query("default_warehouse_for_sales_return", function () {
 			return {
 				filters: {
@@ -118,16 +122,6 @@ frappe.ui.form.on("Company", {
 			frm.doc.abbr && frm.set_df_property("abbr", "read_only", 1);
 			disbale_coa_fields(frm);
 			frappe.contacts.render_address_and_contact(frm);
-
-			if (frappe.perm.has_perm("Cost Center", 0, "read")) {
-				frm.add_custom_button(
-					__("Cost Centers"),
-					function () {
-						frappe.set_route("Tree", "Cost Center", { company: frm.doc.name });
-					},
-					__("View")
-				);
-			}
 
 			if (frappe.perm.has_perm("Account", 0, "read")) {
 				frm.add_custom_button(
@@ -308,9 +302,6 @@ erpnext.company.setup_queries = function (frm) {
 			["default_inventory_account", { account_type: "Stock" }],
 			["purchase_expense_account", { root_type: "Expense" }],
 			["purchase_expense_contra_account", { root_type: "Expense" }],
-			["cost_center", {}],
-			["round_off_cost_center", {}],
-			["depreciation_cost_center", {}],
 			["capital_work_in_progress_account", { account_type: "Capital Work in Progress" }],
 			["asset_received_but_not_billed", { account_type: "Asset Received But Not Billed" }],
 			["unrealized_profit_loss_account", { root_type: ["in", ["Liability", "Asset"]] }],

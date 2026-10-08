@@ -243,22 +243,7 @@ erpnext.assets.AssetCapitalization = class AssetCapitalization extends erpnext.s
 	}
 
 	company() {
-		var me = this;
-
-		if (me.frm.doc.company) {
-			frappe.model.set_value(me.frm.doc.doctype, me.frm.doc.name, "cost_center", null);
-			$.each(me.frm.doc.stock_items || [], function (i, d) {
-				frappe.model.set_value(d.doctype, d.name, "cost_center", null);
-			});
-			$.each(me.frm.doc.asset_items || [], function (i, d) {
-				frappe.model.set_value(d.doctype, d.name, "cost_center", null);
-			});
-			$.each(me.frm.doc.service_items || [], function (i, d) {
-				frappe.model.set_value(d.doctype, d.name, "cost_center", null);
-			});
-		}
-
-		erpnext.accounts.dimensions.update_dimension(me.frm, me.frm.doctype);
+		erpnext.accounts.dimensions.update_dimension(this.frm, this.frm.doc.doctype);
 	}
 
 	stock_items_add(doc, cdt, cdn) {

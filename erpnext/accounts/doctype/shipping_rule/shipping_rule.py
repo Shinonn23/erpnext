@@ -42,7 +42,6 @@ class ShippingRule(Document):
 		calculate_based_on: DF.Literal["Fixed", "Net Total", "Net Weight"]
 		company: DF.Link
 		conditions: DF.Table[ShippingRuleCondition]
-		cost_center: DF.Link | None
 		countries: DF.Table[ShippingRuleCountry]
 		disabled: DF.Check
 		label: DF.Data
@@ -156,7 +155,7 @@ class ShippingRule(Document):
 		shipping_charge = {
 			"charge_type": "Actual",
 			"account_head": self.account,
-			"cost_center": self.cost_center,
+
 		}
 		if self.shipping_rule_type == "Selling":
 			# check if not applied on purchase
@@ -175,12 +174,6 @@ class ShippingRule(Document):
 			shipping_charge["add_deduct_tax"] = "Add"
 
 		shipping_charge_filters = shipping_charge.copy()
-		if not self.cost_center:
-			shipping_charge_filters["cost_center"] = (
-				"in",
-				(None, "", erpnext.get_default_cost_center(doc.company)),
-			)
-
 		existing_shipping_charge = doc.get("taxes", filters=shipping_charge_filters)
 		if existing_shipping_charge:
 			# take the last record found

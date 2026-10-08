@@ -22,7 +22,13 @@ add_to_apps_screen = [
 
 develop_version = "15.x.x-develop"
 
-app_include_js = "erpnext.bundle.js"
+app_include_js = [
+	"erpnext.bundle.js",
+	"/assets/erpnext/js/storage_location.js",
+	"/assets/erpnext/js/thailand/address.js",
+	"/assets/erpnext/js/thailand/print_format.js",
+	"/assets/erpnext/js/thailand/deposit_utils.js",
+]
 app_include_css = "erpnext.bundle.css"
 web_include_css = "erpnext-web.bundle.css"
 email_css = "email_erpnext.bundle.css"
@@ -37,12 +43,28 @@ web_include_icons = [
 
 doctype_js = {
 	"Address": "public/js/address.js",
+	"Material Request": "assets/doctype/material_request/material_request.js",
+	"Custody Loan": "loan/doctype/custody_loan/custody_loan.js",
+	"Custody Loan Return": "loan/doctype/custody_loan_return/custody_loan_return.js",
+	"Custody Loan Adjustment": "loan/doctype/custody_loan_adjustment/custody_loan_adjustment.js",
 	"Communication": "public/js/communication.js",
 	"Event": "public/js/event.js",
 	"Newsletter": "public/js/newsletter.js",
 	"Contact": "public/js/contact.js",
+	"Journal Entry": "public/js/thailand/journal_entry.js",
+	"Payment Entry": "public/js/thailand/payment_entry.js",
+	"Expense Claim": "public/js/thailand/expense_claim.js",
+	"Purchase Invoice": "public/js/thailand/purchase_invoice.js",
+	"Sales Order": "public/js/thailand/sales_order.js",
+	"Purchase Order": "public/js/thailand/purchase_order.js",
+	"Sales Invoice": "public/js/thailand/sales_invoice.js",
+	"Purchase Tax Invoice": "public/js/thailand/purchase_tax_invoice.js",
+	"Sales Tax Invoice": "public/js/thailand/sales_tax_invoice.js",
+	"Currency Exchange Settings": "public/js/thailand/currency_exchange_settings.js",
 }
 doctype_list_js = {
+	"Stock Entry": "stock/doctype/stock_entry/stock_entry_list.js",
+	"Asset Movement": "assets/doctype/asset_movement/asset_movement_list.js",
 	"Code List": [
 		"edi/doctype/code_list/code_list_import.js",
 	],
@@ -53,9 +75,15 @@ doctype_list_js = {
 
 page_js = {"print": "public/js/print.js"}
 
-extend_doctype_class = {"Address": "erpnext.accounts.custom.address.ERPNextAddress"}
+extend_doctype_class = {
+	"Address": "erpnext.accounts.custom.address.ERPNextAddress",
+	"Payment Entry": "erpnext.regional.thailand.custom.payment_entry.PaymentEntry",
+}
 
-override_whitelisted_methods = {"frappe.www.contact.send_message": "erpnext.templates.utils.send_message"}
+override_whitelisted_methods = {
+	"frappe.www.contact.send_message": "erpnext.templates.utils.send_message",
+	"erpnext.accounts.doctype.payment_entry.payment_entry.get_outstanding_reference_documents": "erpnext.regional.thailand.custom.payment_entry.get_outstanding_reference_documents",
+}
 
 welcome_email = "erpnext.setup.utils.welcome_email"
 
@@ -64,12 +92,30 @@ setup_wizard_requires = "assets/erpnext/js/setup_wizard.js"
 setup_wizard_stages = "erpnext.setup.setup_wizard.setup_wizard.get_setup_stages"
 
 after_install = "erpnext.setup.install.after_install"
+after_migrate = [
+	"erpnext.stock.doctype.storage_location.storage_location.setup_storage_location_dimension",
+]
 
 after_app_install = "erpnext.setup.install.after_app_install"
 after_app_uninstall = "erpnext.setup.install.after_app_uninstall"
 
+override_doctype_class = {
+	"Currency Exchange Settings": "erpnext.regional.thailand.custom.currency_exchange_settings.CurrencyExchangeSettings",
+	"Journal Entry": "erpnext.regional.thailand.custom.journal_entry.JournalEntry",
+	"GL Entry": "erpnext.regional.thailand.custom.gl_entry.GLEntry",
+	"Expense Claim": "erpnext.regional.thailand.custom.expense_claim.ExpenseClaim",
+	"Material Request": "erpnext.assets.doctype.material_request.material_request.CustomerMaterialRequest",
+}
+
 # patches that must stop the migration when they fail, even with `bench migrate --skip-failing`
-never_skip_patches = ["erpnext.patches.v16_0.update_serial_batch_entries"]
+never_skip_patches = [
+	"erpnext.patches.v16_0.update_serial_batch_entries",
+	"erpnext.patches.v16_0.rename_material_request_progress_fields",
+	"erpnext.patches.v16_0.remove_customer_use_request_doctypes",
+	"erpnext.patches.v16_0.purge_customer_use_legacy_columns",
+]
+
+before_migrate = "erpnext.patches.v16_0.remove_customer_use_request_doctypes.assert_no_legacy_data"
 
 boot_session = "erpnext.startup.boot.boot_session"
 notification_config = "erpnext.startup.notifications.get_notification_config"
@@ -82,7 +128,6 @@ on_session_creation = "erpnext.portal.utils.create_customer_or_supplier"
 
 treeviews = [
 	"Account",
-	"Cost Center",
 	"Warehouse",
 	"Item Group",
 	"Customer Group",
@@ -108,8 +153,64 @@ demo_transaction_doctypes = [
 jinja = {
 	"methods": [
 		"erpnext.stock.serial_batch_bundle.get_serial_or_batch_nos",
+		"erpnext.regional.thailand.utils.amount_in_bahttext",
+		"erpnext.regional.thailand.utils.amount_to_text",
+		"erpnext.regional.thailand.utils.full_thai_date",
 	],
 }
+
+_thailand_doc_events = {
+	"GL Entry": {"after_insert": "erpnext.regional.thailand.custom.custom_api.create_tax_invoice_on_gl_tax"},
+	"Payment Entry": {
+		"validate": "erpnext.regional.thailand.custom.custom_api.validate_company_address",
+		"on_update": "erpnext.regional.thailand.custom.custom_api.clear_invoice_undue_tax",
+		"on_submit": [
+			"erpnext.regional.thailand.custom.payment_entry.reconcile_undue_tax",
+			"erpnext.regional.thailand.custom.payment_entry.update_sales_billing_outstanding_amount",
+		],
+		"on_cancel": "erpnext.regional.thailand.custom.payment_entry.update_sales_billing_outstanding_amount",
+	},
+	"Unreconcile Payment": {"on_submit": "erpnext.regional.thailand.custom.unreconcile_payment.unreconcile_undue_tax"},
+	"Sales Invoice": {
+		"validate": "erpnext.regional.thailand.custom.custom_api.validate_sales_tax_invoice_zero_tax",
+		"on_submit": "erpnext.regional.thailand.custom.custom_api.create_sales_tax_invoice_on_zero_tax",
+		"before_cancel": "erpnext.regional.thailand.custom.custom_api.cancel_related_tax_invoice",
+		"before_validate": [
+			"erpnext.regional.thailand.custom.deposit_utils.validate_invoice",
+			"erpnext.regional.thailand.custom.deposit_utils.apply_deposit_deduction",
+		],
+		"on_cancel": "erpnext.regional.thailand.custom.deposit_utils.cancel_deposit_invoice",
+		"on_trash": "erpnext.regional.thailand.custom.deposit_utils.cancel_deposit_invoice",
+	},
+	"Purchase Invoice": {
+		"after_insert": "erpnext.regional.thailand.custom.custom_api.validate_tax_invoice",
+		"on_update": "erpnext.regional.thailand.custom.custom_api.validate_tax_invoice",
+		"before_cancel": "erpnext.regional.thailand.custom.custom_api.cancel_related_tax_invoice",
+		"before_validate": [
+			"erpnext.regional.thailand.custom.deposit_utils.validate_invoice",
+			"erpnext.regional.thailand.custom.deposit_utils.apply_deposit_deduction",
+		],
+		"on_cancel": "erpnext.regional.thailand.custom.deposit_utils.cancel_deposit_invoice",
+		"on_trash": "erpnext.regional.thailand.custom.deposit_utils.cancel_deposit_invoice",
+	},
+	"Expense Claim": {
+		"after_insert": "erpnext.regional.thailand.custom.custom_api.validate_tax_invoice",
+		"on_update": "erpnext.regional.thailand.custom.custom_api.validate_tax_invoice",
+	},
+	"Journal Entry": {
+		"on_update": "erpnext.regional.thailand.custom.custom_api.prepare_journal_entry_tax_invoice_detail",
+		"on_submit": "erpnext.regional.thailand.custom.journal_entry.reconcile_undue_tax",
+	},
+	"Print Format": {"before_validate": "erpnext.regional.thailand.custom.print_format.allow_update_standard"},
+	"Address": {"on_update": "erpnext.regional.thailand.custom.address.update_tax_info_in_linked_doc"},
+	"Item": {"validate": "erpnext.regional.thailand.custom.item.validate_deposit_item"},
+	"Currency": {"on_update": "erpnext.regional.thailand.custom.currency_exchange_bot_api.clear_exchange_rate_cache"},
+}
+
+auto_cancel_exempted_doctypes = ["Payment Entry", "Sales Tax Invoice", "Purchase Tax Invoice"]
+
+on_print_pdf = "erpnext.regional.thailand.custom.print_utils.add_comment_on_print_pdf"
+on_gle_rename = "erpnext.regional.thailand.custom.gl_entry.rename_gl_entry_in_tax_invoice"
 
 # website
 webform_list_context = "erpnext.controllers.website_list_for_contact.get_webform_list_context"
@@ -364,8 +465,35 @@ doc_events = {
 		"after_rename": "erpnext.stock.doctype.item.item_search.reindex_renamed_item",
 	},
 	"Stock Entry": {
-		"on_submit": "erpnext.stock.doctype.material_request.material_request.update_completed_and_requested_qty",
-		"on_cancel": "erpnext.stock.doctype.material_request.material_request.update_completed_and_requested_qty",
+		"before_validate": [
+			"erpnext.loan.doctype.custody_loan.custody_loan_core.validate_generated_transaction",
+			"erpnext.stock.doctype.stock_entry.shipment_stock_entry.prepare_stock_entry_for_shipment",
+		],
+		"before_cancel": [
+			"erpnext.loan.doctype.custody_loan.custody_loan_core.validate_generated_transaction_cancellation",
+			"erpnext.stock.doctype.stock_entry.shipment_stock_entry.validate_stock_entry_shipment_cancel",
+		],
+		"validate": [
+			"erpnext.loan.doctype.custody_loan.custody_loan_core.validate_generated_transaction",
+			"erpnext.assets.doctype.material_request.material_request.validate_stock_entry_request",
+			"erpnext.stock.doctype.stock_entry.shipment_stock_entry.validate_stock_entry_shipment",
+		],
+		"on_submit": [
+			"erpnext.stock.doctype.material_request.material_request.update_completed_and_requested_qty",
+			"erpnext.assets.doctype.material_request.material_request.update_stock_entry_request_progress",
+			"erpnext.loan.doctype.custody_loan.custody_loan_core.update_custody_loan_status",
+		],
+		"on_cancel": [
+			"erpnext.stock.doctype.material_request.material_request.update_completed_and_requested_qty",
+			"erpnext.assets.doctype.material_request.material_request.update_stock_entry_request_progress",
+			"erpnext.loan.doctype.custody_loan.custody_loan_core.update_custody_loan_status",
+		],
+	},
+	"Asset Movement": {
+		"validate": "erpnext.loan.doctype.custody_loan.custody_loan_core.validate_generated_transaction",
+		"before_cancel": "erpnext.loan.doctype.custody_loan.custody_loan_core.validate_generated_transaction_cancellation",
+		"on_submit": "erpnext.loan.doctype.custody_loan.custody_loan_core.update_custody_loan_status",
+		"on_cancel": "erpnext.loan.doctype.custody_loan.custody_loan_core.update_custody_loan_status",
 	},
 	"User": {
 		"after_insert": "frappe.contacts.doctype.contact.contact.update_contact",
@@ -389,12 +517,8 @@ doc_events = {
 		"on_update": "erpnext.crm.utils.disable_opportunity_creation_on_contact_us_disabled",
 	},
 	"Sales Invoice": {
-		"on_submit": [
-			"erpnext.regional.italy.utils.sales_invoice_on_submit",
-		],
-		"on_cancel": [
-			"erpnext.regional.italy.utils.sales_invoice_on_cancel",
-		],
+		"on_submit": ["erpnext.regional.italy.utils.sales_invoice_on_submit"],
+		"on_cancel": ["erpnext.regional.italy.utils.sales_invoice_on_cancel"],
 		"on_trash": "erpnext.regional.check_deletion_permission",
 	},
 	"Purchase Invoice": {
@@ -406,11 +530,7 @@ doc_events = {
 	"Payment Entry": {
 		"on_trash": "erpnext.regional.check_deletion_permission",
 	},
-	"Address": {
-		"validate": [
-			"erpnext.regional.italy.utils.set_state_code",
-		],
-	},
+	"Address": {"validate": ["erpnext.regional.italy.utils.set_state_code"]},
 	"Contact": {
 		"on_trash": "erpnext.support.doctype.issue.issue.update_issue",
 		"after_insert": "erpnext.telephony.doctype.call_log.call_log.link_existing_conversations",
@@ -465,7 +585,7 @@ scheduler_events = {
 		"erpnext.utilities.doctype.video.video.update_youtube_data",
 		"erpnext.accounts.doctype.bank_transaction_rule.bank_transaction_rule.scheduler_run_rule_evaluation",
 	],
-	"daily": [],
+	"daily": ["erpnext.regional.doctype.thai_fda_registration.reminders.send_expiry_reminders"],
 	"daily_long": [],
 	"daily_maintenance": [
 		"erpnext.support.doctype.issue.issue.auto_close_tickets",
@@ -615,20 +735,6 @@ get_entries_for_bank_clearance_summary = "erpnext.accounts.report.bank_clearance
 
 get_entries_for_bank_reconciliation_statement = "erpnext.accounts.report.bank_reconciliation_statement.bank_reconciliation_statement.get_entries_for_bank_reconciliation_statement"
 
-regional_overrides = {
-	"France": {"erpnext.tests.test_regional.test_method": "erpnext.regional.france.utils.test_method"},
-	"United Arab Emirates": {
-		"erpnext.controllers.taxes_and_totals.update_itemised_tax_data": "erpnext.regional.united_arab_emirates.utils.update_itemised_tax_data",
-		"erpnext.accounts.doctype.purchase_invoice.purchase_invoice.make_regional_gl_entries": "erpnext.regional.united_arab_emirates.utils.make_regional_gl_entries",
-	},
-	"Saudi Arabia": {
-		"erpnext.controllers.taxes_and_totals.update_itemised_tax_data": "erpnext.regional.united_arab_emirates.utils.update_itemised_tax_data"
-	},
-	"Italy": {
-		"erpnext.controllers.taxes_and_totals.update_itemised_tax_data": "erpnext.regional.italy.utils.update_itemised_tax_data",
-		"erpnext.controllers.accounts_controller.validate_regional": "erpnext.regional.italy.utils.sales_invoice_validate",
-	},
-}
 user_data_fields = [
 	{
 		"doctype": "Lead",
@@ -719,3 +825,48 @@ repost_allowed_doctypes = [
 	"Payment Entry",
 	"Purchase Receipt",
 ]
+
+fixtures = [
+	{
+		"doctype": "Withholding Tax Type Of Income",
+		"filters": [
+			[
+				"name",
+				"in",
+				(
+					"1", "2", "3", "4", "4.1.1", "4.1.2", "4.1.3", "4.1.4",
+					"4.2.1", "4.2.2", "4.2.3", "4.2.4", "4.2.5", "5", "6",
+				),
+			],
+		]
+	},
+]
+
+# Thailand localization hooks are merged after the standard hook declarations so
+# they augment ERPNext's existing events instead of replacing them.
+for _doctype, _events in _thailand_doc_events.items():
+	_doc_events = doc_events.setdefault(_doctype, {})
+	for _event, _handler in _events.items():
+		_existing = _doc_events.get(_event)
+		if not _existing:
+			_doc_events[_event] = _handler
+		else:
+			_existing = _existing if isinstance(_existing, list) else [_existing]
+			_handlers = _handler if isinstance(_handler, list) else [_handler]
+			_doc_events[_event] = list(dict.fromkeys([*_existing, *_handlers]))
+
+override_whitelisted_methods.update(
+	{
+		"erpnext.accounts.doctype.payment_entry.payment_entry.get_outstanding_reference_documents": "erpnext.regional.thailand.custom.payment_entry.get_outstanding_reference_documents"
+	}
+)
+auto_cancel_exempted_doctypes = list(
+	dict.fromkeys([*auto_cancel_exempted_doctypes, "Sales Tax Invoice", "Purchase Tax Invoice"])
+)
+naming_series_variables.update(
+	{
+		variable: "erpnext.regional.thailand.custom.naming.parse_naming_series_variable"
+		for variable in ("YYYY-DATE", "YY-DATE", "MM-DATE", "DD-DATE", "WW-DATE")
+	}
+)
+after_migrate.append("erpnext.regional.thailand.migration.transfer_thailand_module_ownership")

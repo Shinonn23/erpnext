@@ -402,7 +402,6 @@ frappe.ui.form.on("POS Invoice", {
 				callback: function (r) {
 					if (r) {
 						frm.set_value("loyalty_redemption_account", r.message.expense_account);
-						frm.set_value("loyalty_redemption_cost_center", r.message.cost_center);
 						frm.redemption_conversion_factor = r.message.conversion_factor;
 					}
 				},

@@ -168,7 +168,6 @@ def make_gl_entry(tax, gl_entries, doc, tax_accounts):
 			doc.get_gl_dict(
 				{
 					"account": tax.account_head,
-					"cost_center": tax.cost_center,
 					"posting_date": doc.posting_date,
 					"against": doc.supplier,
 					dr_or_cr: tax.base_tax_amount_after_discount_amount,

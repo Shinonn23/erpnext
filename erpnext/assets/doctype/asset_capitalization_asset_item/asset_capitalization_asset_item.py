@@ -17,7 +17,6 @@ class AssetCapitalizationAssetItem(Document):
 		asset: DF.Link
 		asset_name: DF.Data | None
 		asset_value: DF.Currency
-		cost_center: DF.Link | None
 		current_asset_value: DF.Currency
 		finance_book: DF.Link | None
 		fixed_asset_account: DF.Link | None

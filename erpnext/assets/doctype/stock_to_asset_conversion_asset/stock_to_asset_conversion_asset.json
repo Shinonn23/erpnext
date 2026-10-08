@@ -1,0 +1,15 @@
+{
+ "doctype":"DocType","editable_grid":1,"engine":"InnoDB","field_order":["source_item_row","asset_item_code","asset_serial_number","source_serial_no","source_batch_no","asset_value","asset_location","accounting_treatment","calculate_depreciation","asset"],
+ "fields":[
+  {"fieldname":"source_item_row","fieldtype":"Link","label":"Source Stock Item Row","options":"Stock to Asset Conversion Item","read_only":1},
+  {"fieldname":"asset_item_code","fieldtype":"Link","label":"Asset Item Code","options":"Item","read_only":1,"in_list_view":1},
+  {"fieldname":"asset_serial_number","fieldtype":"Data","label":"Asset Serial Number","read_only":1,"in_list_view":1},
+  {"fieldname":"source_serial_no","fieldtype":"Link","label":"Source Serial No","options":"Serial No","read_only":1},
+  {"fieldname":"source_batch_no","fieldtype":"Link","label":"Source Batch No","options":"Batch","read_only":1},
+  {"fieldname":"asset_value","fieldtype":"Currency","label":"Asset Value","options":"Company:company:default_currency","read_only":1,"in_list_view":1},
+  {"fieldname":"asset_location","fieldtype":"Link","label":"Asset Location","options":"Location","read_only":1},
+  {"fieldname":"accounting_treatment","fieldtype":"Select","label":"Accounting Treatment","options":"Expense\nCapitalized","read_only":1},
+  {"fieldname":"calculate_depreciation","fieldtype":"Check","label":"Calculate Depreciation","read_only":1},
+  {"fieldname":"asset","fieldtype":"Link","label":"Created Asset","options":"Asset","read_only":1}
+ ],"istable":1,"module":"Assets","name":"Stock to Asset Conversion Asset","permissions":[],"track_changes":1
+}

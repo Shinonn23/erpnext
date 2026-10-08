@@ -346,7 +346,6 @@ def make_asset_value_adjustment(**args):
 			"date": args.date or nowdate(),
 			"new_asset_value": args.new_asset_value,
 			"current_asset_value": args.current_asset_value,
-			"cost_center": args.cost_center or "Main - _TC",
 			"difference_account": make_difference_account(),
 		}
 	).insert()

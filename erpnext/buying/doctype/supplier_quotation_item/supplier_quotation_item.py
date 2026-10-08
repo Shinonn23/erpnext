@@ -22,7 +22,6 @@ class SupplierQuotationItem(Document):
 		base_rate: DF.Currency
 		brand: DF.Link | None
 		conversion_factor: DF.Float
-		cost_center: DF.Link | None
 		description: DF.TextEditor | None
 		discount_amount: DF.Currency
 		discount_percentage: DF.Percent

@@ -44,7 +44,6 @@
   "accounting_details_section",
   "income_account",
   "column_break_48",
-  "cost_center",
   "amended_from",
   "address_and_contact_tab",
   "address_and_contact_section",
@@ -304,14 +303,6 @@
    "fieldname": "accounting_details_section",
    "fieldtype": "Section Break",
    "label": "Accounting Details"
-  },
-  {
-   "fetch_from": "dunning_type.cost_center",
-   "fieldname": "cost_center",
-   "fieldtype": "Link",
-   "label": "Cost Center",
-   "options": "Cost Center",
-   "print_hide": 1
   },
   {
    "collapsible": 1,

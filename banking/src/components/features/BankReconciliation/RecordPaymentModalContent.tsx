@@ -1,10 +1,10 @@
 import { atom, useAtom, useAtomValue, useSetAtom } from "jotai"
-import { bankRecRecordPaymentModalAtom, bankRecSelectedTransactionAtom, bankRecUnreconcileModalAtom, SelectedBank, selectedBankAccountAtom } from "./bankRecAtoms"
+import { bankRecRecordPaymentModalAtom, bankRecSelectedTransactionAtom, SelectedBank, selectedBankAccountAtom } from "./bankRecAtoms"
 import { Dialog, DialogContent, DialogTitle, DialogDescription, DialogHeader, DialogFooter, DialogClose, DialogTrigger } from "@/components/ui/dialog"
 import _ from "@/lib/translate"
 import { UnreconciledTransaction, useGetRuleForTransaction, useRefreshUnreconciledTransactions, useUpdateActionLog } from "./utils"
 import { useFieldArray, useForm, useFormContext, useWatch } from "react-hook-form"
-import { getCompanyCostCenter, getCompanyCurrency } from "@/lib/company"
+import { getCompanyCurrency } from "@/lib/company"
 import { FrappeConfig, FrappeContext, useFrappeGetCall, useFrappePostCall } from "frappe-react-sdk"
 import { toast } from "sonner"
 import ErrorBanner from "@/components/ui/error-banner"
@@ -114,7 +114,7 @@ const BulkPaymentEntryForm = ({ transactions }: { transactions: UnreconciledTran
                 }
             })
 
-            toast.success(_("Payment Recorded"), {
+            toast.success(_("Payment Entry drafts created. Request approval on each entry to post and match."), {
                 duration: 4000,
                 closeButton: true,
             })
@@ -301,8 +301,6 @@ const PaymentEntryForm = ({ selectedTransaction, selectedBankAccount }: { select
 
     const { call: createPaymentEntry, loading, error, isCompleted } = useFrappePostCall<{ message: { transaction: BankTransaction, payment_entry: PaymentEntry } }>('erpnext.accounts.doctype.bank_reconciliation_tool.bank_reconciliation_tool.create_payment_entry_and_reconcile')
 
-    const setBankRecUnreconcileModalAtom = useSetAtom(bankRecUnreconcileModalAtom)
-
     const addToActionLog = useUpdateActionLog()
 
     const { file: frappeFile } = useContext(FrappeContext) as FrappeConfig
@@ -339,16 +337,13 @@ const PaymentEntryForm = ({ selectedTransaction, selectedBankAccount }: { select
                     }
                 ]
             })
-            toast.success(_("Payment Entry Created"), {
+            toast.success(_("Payment Entry draft created. Request approval to post and match it."), {
                 duration: 4000,
                 closeButton: true,
                 action: {
-                    label: _("Undo"),
-                    onClick: () => setBankRecUnreconcileModalAtom(selectedTransaction.name)
+                    label: _("Open Payment Entry"),
+                    onClick: () => window.open(`/desk/${slug("Payment Entry")}/${message.payment_entry.name}`, "_blank")
                 },
-                actionButtonStyle: {
-                    backgroundColor: "rgb(0, 138, 46)"
-                }
             })
 
             if (files.length > 0) {
@@ -829,7 +824,6 @@ const Summary = ({ currency }: { currency: string }) => {
             setValue('deductions', [...deductions, {
                 amount: amount,
                 account: '',
-                cost_center: getCompanyCostCenter(getValues('company')),
                 description: ''
             } as PaymentEntryDeduction])
 
@@ -1154,7 +1148,6 @@ const OtherChargesSection = ({ currency }: { currency: string }) => {
 
         append({
             account: '',
-            cost_center: getCompanyCostCenter(getValues('company')),
             description: '',
             amount: 0
         } as PaymentEntryDeduction)
@@ -1177,7 +1170,6 @@ const OtherChargesSection = ({ currency }: { currency: string }) => {
                         checked={selectedRows.length > 0 && selectedRows.length === fields.length}
                         onCheckedChange={onSelectAll} /></TableHead>
                     <TableHead>{_("Account")} <span className="text-ink-red-3">*</span></TableHead>
-                    <TableHead>{_("Cost Center")} <span className="text-ink-red-3">*</span></TableHead>
                     <TableHead>{_("Description")}</TableHead>
                     <TableHead className="text-end">{_("Amount")} <span className="text-ink-red-3">*</span></TableHead>
                 </TableRow>
@@ -1203,26 +1195,6 @@ const OtherChargesSection = ({ currency }: { currency: string }) => {
                                 }}
                                 buttonClassName="min-w-64"
                                 isRequired
-                                hideLabel
-                            />
-                        </TableCell>
-                        <TableCell className="align-top">
-                            <LinkFormField
-                                doctype="Cost Center"
-                                reference_doctype="Payment Entry Deduction"
-                                customQuery={{
-                                    query: "erpnext.controllers.queries.get_filtered_dimensions",
-                                    filters: {
-                                        "dimension": "cost_center",
-                                        "company": getValues('company'),
-                                    }
-                                }}
-                                rules={{
-                                    required: _("Cost Center is required"),
-                                }}
-                                name={`deductions.${index}.cost_center`}
-                                label={_("Cost Center")}
-                                buttonClassName="min-w-48"
                                 hideLabel
                             />
                         </TableCell>

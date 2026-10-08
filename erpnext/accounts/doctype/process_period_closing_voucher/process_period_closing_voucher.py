@@ -495,7 +495,7 @@ def get_dimensions():
 		get_accounting_dimensions,
 	)
 
-	default_dimensions = ["cost_center", "finance_book", "project"]
+	default_dimensions = ["finance_book", "project"]
 	dimensions = default_dimensions + get_accounting_dimensions()
 	return dimensions
 

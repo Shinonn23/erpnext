@@ -1,4 +1,5 @@
 [pre_model_sync]
+erpnext.patches.v16_0.rename_customer_use_request_doctypes
 erpnext.patches.v12_0.update_is_cancelled_field
 erpnext.patches.v11_0.rename_production_order_to_work_order
 erpnext.patches.v13_0.add_bin_unique_constraint
@@ -117,7 +118,6 @@ erpnext.patches.v12_0.update_price_or_product_discount
 erpnext.patches.v12_0.set_production_capacity_in_workstation
 erpnext.patches.v12_0.set_employee_preferred_emails
 erpnext.patches.v12_0.set_against_blanket_order_in_sales_and_purchase_order
-erpnext.patches.v12_0.set_cost_center_in_child_table_of_expense_claim
 erpnext.patches.v12_0.set_lead_title_field
 erpnext.patches.v12_0.set_permission_einvoicing
 erpnext.patches.v12_0.create_irs_1099_field_united_states
@@ -154,7 +154,6 @@ erpnext.patches.v13_0.replace_pos_page_with_point_of_sale_page
 erpnext.patches.v13_0.delete_old_purchase_reports
 erpnext.patches.v12_0.set_italian_import_supplier_invoice_permissions
 erpnext.patches.v13_0.update_subscription
-erpnext.patches.v12_0.unhide_cost_center_field
 erpnext.patches.v13_0.update_sla_enhancements
 erpnext.patches.v13_0.update_deferred_settings
 erpnext.patches.v12_0.set_multi_uom_in_rfq
@@ -262,6 +261,10 @@ erpnext.patches.v15_0.rename_subcontracting_fields
 erpnext.patches.v15_0.unset_incorrect_additional_discount_percentage
 
 [post_model_sync]
+erpnext.patches.v16_0.migrate_asset_movement_customer_use_reference
+erpnext.patches.v16_0.use_transfer_for_customer_asset_movements
+erpnext.patches.v16_0.remove_custody_loan_from_stock_sidebar
+erpnext.patches.v16_0.rename_material_request_progress_fields
 erpnext.patches.v15_0.rename_gross_purchase_amount_to_net_purchase_amount
 erpnext.patches.v15_0.create_asset_depreciation_schedules_from_assets
 execute:frappe.delete_doc_if_exists('Workspace', 'ERPNext Integrations Settings')
@@ -272,11 +275,12 @@ erpnext.patches.v14_0.delete_healthcare_doctypes
 erpnext.patches.v14_0.delete_hub_doctypes
 erpnext.patches.v14_0.delete_hospitality_doctypes # 20-01-2022
 erpnext.patches.v14_0.delete_agriculture_doctypes # 15-06-2022
+erpnext.patches.v16_0.remove_customer_use_request_doctypes
+erpnext.patches.v16_0.purge_customer_use_legacy_columns
 erpnext.patches.v14_0.delete_education_doctypes
 erpnext.patches.v14_0.delete_datev_doctypes
 erpnext.patches.v14_0.rearrange_company_fields
 erpnext.patches.v13_0.update_sane_transfer_against
-erpnext.patches.v14_0.migrate_cost_center_allocations
 erpnext.patches.v13_0.update_reserved_qty_closed_wo
 erpnext.patches.v13_0.update_exchange_rate_settings
 erpnext.patches.v14_0.delete_amazon_mws_doctype
@@ -512,3 +516,6 @@ erpnext.patches.v16_0.enable_serial_no_wise_valuation
 erpnext.patches.v16_0.add_voucher_index_to_repost_item_valuation
 erpnext.patches.v16_0.mirror_select_perms_to_custom_docperm
 erpnext.patches.v16_0.recalculate_subcontracting_order_service_cost
+erpnext.patches.v16_0.expose_inventory_dimensions_in_stock_tables
+erpnext.patches.v16_0.remove_cost_center_doctypes
+erpnext.patches.v16_0.purge_cost_center_data

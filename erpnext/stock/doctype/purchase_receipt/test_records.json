@@ -18,8 +18,7 @@
     "doctype": "Purchase Taxes and Charges",
     "parentfield": "taxes",
     "rate": 100.0,
-    "tax_amount": 100.0,
-	"cost_center": "Main - _TC"
+    "tax_amount": 100.0
    },
    {
     "account_head": "_Test Account VAT - _TC",
@@ -30,8 +29,7 @@
     "doctype": "Purchase Taxes and Charges",
     "parentfield": "taxes",
     "rate": 120.0,
-    "tax_amount": 120.0,
-	"cost_center": "Main - _TC"
+    "tax_amount": 120.0
    },
    {
     "account_head": "_Test Account Customs Duty - _TC",
@@ -42,8 +40,7 @@
     "doctype": "Purchase Taxes and Charges",
     "parentfield": "taxes",
     "rate": 150.0,
-    "tax_amount": 150.0,
-	"cost_center": "Main - _TC"
+    "tax_amount": 150.0
    }
   ],
   "items": [
@@ -61,8 +58,7 @@
     "rejected_qty": 0.0,
     "stock_uom": "_Test UOM",
     "uom": "_Test UOM",
-    "warehouse": "_Test Warehouse - _TC",
-	"cost_center": "Main - _TC"
+    "warehouse": "_Test Warehouse - _TC"
    },
    {
     "base_amount": 250.0,
@@ -78,8 +74,7 @@
     "rejected_qty": 0.0,
     "stock_uom": "_Test UOM",
     "uom": "_Test UOM",
-    "warehouse": "_Test Warehouse 1 - _TC",
-	"cost_center": "Main - _TC"
+    "warehouse": "_Test Warehouse 1 - _TC"
    }
   ],
   "supplier": "_Test Supplier"

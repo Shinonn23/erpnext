@@ -367,7 +367,6 @@ class TestTaxWithholdingCategory(ERPNextTestSuite):
 					"category": "Total",
 					"charge_type": "Actual",
 					"account_head": "_Test Account VAT - _TC",
-					"cost_center": "Main - _TC",
 					"tax_amount": 500,
 					"description": "Test",
 					"add_deduct_tax": "Add",
@@ -404,7 +403,6 @@ class TestTaxWithholdingCategory(ERPNextTestSuite):
 					"category": "Total",
 					"charge_type": "Actual",
 					"account_head": "_Test Account VAT - _TC",
-					"cost_center": "Main - _TC",
 					"tax_amount": 500,
 					"description": "Test",
 				},
@@ -494,7 +492,6 @@ class TestTaxWithholdingCategory(ERPNextTestSuite):
 					"category": "Total",
 					"charge_type": "Actual",
 					"account_head": "TCS - _TC",
-					"cost_center": "Main - _TC",
 					"tax_amount": 200,
 					"description": "Test Gross Tax",
 				},
@@ -528,7 +525,6 @@ class TestTaxWithholdingCategory(ERPNextTestSuite):
 				"category": "Total",
 				"charge_type": "Actual",
 				"account_head": "TCS - _TC",
-				"cost_center": "Main - _TC",
 				"tax_amount": 400,
 				"description": "Test Gross Tax",
 			},
@@ -581,7 +577,6 @@ class TestTaxWithholdingCategory(ERPNextTestSuite):
 				"category": "Total",
 				"charge_type": "Actual",
 				"account_head": "_Test Account VAT - _TC",
-				"cost_center": "Main - _TC",
 				"tax_amount": 500,
 				"description": "VAT added to test TDS calculation on gross amount",
 			},
@@ -1051,7 +1046,6 @@ class TestTaxWithholdingCategory(ERPNextTestSuite):
 				"category": "Total",
 				"charge_type": "Actual",
 				"account_head": "_Test Account VAT - _TC",
-				"cost_center": "Main - _TC",
 				"tax_amount": 1000,
 				"description": "VAT added to test TDS calculation on gross amount",
 			},
@@ -1089,7 +1083,6 @@ class TestTaxWithholdingCategory(ERPNextTestSuite):
 					"item_code": item_code,
 					"qty": 1,
 					"rate": 10000,
-					"cost_center": "Main - _TC",
 					"expense_account": "Stock Received But Not Billed - _TC",
 					"apply_tds": 0,  # No TDS for this item
 				},
@@ -1098,7 +1091,6 @@ class TestTaxWithholdingCategory(ERPNextTestSuite):
 					"item_code": item_code,
 					"qty": 1,
 					"rate": 5000,  # Above single threshold of 2000 for Test Service Category
-					"cost_center": "Main - _TC",
 					"expense_account": "Stock Received But Not Billed - _TC",
 					"apply_tds": 1,
 					"tax_withholding_category": "Test Service Category",
@@ -1108,7 +1100,6 @@ class TestTaxWithholdingCategory(ERPNextTestSuite):
 					"item_code": item_code,
 					"qty": 1,
 					"rate": 35000,  # Above cumulative threshold for New TDS Category with tax on excess
-					"cost_center": "Main - _TC",
 					"expense_account": "Stock Received But Not Billed - _TC",
 					"apply_tds": 1,
 					"tax_withholding_category": "New TDS Category",
@@ -1189,7 +1180,6 @@ class TestTaxWithholdingCategory(ERPNextTestSuite):
 				"category": "Total",
 				"charge_type": "Actual",
 				"account_head": "_Test Account VAT - _TC",
-				"cost_center": "Main - _TC",
 				"tax_amount": 8000,
 				"description": "Test",
 			},
@@ -3439,7 +3429,6 @@ class TestTaxWithholdingCategory(ERPNextTestSuite):
 						"item_code": frappe.db.get_value("Item", {"item_name": "TDS Item"}, "name"),
 						"qty": 1,
 						"rate": 500,  # 500 USD = 40000 INR
-						"cost_center": "Main - _TC",
 						"expense_account": "_Test Account Cost for Goods Sold - _TC",
 					}
 				],
@@ -3603,7 +3592,6 @@ class TestTaxWithholdingCategory(ERPNextTestSuite):
 			"accounts",
 			{
 				"account": "Stock Received But Not Billed - _TC",
-				"cost_center": "_Test Cost Center - _TC",
 				"credit_in_account_currency": 50000,  # Credit (reversal of expense)
 				"exchange_rate": 1,
 			},
@@ -3617,7 +3605,6 @@ class TestTaxWithholdingCategory(ERPNextTestSuite):
 				"account": "Creditors - _TC",
 				"party_type": "Supplier",
 				"party": "Test TDS Supplier",
-				"cost_center": "_Test Cost Center - _TC",
 				"debit_in_account_currency": 50000,  # Debit (reversal)
 				"exchange_rate": 1,
 			},
@@ -3793,7 +3780,6 @@ def create_purchase_invoice(**args):
 					"item_code": item,
 					"qty": args.qty or 1,
 					"rate": args.rate or 10000,
-					"cost_center": "Main - _TC",
 					"expense_account": "Stock Received But Not Billed - _TC",
 				}
 			],
@@ -3826,7 +3812,6 @@ def create_purchase_order(**args):
 					"item_code": item,
 					"qty": args.qty or 1,
 					"rate": args.rate or 10000,
-					"cost_center": "Main - _TC",
 					"expense_account": "Stock Received But Not Billed - _TC",
 				}
 			],
@@ -3859,7 +3844,6 @@ def create_sales_invoice(**args):
 					"item_code": item,
 					"qty": args.qty or 1,
 					"rate": args.rate or 10000,
-					"cost_center": "Main - _TC",
 					"expense_account": "Cost of Goods Sold - _TC",
 					"warehouse": args.warehouse or "_Test Warehouse - _TC",
 				}
@@ -3902,15 +3886,11 @@ def make_journal_entry_with_tax_withholding(
 	party,
 	voucher_type,
 	amount,
-	cost_center=None,
 	posting_date=None,
 	save=True,
 	submit=False,
 ):
 	"""Helper function to create Journal Entry for tax withholding"""
-	if not cost_center:
-		cost_center = "_Test Cost Center - _TC"
-
 	jv = frappe.new_doc("Journal Entry")
 	jv.posting_date = posting_date or today()
 	jv.company = "_Test Company"
@@ -3926,7 +3906,6 @@ def make_journal_entry_with_tax_withholding(
 			"accounts",
 			{
 				"account": expense_account,
-				"cost_center": cost_center,
 				"debit_in_account_currency": amount,
 				"exchange_rate": 1,
 			},
@@ -3938,7 +3917,6 @@ def make_journal_entry_with_tax_withholding(
 				"account": party_account,
 				"party_type": party_type,
 				"party": party,
-				"cost_center": cost_center,
 				"credit_in_account_currency": amount,
 				"exchange_rate": 1,
 			},
@@ -3954,7 +3932,6 @@ def make_journal_entry_with_tax_withholding(
 				"account": party_account,
 				"party_type": party_type,
 				"party": party,
-				"cost_center": cost_center,
 				"debit_in_account_currency": amount,
 				"exchange_rate": 1,
 			},
@@ -3964,7 +3941,6 @@ def make_journal_entry_with_tax_withholding(
 			"accounts",
 			{
 				"account": income_account,
-				"cost_center": cost_center,
 				"credit_in_account_currency": amount,
 				"exchange_rate": 1,
 			},

@@ -1,0 +1,29 @@
+{
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": ["material_request_item", "item_code", "item_name", "qty", "source_warehouse", "asset", "source_location", "target_location", "batch_no", "serial_no", "valuation_rate", "returned_qty", "replacement_received_qty", "adjusted_qty", "outstanding_qty"],
+ "fields": [
+  {"fieldname": "material_request_item", "fieldtype": "Link", "label": "Material Request Item", "options": "Material Request Item", "read_only": 1, "in_list_view": 1},
+  {"fieldname": "item_code", "fieldtype": "Link", "label": "Item", "options": "Item", "read_only": 1, "in_list_view": 1, "reqd": 1},
+  {"fieldname": "item_name", "fieldtype": "Data", "label": "Item Name", "read_only": 1},
+  {"fieldname": "qty", "fieldtype": "Float", "label": "Loan Qty", "in_list_view": 1, "reqd": 1},
+  {"fieldname": "source_warehouse", "fieldtype": "Link", "label": "Source Warehouse", "options": "Warehouse", "depends_on": "eval:parent.loan_type == 'Stock'", "mandatory_depends_on": "eval:parent.loan_type == 'Stock'", "in_list_view": 1},
+  {"fieldname": "asset", "fieldtype": "Link", "label": "Asset", "options": "Asset", "depends_on": "eval:parent.loan_type == 'Asset'", "mandatory_depends_on": "eval:parent.loan_type == 'Asset'", "in_list_view": 1},
+  {"fieldname": "source_location", "fieldtype": "Link", "label": "Source Location", "options": "Location", "read_only": 1},
+  {"fieldname": "target_location", "fieldtype": "Link", "label": "Recipient Location", "options": "Location", "depends_on": "eval:parent.loan_type == 'Asset'", "in_list_view": 1},
+  {"fieldname": "batch_no", "fieldtype": "Link", "label": "Batch No", "options": "Batch", "depends_on": "eval:parent.loan_type == 'Stock'", "in_list_view": 1},
+  {"fieldname": "serial_no", "fieldtype": "Small Text", "label": "Serial Nos", "depends_on": "eval:parent.loan_type == 'Stock'"},
+  {"fieldname": "valuation_rate", "fieldtype": "Currency", "label": "Issue Valuation Rate", "read_only": 1, "hidden": 1},
+  {"fieldname": "returned_qty", "fieldtype": "Float", "label": "Returned Qty", "read_only": 1},
+  {"fieldname": "replacement_received_qty", "fieldtype": "Float", "label": "Replacement Qty Received", "read_only": 1, "hidden": 1},
+  {"fieldname": "adjusted_qty", "fieldtype": "Float", "label": "Adjusted Qty", "read_only": 1},
+  {"fieldname": "outstanding_qty", "fieldtype": "Float", "label": "Outstanding Qty", "read_only": 1, "in_list_view": 1}
+ ],
+ "istable": 1,
+ "module": "Loan",
+ "name": "Custody Loan Item",
+ "permissions": [],
+ "sort_field": "idx",
+ "sort_order": "ASC"
+}

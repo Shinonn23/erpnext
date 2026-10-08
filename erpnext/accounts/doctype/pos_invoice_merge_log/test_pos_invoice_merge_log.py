@@ -14,7 +14,9 @@ from erpnext.accounts.doctype.pos_closing_entry.pos_closing_entry import (
 )
 from erpnext.accounts.doctype.pos_closing_entry.test_pos_closing_entry import init_user_and_profile
 from erpnext.accounts.doctype.pos_invoice.pos_invoice import make_sales_return
-from erpnext.accounts.doctype.pos_invoice.test_pos_invoice import create_pos_invoice
+from erpnext.accounts.doctype.pos_invoice.test_pos_invoice import (
+	create_pos_invoice,
+)
 from erpnext.accounts.doctype.pos_opening_entry.test_pos_opening_entry import create_opening_entry
 from erpnext.stock.doctype.serial_and_batch_bundle.test_serial_and_batch_bundle import (
 	get_serial_nos_from_bundle,
@@ -49,7 +51,7 @@ def sell_over_the_counter(lines, discount_percentage=0):
 				"price_list_rate": rate,
 				"warehouse": "_Test Warehouse - _TC",
 				"income_account": "Sales - _TC",
-				"cost_center": "_Test Cost Center - _TC",
+
 			},
 		)
 
@@ -96,7 +98,7 @@ class TestPOSInvoiceMergeLog(ERPNextTestSuite):
 
 	def make_closing_entry(self):
 		closing_entry = make_closing_entry_from_opening(self.opening_entry)
-		closing_entry.insert().submit()
+		closing_entry.submit()
 		return closing_entry
 
 	def test_consolidated_invoice_creation(self):
@@ -104,17 +106,14 @@ class TestPOSInvoiceMergeLog(ERPNextTestSuite):
 		pos_inv.append("payments", {"mode_of_payment": "Cash", "account": "Cash - _TC", "amount": 300})
 		pos_inv.save()
 		pos_inv.submit()
-
 		pos_inv2 = create_pos_invoice(rate=3200, do_not_submit=1)
 		pos_inv2.append("payments", {"mode_of_payment": "Cash", "account": "Cash - _TC", "amount": 3200})
 		pos_inv2.save()
 		pos_inv2.submit()
-
 		pos_inv3 = create_pos_invoice(customer="_Test Customer 2", rate=2300, do_not_submit=1)
 		pos_inv3.append("payments", {"mode_of_payment": "Cash", "account": "Cash - _TC", "amount": 2300})
 		pos_inv3.save()
 		pos_inv3.submit()
-
 		self.make_closing_entry()
 
 		pos_inv.load_from_db()
@@ -130,17 +129,14 @@ class TestPOSInvoiceMergeLog(ERPNextTestSuite):
 		pos_inv.append("payments", {"mode_of_payment": "Cash", "account": "Cash - _TC", "amount": 300})
 		pos_inv.save()
 		pos_inv.submit()
-
 		pos_inv2 = create_pos_invoice(rate=3200, do_not_submit=1)
 		pos_inv2.append("payments", {"mode_of_payment": "Cash", "account": "Cash - _TC", "amount": 3200})
 		pos_inv2.save()
 		pos_inv2.submit()
-
 		pos_inv3 = create_pos_invoice(customer="_Test Customer 2", rate=2300, do_not_submit=1)
 		pos_inv3.append("payments", {"mode_of_payment": "Cash", "account": "Cash - _TC", "amount": 2300})
 		pos_inv3.save()
 		pos_inv3.submit()
-
 		pos_inv_cn = make_sales_return(pos_inv.name)
 		pos_inv_cn.set("payments", [])
 		pos_inv_cn.append("payments", {"mode_of_payment": "Cash", "account": "Cash - _TC", "amount": -100})
@@ -149,7 +145,6 @@ class TestPOSInvoiceMergeLog(ERPNextTestSuite):
 		)
 		pos_inv_cn.paid_amount = -300
 		pos_inv_cn.submit()
-
 		self.make_closing_entry()
 
 		pos_inv.load_from_db()
@@ -175,7 +170,6 @@ class TestPOSInvoiceMergeLog(ERPNextTestSuite):
 			{
 				"account_head": "_Test Account VAT - _TC",
 				"charge_type": "On Net Total",
-				"cost_center": "_Test Cost Center - _TC",
 				"description": "VAT",
 				"doctype": "Sales Taxes and Charges",
 				"rate": 9,
@@ -185,7 +179,6 @@ class TestPOSInvoiceMergeLog(ERPNextTestSuite):
 		inv.payments[0].amount = inv.grand_total
 		inv.save()
 		inv.submit()
-
 		inv2 = create_pos_invoice(qty=1, rate=100, do_not_save=True)
 		inv2.get("items")[0].item_code = "_Test Item 2"
 		inv2.append(
@@ -193,7 +186,6 @@ class TestPOSInvoiceMergeLog(ERPNextTestSuite):
 			{
 				"account_head": "_Test Account VAT - _TC",
 				"charge_type": "On Net Total",
-				"cost_center": "_Test Cost Center - _TC",
 				"description": "VAT",
 				"doctype": "Sales Taxes and Charges",
 				"rate": 5,
@@ -203,7 +195,6 @@ class TestPOSInvoiceMergeLog(ERPNextTestSuite):
 		inv2.payments[0].amount = inv.grand_total
 		inv2.save()
 		inv2.submit()
-
 		self.make_closing_entry()
 
 		inv.load_from_db()
@@ -258,7 +249,6 @@ class TestPOSInvoiceMergeLog(ERPNextTestSuite):
 			{
 				"account_head": "_Test Account VAT - _TC",
 				"charge_type": "On Net Total",
-				"cost_center": "_Test Cost Center - _TC",
 				"description": "VAT",
 				"doctype": "Sales Taxes and Charges",
 				"rate": 7.5,
@@ -268,14 +258,12 @@ class TestPOSInvoiceMergeLog(ERPNextTestSuite):
 		inv.append("payments", {"mode_of_payment": "Cash", "account": "Cash - _TC", "amount": 30000})
 		inv.insert()
 		inv.submit()
-
 		inv2 = create_pos_invoice(qty=3, rate=10000, do_not_save=True)
 		inv2.append(
 			"taxes",
 			{
 				"account_head": "_Test Account VAT - _TC",
 				"charge_type": "On Net Total",
-				"cost_center": "_Test Cost Center - _TC",
 				"description": "VAT",
 				"doctype": "Sales Taxes and Charges",
 				"rate": 7.5,
@@ -285,7 +273,6 @@ class TestPOSInvoiceMergeLog(ERPNextTestSuite):
 		inv2.append("payments", {"mode_of_payment": "Cash", "account": "Cash - _TC", "amount": 30000})
 		inv2.insert()
 		inv2.submit()
-
 		self.make_closing_entry()
 
 		inv.load_from_db()
@@ -310,7 +297,6 @@ class TestPOSInvoiceMergeLog(ERPNextTestSuite):
 			{
 				"account_head": "_Test Account VAT - _TC",
 				"charge_type": "On Net Total",
-				"cost_center": "_Test Cost Center - _TC",
 				"description": "VAT",
 				"doctype": "Sales Taxes and Charges",
 				"rate": 7.5,
@@ -320,14 +306,12 @@ class TestPOSInvoiceMergeLog(ERPNextTestSuite):
 		inv.append("payments", {"mode_of_payment": "Cash", "account": "Cash - _TC", "amount": 60000})
 		inv.insert()
 		inv.submit()
-
 		inv2 = create_pos_invoice(qty=6, rate=10000, do_not_save=True)
 		inv2.append(
 			"taxes",
 			{
 				"account_head": "_Test Account VAT - _TC",
 				"charge_type": "On Net Total",
-				"cost_center": "_Test Cost Center - _TC",
 				"description": "VAT",
 				"doctype": "Sales Taxes and Charges",
 				"rate": 7.5,
@@ -337,12 +321,10 @@ class TestPOSInvoiceMergeLog(ERPNextTestSuite):
 		inv2.append("payments", {"mode_of_payment": "Cash", "account": "Cash - _TC", "amount": 60000})
 		inv2.insert()
 		inv2.submit()
-
 		inv3 = create_pos_invoice(qty=3, rate=600, do_not_save=True)
 		inv3.append("payments", {"mode_of_payment": "Cash", "account": "Cash - _TC", "amount": 1800})
 		inv3.insert()
 		inv3.submit()
-
 		self.make_closing_entry()
 
 		inv.load_from_db()
@@ -375,7 +357,7 @@ class TestPOSInvoiceMergeLog(ERPNextTestSuite):
 						"rate": rate,
 						"income_account": "Sales - _TC",
 						"expense_account": "Cost of Goods Sold - _TC",
-						"cost_center": "_Test Cost Center - _TC",
+
 					},
 				)
 			inv.append(
@@ -383,7 +365,6 @@ class TestPOSInvoiceMergeLog(ERPNextTestSuite):
 				{
 					"account_head": "_Test Account VAT - _TC",
 					"charge_type": "On Net Total",
-					"cost_center": "_Test Cost Center - _TC",
 					"description": "VAT",
 					"doctype": "Sales Taxes and Charges",
 					"rate": 15,
@@ -395,7 +376,6 @@ class TestPOSInvoiceMergeLog(ERPNextTestSuite):
 			inv.paid_amount = -157
 			inv.save()
 			inv.submit()
-
 		self.make_closing_entry()
 
 		inv.load_from_db()
@@ -418,12 +398,10 @@ class TestPOSInvoiceMergeLog(ERPNextTestSuite):
 		inv.append("payments", {"mode_of_payment": "Cash", "account": "Cash - _TC", "amount": 70})
 		inv.insert()
 		inv.submit()
-
 		inv2 = create_pos_invoice(qty=1, rate=59.5, do_not_save=True)
 		inv2.append("payments", {"mode_of_payment": "Cash", "account": "Cash - _TC", "amount": 60})
 		inv2.insert()
 		inv2.submit()
-
 		self.make_closing_entry()
 
 		inv.load_from_db()
@@ -457,11 +435,9 @@ class TestPOSInvoiceMergeLog(ERPNextTestSuite):
 		pos_inv.append("payments", {"mode_of_payment": "Cash", "account": "Cash - _TC", "amount": 100})
 		pos_inv.save()
 		pos_inv.submit()
-
 		pos_inv_cn = make_sales_return(pos_inv.name)
 		pos_inv_cn.paid_amount = -100
 		pos_inv_cn.submit()
-
 		pos_inv2 = create_pos_invoice(
 			item_code="_Test Serialized Item With Series",
 			serial_no=[serial_no],
@@ -472,7 +448,6 @@ class TestPOSInvoiceMergeLog(ERPNextTestSuite):
 		pos_inv2.append("payments", {"mode_of_payment": "Cash", "account": "Cash - _TC", "amount": 100})
 		pos_inv2.save()
 		pos_inv2.submit()
-
 		self.make_closing_entry()
 
 		pos_inv.load_from_db()
@@ -480,50 +455,6 @@ class TestPOSInvoiceMergeLog(ERPNextTestSuite):
 
 		self.assertNotEqual(pos_inv.consolidated_invoice, pos_inv2.consolidated_invoice)
 
-	def test_separate_consolidated_invoice_for_different_accounting_dimensions(self):
-		"""
-		Creating 3 POS Invoices where first POS Invoice has different Cost Center than the other two.
-		Consolidate the Invoices.
-		Check whether the first POS Invoice is consolidated with a separate Sales Invoice than the other two.
-		Check whether the second and third POS Invoice are consolidated with the same Sales Invoice.
-		"""
-		from erpnext.accounts.doctype.cost_center.test_cost_center import create_cost_center
-
-		create_cost_center(cost_center_name="_Test POS Cost Center 1", is_group=0)
-		create_cost_center(cost_center_name="_Test POS Cost Center 2", is_group=0)
-
-		pos_inv = create_pos_invoice(rate=300, do_not_submit=1)
-		pos_inv.append("payments", {"mode_of_payment": "Cash", "account": "Cash - _TC", "amount": 300})
-		pos_inv.cost_center = "_Test POS Cost Center 1 - _TC"
-		pos_inv.save()
-		pos_inv.submit()
-
-		pos_inv2 = create_pos_invoice(rate=3200, do_not_submit=1)
-		pos_inv2.append("payments", {"mode_of_payment": "Cash", "account": "Cash - _TC", "amount": 3200})
-		pos_inv.cost_center = "_Test POS Cost Center 2 - _TC"
-		pos_inv2.save()
-		pos_inv2.submit()
-
-		pos_inv3 = create_pos_invoice(rate=2300, do_not_submit=1)
-		pos_inv3.append("payments", {"mode_of_payment": "Cash", "account": "Cash - _TC", "amount": 2300})
-		pos_inv.cost_center = "_Test POS Cost Center 2 - _TC"
-		pos_inv3.save()
-		pos_inv3.submit()
-
-		self.make_closing_entry()
-
-		pos_inv.load_from_db()
-		self.assertTrue(frappe.db.exists("Sales Invoice", pos_inv.consolidated_invoice))
-
-		pos_inv2.load_from_db()
-		self.assertTrue(frappe.db.exists("Sales Invoice", pos_inv2.consolidated_invoice))
-
-		self.assertFalse(pos_inv.consolidated_invoice == pos_inv3.consolidated_invoice)
-
-		pos_inv3.load_from_db()
-		self.assertTrue(frappe.db.exists("Sales Invoice", pos_inv3.consolidated_invoice))
-
-		self.assertTrue(pos_inv2.consolidated_invoice == pos_inv3.consolidated_invoice)
 
 	def test_company_in_pos_invoice_merge_log(self):
 		"""
@@ -533,7 +464,6 @@ class TestPOSInvoiceMergeLog(ERPNextTestSuite):
 		pos_inv.append("payments", {"mode_of_payment": "Cash", "account": "Cash - _TC", "amount": 300})
 		pos_inv.save()
 		pos_inv.submit()
-
 		closing_entry = self.make_closing_entry()
 
 		self.assertTrue(frappe.db.exists("POS Invoice Merge Log", {"pos_closing_entry": closing_entry.name}))

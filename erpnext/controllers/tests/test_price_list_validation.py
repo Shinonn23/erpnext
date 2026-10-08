@@ -68,9 +68,7 @@ class TestPriceListValidation(ERPNextTestSuite):
 
 		delivery_note = create_delivery_note(
 			company=company,
-			customer="_Test Internal Customer 2",
-			cost_center="Main - TCP1",
-			expense_account="Cost of Goods Sold - TCP1",
+			customer="_Test Internal Customer 2""Cost of Goods Sold - TCP1",
 			warehouse="Stores - TCP1",
 			target_warehouse=create_warehouse("_Test Transit For Price List", company=company),
 			do_not_submit=1,

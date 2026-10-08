@@ -20,7 +20,6 @@
   "from_payment_date",
   "to_payment_date",
   "column_break_uj04",
-  "cost_center",
   "bank_cash_account",
   "section_break_2n02",
   "status",
@@ -105,12 +104,6 @@
   {
    "fieldname": "column_break_uj04",
    "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "cost_center",
-   "fieldtype": "Link",
-   "label": "Cost Center",
-   "options": "Cost Center"
   },
   {
    "fieldname": "bank_cash_account",

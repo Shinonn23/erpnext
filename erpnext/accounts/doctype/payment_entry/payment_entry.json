@@ -70,6 +70,7 @@
   "deductions_or_loss_section",
   "deductions",
   "section_tax_withholding_entry",
+  "tax_withholding_categories",
   "tax_withholding_group",
   "ignore_tax_withholding_threshold",
   "override_tax_withholding_entries",
@@ -82,7 +83,6 @@
   "accounting_dimensions_section",
   "project",
   "dimension_col_break",
-  "cost_center",
   "section_break_12",
   "status",
   "custom_remarks",
@@ -150,13 +150,6 @@
    "print_hide": 1,
    "remember_last_selected_value": 1,
    "reqd": 1
-  },
-  {
-   "allow_on_submit": 1,
-   "fieldname": "cost_center",
-   "fieldtype": "Link",
-   "label": "Cost Center",
-   "options": "Cost Center"
   },
   {
    "fieldname": "mode_of_payment",
@@ -579,11 +572,10 @@
    "label": "Custom Remarks"
   },
   {
-   "depends_on": "eval:doc.apply_tds",
+   "hidden": 1,
    "fieldname": "tax_withholding_category",
    "fieldtype": "Link",
    "label": "Tax Withholding Category",
-   "mandatory_depends_on": "eval:doc.apply_tds",
    "options": "Tax Withholding Category"
   },
   {
@@ -593,7 +585,7 @@
    "label": "Taxes and Charges"
   },
   {
-   "depends_on": "eval:doc.party_type == 'Supplier'",
+   "depends_on": "eval:in_list([\"Supplier\", \"Customer\"], doc.party_type)",
    "fieldname": "purchase_taxes_and_charges_template",
    "fieldtype": "Link",
    "label": "Purchase Taxes and Charges Template",
@@ -751,6 +743,14 @@
    "fieldname": "section_tax_withholding_entry",
    "fieldtype": "Section Break",
    "label": "Tax Withholding Entry"
+  },
+  {
+   "depends_on": "eval:doc.apply_tds",
+   "fieldname": "tax_withholding_categories",
+   "fieldtype": "Table",
+   "label": "Tax Withholding Categories",
+   "mandatory_depends_on": "eval:doc.apply_tds",
+   "options": "Payment Entry Tax Withholding Category"
   },
   {
    "fieldname": "tax_withholding_group",

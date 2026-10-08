@@ -13,7 +13,6 @@ def setup(company=None, patch=True):
 
 def setup_company_independent_fixtures(company=None, patch=True):
 	make_custom_fields()
-	add_print_formats()
 
 
 def make_custom_fields(update=True):
@@ -61,7 +60,3 @@ def make_custom_fields(update=True):
 	}
 	create_custom_fields(custom_fields, update=update)
 
-
-def add_print_formats():
-	frappe.reload_doc("regional", "print_format", "irs_1099_form")
-	frappe.db.set_value("Print Format", "IRS 1099 Form", "disabled", 0)

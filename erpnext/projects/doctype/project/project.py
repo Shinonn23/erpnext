@@ -35,7 +35,6 @@ class Project(Document):
 		collect_progress: DF.Check
 		company: DF.Link
 		copied_from: DF.Data | None
-		cost_center: DF.Link | None
 		customer: DF.Link | None
 		daily_time_to_send: DF.Time | None
 		day_to_send: DF.Literal["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
@@ -517,11 +516,6 @@ def get_users_for_project(doctype, txt, searchfield, start, page_len, filters):
 		),
 		{"txt": "%%%s%%" % txt, "_txt": txt.replace("%", ""), "start": start, "page_len": page_len},
 	)
-
-
-@frappe.whitelist()
-def get_cost_center_name(project):
-	return frappe.db.get_value("Project", project, "cost_center")
 
 
 def hourly_reminder():

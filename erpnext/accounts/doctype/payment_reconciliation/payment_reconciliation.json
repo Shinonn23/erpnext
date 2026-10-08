@@ -26,7 +26,6 @@
   "payment_limit",
   "bank_cash_account",
   "accounting_dimensions_section",
-  "cost_center",
   "dimension_col_break",
   "project",
   "sec_break1",
@@ -190,16 +189,10 @@
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "cost_center",
+   "fieldname": "project",
    "fieldtype": "Link",
-   "label": "Cost Center",
-   "options": "Cost Center"
-  },
-  {
-    "fieldname": "project",
-    "fieldtype": "Link",
-    "label": "Project",
-    "options": "Project"
+   "label": "Project",
+   "options": "Project"
   },
   {
    "depends_on": "eval:doc.party",

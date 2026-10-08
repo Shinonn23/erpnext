@@ -109,7 +109,6 @@ def get_gle_fields():
 		"credit_in_account_currency",
 		"voucher_no",
 		# default dimension fields
-		"cost_center",
 		"finance_book",
 		"project",
 		# accounting dimensions

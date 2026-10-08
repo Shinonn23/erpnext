@@ -15,7 +15,6 @@ class PaymentReconciliationPayment(Document):
 		from frappe.types import DF
 
 		amount: DF.Currency
-		cost_center: DF.Link | None
 		currency: DF.Link | None
 		difference_amount: DF.Currency
 		exchange_rate: DF.Float

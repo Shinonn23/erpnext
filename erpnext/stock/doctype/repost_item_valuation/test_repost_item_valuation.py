@@ -327,7 +327,6 @@ class TestRepostItemValuation(ERPNextTestSuite, StockTestMixin):
 			update_stock=1,
 			currency="INR",
 			item_code=item.name,
-			cost_center="Main - TCP1",
 			qty=1,
 			rate=rate,
 		)

@@ -25,7 +25,7 @@ from erpnext.accounts.general_ledger import make_reverse_gl_entries
 from erpnext.assets.doctype.asset.depreciation import (
 	get_comma_separated_links,
 	get_depreciation_accounts,
-	get_disposal_account_and_cost_center,
+	get_disposal_account,
 )
 from erpnext.assets.doctype.asset_activity.asset_activity import add_asset_activity
 from erpnext.assets.doctype.asset_category.asset_category import get_asset_category_account
@@ -56,15 +56,18 @@ class Asset(AccountsController):
 		asset_owner: DF.Literal["", "Company", "Supplier", "Customer"]
 		asset_owner_company: DF.Link | None
 		asset_quantity: DF.Int
+		asset_serial_number: DF.Data | None
 		asset_type: DF.Literal["", "Existing Asset", "Composite Asset", "Composite Component"]
 		available_for_use_date: DF.Date | None
 		booked_fixed_asset: DF.Check
 		calculate_depreciation: DF.Check
 		company: DF.Link
 		comprehensive_insurance: DF.Data | None
-		cost_center: DF.Link | None
 		custodian: DF.Link | None
 		customer: DF.Link | None
+		material_request: DF.Link | None
+		demo_loan_status: DF.Literal["", "Available", "With Customer"]
+		is_demo_asset: DF.Check
 		default_finance_book: DF.Link | None
 		department: DF.Link | None
 		depr_entry_posting_status: DF.Literal["", "Successful", "Failed"]
@@ -113,6 +116,9 @@ class Asset(AccountsController):
 			"Capitalized",
 			"Work In Progress",
 		]
+		source_batch_no: DF.Link | None
+		source_serial_no: DF.Link | None
+		source_warehouse: DF.Link | None
 		supplier: DF.Link | None
 		total_asset_cost: DF.Currency
 		total_number_of_depreciations: DF.Int
@@ -127,7 +133,6 @@ class Asset(AccountsController):
 		self.validate_asset_values()
 		self.validate_asset_and_reference()
 		self.validate_item()
-		self.validate_cost_center()
 		self.set_missing_values()
 		self.validate_gross_and_purchase_amount()
 		self.validate_finance_books()
@@ -351,35 +356,6 @@ class Asset(AccountsController):
 			frappe.throw(_("Item {0} must be a Fixed Asset Item").format(self.item_code))
 		elif item.is_stock_item:
 			frappe.throw(_("Item {0} must be a non-stock item").format(self.item_code))
-
-	def validate_cost_center(self):
-		if self.cost_center:
-			cost_center_company, cost_center_is_group = frappe.db.get_value(
-				"Cost Center", self.cost_center, ["company", "is_group"]
-			)
-			if cost_center_company != self.company:
-				frappe.throw(
-					_("Cost Center {} doesn't belong to Company {}").format(
-						frappe.bold(self.cost_center), frappe.bold(self.company)
-					),
-					title=_("Invalid Cost Center"),
-				)
-			if cost_center_is_group:
-				frappe.throw(
-					_(
-						"Cost Center {} is a group cost center and group cost centers cannot be used in transactions"
-					).format(frappe.bold(self.cost_center)),
-					title=_("Invalid Cost Center"),
-				)
-
-		else:
-			if not frappe.get_cached_value("Company", self.company, "depreciation_cost_center"):
-				frappe.throw(
-					_(
-						"Please set a Cost Center for the Asset or set an Asset Depreciation Cost Center for the Company {}"
-					).format(frappe.bold(self.company)),
-					title=_("Missing Cost Center"),
-				)
 
 	def validate_in_use_date(self):
 		if not self.available_for_use_date and self.asset_type != "Composite Component":
@@ -943,7 +919,6 @@ class Asset(AccountsController):
 						"posting_date": self.available_for_use_date,
 						"credit": self.purchase_amount,
 						"credit_in_account_currency": self.purchase_amount,
-						"cost_center": self.cost_center,
 					},
 					item=self,
 				)
@@ -958,7 +933,6 @@ class Asset(AccountsController):
 						"posting_date": self.available_for_use_date,
 						"debit": self.purchase_amount,
 						"debit_in_account_currency": self.purchase_amount,
-						"cost_center": self.cost_center,
 					},
 					item=self,
 				)
@@ -1100,7 +1074,7 @@ def make_sales_invoice(asset, item_code, company, sell_qty, serial_no=None):
 	si = frappe.new_doc("Sales Invoice")
 	si.company = company
 	si.currency = frappe.get_cached_value("Company", company, "default_currency")
-	disposal_account, depreciation_cost_center = get_disposal_account_and_cost_center(company)
+	disposal_account = get_disposal_account(company)
 	si.append(
 		"items",
 		{
@@ -1109,13 +1083,14 @@ def make_sales_invoice(asset, item_code, company, sell_qty, serial_no=None):
 			"asset": asset,
 			"income_account": disposal_account,
 			"serial_no": serial_no,
-			"cost_center": depreciation_cost_center,
 			"qty": sell_qty,
 		},
 	)
 
-	accounting_dimensions = get_dimensions(with_cost_center_and_project=True)
-	for dimension in accounting_dimensions[0]:
+	accounting_dimensions = get_dimensions()[0]
+	if not any(dimension.fieldname == "project" for dimension in accounting_dimensions):
+		accounting_dimensions.append(frappe._dict(fieldname="project", document_type="Project"))
+	for dimension in accounting_dimensions:
 		si.update(
 			{
 				dimension["fieldname"]: asset_doc.get(dimension["fieldname"])
@@ -1250,10 +1225,9 @@ def make_journal_entry(asset_name):
 		depreciation_expense_account,
 	) = get_depreciation_accounts(asset.asset_category, asset.company)
 
-	depreciation_cost_center, depreciation_series = frappe.get_cached_value(
-		"Company", asset.company, ["depreciation_cost_center", "series_for_depreciation_entry"]
+	depreciation_series = frappe.get_cached_value(
+		"Company", asset.company, "series_for_depreciation_entry"
 	)
-	depreciation_cost_center = asset.cost_center or depreciation_cost_center
 
 	je = frappe.new_doc("Journal Entry")
 	je.voucher_type = "Depreciation Entry"
@@ -1267,7 +1241,6 @@ def make_journal_entry(asset_name):
 			"account": depreciation_expense_account,
 			"reference_type": "Asset",
 			"reference_name": asset.name,
-			"cost_center": depreciation_cost_center,
 		},
 	)
 
@@ -1379,7 +1352,6 @@ def get_values_from_purchase_doc(purchase_doc_name: str, item_code: str, doctype
 		"purchase_date": purchase_doc.get("posting_date"),
 		"net_purchase_amount": flt(first_item.valuation_rate) * flt(first_item.qty),
 		"asset_quantity": first_item.qty,
-		"cost_center": first_item.cost_center or purchase_doc.get("cost_center"),
 		"asset_location": first_item.get("asset_location"),
 		"purchase_receipt_item": first_item.name if doctype == "Purchase Receipt" else None,
 		"purchase_invoice_item": first_item.name if doctype == "Purchase Invoice" else None,

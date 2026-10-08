@@ -1,0 +1,36 @@
+{
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "autoname": "hash",
+ "field_order": [
+  "dedupe_key",
+  "registration",
+  "expiry_date",
+  "trigger",
+  "status",
+  "system_sent",
+  "email_sent",
+  "recipients",
+  "delivery_note"
+ ],
+ "fields": [
+  {"fieldname": "dedupe_key", "fieldtype": "Data", "label": "Idempotency Key", "unique": 1, "reqd": 1, "hidden": 1},
+  {"fieldname": "registration", "fieldtype": "Link", "label": "ทะเบียน อย.", "options": "Thai FDA Registration", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "expiry_date", "fieldtype": "Date", "label": "วันหมดอายุ", "reqd": 1},
+  {"fieldname": "trigger", "fieldtype": "Data", "label": "จุดเตือน", "reqd": 1},
+  {"fieldname": "status", "fieldtype": "Select", "label": "สถานะการส่ง", "options": "กำลังส่ง\nส่งแล้ว\nรอส่งซ้ำ\nยกเลิก", "default": "กำลังส่ง", "reqd": 1},
+  {"fieldname": "system_sent", "fieldtype": "Check", "label": "ส่งในระบบแล้ว", "default": "0"},
+  {"fieldname": "email_sent", "fieldtype": "Check", "label": "ส่งอีเมลแล้ว", "default": "0"},
+  {"fieldname": "recipients", "fieldtype": "Small Text", "label": "ผู้รับ"},
+  {"fieldname": "delivery_note", "fieldtype": "Small Text", "label": "รายละเอียดการส่ง"}
+ ],
+ "module": "Regional",
+ "name": "Thai FDA Reminder Log",
+ "permissions": [
+  {"read": 1, "report": 1, "role": "Item Manager"},
+  {"read": 1, "report": 1, "role": "Stock Manager"},
+  {"read": 1, "report": 1, "role": "System Manager"}
+ ],
+ "row_format": "Dynamic",
+ "track_changes": 1
+}

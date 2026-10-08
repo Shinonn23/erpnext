@@ -1,0 +1,103 @@
+import http.client
+import json
+from datetime import datetime, timedelta
+
+import frappe
+
+RATE_TYPE_FIELD_MAP = {
+	"Mid Rate": "mid_rate",
+	"Selling Rate": "selling",
+	"Buying Sight Rate": "buying_sight",
+	"Buying Transfer Rate": "buying_transfer",
+}
+
+
+def clear_exchange_rate_cache(doc, method=None):
+	if not doc.has_value_changed("bot_currency_rate_type"):
+		return
+
+	currency = doc.name
+	suffix = f":{currency}".encode()
+	middle = f":{currency}:".encode()
+	cache = frappe.cache()
+	stale_keys = [
+		key
+		for key in cache.keys("currency_exchange_rate_*")
+		if key.endswith(suffix) or middle in key
+	]
+	if stale_keys:
+		cache.delete(*stale_keys)
+
+
+@frappe.whitelist(allow_guest=True)
+def get_api_currency_exchange(from_currency, to_currency, transaction_date, token=None):
+	# Convert the transaction_date string to a datetime object
+	trans_start_date = datetime.strptime(transaction_date, "%Y-%m-%d")
+	trans_start_date = trans_start_date - timedelta(days=5)
+	trans_start_date = trans_start_date.strftime("%Y-%m-%d")
+
+	trans_end_date = datetime.strptime(transaction_date, "%Y-%m-%d")
+	trans_end_date = trans_end_date.strftime("%Y-%m-%d")
+
+	currency_doc = frappe.get_cached_doc("Currency", from_currency)
+	bot_currency = (currency_doc.get("bot_currency") or from_currency).upper()
+	rate_field = RATE_TYPE_FIELD_MAP.get(
+		currency_doc.get("bot_currency_rate_type"), "selling"
+	)
+
+	# Params to BOT API
+	start_date = trans_start_date
+	end_date = trans_end_date
+
+	if not token:
+		currency_exchange_settings = frappe.get_single("Currency Exchange Settings")
+		token = currency_exchange_settings.get_password("token")
+
+	conn = http.client.HTTPSConnection("gateway.api.bot.or.th")
+	headers = {
+		"Authorization": token,
+		"accept": "application/json",
+		"Content-Type": "application/json",
+	}
+
+	# Properly formatted URL with dynamic date parameters
+	url_path = f"/Stat-ExchangeRate/v2/DAILY_AVG_EXG_RATE/?start_period={start_date}&end_period={end_date}&currency={bot_currency}"
+	conn.request("GET", url_path, headers=headers)
+
+	# Respose
+	res = conn.getresponse()
+	data = res.read()
+	result = data.decode("utf-8")
+
+	# To Json
+	parsed_result = json.loads(result)
+
+	rates = 0
+	# Check if "data_detail" exists and has items
+	if (
+		"data_detail" in parsed_result["result"]["data"]
+		and parsed_result["result"]["data"]["data_detail"]
+	):
+		data_detail = parsed_result["result"]["data"]["data_detail"]
+
+		# Sort data by the "period" field if not empty
+		if data_detail:
+			sorted_data = sorted(
+				data_detail, key=lambda x: datetime.strptime(x["period"], "%Y-%m-%d")
+			)
+
+			# Get the latest period's data (the last element in the sorted list)
+			latest_period_data = sorted_data[-1]
+			rates = float(latest_period_data[rate_field])
+
+	# Creating the response dictionary
+	response_data = {
+		"amount": 1.0,
+		"from_currency": from_currency,
+		"date": transaction_date,
+		"rates": {to_currency: rates},
+	}
+	print("response_data", response_data)
+	# Setting the response directly to avoid Frappe's automatic "data" wrapping
+	frappe.local.response.http_status_code = 200  # Setting HTTP status code
+	frappe.local.response.message = response_data

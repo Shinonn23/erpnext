@@ -1,0 +1,35 @@
+{
+ "actions": [],
+ "autoname": "naming_series:",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["company", "naming_series", "custody_loan", "loan_type", "return_date", "requires_shipment", "status", "items_section", "items", "generated_documents_section", "stock_entry", "replacement_stock_entry", "asset_movement", "amended_from"],
+ "fields": [
+  {"fieldname": "company", "fieldtype": "Link", "label": "Company", "options": "Company", "read_only": 1, "reqd": 1, "in_list_view": 1},
+  {"fieldname": "naming_series", "fieldtype": "Select", "label": "Series", "options": "CUST-RET-.YYYY.-", "reqd": 1, "no_copy": 1},
+  {"fieldname": "custody_loan", "fieldtype": "Link", "label": "Custody Loan", "options": "Custody Loan", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "loan_type", "fieldtype": "Select", "label": "Loan Type", "options": "Stock\nAsset", "read_only": 1, "reqd": 1},
+  {"fieldname": "return_date", "fieldtype": "Date", "label": "Return Date", "default": "Today", "reqd": 1},
+  {"fieldname": "requires_shipment", "fieldtype": "Check", "label": "Ship via Shipment", "default": "0"},
+  {"fieldname": "status", "fieldtype": "Select", "label": "Status", "options": "Draft\nIn Transit\nReceived\nCancelled", "default": "Draft", "read_only": 1, "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "items_section", "fieldtype": "Section Break", "label": "Returned Items"},
+  {"fieldname": "items", "fieldtype": "Table", "label": "Items", "options": "Custody Loan Return Item", "reqd": 1},
+  {"fieldname": "generated_documents_section", "fieldtype": "Section Break", "label": "Generated Documents", "collapsible": 1},
+  {"fieldname": "stock_entry", "fieldtype": "Link", "label": "Stock Entry", "options": "Stock Entry", "read_only": 1},
+  {"fieldname": "replacement_stock_entry", "fieldtype": "Link", "label": "Replacement Receipt Stock Entry", "options": "Stock Entry", "read_only": 1},
+  {"fieldname": "asset_movement", "fieldtype": "Link", "label": "Asset Movement", "options": "Asset Movement", "read_only": 1},
+  {"fieldname": "amended_from", "fieldtype": "Link", "label": "Amended From", "options": "Custody Loan Return", "no_copy": 1, "read_only": 1, "print_hide": 1}
+ ],
+ "is_submittable": 1,
+ "module": "Loan",
+ "name": "Custody Loan Return",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {"role": "System Manager", "read": 1, "write": 1, "create": 1, "submit": 1, "cancel": 1, "delete": 1, "print": 1, "email": 1, "export": 1, "report": 1, "share": 1},
+  {"role": "Stock User", "read": 1, "write": 1, "create": 1, "submit": 1, "print": 1, "email": 1, "export": 1, "report": 1},
+  {"role": "Stock Manager", "read": 1, "write": 1, "create": 1, "submit": 1, "cancel": 1, "delete": 1, "print": 1, "email": 1, "export": 1, "report": 1, "share": 1}
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC"
+}

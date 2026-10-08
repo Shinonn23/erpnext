@@ -246,6 +246,7 @@ def get_batch_qty(
 	consider_negative_batches=False,
 	do_not_check_future_batches=False,
 	ignore_reserved_stock=False,
+	inventory_dimensions_dict=None,
 ):
 	"""Returns batch actual qty if warehouse is passed,
 	        or returns dict of qty by warehouse if warehouse is None
@@ -275,6 +276,7 @@ def get_batch_qty(
 			"consider_negative_batches": consider_negative_batches,
 			"do_not_check_future_batches": do_not_check_future_batches,
 			"ignore_reserved_stock": ignore_reserved_stock,
+			"inventory_dimensions_dict": inventory_dimensions_dict or {},
 		}
 	)
 

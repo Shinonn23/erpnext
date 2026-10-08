@@ -436,7 +436,6 @@ class TestJobCard(ERPNextTestSuite):
 				"basic_rate": row.basic_rate,
 				"basic_amount": row.basic_amount,
 				"expense_account": row.expense_account,
-				"cost_center": row.cost_center,
 				"s_warehouse": row.s_warehouse,
 				"t_warehouse": row.t_warehouse,
 			},

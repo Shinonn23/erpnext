@@ -76,7 +76,6 @@ class TestTaxRule(ERPNextTestSuite):
 							"charge_type": "On Net Total",
 							"description": "VAT",
 							"doctype": "Purchase Taxes and Charges",
-							"cost_center": "Main - _TC",
 							"rate": 6,
 						}
 					],

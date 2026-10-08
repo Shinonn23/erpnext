@@ -35,8 +35,6 @@ def test_create_test_data():
 						"default_warehouse": "Stores - _TC",
 						"default_price_list": "_Test Price List",
 						"expense_account": "Cost of Goods Sold - _TC",
-						"buying_cost_center": "Main - _TC",
-						"selling_cost_center": "Main - _TC",
 						"income_account": "Sales - _TC",
 					}
 				],

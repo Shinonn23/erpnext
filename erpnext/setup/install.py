@@ -21,6 +21,9 @@ def after_install():
 	if not frappe.db.exists("Role", "Analytics"):
 		frappe.get_doc({"doctype": "Role", "role_name": "Analytics"}).insert()
 
+	from erpnext.stock.doctype.storage_location.storage_location import setup_storage_location_dimension
+
+	setup_storage_location_dimension()
 	set_single_defaults()
 	setup_repost_defaults()
 	create_print_setting_custom_fields()
@@ -37,9 +40,11 @@ def after_install():
 	update_roles()
 	make_default_operations()
 	update_pegged_currencies()
-	set_default_print_formats()
 	create_letter_head()
 	toggle_hidden_fields()
+	from erpnext.regional.thailand.install import after_install as thailand_after_install
+
+	thailand_after_install()
 	frappe.db.commit()
 
 
@@ -336,37 +341,6 @@ def update_pegged_currencies():
 	doc.save()
 
 
-def set_default_print_formats():
-	default_map = {
-		"Sales Order": "Sales Order with Item Image",
-		"Sales Invoice": "Sales Invoice with Item Image",
-		"Delivery Note": "Delivery Note with Item Image",
-		"Purchase Order": "Purchase Order with Item Image",
-		"Purchase Invoice": "Purchase Invoice with Item Image",
-		"POS Invoice": "POS Invoice with Item Image",
-		"Quotation": "Quotation with Item Image",
-		"Request for Quotation": "Request for Quotation with Item Image",
-	}
-
-	for doctype, print_format in default_map.items():
-		if frappe.get_meta(doctype).default_print_format:
-			continue
-
-		if not frappe.db.exists("Print Format", print_format):
-			continue
-
-		frappe.make_property_setter(
-			{
-				"doctype": doctype,
-				"doctype_or_field": "DocType",
-				"property": "default_print_format",
-				"value": print_format,
-				"property_type": "Link",
-			},
-			validate_fields_for_doctype=False,
-		)
-
-
 def create_letter_head():
 	base_path = frappe.get_app_path("erpnext", "accounts", "letterhead")
 
@@ -439,6 +413,10 @@ def after_app_install(app_name=None):
 		from erpnext.crm.frappe_crm_api import remove_allowed_users_on_crm_install
 
 		remove_allowed_users_on_crm_install()
+	elif app_name == "hrms":
+		from erpnext.regional.thailand.install import after_app_install as thailand_after_app_install
+
+		thailand_after_app_install(app_name)
 
 
 def after_app_uninstall(app_name=None):

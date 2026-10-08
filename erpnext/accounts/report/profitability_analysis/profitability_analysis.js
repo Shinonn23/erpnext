@@ -15,8 +15,8 @@ frappe.query_reports["Profitability Analysis"] = {
 			fieldname: "based_on",
 			label: __("Based On"),
 			fieldtype: "Select",
-			options: ["Cost Center", "Project", "Accounting Dimension"],
-			default: "Cost Center",
+			options: ["Project", "Accounting Dimension"],
+			default: "Accounting Dimension",
 			reqd: 1,
 			on_change: function (query_report) {
 				let based_on = query_report.get_values().based_on;
@@ -106,10 +106,10 @@ frappe.query_reports["Profitability Analysis"] = {
 			to_fiscal_year: data.fiscal_year,
 		};
 
-		if (data.based_on == "Cost Center") {
-			frappe.route_options["cost_center"] = data.account;
-		} else {
+		if (data.based_on == "Project") {
 			frappe.route_options["project"] = data.account;
+		} else {
+			frappe.route_options[data.dimension_field] = data.account;
 		}
 
 		frappe.set_route("query-report", "Profit and Loss Statement");

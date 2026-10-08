@@ -131,6 +131,50 @@
   {
    "child": 0,
    "collapsible": 1,
+   "icon": "wallet",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Petty Cash",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Section Break"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Payment Receipt",
+   "link_to": "Payment Receipt",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Petty Cash Holder",
+   "link_to": "Petty Cash Holder",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Petty Cash Report",
+   "link_to": "Petty Cash Report",
+   "link_type": "Report",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
    "icon": "sheet",
    "indent": 1,
    "keep_closed": 1,
@@ -195,7 +239,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-02-23 16:38:05.061694",
+ "modified": "2026-10-05 14:06:48.069157",
  "modified_by": "Administrator",
  "module": "Accounts",
  "module_onboarding": "Accounting Onboarding",

@@ -570,7 +570,6 @@ def get_basic_details(ctx: ItemDetailsCtx, item, overwrite_warehouse=True) -> It
 			"provisional_expense_account": get_provisional_account(
 				ctx, item_defaults, item_group_defaults, brand_defaults
 			),
-			"cost_center": get_default_cost_center(ctx, item_defaults, item_group_defaults, brand_defaults),
 			"has_serial_no": item.has_serial_no,
 			"has_batch_no": item.has_batch_no,
 			"batch_no": ctx.batch_no,
@@ -651,7 +650,6 @@ def get_basic_details(ctx: ItemDetailsCtx, item, overwrite_warehouse=True) -> It
 	for d in [
 		["Account", "income_account", "default_income_account"],
 		["Account", "expense_account", expense_account_field],
-		["Cost Center", "cost_center", "cost_center"],
 		["Warehouse", "warehouse", ""],
 	]:
 		if not out[d[1]]:
@@ -1061,56 +1059,6 @@ def get_default_deferred_account(ctx: ItemDetailsCtx, item, fieldname=None):
 		)
 	else:
 		return None
-
-
-@erpnext.normalize_ctx_input(ItemDetailsCtx)
-def get_default_cost_center(ctx: ItemDetailsCtx, item=None, item_group=None, brand=None, company=None):
-	cost_center = None
-
-	if not company and ctx.get("company"):
-		company = ctx.get("company")
-
-	if ctx.get("project"):
-		cost_center = frappe.db.get_value("Project", ctx.get("project"), "cost_center", cache=True)
-
-	if not cost_center and (item and item_group and brand):
-		if ctx.get("customer"):
-			cost_center = (
-				item.get("selling_cost_center")
-				or item_group.get("selling_cost_center")
-				or brand.get("selling_cost_center")
-			)
-		else:
-			cost_center = (
-				item.get("buying_cost_center")
-				or item_group.get("buying_cost_center")
-				or brand.get("buying_cost_center")
-			)
-
-	elif not cost_center and ctx.get("item_code") and company:
-		for method in ["get_item_defaults", "get_item_group_defaults", "get_brand_defaults"]:
-			path = f"erpnext.stock.get_item_details.{method}"
-			data = frappe.get_attr(path)(ctx.get("item_code"), company)
-
-			if data and (data.selling_cost_center or data.buying_cost_center):
-				if ctx.get("customer") and data.selling_cost_center:
-					return data.selling_cost_center
-
-				elif ctx.get("supplier") and data.buying_cost_center:
-					return data.buying_cost_center
-
-				return data.selling_cost_center or data.buying_cost_center
-
-	if not cost_center and ctx.get("cost_center"):
-		cost_center = ctx.get("cost_center")
-
-	if company and cost_center and frappe.get_cached_value("Cost Center", cost_center, "company") != company:
-		return None
-
-	if not cost_center and company:
-		cost_center = frappe.get_cached_value("Company", company, "cost_center")
-
-	return cost_center
 
 
 def get_default_supplier(_ctx: ItemDetailsCtx, item, item_group, brand):
@@ -1566,7 +1514,7 @@ def get_pos_profile_item_details_(ctx: ItemDetailsCtx, company, pos_profile=None
 		pos_profile = frappe.flags.pos_profile = get_pos_profile(company, ctx.pos_profile)
 
 	if pos_profile:
-		for fieldname in ("income_account", "cost_center", "warehouse", "expense_account"):
+		for fieldname in ("income_account", "warehouse", "expense_account"):
 			if (not ctx.get(fieldname) or update_data) and pos_profile.get(fieldname):
 				res[fieldname] = pos_profile.get(fieldname)
 

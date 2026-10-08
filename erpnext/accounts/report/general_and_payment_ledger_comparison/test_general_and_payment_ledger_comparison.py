@@ -15,7 +15,6 @@ class TestGeneralAndPaymentLedger(ERPNextTestSuite, AccountsTestMixin):
 		self.company = "_Test Company"
 		self.debit_to = "Debtors - _TC"
 		self.expense_account = "Cost of Goods Sold - _TC"
-		self.cost_center = "Main - _TC"
 		self.income_account = "Sales - _TC"
 		self.warehouse = "Stores - _TC"
 		self.creditors = "Creditors - _TC"
@@ -35,7 +34,6 @@ class TestGeneralAndPaymentLedger(ERPNextTestSuite, AccountsTestMixin):
 			company=self.company,
 			debit_to=self.debit_to,
 			expense_account=self.expense_account,
-			cost_center=self.cost_center,
 			income_account=self.income_account,
 			warehouse=self.warehouse,
 		)

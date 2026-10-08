@@ -13,7 +13,6 @@
     "base_amount": 500,
     "base_rate": 50,
     "conversion_factor": 1.0,
-    "cost_center": "_Test Cost Center - _TC",
     "doctype": "Purchase Invoice Item",
     "expense_account": "_Test Account Cost for Goods Sold - _TC",
     "item_code": "_Test Item Home Desktop 100",
@@ -23,14 +22,13 @@
     "qty": 10,
     "rate": 50,
     "uom": "_Test UOM",
-	"warehouse": "_Test Warehouse - _TC"
+    "warehouse": "_Test Warehouse - _TC"
    },
    {
     "amount": 750,
     "base_amount": 750,
     "base_rate": 150,
     "conversion_factor": 1.0,
-    "cost_center": "_Test Cost Center - _TC",
     "doctype": "Purchase Invoice Item",
     "expense_account": "_Test Account Cost for Goods Sold - _TC",
     "item_code": "_Test Item Home Desktop 200",
@@ -39,7 +37,7 @@
     "qty": 5,
     "rate": 150,
     "uom": "_Test UOM",
-	"warehouse": "_Test Warehouse - _TC"
+    "warehouse": "_Test Warehouse - _TC"
    }
   ],
   "grand_total": 0,
@@ -50,7 +48,6 @@
     "add_deduct_tax": "Add",
     "category": "Valuation and Total",
     "charge_type": "Actual",
-    "cost_center": "_Test Cost Center - _TC",
     "description": "Shipping Charges",
     "doctype": "Purchase Taxes and Charges",
     "parentfield": "taxes",
@@ -61,7 +58,6 @@
     "add_deduct_tax": "Add",
     "category": "Valuation",
     "charge_type": "On Net Total",
-    "cost_center": "_Test Cost Center - _TC",
     "description": "Customs Duty",
     "doctype": "Purchase Taxes and Charges",
     "parentfield": "taxes",
@@ -72,7 +68,6 @@
     "add_deduct_tax": "Add",
     "category": "Total",
     "charge_type": "On Net Total",
-    "cost_center": "_Test Cost Center - _TC",
     "description": "Excise Duty",
     "doctype": "Purchase Taxes and Charges",
     "parentfield": "taxes",
@@ -83,7 +78,6 @@
     "add_deduct_tax": "Add",
     "category": "Total",
     "charge_type": "On Previous Row Amount",
-    "cost_center": "_Test Cost Center - _TC",
     "description": "Education Cess",
     "doctype": "Purchase Taxes and Charges",
     "parentfield": "taxes",
@@ -95,7 +89,6 @@
     "add_deduct_tax": "Add",
     "category": "Total",
     "charge_type": "On Previous Row Amount",
-    "cost_center": "_Test Cost Center - _TC",
     "description": "S&H Education Cess",
     "doctype": "Purchase Taxes and Charges",
     "parentfield": "taxes",
@@ -107,7 +100,6 @@
     "add_deduct_tax": "Add",
     "category": "Total",
     "charge_type": "On Previous Row Total",
-    "cost_center": "_Test Cost Center - _TC",
     "description": "CST",
     "doctype": "Purchase Taxes and Charges",
     "parentfield": "taxes",
@@ -119,7 +111,6 @@
     "add_deduct_tax": "Add",
     "category": "Total",
     "charge_type": "On Net Total",
-    "cost_center": "_Test Cost Center - _TC",
     "description": "VAT",
     "doctype": "Purchase Taxes and Charges",
     "parentfield": "taxes",
@@ -130,7 +121,6 @@
     "add_deduct_tax": "Deduct",
     "category": "Total",
     "charge_type": "On Previous Row Total",
-    "cost_center": "_Test Cost Center - _TC",
     "description": "Discount",
     "doctype": "Purchase Taxes and Charges",
     "parentfield": "taxes",
@@ -141,9 +131,6 @@
   "supplier": "_Test Supplier",
   "supplier_name": "_Test Supplier"
  },
-
-
-
  {
   "bill_no": "NA",
   "buying_price_list": "_Test Price List",
@@ -155,7 +142,6 @@
   "items": [
    {
     "conversion_factor": 1.0,
-    "cost_center": "_Test Cost Center - _TC",
     "doctype": "Purchase Invoice Item",
     "expense_account": "_Test Account Cost for Goods Sold - _TC",
     "item_code": "_Test Item",
@@ -174,7 +160,6 @@
     "add_deduct_tax": "Add",
     "category": "Valuation and Total",
     "charge_type": "Actual",
-    "cost_center": "_Test Cost Center - _TC",
     "description": "Shipping Charges",
     "doctype": "Purchase Taxes and Charges",
     "parentfield": "taxes",
@@ -185,7 +170,6 @@
     "add_deduct_tax": "Add",
     "category": "Total",
     "charge_type": "Actual",
-    "cost_center": "_Test Cost Center - _TC",
     "description": "VAT",
     "doctype": "Purchase Taxes and Charges",
     "parentfield": "taxes",
@@ -196,7 +180,6 @@
     "add_deduct_tax": "Add",
     "category": "Valuation",
     "charge_type": "Actual",
-    "cost_center": "_Test Cost Center - _TC",
     "description": "Customs Duty",
     "doctype": "Purchase Taxes and Charges",
     "parentfield": "taxes",

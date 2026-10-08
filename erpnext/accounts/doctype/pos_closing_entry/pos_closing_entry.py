@@ -64,17 +64,29 @@ class POSClosingEntry(StatusUpdater):
 		self.validate_invoice_mode()
 
 	def set_posting_date_and_time(self):
-		if self.posting_date:
+		if not self.posting_date:
 			self.posting_date = frappe.utils.nowdate()
-		if self.posting_time:
+		if not self.posting_time:
 			self.posting_time = frappe.utils.nowtime()
 
 	def fetch_invoice_type(self):
 		self.invoice_type = frappe.db.get_single_value("POS Settings", "invoice_type")
 
 	def validate_pos_opening_entry(self):
-		if frappe.db.get_value("POS Opening Entry", self.pos_opening_entry, "status") != "Open":
+		opening_entry = frappe.db.get_value(
+			"POS Opening Entry",
+			self.pos_opening_entry,
+			["status", "pos_profile", "user", "company"],
+			as_dict=True,
+		)
+		if not opening_entry or opening_entry.status != "Open":
 			frappe.throw(_("Selected POS Opening Entry should be open."), title=_("Invalid Opening Entry"))
+		if (
+			opening_entry.pos_profile != self.pos_profile
+			or opening_entry.user != self.user
+			or opening_entry.company != self.company
+		):
+			frappe.throw(_("POS Closing Entry details must match the selected opening session."))
 
 	def validate_invoice_mode(self):
 		if self.invoice_type == "POS Invoice":

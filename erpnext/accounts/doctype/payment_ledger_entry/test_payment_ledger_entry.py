@@ -17,7 +17,6 @@ class TestPaymentLedgerEntry(ERPNextTestSuite):
 	def setUp(self):
 		self.ple = qb.DocType("Payment Ledger Entry")
 		self.company = "_Test Company"
-		self.cost_center = "Main - _TC"
 		self.warehouse = "Stores - _TC"
 		self.income_account = "Sales - _TC"
 		self.expense_account = "Cost of Goods Sold - _TC"
@@ -44,10 +43,8 @@ class TestPaymentLedgerEntry(ERPNextTestSuite):
 			customer=self.customer,
 			item_code=self.item,
 			item_name=self.item,
-			cost_center=self.cost_center,
 			warehouse=self.warehouse,
 			debit_to=self.debit_to,
-			parent_cost_center=self.cost_center,
 			update_stock=0,
 			currency="INR",
 			is_pos=0,
@@ -87,7 +84,6 @@ class TestPaymentLedgerEntry(ERPNextTestSuite):
 			transaction_date=posting_date,
 			customer=self.customer,
 			item_code=self.item,
-			cost_center=self.cost_center,
 			warehouse=self.warehouse,
 			debit_to=self.debit_to,
 			currency="INR",
@@ -98,25 +94,21 @@ class TestPaymentLedgerEntry(ERPNextTestSuite):
 		)
 		return so
 
-	def create_journal_entry(self, acc1=None, acc2=None, amount=0, posting_date=None, cost_center=None):
+	def create_journal_entry(self, acc1=None, acc2=None, amount=0, posting_date=None):
 		je = frappe.new_doc("Journal Entry")
 		je.posting_date = posting_date or nowdate()
 		je.company = self.company
 		je.user_remark = "test"
-		if not cost_center:
-			cost_center = self.cost_center
 		je.set(
 			"accounts",
 			[
 				{
 					"account": acc1,
-					"cost_center": cost_center,
 					"debit_in_account_currency": amount if amount > 0 else 0,
 					"credit_in_account_currency": abs(amount) if amount < 0 else 0,
 				},
 				{
 					"account": acc2,
-					"cost_center": cost_center,
 					"credit_in_account_currency": amount if amount > 0 else 0,
 					"debit_in_account_currency": abs(amount) if amount < 0 else 0,
 				},

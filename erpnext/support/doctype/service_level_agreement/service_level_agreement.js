@@ -115,7 +115,7 @@ frappe.ui.form.on("Service Level Agreement", {
 	onload: function (frm) {
 		frm.set_query("document_type", function () {
 			let invalid_doctypes = frappe.model.core_doctypes_list;
-			invalid_doctypes.push(frm.doc.doctype, "Cost Center", "Company");
+			invalid_doctypes.push(frm.doc.doctype, "Company");
 
 			return {
 				filters: [

@@ -75,9 +75,6 @@ def make_company(company_name, abbr):
 
 	company.create_default_warehouses()
 
-	if not frappe.db.get_value("Cost Center", {"is_group": 0, "company": company.name}):
-		company.create_default_cost_center()
-
 	company.save()
 
 	return company
@@ -157,7 +154,6 @@ def make_sales_invoices():
 			debit_to="Debtors - _TCSV",
 			income_account="Sales - _TCSV",
 			expense_account="Cost of Goods Sold - _TCSV",
-			cost_center="Main - _TCSV",
 			do_not_save=1,
 		)
 		if tax:
@@ -166,7 +162,6 @@ def make_sales_invoices():
 				{
 					"charge_type": "On Net Total",
 					"account_head": tax_account,
-					"cost_center": "Main - _TCSV",
 					"description": "VAT 15% @ 15.0",
 					"rate": tax_rate,
 				},
@@ -188,7 +183,6 @@ def create_purchase_invoices():
 		supplier_warehouse="Finished Goods - _TCSV",
 		warehouse="Finished Goods - _TCSV",
 		currency="ZAR",
-		cost_center="Main - _TCSV",
 		expense_account="Cost of Goods Sold - _TCSV",
 		item="_Test SA VAT Item",
 		qty=1,
@@ -201,7 +195,6 @@ def create_purchase_invoices():
 		{
 			"charge_type": "On Net Total",
 			"account_head": "VAT - 15% - _TCSV",
-			"cost_center": "Main - _TCSV",
 			"description": "VAT 15% @ 15.0",
 			"rate": 15.0,
 		},

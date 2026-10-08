@@ -40,7 +40,6 @@ class GLEntry(Document):
 		against_voucher: DF.DynamicLink | None
 		against_voucher_type: DF.Link | None
 		company: DF.Link | None
-		cost_center: DF.Link | None
 		credit: DF.Currency
 		credit_in_account_currency: DF.Currency
 		credit_in_reporting_currency: DF.Currency
@@ -83,11 +82,9 @@ class GLEntry(Document):
 	def validate(self):
 		self.flags.ignore_submit_comment = True
 		self.validate_and_set_fiscal_year()
-		self.pl_must_have_cost_center()
 
 		if not self.flags.from_repost and self.voucher_type != "Period Closing Voucher":
 			self.check_mandatory()
-			self.validate_cost_center()
 			self.check_pl_account()
 			self.validate_party()
 			self.validate_currency()
@@ -168,23 +165,6 @@ class GLEntry(Document):
 				)
 			)
 
-	def pl_must_have_cost_center(self):
-		"""Validate that profit and loss type account GL entries have a cost center."""
-
-		if self.cost_center or self.voucher_type == "Period Closing Voucher":
-			return
-
-		if frappe.get_cached_value("Account", self.account, "report_type") == "Profit and Loss":
-			msg = _("{0} {1}: Cost Center is required for 'Profit and Loss' account {2}.").format(
-				self.voucher_type, self.voucher_no, self.account
-			)
-			msg += " "
-			msg += _(
-				"Please set the cost center field in {0} or setup a default Cost Center for the Company."
-			).format(self.voucher_type)
-
-			frappe.throw(msg, title=_("Missing Cost Center"))
-
 	def validate_dimensions_for_pl_and_bs(self):
 		account_type = frappe.get_cached_value("Account", self.account, "report_type")
 
@@ -251,26 +231,6 @@ class GLEntry(Document):
 				_("{0} {1}: Account {2} does not belong to Company {3}").format(
 					self.voucher_type, self.voucher_no, self.account, self.company
 				)
-			)
-
-	def validate_cost_center(self):
-		if not self.cost_center or self.is_cancelled:
-			return
-
-		is_group, company = frappe.get_cached_value("Cost Center", self.cost_center, ["is_group", "company"])
-
-		if company != self.company:
-			frappe.throw(
-				_("{0} {1}: Cost Center {2} does not belong to Company {3}").format(
-					self.voucher_type, self.voucher_no, self.cost_center, self.company
-				)
-			)
-
-		if self.voucher_type != "Period Closing Voucher" and is_group:
-			frappe.throw(
-				_(
-					"""{0} {1}: Cost Center {2} is a group cost center and group cost centers cannot be used in transactions"""
-				).format(self.voucher_type, self.voucher_no, frappe.bold(self.cost_center))
 			)
 
 	def validate_party(self):

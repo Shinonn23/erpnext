@@ -14,6 +14,7 @@ from frappe.desk.page.setup_wizard.setup_wizard import make_records
 from frappe.utils import (
 	add_months,
 	cint,
+	flt,
 	formatdate,
 	get_first_day,
 	get_last_day,
@@ -53,7 +54,10 @@ class Company(NestedSet):
 		company_description: DF.TextEditor | None
 		company_logo: DF.AttachImage | None
 		company_name: DF.Data
-		cost_center: DF.Link | None
+		asset_capitalization_threshold: DF.Currency
+		customer_demo_return_lookahead_days: DF.Int
+		customer_loan_warehouse: DF.Link | None
+		low_value_asset_expense_account: DF.Link | None
 		country: DF.Link
 		create_chart_of_accounts_based_on: DF.Literal["", "Standard Template", "Existing Company"]
 		credit_limit: DF.Currency
@@ -74,6 +78,7 @@ class Company(NestedSet):
 		default_finance_book: DF.Link | None
 		default_holiday_list: DF.Link | None
 		default_in_transit_warehouse: DF.Link | None
+		default_in_transit_location: DF.Link | None
 		default_income_account: DF.Link | None
 		default_inventory_account: DF.Link | None
 		default_letter_head: DF.Link | None
@@ -87,7 +92,6 @@ class Company(NestedSet):
 		default_selling_terms: DF.Link | None
 		default_warehouse_for_sales_return: DF.Link | None
 		default_wip_warehouse: DF.Link | None
-		depreciation_cost_center: DF.Link | None
 		depreciation_expense_account: DF.Link | None
 		disposal_account: DF.Link | None
 		domain: DF.Data | None
@@ -119,7 +123,6 @@ class Company(NestedSet):
 		rgt: DF.Int
 		role_allowed_for_frozen_entries: DF.Link | None
 		round_off_account: DF.Link | None
-		round_off_cost_center: DF.Link | None
 		round_off_for_opening: DF.Link | None
 		sales_monthly_history: DF.SmallText | None
 		series_for_depreciation_entry: DF.Data | None
@@ -184,8 +187,23 @@ class Company(NestedSet):
 		self.validate_parent_company()
 		self.set_reporting_currency()
 		self.validate_inventory_account_settings()
+		self.validate_customer_demo_loan_settings()
 		self.cant_change_valuation_method()
 		self.validate_pending_reposts(old_doc)
+
+	def validate_customer_demo_loan_settings(self):
+		if cint(self.customer_demo_return_lookahead_days) < 0:
+			frappe.throw(_("Asset Return Look-ahead cannot be negative"))
+		if self.customer_loan_warehouse:
+			warehouse_company = frappe.db.get_value("Warehouse", self.customer_loan_warehouse, "company")
+			if warehouse_company != self.name:
+				frappe.throw(_("Customer Loan Warehouse must belong to Company {0}").format(self.name))
+		if flt(self.asset_capitalization_threshold) > 0 and not self.low_value_asset_expense_account:
+			frappe.throw(_("Low Value Asset Expense Account is required when a threshold is set"))
+		if self.low_value_asset_expense_account:
+			account_company = frappe.db.get_value("Account", self.low_value_asset_expense_account, "company")
+			if account_company != self.name:
+				frappe.throw(_("Low Value Asset Expense Account must belong to Company {0}").format(self.name))
 
 	def cant_change_valuation_method(self):
 		doc_before_save = self.get_doc_before_save()
@@ -348,9 +366,6 @@ class Company(NestedSet):
 				sync_financial_report_templates(self.chart_of_accounts, self.existing_company)
 				self.create_default_accounts()
 				self.create_default_warehouses()
-
-		if not frappe.db.get_value("Cost Center", {"is_group": 0, "company": self.name}):
-			self.create_default_cost_center()
 
 		if frappe.flags.country_change:
 			install_country_fixtures(self.name, self.country)
@@ -712,34 +727,6 @@ class Company(NestedSet):
 			)
 			mode_of_payment.save(ignore_permissions=True)
 
-	def create_default_cost_center(self):
-		cc_list = [
-			{
-				"cost_center_name": self.name,
-				"company": self.name,
-				"is_group": 1,
-				"parent_cost_center": None,
-			},
-			{
-				"cost_center_name": _("Main"),
-				"company": self.name,
-				"is_group": 0,
-				"parent_cost_center": self.name + " - " + self.abbr,
-			},
-		]
-		for cc in cc_list:
-			cc.update({"doctype": "Cost Center"})
-			cc_doc = frappe.get_doc(cc)
-			cc_doc.flags.ignore_permissions = True
-
-			if cc.get("cost_center_name") == self.name:
-				cc_doc.flags.ignore_mandatory = True
-			cc_doc.insert()
-
-		self.db_set("cost_center", _("Main") + " - " + self.abbr)
-		self.db_set("round_off_cost_center", _("Main") + " - " + self.abbr)
-		self.db_set("depreciation_cost_center", _("Main") + " - " + self.abbr)
-
 	def after_rename(self, olddn, newdn, merge=False):
 		self.db_set("company_name", newdn)
 
@@ -756,7 +743,7 @@ class Company(NestedSet):
 
 	def on_trash(self):
 		"""
-		Trash accounts and cost centers for this company if no gl entry exists
+		Trash accounts and budgets for this company if no gl entry exists
 		"""
 		if frappe.db.get_single_value("Global Defaults", "demo_company") == self.name:
 			frappe.throw(
@@ -777,7 +764,7 @@ class Company(NestedSet):
 				self.name,
 			)
 
-			for doctype in ["Account", "Cost Center", "Budget", "Party Account"]:
+			for doctype in ["Account", "Budget", "Party Account"]:
 				frappe.db.sql(f"delete from `tab{doctype}` where company = %s", self.name)
 
 		if not frappe.db.get_value("Stock Ledger Entry", {"company": self.name}):

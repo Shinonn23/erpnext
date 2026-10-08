@@ -742,7 +742,6 @@ class TaxWithholdingController:
 		self.calculate_taxes_and_totals()
 
 	def _create_tax_row(self, account_head, tax_amount):
-		cost_center = self.doc.cost_center or erpnext.get_default_cost_center(self.doc.company)
 		return self.doc.append(
 			"taxes",
 			{
@@ -751,7 +750,6 @@ class TaxWithholdingController:
 				"charge_type": "Actual",
 				"account_head": account_head,
 				"description": account_head,
-				"cost_center": cost_center,
 				"tax_amount": tax_amount,
 				"dont_recompute_tax": 1,
 			},
@@ -1145,14 +1143,15 @@ class PaymentTaxWithholding(TaxWithholdingController):
 		self.party = doc.party
 
 	def _get_category_names(self):
+		if categories := self.doc.get("tax_withholding_categories"):
+			return list({row.tax_withholding_category for row in categories if row.tax_withholding_category})
+
 		if not self.doc.tax_withholding_category:
 			return []
 
 		return [self.doc.tax_withholding_category]
 
 	def _update_taxable_amounts(self):
-		category = next(iter(self.category_details.values()))
-
 		taxable_amount_in_party_currency = self.doc.unallocated_amount
 		taxable_amount_in_party_currency += sum(
 			flt(d.allocated_amount)
@@ -1161,9 +1160,19 @@ class PaymentTaxWithholding(TaxWithholdingController):
 		)
 
 		exchange_rate = self.get_conversion_rate()
-		taxable_amount = flt(taxable_amount_in_party_currency * exchange_rate, self.precision)
+		default_taxable_amount = flt(taxable_amount_in_party_currency * exchange_rate, self.precision)
 
-		category["taxable_amount"] = taxable_amount
+		if categories := self.doc.get("tax_withholding_categories"):
+			for category in self.category_details.values():
+				category["taxable_amount"] = 0
+			for row in categories:
+				category = self.category_details.get(row.tax_withholding_category)
+				if category:
+					category["taxable_amount"] += flt(row.taxable_amount or default_taxable_amount, self.precision)
+			return
+
+		category = next(iter(self.category_details.values()))
+		category["taxable_amount"] = default_taxable_amount
 
 	def get_conversion_rate(self):
 		if self.doc.payment_type == "Receive":
@@ -1395,8 +1404,6 @@ class JournalTaxWithholding(TaxWithholdingController):
 					"account": account_head,
 					"account_currency": account_currency,
 					"exchange_rate": exchange_rate,
-					"cost_center": self.doc.get("cost_center")
-					or erpnext.get_default_cost_center(self.doc.company),
 					"credit": 0,
 					"credit_in_account_currency": 0,
 					"debit": 0,

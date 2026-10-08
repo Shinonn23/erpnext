@@ -26,7 +26,6 @@ def get_pos_columns():
 		_("Taxes") + ":Currency/currency:120",
 		_("Payments") + ":Currency/currency:120",
 		_("Warehouse") + ":Data:200",
-		_("Cost Center") + ":Data:200",
 	]
 
 
@@ -55,7 +54,6 @@ def get_pos_sales_payment_data(filters):
 			row["total_taxes"],
 			row["paid_amount"],
 			row["warehouse"],
-			row["cost_center"],
 		]
 		for row in sales_invoice_data
 	]
@@ -124,10 +122,10 @@ def get_pos_invoice_data(filters):
 		"SELECT "
 		'posting_date, owner, sum(net_total) as "net_total", sum(total_taxes) as "total_taxes", '
 		'sum(paid_amount) as "paid_amount", sum(outstanding_amount) as "outstanding_amount", '
-		"mode_of_payment, warehouse, cost_center "
+		"mode_of_payment, warehouse "
 		"FROM ("
 		"SELECT "
-		'parent, item_code, sum(amount) as "base_total", warehouse, cost_center '
+		'parent, item_code, sum(amount) as "base_total", warehouse '
 		"from `tabSales Invoice Item`  group by parent"
 		") t1 "
 		"left join "

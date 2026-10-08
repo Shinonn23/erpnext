@@ -21,7 +21,6 @@
   "has_unit_price_items",
   "amended_from",
   "accounting_dimensions_section",
-  "cost_center",
   "dimension_col_break",
   "project",
   "currency_and_price_list",
@@ -897,12 +896,6 @@
    "fieldtype": "Text Editor",
    "label": "Billing Address Details",
    "read_only": 1
-  },
-  {
-   "fieldname": "cost_center",
-   "fieldtype": "Link",
-   "label": "Cost Center",
-   "options": "Cost Center"
   },
   {
    "fieldname": "project",

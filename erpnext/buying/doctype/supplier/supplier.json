@@ -12,6 +12,7 @@
  "field_order": [
   "naming_series",
   "supplier_name",
+  "old_supplier_code",
   "supplier_type",
   "alias",
   "gender",
@@ -92,7 +93,8 @@
    "oldfieldname": "naming_series",
    "oldfieldtype": "Select",
    "options": "SUP-.YYYY.-",
-   "set_only_once": 1
+   "set_only_once": 1,
+   "hidden": 1
   },
   {
    "bold": 1,
@@ -104,6 +106,13 @@
    "oldfieldname": "supplier_name",
    "oldfieldtype": "Data",
    "reqd": 1
+  },
+  {
+   "fieldname": "old_supplier_code",
+   "fieldtype": "Data",
+   "label": "Old Supplier Code",
+   "in_global_search": 1,
+   "search_index": 1
   },
   {
    "fieldname": "alias",
@@ -646,7 +655,7 @@
  ],
  "quick_entry": 1,
  "row_format": "Dynamic",
- "search_fields": "supplier_group, alias",
+ "search_fields": "supplier_group,alias,old_supplier_code",
  "show_name_in_global_search": 1,
  "sort_field": "creation",
  "sort_order": "ASC",

@@ -35,7 +35,7 @@ class TestPurchaseRegister(ERPNextTestSuite):
 			supplier="_Test Supplier",
 			item="_Test Item",
 			warehouse="_Test Warehouse - _TC6",
-			cost_center="_Test Cost Center - _TC6",
+
 			do_not_save=1,
 			do_not_submit=1,
 			qty=1,
@@ -45,7 +45,7 @@ class TestPurchaseRegister(ERPNextTestSuite):
 			"taxes",
 			{
 				"account_head": "GST - _TC6",
-				"cost_center": "_Test Cost Center - _TC6",
+
 				"add_deduct_tax": "Add",
 				"category": "Valuation and Total",
 				"charge_type": "Actual",
@@ -137,7 +137,6 @@ class TestPurchaseRegister(ERPNextTestSuite):
 
 def make_purchase_invoice():
 	from erpnext.accounts.doctype.account.test_account import create_account
-	from erpnext.accounts.doctype.cost_center.test_cost_center import create_cost_center
 	from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse
 
 	create_account(
@@ -148,7 +147,6 @@ def make_purchase_invoice():
 		account_currency="INR",
 	)
 	create_warehouse(warehouse_name="_Test Warehouse - _TC6", company="_Test Company 6")
-	create_cost_center(cost_center_name="_Test Cost Center", company="_Test Company 6")
 	pi = create_purchase_invoice_with_taxes()
 	pi.submit()
 	return pi
@@ -161,14 +159,14 @@ def create_purchase_invoice_with_taxes():
 			"posting_date": today(),
 			"supplier": "_Test Supplier",
 			"company": "_Test Company 6",
-			"cost_center": "_Test Cost Center - _TC6",
+
 			"taxes_and_charges": "",
 			"currency": "INR",
 			"credit_to": "Creditors - _TC6",
 			"items": [
 				{
 					"doctype": "Purchase Invoice Item",
-					"cost_center": "_Test Cost Center - _TC6",
+
 					"item_code": "_Test Item",
 					"qty": 1,
 					"rate": 1000,
@@ -178,7 +176,7 @@ def create_purchase_invoice_with_taxes():
 			"taxes": [
 				{
 					"account_head": "GST - _TC6",
-					"cost_center": "_Test Cost Center - _TC6",
+
 					"add_deduct_tax": "Add",
 					"category": "Valuation and Total",
 					"charge_type": "Actual",

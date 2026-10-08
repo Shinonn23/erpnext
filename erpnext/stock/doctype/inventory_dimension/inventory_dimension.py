@@ -245,6 +245,21 @@ class InventoryDimension(Document):
 					fields = [fields]
 
 				for field in fields:
+					if doctype in (
+						"Stock Count Item",
+						"Stock Entry Detail",
+						"Stock Reconciliation Item",
+					) and field.get("fieldtype") == "Link":
+						field["in_list_view"] = 1
+						custom_field = frappe.db.get_value(
+							"Custom Field", {"dt": doctype, "fieldname": field["fieldname"]}, "name"
+						)
+						if custom_field:
+							frappe.db.set_value(
+								"Custom Field", custom_field, "in_list_view", 1, update_modified=False
+							)
+							frappe.clear_cache(doctype=doctype)
+
 					if not field_exists(doctype, field["fieldname"]):
 						filter_custom_fields.setdefault(doctype, []).append(field)
 

@@ -16,7 +16,6 @@ class PaymentReconciliationAllocation(Document):
 
 		allocated_amount: DF.Currency
 		amount: DF.Currency
-		cost_center: DF.Link | None
 		currency: DF.Link | None
 		debit_or_credit_note_posting_date: DF.Date | None
 		difference_account: DF.Link | None

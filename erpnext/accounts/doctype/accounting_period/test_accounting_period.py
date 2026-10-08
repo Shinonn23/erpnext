@@ -32,7 +32,7 @@ class TestAccountingPeriod(ERPNextTestSuite):
 		ap1 = create_accounting_period(period_name="Test Accounting Period 2")
 		ap1.save()
 
-		doc = create_sales_invoice(do_not_save=1, cost_center="_Test Company - _TC", warehouse="Stores - _TC")
+		doc = create_sales_invoice(do_not_save=1, warehouse="Stores - _TC")
 		self.assertRaises(ClosedAccountingPeriod, doc.save)
 
 	def test_accounting_period_exempted_role(self):

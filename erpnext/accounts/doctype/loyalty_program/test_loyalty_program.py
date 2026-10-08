@@ -208,7 +208,6 @@ class TestLoyaltyProgram(ERPNextTestSuite):
 				"conversion_factor": 1,
 				"expiry_duration": 10,
 				"company": "_Test Company",
-				"cost_center": "Main - _TC",
 				"expense_account": "Loyalty - _TC",
 				"collection_rules": [
 					{"tier_name": "Gold", "collection_factor": 1000, "min_spent": 20000},
@@ -311,7 +310,6 @@ def create_sales_invoice_record(qty=1):
 					"qty": qty,
 					"rate": 10000,
 					"income_account": "Sales - _TC",
-					"cost_center": "Main - _TC",
 					"expense_account": "Cost of Goods Sold - _TC",
 				}
 			],

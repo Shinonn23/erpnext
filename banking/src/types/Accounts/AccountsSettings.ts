@@ -32,7 +32,7 @@ export interface AccountsSettings {
 	allow_multi_currency_invoices_against_single_party_account?: 0 | 1
 	/**	Confirm before resetting posting date : Check - If enabled, user will be alerted before resetting posting date to current date in relevant transactions	*/
 	confirm_before_resetting_posting_date?: 0 | 1
-	/**	Enable Accounting Dimensions : Check - Enable cost center, projects and other custom accounting dimensions	*/
+	/**	Enable Accounting Dimensions : Check - Enable accounting dimensions	*/
 	enable_accounting_dimensions?: 0 | 1
 	/**	Enable Discounts and Margin : Check - Apply discounts and margins on products	*/
 	enable_discounts_and_margin?: 0 | 1

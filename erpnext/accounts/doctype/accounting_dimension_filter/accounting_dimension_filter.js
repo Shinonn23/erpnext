@@ -24,7 +24,7 @@ frappe.ui.form.on("Accounting Dimension Filter", {
 		});
 
 		frappe.db.get_list("Accounting Dimension", { fields: ["document_type"] }).then((res) => {
-			let options = ["Cost Center", "Project"];
+			let options = [];
 
 			res.forEach((dimension) => {
 				options.push(dimension.document_type);

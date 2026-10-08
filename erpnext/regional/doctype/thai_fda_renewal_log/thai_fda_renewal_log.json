@@ -1,0 +1,39 @@
+{
+ "doctype": "DocType",
+ "istable": 1,
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "event_date",
+  "stage",
+  "application_number",
+  "previous_registration_number",
+  "new_registration_number",
+  "previous_issue_date",
+  "new_issue_date",
+  "previous_expiry_date",
+  "new_expiry_date",
+  "previous_document",
+  "new_document",
+  "notes"
+ ],
+ "fields": [
+  {"fieldname": "event_date", "fieldtype": "Date", "label": "วันที่ดำเนินการ", "in_list_view": 1, "reqd": 1},
+  {"fieldname": "stage", "fieldtype": "Select", "label": "ขั้นตอน", "options": "กำลังดำเนินการ\nยื่นแล้ว\nได้รับฉบับใหม่\nไม่อนุมัติ/ยุติ", "in_list_view": 1, "reqd": 1},
+  {"fieldname": "application_number", "fieldtype": "Data", "label": "เลขที่คำขอต่ออายุ"},
+  {"fieldname": "previous_registration_number", "fieldtype": "Data", "label": "เลขทะเบียนเดิม"},
+  {"fieldname": "new_registration_number", "fieldtype": "Data", "label": "เลขทะเบียนฉบับใหม่"},
+  {"fieldname": "previous_issue_date", "fieldtype": "Date", "label": "วันที่ออกฉบับเดิม"},
+  {"fieldname": "new_issue_date", "fieldtype": "Date", "label": "วันที่ออกฉบับใหม่"},
+  {"fieldname": "previous_expiry_date", "fieldtype": "Date", "label": "วันหมดอายุเดิม"},
+  {"fieldname": "new_expiry_date", "fieldtype": "Date", "label": "วันหมดอายุฉบับใหม่"},
+  {"fieldname": "previous_document", "fieldtype": "Attach", "label": "ไฟล์หลักฐานเดิม"},
+  {"fieldname": "new_document", "fieldtype": "Attach", "label": "ไฟล์หลักฐานฉบับใหม่"},
+  {"fieldname": "notes", "fieldtype": "Small Text", "label": "หมายเหตุ"}
+ ],
+ "module": "Regional",
+ "name": "Thai FDA Renewal Log",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "track_changes": 1
+}

@@ -1,0 +1,173 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "naming_series:",
+ "creation": "2024-12-01 01:09:16.885851",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "customer",
+  "customer_name",
+  "naming_series",
+  "column_break_gcaf",
+  "company",
+  "date",
+  "sales_billing",
+  "section_break_gvcn",
+  "payment_references",
+  "section_break_zfas",
+  "billing_references",
+  "section_break_plix",
+  "column_break_vswz",
+  "total_invoice_amount",
+  "column_break_rcug",
+  "total_paid_amount",
+  "section_break_fhdg",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "bold": 1,
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Customer",
+   "options": "Customer",
+   "reqd": 1
+  },
+  {
+   "fetch_from": "customer.customer_name",
+   "fieldname": "customer_name",
+   "fieldtype": "Data",
+   "label": "Customer Name"
+  },
+  {
+   "fieldname": "column_break_gcaf",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company"
+  },
+  {
+   "fieldname": "date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "section_break_gvcn",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "payment_references",
+   "fieldtype": "Table",
+   "label": "Payment Entries",
+   "options": "Payment Receipt Payment Reference"
+  },
+  {
+   "fieldname": "section_break_fhdg",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Payment Receipt",
+   "print_hide": 1,
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "section_break_plix",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "total_paid_amount",
+   "fieldtype": "Currency",
+   "label": "Total Paid Amount",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_rcug",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "column_break_vswz",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Naming Series",
+   "options": "PRE-.YYYY.-",
+   "reqd": 1
+  },
+  {
+   "fieldname": "sales_billing",
+   "fieldtype": "Link",
+   "label": "Sales Billing",
+   "options": "Sales Billing"
+  },
+  {
+   "fieldname": "section_break_zfas",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "billing_references",
+   "fieldtype": "Table",
+   "label": "Billing References",
+   "options": "Payment Receipt Billing Reference"
+  },
+  {
+   "fieldname": "total_invoice_amount",
+   "fieldtype": "Currency",
+   "label": "Total Invoice Amount",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "is_submittable": 1,
+ "links": [],
+ "modified": "2024-12-29 22:14:16.790023",
+ "modified_by": "Administrator",
+ "module": "Regional",
+ "name": "Payment Receipt",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts User",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

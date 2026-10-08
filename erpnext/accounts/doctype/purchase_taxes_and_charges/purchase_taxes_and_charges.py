@@ -31,7 +31,6 @@ class PurchaseTaxesandCharges(Document):
 			"On Previous Row Total",
 			"On Item Quantity",
 		]
-		cost_center: DF.Link | None
 		description: DF.SmallText
 		dont_recompute_tax: DF.Check
 		included_in_paid_amount: DF.Check

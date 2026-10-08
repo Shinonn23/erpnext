@@ -25,7 +25,6 @@
   "column_break_16",
   "payment_gateway",
   "accounting_dimensions_section",
-  "cost_center",
   "dimension_col_break"
  ],
  "fields": [
@@ -135,12 +134,6 @@
   {
    "fieldname": "dimension_col_break",
    "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "cost_center",
-   "fieldtype": "Link",
-   "label": "Cost Center",
-   "options": "Cost Center"
   },
   {
    "fieldname": "product_price_id",

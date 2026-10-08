@@ -180,7 +180,7 @@ class ServiceLevelAgreement(Document):
 
 	def validate_selected_doctype(self):
 		invalid_doctypes = list(frappe.model.core_doctypes_list)
-		invalid_doctypes.extend(["Cost Center", "Company"])
+		invalid_doctypes.append("Company")
 		valid_document_types = frappe.get_all(
 			"DocType",
 			{

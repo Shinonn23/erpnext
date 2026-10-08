@@ -222,7 +222,6 @@ class TestMaterialRequest(ERPNextTestSuite):
 						"transfer_qty": qty1,
 						"uom": "_Test UOM 1",
 						"t_warehouse": warehouse or "_Test Warehouse 1 - _TC",
-						"cost_center": "_Test Cost Center - _TC",
 					},
 					{
 						"conversion_factor": 1.0,
@@ -235,7 +234,6 @@ class TestMaterialRequest(ERPNextTestSuite):
 						"transfer_qty": qty2,
 						"uom": "_Test UOM 1",
 						"t_warehouse": warehouse or "_Test Warehouse 1 - _TC",
-						"cost_center": "_Test Cost Center - _TC",
 					},
 				],
 			}
@@ -950,9 +948,7 @@ class TestMaterialRequest(ERPNextTestSuite):
 		mr1 = make_material_request()
 		comapnywise_mr_list.setdefault(mr1.company, []).append(mr1.name)
 
-		mr2 = make_material_request(
-			company="_Test Company 1", warehouse="Stores - _TC1", cost_center="Main - _TC1"
-		)
+		mr2 = make_material_request(company="_Test Company 1", warehouse="Stores - _TC1")
 		comapnywise_mr_list.setdefault(mr2.company, []).append(mr2.name)
 
 		for company, _mr_list in comapnywise_mr_list.items():
@@ -1455,7 +1451,6 @@ def make_material_request(**args):
 			"schedule_date": args.schedule_date or today(),
 			"from_warehouse": args.from_warehouse,
 			"warehouse": args.warehouse or "_Test Warehouse - _TC",
-			"cost_center": args.cost_center or "_Test Cost Center - _TC",
 		},
 	)
 	mr.insert()

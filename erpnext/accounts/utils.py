@@ -206,7 +206,6 @@ def get_balance_on(
 	party=None,
 	company=None,
 	in_account_currency=True,
-	cost_center=None,
 	ignore_account_permission=False,
 	account_type=None,
 	start_date=None,
@@ -221,8 +220,6 @@ def get_balance_on(
 		party_type = frappe.form_dict.get("party_type")
 	if not party and frappe.form_dict.get("party"):
 		party = frappe.form_dict.get("party")
-	if not cost_center and frappe.form_dict.get("cost_center"):
-		cost_center = frappe.form_dict.get("cost_center")
 
 	cond = ["is_cancelled=0"]
 	if start_date:
@@ -252,19 +249,6 @@ def get_balance_on(
 		report_type = acc.report_type
 	else:
 		report_type = ""
-
-	if cost_center and report_type == "Profit and Loss":
-		cc = frappe.get_lazy_doc("Cost Center", cost_center)
-		if cc.is_group:
-			cond.append(
-				f""" exists (
-				select 1 from `tabCost Center` cc where cc.name = gle.cost_center
-				and cc.lft >= {cc.lft} and cc.rgt <= {cc.rgt}
-			)"""
-			)
-
-		else:
-			cond.append(f"""gle.cost_center = {frappe.db.escape(cost_center)} """)
 
 	if account:
 		if not (frappe.flags.ignore_account_permission or ignore_account_permission):
@@ -466,32 +450,6 @@ def add_ac(args=None):
 	ac.insert()
 
 	return ac.name
-
-
-@frappe.whitelist()
-def add_cc(args=None):
-	from frappe.desk.treeview import make_tree_args
-
-	if not args:
-		args = frappe.local.form_dict
-
-	args.doctype = "Cost Center"
-	args = make_tree_args(**args)
-
-	if args.parent_cost_center == args.company:
-		args.parent_cost_center = "{} - {}".format(
-			args.parent_cost_center, frappe.get_cached_value("Company", args.company, "abbr")
-		)
-
-	cc = frappe.new_doc("Cost Center")
-	cc.update(args)
-
-	if not cc.parent_cost_center:
-		cc.parent_cost_center = args.get("parent")
-
-	cc.old_parent = ""
-	cc.insert()
-	return cc.name
 
 
 def _build_dimensions_dict_for_exc_gain_loss(
@@ -1528,28 +1486,6 @@ def create_payment_gateway_account(gateway, payment_channel="Email", company=Non
 		pass
 
 
-@frappe.whitelist()
-def update_cost_center(docname, cost_center_name, cost_center_number, company, merge):
-	"""
-	Renames the document by adding the number as a prefix to the current name and updates
-	all transaction where it was present.
-	"""
-	frappe.has_permission("Cost Center", "write", doc=docname, throw=True)
-	validate_field_number("Cost Center", docname, cost_center_number, company, "cost_center_number")
-
-	if cost_center_number:
-		frappe.db.set_value("Cost Center", docname, "cost_center_number", cost_center_number.strip())
-	else:
-		frappe.db.set_value("Cost Center", docname, "cost_center_number", "")
-
-	frappe.db.set_value("Cost Center", docname, "cost_center_name", cost_center_name.strip())
-
-	new_name = get_autoname_with_number(cost_center_number, cost_center_name, company)
-	if docname != new_name:
-		frappe.rename_doc("Cost Center", docname, new_name, force=1, merge=merge)
-		return new_name
-
-
 def validate_field_number(doctype_name, docname, number_value, company, field_name):
 	"""Validate if the number entered isn't already assigned to some other document."""
 	if number_value:
@@ -1793,7 +1729,7 @@ def get_voucherwise_gl_entries(future_stock_vouchers, posting_date):
 
 	gles = frappe.db.sql(
 		"""
-		select name, account, credit, debit, cost_center, project, voucher_type, voucher_no
+		select name, account, credit, debit, project, voucher_type, voucher_no
 			from `tabGL Entry`
 		where
 			posting_date >= {} and voucher_no in ({})""".format("%s", ", ".join(["%s"] * len(voucher_nos))),
@@ -1819,7 +1755,6 @@ def compare_existing_and_expected_gle(existing_gle, expected_gle, precision):
 				account_existed = True
 			if (
 				entry.account == e.account
-				and (not entry.cost_center or not e.cost_center or entry.cost_center == e.cost_center)
 				and (
 					flt(entry.debit, precision) != flt(e.debit, precision)
 					or flt(entry.credit, precision) != flt(e.credit, precision)
@@ -2042,7 +1977,6 @@ def get_payment_ledger_entries(gl_entries, cancel=0):
 					party_type=gle.party_type,
 					party=gle.party,
 					project=gle.project,
-					cost_center=gle.cost_center,
 					finance_book=gle.finance_book,
 					due_date=gle.due_date,
 					voucher_type=gle.voucher_type,
@@ -2354,7 +2288,6 @@ class QueryPaymentLedger:
 				ple.posting_date,
 				ple.due_date,
 				ple.account_currency.as_("currency"),
-				ple.cost_center.as_("cost_center"),
 				Sum(ple.amount).as_("amount"),
 				Sum(ple.amount_in_account_currency).as_("amount_in_account_currency"),
 				ple.remarks,
@@ -2419,7 +2352,6 @@ class QueryPaymentLedger:
 				).as_("paid_amount_in_account_currency"),
 				Table("vouchers").due_date,
 				Table("vouchers").currency,
-				Table("vouchers").cost_center.as_("cost_center"),
 				Table("vouchers").remarks,
 			)
 			.where(Criterion.all(filter_on_outstanding_amount))
@@ -2505,7 +2437,6 @@ def create_gain_loss_journal(
 	ref2_dt,
 	ref2_dn,
 	ref2_detail_no,
-	cost_center,
 	dimensions,
 	project=None,
 ) -> str:
@@ -2533,7 +2464,6 @@ def create_gain_loss_journal(
 			"party": party,
 			"account_currency": party_account_currency,
 			"exchange_rate": 0,
-			"cost_center": cost_center or erpnext.get_default_cost_center(company),
 			"project": project,
 			"reference_type": ref1_dt,
 			"reference_name": ref1_dn,
@@ -2551,7 +2481,6 @@ def create_gain_loss_journal(
 			"account": gain_loss_account,
 			"account_currency": gain_loss_account_currency,
 			"exchange_rate": 1,
-			"cost_center": cost_center or erpnext.get_default_cost_center(company),
 			"project": project,
 			"reference_type": ref2_dt,
 			"reference_name": ref2_dn,

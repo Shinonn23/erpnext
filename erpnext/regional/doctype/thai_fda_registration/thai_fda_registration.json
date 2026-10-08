@@ -1,0 +1,263 @@
+{
+ "actions": [],
+ "allow_import": 0,
+ "autoname": "naming_series:",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "section_product",
+  "item",
+  "item_name",
+  "regulatory_category",
+  "other_category",
+  "approval_type",
+  "registration_number",
+  "column_break_product",
+  "status",
+  "activity",
+  "issuing_authority",
+  "holder_name",
+  "section_validity",
+  "issue_date",
+  "expiry_basis",
+  "expiry_date",
+  "column_break_validity",
+  "document",
+  "source_url",
+  "verified_date",
+  "responsible_user",
+  "section_renewal",
+  "renewal_status",
+  "renewal_history"
+ ],
+ "fields": [
+  {
+   "default": "TFDA-.YYYY.-.#####",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Series",
+   "options": "TFDA-.YYYY.-.#####"
+  },
+  {
+   "fieldname": "section_product",
+   "fieldtype": "Section Break",
+   "label": "ข้อมูลผลิตภัณฑ์และทะเบียน"
+  },
+  {
+   "fieldname": "item",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Item",
+   "options": "Item",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fetch_from": "item.item_name",
+   "fieldname": "item_name",
+   "fieldtype": "Data",
+   "label": "ชื่อสินค้า",
+   "read_only": 1
+  },
+  {
+   "fieldname": "regulatory_category",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "กลุ่มผลิตภัณฑ์",
+   "options": "อาหาร\nยา\nเครื่องสำอาง\nเครื่องมือแพทย์\nวัตถุอันตราย\nผลิตภัณฑ์สมุนไพร\nอื่นๆ",
+   "reqd": 1
+  },
+  {
+   "depends_on": "eval:doc.regulatory_category == 'อื่นๆ'",
+   "fieldname": "other_category",
+   "fieldtype": "Data",
+   "label": "ระบุกลุ่มผลิตภัณฑ์อื่นๆ",
+   "mandatory_depends_on": "eval:doc.regulatory_category == 'อื่นๆ'"
+  },
+  {
+   "fieldname": "approval_type",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "ประเภทใบอนุญาต/การรับแจ้ง",
+   "reqd": 1
+  },
+  {
+   "fieldname": "registration_number",
+   "fieldtype": "Data",
+   "in_global_search": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "เลขทะเบียน/เลขที่ใบอนุญาต",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "column_break_product",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "มีผล",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "สถานะทะเบียน",
+   "options": "รออนุมัติ\nมีผล\nพักใช้\nเพิกถอน\nยกเลิก\nถูกแทนที่",
+   "reqd": 1
+  },
+  {
+   "fieldname": "activity",
+   "fieldtype": "Select",
+   "label": "กิจกรรมที่ได้รับอนุญาต",
+   "options": "\nผลิต\nนำเข้า\nขาย\nขึ้นทะเบียนผลิตภัณฑ์\nอื่นๆ"
+  },
+  {
+   "fieldname": "issuing_authority",
+   "fieldtype": "Data",
+   "label": "หน่วยงานผู้ออกเอกสาร"
+  },
+  {
+   "fieldname": "holder_name",
+   "fieldtype": "Data",
+   "label": "ผู้รับอนุญาต/ผู้ถือทะเบียน"
+  },
+  {
+   "fieldname": "section_validity",
+   "fieldtype": "Section Break",
+   "label": "วันที่และหลักฐาน"
+  },
+  {
+   "fieldname": "issue_date",
+   "fieldtype": "Date",
+   "label": "วันที่ออกเอกสาร"
+  },
+  {
+   "default": "ยังยืนยันไม่ได้",
+   "fieldname": "expiry_basis",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "ข้อมูลวันหมดอายุ",
+   "options": "มีวันหมดอายุตามเอกสาร\nเอกสารไม่ระบุวันหมดอายุ\nยังยืนยันไม่ได้",
+   "reqd": 1
+  },
+  {
+   "depends_on": "eval:doc.expiry_basis == 'มีวันหมดอายุตามเอกสาร'",
+   "fieldname": "expiry_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "วันหมดอายุ",
+   "mandatory_depends_on": "eval:doc.expiry_basis == 'มีวันหมดอายุตามเอกสาร'"
+  },
+  {
+   "fieldname": "column_break_validity",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "document",
+   "fieldtype": "Attach",
+   "label": "ไฟล์ใบอนุญาต/หลักฐาน"
+  },
+  {
+   "fieldname": "source_url",
+   "fieldtype": "Data",
+   "label": "ลิงก์แหล่งตรวจสอบ",
+   "options": "URL"
+  },
+  {
+   "fieldname": "verified_date",
+   "fieldtype": "Date",
+   "label": "วันที่ตรวจสอบข้อมูลล่าสุด"
+  },
+  {
+   "default": "__user",
+   "fieldname": "responsible_user",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "ผู้รับผิดชอบ",
+   "options": "User",
+   "reqd": 1
+  },
+  {
+   "fieldname": "section_renewal",
+   "fieldtype": "Section Break",
+   "label": "การต่ออายุ"
+  },
+  {
+   "default": "ยังไม่เริ่ม",
+   "fieldname": "renewal_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "สถานะการต่ออายุ",
+   "options": "ยังไม่เริ่ม\nกำลังดำเนินการ\nยื่นแล้ว\nได้รับฉบับใหม่",
+   "reqd": 1
+  },
+  {
+   "fieldname": "renewal_history",
+   "fieldtype": "Table",
+   "label": "ประวัติการต่ออายุ",
+   "options": "Thai FDA Renewal Log"
+  }
+ ],
+ "grid_page_length": 50,
+ "links": [
+  {"link_doctype": "Thai FDA Reminder Log", "link_fieldname": "registration"}
+ ],
+ "module": "Regional",
+ "name": "Thai FDA Registration",
+ "naming_rule": "By \"Naming Series\" field",
+ "permissions": [
+  {
+   "create": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Stock User",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Item Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Stock Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "search_fields": "item,registration_number,approval_type,holder_name",
+ "sort_field": "expiry_date",
+ "sort_order": "ASC",
+ "title_field": "registration_number",
+ "track_changes": 1
+}

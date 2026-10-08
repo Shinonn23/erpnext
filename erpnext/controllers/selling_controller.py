@@ -177,7 +177,7 @@ class SellingController(StockController):
 					"doctype": "Sales Taxes and Charges",
 					"charge_type": "Actual",
 					"account_head": shipping_rule.account,
-					"cost_center": shipping_rule.cost_center,
+
 				},
 			)
 			if existing_shipping_charge:

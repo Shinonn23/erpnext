@@ -16,7 +16,7 @@ from erpnext.accounts.doctype.accounting_dimension.accounting_dimension import (
 )
 
 TREE_DOCTYPES = frozenset(
-	["Customer Group", "Territory", "Supplier Group", "Sales Partner", "Sales Person", "Cost Center"]
+	["Customer Group", "Territory", "Supplier Group", "Sales Partner", "Sales Person"]
 )
 
 
@@ -383,9 +383,6 @@ class PartyLedgerSummaryReport:
 
 		if self.filters.finance_book:
 			query = query.where(IfNull(gle.finance_book, "") == self.filters.finance_book)
-
-		if self.filters.cost_center:
-			query = query.where((gle.cost_center).isin(self.filters.cost_center))
 
 		if self.filters.project:
 			query = query.where((gle.project).isin(self.filters.project))

@@ -319,7 +319,6 @@ class ManufactureEntry:
 		for item, item_details in item_dict.items():
 			for d in [
 				["Account", "expense_account", "stock_adjustment_account"],
-				["Cost Center", "cost_center", "cost_center"],
 				["Warehouse", "default_warehouse", ""],
 			]:
 				company_in_record = frappe.db.get_value(d[0], item_details.get(d[1]), "company")
@@ -343,7 +342,6 @@ class ManufactureEntry:
 			"description": item.description,
 			"stock_uom": item.stock_uom,
 			"expense_account": item.get("expense_account"),
-			"cost_center": item.get("buying_cost_center"),
 			"is_finished_item": 1,
 		}
 

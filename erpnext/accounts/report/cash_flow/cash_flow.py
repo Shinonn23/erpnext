@@ -16,7 +16,6 @@ from erpnext.accounts.doctype.financial_report_template.financial_report_engine 
 )
 from erpnext.accounts.report.financial_statements import (
 	get_columns,
-	get_cost_centers_with_children,
 	get_data,
 	get_filtered_list_for_consolidated_report,
 	get_period_list,
@@ -229,10 +228,6 @@ def get_account_type_based_gl_data(company, filters=None):
 		cond = " AND (finance_book in (%s, '') OR finance_book IS NULL)" % (
 			frappe.db.escape(cstr(filters.finance_book))
 		)
-
-	if filters.get("cost_center"):
-		filters.cost_center = get_cost_centers_with_children(filters.cost_center)
-		cond += " and cost_center in %(cost_center)s"
 
 	gl_sum = frappe.db.sql_list(
 		f"""

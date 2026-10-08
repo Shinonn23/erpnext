@@ -66,12 +66,43 @@ frappe.ui.form.on("Shipment", {
 				};
 			}
 		});
+		frm.set_query("reference_doctype", "shipment_documents", function () {
+			return {
+				filters: {
+					name: ["in", ["Delivery Note", "Purchase Receipt", "Stock Entry", "Asset Movement"]],
+				},
+			};
+		});
+		frm.set_query("reference_name", "shipment_documents", function (doc, cdt, cdn) {
+			const row = locals[cdt][cdn];
+			return { filters: { docstatus: 1 } };
+		});
 	},
-	refresh: function () {
+	refresh: function (frm) {
 		$("div[data-fieldname=pickup_address] > div > .clearfix").hide();
 		$("div[data-fieldname=pickup_contact] > div > .clearfix").hide();
 		$("div[data-fieldname=delivery_address] > div > .clearfix").hide();
 		$("div[data-fieldname=delivery_contact] > div > .clearfix").hide();
+		if (frm.doc.material_request) {
+			const fields =
+				frm.doc.material_request_direction === "Pickup"
+					? ["pickup_from_type", "pickup_customer", "pickup_address_name", "pickup_contact_name"]
+					: ["delivery_to_type", "delivery_customer", "delivery_address_name", "delivery_contact_name"];
+			fields.forEach((fieldname) => frm.set_df_property(fieldname, "read_only", 1));
+		}
+		if (frm.doc.docstatus === 1 && frm.doc.tracking_status === "In Progress") {
+			frm.add_custom_button(__("Confirm Receipt"), () => {
+				frm.set_value("tracking_status", "Delivered");
+				if (!frm.doc.received_on) {
+					frm.set_value("received_on", frappe.datetime.now_datetime());
+				}
+			});
+		}
+	},
+	tracking_status: function (frm) {
+		if (frm.doc.tracking_status === "Delivered" && !frm.doc.received_on) {
+			frm.set_value("received_on", frappe.datetime.now_datetime());
+		}
 	},
 	before_save: function (frm) {
 		let delivery_to = `delivery_${frappe.model.scrub(frm.doc.delivery_to_type)}`;
@@ -106,6 +137,7 @@ frappe.ui.form.on("Shipment", {
 		);
 	},
 	pickup_from_type: function (frm) {
+		if (frm.doc.material_request && frm.doc.material_request_direction === "Pickup") return;
 		if (frm.doc.pickup_from_type == "Company") {
 			frm.set_value("pickup_company", frappe.defaults.get_default("company"));
 			frm.set_value("pickup_customer", "");
@@ -123,6 +155,7 @@ frappe.ui.form.on("Shipment", {
 		}
 	},
 	delivery_to_type: function (frm) {
+		if (frm.doc.material_request && frm.doc.material_request_direction === "Delivery") return;
 		if (frm.doc.delivery_to_type == "Company") {
 			frm.set_value("delivery_company", frappe.defaults.get_default("company"));
 			frm.set_value("delivery_customer", "");
@@ -143,6 +176,7 @@ frappe.ui.form.on("Shipment", {
 		}
 	},
 	delivery_address_name: function (frm) {
+		if (frm.doc.material_request && frm.doc.material_request_direction === "Delivery") return;
 		if (frm.doc.delivery_to_type == "Company") {
 			erpnext.utils.get_address_display(frm, "delivery_address_name", "delivery_address", true);
 		} else {
@@ -150,6 +184,7 @@ frappe.ui.form.on("Shipment", {
 		}
 	},
 	pickup_address_name: function (frm) {
+		if (frm.doc.material_request && frm.doc.material_request_direction === "Pickup") return;
 		if (frm.doc.pickup_from_type == "Company") {
 			erpnext.utils.get_address_display(frm, "pickup_address_name", "pickup_address", true);
 		} else {
@@ -206,11 +241,13 @@ frappe.ui.form.on("Shipment", {
 		});
 	},
 	delivery_contact_name: function (frm) {
+		if (frm.doc.material_request && frm.doc.material_request_direction === "Delivery") return;
 		if (frm.doc.delivery_contact_name) {
 			frm.events.get_contact_display(frm, frm.doc.delivery_contact_name, "Delivery");
 		}
 	},
 	pickup_contact_name: function (frm) {
+		if (frm.doc.material_request && frm.doc.material_request_direction === "Pickup") return;
 		if (frm.doc.pickup_contact_name) {
 			frm.events.get_contact_display(frm, frm.doc.pickup_contact_name, "Pickup");
 		}
@@ -319,6 +356,7 @@ frappe.ui.form.on("Shipment", {
 		}
 	},
 	delivery_customer: function (frm) {
+		if (frm.doc.material_request && frm.doc.material_request_direction === "Delivery") return;
 		frm.trigger("clear_delivery_fields");
 		if (frm.doc.delivery_customer) {
 			frm.events.set_address_name(frm, "Customer", frm.doc.delivery_customer, "Delivery");
@@ -333,6 +371,7 @@ frappe.ui.form.on("Shipment", {
 		}
 	},
 	pickup_customer: function (frm) {
+		if (frm.doc.material_request && frm.doc.material_request_direction === "Pickup") return;
 		if (frm.doc.pickup_customer) {
 			frm.events.set_address_name(frm, "Customer", frm.doc.pickup_customer, "Pickup");
 			frm.events.set_contact_name(frm, "Customer", frm.doc.pickup_customer, "Pickup");

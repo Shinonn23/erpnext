@@ -39,7 +39,6 @@ class POSProfile(Document):
 		auto_add_item_to_cart: DF.Check
 		company: DF.Link
 		company_address: DF.Link | None
-		cost_center: DF.Link | None
 		country: DF.ReadOnly | None
 		currency: DF.Link
 		customer: DF.Link | None
@@ -70,7 +69,6 @@ class POSProfile(Document):
 		validate_stock_on_save: DF.Check
 		warehouse: DF.Link
 		write_off_account: DF.Link
-		write_off_cost_center: DF.Link
 		write_off_limit: DF.Currency
 	# end: auto-generated types
 
@@ -144,7 +142,6 @@ class POSProfile(Document):
 	def validate_all_link_fields(self):
 		accounts = {
 			"Account": [self.income_account, self.expense_account],
-			"Cost Center": [self.cost_center],
 			"Warehouse": [self.warehouse],
 		}
 

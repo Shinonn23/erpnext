@@ -75,6 +75,7 @@ class Item(Document):
 		allow_negative_stock: DF.Check
 		asset_category: DF.Link | None
 		asset_naming_series: DF.Literal[None]
+		demo_asset_item_code: DF.Link | None
 		attributes: DF.Table[ItemVariantAttribute]
 		auto_create_assets: DF.Check
 		barcodes: DF.Table[ItemBarcode]
@@ -219,6 +220,7 @@ class Item(Document):
 		self.validate_variant_attributes()
 		self.validate_variant_based_on_change()
 		self.validate_fixed_asset()
+		self.validate_demo_asset_item_code()
 		self.clear_retain_sample()
 		self.validate_retain_sample()
 		self.validate_uom_conversion_factor()
@@ -228,6 +230,17 @@ class Item(Document):
 		self.validate_auto_reorder_enabled_in_stock_settings()
 		self.validate_serial_and_batch_no_enabled_in_stock_settings()
 		self.cant_change()
+
+	def validate_demo_asset_item_code(self):
+		if not self.demo_asset_item_code:
+			return
+		if not self.is_stock_item:
+			frappe.throw(_("Demo Asset Item Code can only be set on a Stock Item"))
+		asset_item = frappe.get_cached_value(
+			"Item", self.demo_asset_item_code, ["is_stock_item", "is_fixed_asset"], as_dict=True
+		)
+		if not asset_item or asset_item.is_stock_item or not asset_item.is_fixed_asset:
+			frappe.throw(_("Demo Asset Item Code must be a non-stock Fixed Asset Item"))
 		self.validate_serialized_change_with_bundle()
 		self.validate_serial_no_wise_valuation()
 		self.set_valuation_method_for_serial_no_wise_valuation()
@@ -809,10 +822,8 @@ class Item(Document):
 						"company": item.company,
 						"default_warehouse": item.default_warehouse,
 						"default_price_list": item.default_price_list,
-						"buying_cost_center": item.buying_cost_center,
 						"default_supplier": item.default_supplier,
 						"expense_account": item.expense_account,
-						"selling_cost_center": item.selling_cost_center,
 						"income_account": item.income_account,
 					},
 				)
@@ -1618,8 +1629,6 @@ def validate_item_default_company_links(item_defaults: list[ItemDefault]) -> Non
 	for item_default in item_defaults:
 		for doctype, field in [
 			["Warehouse", "default_warehouse"],
-			["Cost Center", "buying_cost_center"],
-			["Cost Center", "selling_cost_center"],
 			["Account", "expense_account"],
 			["Account", "income_account"],
 		]:

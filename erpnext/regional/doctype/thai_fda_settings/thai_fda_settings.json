@@ -1,0 +1,34 @@
+{
+ "doctype": "DocType",
+ "issingle": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "enabled",
+  "section_schedule",
+  "reminder_days",
+  "overdue_repeat_days",
+  "section_delivery",
+  "send_system_notification",
+  "send_email",
+  "recipients"
+ ],
+ "fields": [
+  {"fieldname": "enabled", "fieldtype": "Check", "label": "เปิดใช้การแจ้งเตือน", "default": "1"},
+  {"fieldname": "section_schedule", "fieldtype": "Section Break", "label": "กำหนดเวลา"},
+  {"default": "90,60,30,7", "description": "ใส่จำนวนวันคั่นด้วยจุลภาค เช่น 90,60,30,7", "fieldname": "reminder_days", "fieldtype": "Data", "label": "เตือนก่อนหมดอายุ (วัน)", "reqd": 1},
+  {"default": "7", "description": "เตือนครั้งแรกในวันถัดจากวันหมดอายุ และเตือนซ้ำตามช่วงวันที่กำหนด", "fieldname": "overdue_repeat_days", "fieldtype": "Int", "label": "เตือนซ้ำหลังหมดอายุทุก (วัน)", "reqd": 1},
+  {"fieldname": "section_delivery", "fieldtype": "Section Break", "label": "ช่องทางและผู้รับ"},
+  {"default": "1", "fieldname": "send_system_notification", "fieldtype": "Check", "label": "แจ้งเตือนในระบบ"},
+  {"default": "1", "fieldname": "send_email", "fieldtype": "Check", "label": "ส่งอีเมล"},
+  {"fieldname": "recipients", "fieldtype": "Table", "label": "ผู้รับกลางเพิ่มเติม", "options": "Thai FDA Reminder Recipient"}
+ ],
+ "module": "Regional",
+ "name": "Thai FDA Settings",
+ "permissions": [
+  {"read": 1, "role": "Stock User"},
+  {"create": 1, "read": 1, "write": 1, "role": "Stock Manager"},
+  {"create": 1, "delete": 1, "read": 1, "write": 1, "role": "System Manager"}
+ ],
+ "row_format": "Dynamic",
+ "track_changes": 1
+}

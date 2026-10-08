@@ -1,0 +1,38 @@
+{
+ "app": "erpnext",
+ "charts": [],
+ "content": "[]",
+ "creation": "2026-10-05 13:31:07.540157",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "for_user": "",
+ "hide_custom": 0,
+ "icon": "milestone",
+ "idx": 0,
+ "indicator_color": "",
+ "is_hidden": 1,
+ "label": "Thai Tax",
+ "links": [],
+ "modified": "2026-10-05 15:09:40.993713",
+ "modified_by": "Administrator",
+ "module": "Regional",
+ "name": "Thai Tax",
+ "number_cards": [],
+ "owner": "Administrator",
+ "parent_page": "Accounting",
+ "public": 1,
+ "quick_lists": [],
+ "roles": [
+  {
+   "role": "Accounts Manager"
+  },
+  {
+   "role": "Accounts User"
+  }
+ ],
+ "sequence_id": 7.0,
+ "shortcuts": [],
+ "title": "Thai Tax",
+ "type": "Workspace"
+}

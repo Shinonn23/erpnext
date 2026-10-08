@@ -17,7 +17,6 @@ class TestAccountsReceivable(ERPNextTestSuite, AccountsTestMixin):
 		self.company_abbr = "_TC"
 		self.customer = "_Test Customer"
 		self.item = "_Test Item"
-		self.cost_center = "Main - _TC"
 		self.warehouse = "Stores - _TC"
 		self.income_account = "Sales - _TC"
 		self.expense_account = "Cost of Goods Sold - _TC"
@@ -33,9 +32,6 @@ class TestAccountsReceivable(ERPNextTestSuite, AccountsTestMixin):
 			customer=self.customer,
 			debit_to=self.debit_to,
 			posting_date=today(),
-			parent_cost_center=self.cost_center,
-			cost_center=self.cost_center,
-			rate=100,
 			price_list_rate=100,
 			do_not_save=1,
 			**args,
@@ -73,7 +69,6 @@ class TestAccountsReceivable(ERPNextTestSuite, AccountsTestMixin):
 			item=self.item,
 			qty=-1,
 			debit_to=self.debit_to,
-			cost_center=self.cost_center,
 			is_return=1,
 			return_against=docname,
 			do_not_submit=do_not_submit,
@@ -104,6 +99,7 @@ class TestAccountsReceivable(ERPNextTestSuite, AccountsTestMixin):
 		)
 		pos_inv.disable_rounded_total = 1
 		pos_inv.save()
+
 		pos_inv.submit()
 
 		report = execute(filters)
@@ -247,9 +243,6 @@ class TestAccountsReceivable(ERPNextTestSuite, AccountsTestMixin):
 			customer=self.customer,
 			debit_to=self.debtors_usd,
 			posting_date=today(),
-			parent_cost_center=self.cost_center,
-			cost_center=self.cost_center,
-			rate=100,
 			currency="USD",
 			conversion_rate=80,
 			price_list_rate=100,
@@ -428,8 +421,7 @@ class TestAccountsReceivable(ERPNextTestSuite, AccountsTestMixin):
 			warehouse=self.warehouse,
 			debit_to=self.debit_to,
 			income_account=self.income_account,
-			expense_account=self.expense_account,
-			cost_center=self.cost_center,
+			expense_account=self.expense_account
 		)
 
 		pe = get_payment_entry(so.doctype, so.name)
@@ -544,7 +536,7 @@ class TestAccountsReceivable(ERPNextTestSuite, AccountsTestMixin):
 			"debit_in_account_currency": 100,
 			"reference_type": cr_note.doctype,
 			"reference_name": cr_note.name,
-			"cost_center": self.cost_center,
+
 		}
 		credit_entry = {
 			"account": self.debit_to,
@@ -554,7 +546,7 @@ class TestAccountsReceivable(ERPNextTestSuite, AccountsTestMixin):
 			"credit_in_account_currency": 100,
 			"reference_type": si2.doctype,
 			"reference_name": si2.name,
-			"cost_center": self.cost_center,
+
 		}
 
 		je.append("accounts", debit_entry)
@@ -725,19 +717,6 @@ class TestAccountsReceivable(ERPNextTestSuite, AccountsTestMixin):
 		row = report[0]
 		self.assertEqual(expected_data, [row.invoiced, row.outstanding, row.sales_person])
 
-	def test_cost_center_filter(self):
-		self.create_sales_invoice()
-		filters = {
-			"company": self.company,
-			"report_date": today(),
-			"range": "30, 60, 90, 120",
-			"cost_center": self.cost_center,
-		}
-		report = execute(filters)[1]
-		self.assertEqual(len(report), 1)
-		expected_data = [100.0, 100.0, self.cost_center]
-		row = report[0]
-		self.assertEqual(expected_data, [row.invoiced, row.outstanding, row.cost_center])
 
 	def test_customer_group_filter(self):
 		self.create_sales_invoice()
@@ -970,7 +949,7 @@ class TestAccountsReceivable(ERPNextTestSuite, AccountsTestMixin):
 				"party": self.customer,
 				"debit_in_account_currency": 150,
 				"credit_in_account_currency": 0,
-				"cost_center": self.cost_center,
+
 			},
 		)
 		je.append(
@@ -981,7 +960,7 @@ class TestAccountsReceivable(ERPNextTestSuite, AccountsTestMixin):
 				"party": self.customer,
 				"debit_in_account_currency": 200,
 				"credit_in_account_currency": 0,
-				"cost_center": self.cost_center,
+
 			},
 		)
 		je.append(
@@ -990,7 +969,7 @@ class TestAccountsReceivable(ERPNextTestSuite, AccountsTestMixin):
 				"account": self.cash,
 				"debit_in_account_currency": 0,
 				"credit_in_account_currency": 350,
-				"cost_center": self.cost_center,
+
 			},
 		)
 		je.save().submit()
@@ -1139,61 +1118,7 @@ class TestAccountsReceivable(ERPNextTestSuite, AccountsTestMixin):
 			[row.invoice_grand_total, row.invoiced, row.paid, row.outstanding],
 		)
 
-	def test_cost_center_on_report_output(self):
-		filters = {
-			"company": self.company,
-			"report_date": today(),
-			"range": "30, 60, 90, 120",
-		}
 
-		# check invoice grand total and invoiced column's value for 3 payment terms
-		si = self.create_sales_invoice(no_payment_schedule=True, do_not_submit=True)
-		si.cost_center = self.cost_center
-		si.save().submit()
-
-		new_cc = frappe.get_doc(
-			{
-				"doctype": "Cost Center",
-				"cost_center_name": "East Wing",
-				"parent_cost_center": self.company + " - " + self.company_abbr,
-				"company": self.company,
-			}
-		)
-		new_cc.save()
-
-		# check invoice grand total, invoiced, paid and outstanding column's value after payment
-		pe = self.create_payment_entry(si.name, do_not_submit=True)
-		pe.cost_center = new_cc.name
-		pe.save().submit()
-		report = execute(filters)
-
-		expected_data_after_payment = [si.name, si.cost_center, 60]
-
-		self.assertEqual(len(report[1]), 1)
-		row = report[1][0]
-		self.assertEqual(expected_data_after_payment, [row.voucher_no, row.cost_center, row.outstanding])
-
-	def test_cost_center_on_payment_before_invoice(self):
-		filters = {
-			"company": self.company,
-			"party_type": "Customer",
-			"party": [self.customer],
-			"report_date": today(),
-			"range": "30, 60, 90, 120",
-		}
-
-		si = self.create_sales_invoice(no_payment_schedule=True, do_not_submit=True)
-		si.posting_date = add_days(today(), 1)
-		si.due_date = si.posting_date
-		si.payment_schedule[0].due_date = si.posting_date
-		si.save().submit()
-
-		pe = self.create_payment_entry(si.name, do_not_submit=True)
-		pe.cost_center = self.cost_center
-		pe.save().submit()
-
-		row = next(row for row in execute(filters)[1] if row.voucher_no == pe.name)
-		self.assertEqual(row.cost_center, pe.cost_center)
 
 	def test_payment_terms_template_filters(self):
 		from erpnext.controllers.accounts_controller import get_payment_terms

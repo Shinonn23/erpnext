@@ -22,9 +22,6 @@ function get_filters() {
 		let result = [];
 		frappe.call({
 			method: "erpnext.accounts.doctype.accounting_dimension.accounting_dimension.get_dimensions",
-			args: {
-				with_cost_center_and_project: true,
-			},
 			async: false,
 			callback: function (r) {
 				if (!r.exc) {
@@ -80,7 +77,7 @@ function get_filters() {
 			label: __("Budget Against"),
 			fieldtype: "Select",
 			options: budget_against_options,
-			default: "Cost Center",
+			default: budget_against_options[0],
 			reqd: 1,
 			on_change: function () {
 				frappe.query_report.set_filter_value("budget_against_filter", []);

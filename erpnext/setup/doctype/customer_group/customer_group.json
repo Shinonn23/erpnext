@@ -12,6 +12,7 @@
   "customer_group_name",
   "parent_customer_group",
   "is_group",
+  "naming_series",
   "cb0",
   "default_price_list",
   "payment_terms",
@@ -56,6 +57,12 @@
    "label": "Is Group",
    "oldfieldname": "is_group",
    "oldfieldtype": "Select"
+  },
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Data",
+   "label": "Customer Naming Series",
+   "description": "Naming series used for new records in this group."
   },
   {
    "fieldname": "cb0",

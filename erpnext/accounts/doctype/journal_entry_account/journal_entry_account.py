@@ -21,7 +21,6 @@ class JournalEntryAccount(Document):
 		advance_voucher_type: DF.Link | None
 		against_account: DF.Text | None
 		bank_account: DF.Link | None
-		cost_center: DF.Link | None
 		credit: DF.Currency
 		credit_in_account_currency: DF.Currency
 		debit: DF.Currency

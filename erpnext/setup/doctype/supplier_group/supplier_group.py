@@ -21,6 +21,7 @@ class SupplierGroup(NestedSet):
 		accounts: DF.Table[PartyAccount]
 		is_group: DF.Check
 		lft: DF.Int
+		naming_series: DF.Data | None
 		old_parent: DF.Link | None
 		parent_supplier_group: DF.Link | None
 		payment_terms: DF.Link | None

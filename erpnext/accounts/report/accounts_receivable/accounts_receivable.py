@@ -16,7 +16,6 @@ from erpnext.accounts.doctype.accounting_dimension.accounting_dimension import (
 	get_accounting_dimensions,
 	get_dimension_with_children,
 )
-from erpnext.accounts.report.financial_statements import get_cost_centers_with_children
 from erpnext.accounts.utils import (
 	build_qb_match_conditions,
 	get_advance_payment_doctypes,
@@ -172,7 +171,6 @@ class ReceivablePayableReport:
 			party_account=ple.account,
 			posting_date=ple.posting_date,
 			account_currency=ple.account_currency,
-			cost_center=ple.cost_center,
 			remarks=ple.remarks,
 			invoiced=0.0,
 			paid=0.0,
@@ -197,7 +195,6 @@ class ReceivablePayableReport:
 			ple.voucher_type in ("Payment Entry", "Journal Entry")
 			and ple.against_voucher_type in self.advance_payment_doctypes
 		):
-			self.voucher_balance[key].cost_center = ple.cost_center
 			self.voucher_balance[key].project = ple.project
 
 		self.get_invoices(ple)
@@ -868,7 +865,6 @@ class ReceivablePayableReport:
 				ple.against_voucher_type,
 				ple.against_voucher_no,
 				ple.party_type,
-				ple.cost_center,
 				ple.project,
 				ple.party,
 				ple.posting_date,
@@ -979,9 +975,6 @@ class ReceivablePayableReport:
 			elif self.account_type == "Payable":
 				self.add_supplier_filters()
 
-		if self.filters.cost_center:
-			self.get_cost_center_conditions()
-
 		if self.filters.project:
 			self.qb_selection_filter.append(self.ple.project.isin(self.filters.project))
 
@@ -1006,10 +999,6 @@ class ReceivablePayableReport:
 			self.qb_selection_filter.append(
 				(self.ple.party_type != party_type) | self.ple.party.isin(allowed_parties or [""])
 			)
-
-	def get_cost_center_conditions(self):
-		cost_center_list = get_cost_centers_with_children(self.filters.cost_center)
-		self.qb_selection_filter.append(self.ple.cost_center.isin(cost_center_list))
 
 	def add_common_filters(self):
 		if self.filters.company:
@@ -1125,10 +1114,6 @@ class ReceivablePayableReport:
 		if self.filters.party:
 			ptt = ptt.where((voucher_type[party.lower()]).isin(self.filters.party))
 
-		if self.filters.cost_center:
-			cost_centers = get_cost_centers_with_children(self.filters.cost_center)
-			ptt = ptt.where(voucher_type.cost_center.isin(cost_centers))
-
 		if self.filters.party_account:
 			ptt = ptt.where(voucher_type[acc_type] == self.filters.party_account)
 
@@ -1229,7 +1214,6 @@ class ReceivablePayableReport:
 				options="Contact",
 			)
 
-		self.add_column(label=_("Cost Center"), fieldname="cost_center", fieldtype="Data")
 		self.add_column(label=_("Project"), fieldname="project", fieldtype="Link", options="Project")
 		self.add_column(label=_("Voucher Type"), fieldname="voucher_type", fieldtype="Data")
 		self.add_column(

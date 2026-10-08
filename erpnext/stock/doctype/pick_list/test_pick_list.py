@@ -4,6 +4,7 @@
 import frappe
 from frappe import _dict
 
+from erpnext.regional.thailand.tests.utils import ensure_company_tax_settings
 from erpnext.selling.doctype.product_bundle.test_product_bundle import make_product_bundle
 from erpnext.selling.doctype.sales_order.sales_order import create_pick_list
 from erpnext.selling.doctype.sales_order.test_sales_order import make_sales_order
@@ -291,6 +292,7 @@ class TestPickList(ERPNextTestSuite):
 			}
 		)
 		batch_company.insert()
+		ensure_company_tax_settings(batch_company.name)
 
 		batch_warehouse = frappe.get_doc(
 			{
@@ -366,6 +368,7 @@ class TestPickList(ERPNextTestSuite):
 				"country": "India",
 			}
 		).insert()
+		ensure_company_tax_settings(temp_company.name)
 		temp_warehouse = frappe.get_doc(
 			{"doctype": "Warehouse", "warehouse_name": "Temp Warehouse", "company": temp_company.name}
 		).insert()

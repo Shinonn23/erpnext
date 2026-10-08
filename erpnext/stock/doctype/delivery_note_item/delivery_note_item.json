@@ -109,7 +109,6 @@
   "purchase_order_item",
   "material_request_item",
   "accounting_dimensions_section",
-  "cost_center",
   "dimension_col_break",
   "project",
   "section_break_72",
@@ -599,16 +598,6 @@
    "label": "Item Tax Template",
    "options": "Item Tax Template",
    "print_hide": 1
-  },
-  {
-   "default": ":Company",
-   "fieldname": "cost_center",
-   "fieldtype": "Link",
-   "label": "Cost Center",
-   "no_copy": 1,
-   "options": "Cost Center",
-   "print_hide": 1,
-   "width": "120px"
   },
   {
    "default": "0",

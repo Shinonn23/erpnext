@@ -20,7 +20,7 @@ from frappe.utils.data import (
 	nowdate,
 )
 
-from erpnext import get_default_company, get_default_cost_center
+from erpnext import get_default_company
 from erpnext.accounts.doctype.accounting_dimension.accounting_dimension import (
 	get_accounting_dimensions,
 )
@@ -58,7 +58,6 @@ class Subscription(Document):
 		cancel_at_period_end: DF.Check
 		cancelation_date: DF.Date | None
 		company: DF.Link | None
-		cost_center: DF.Link | None
 		current_invoice_end: DF.Date | None
 		current_invoice_start: DF.Date | None
 		days_until_due: DF.Int
@@ -332,8 +331,6 @@ class Subscription(Document):
 		self.validate_plans_billing_cycle(self.get_billing_cycle_and_interval())
 		self.validate_end_date()
 		self.validate_to_follow_calendar_months()
-		if not self.cost_center:
-			self.cost_center = get_default_cost_center(self.get("company"))
 
 		if self.is_new():
 			self.set_subscription_status()
@@ -454,7 +451,6 @@ class Subscription(Document):
 		else:
 			invoice.posting_date = self.current_invoice_end
 
-		invoice.cost_center = self.cost_center
 
 		if self.invoice_document_type == "Sales Invoice":
 			invoice.customer = self.party
@@ -578,7 +574,7 @@ class Subscription(Document):
 					self.current_invoice_end,
 					prorate_factor,
 				),
-				"cost_center": plan_doc.cost_center,
+
 			}
 
 			if deferred:
@@ -818,7 +814,7 @@ def get_plan_dimensions(
 	plan_doc = frappe.get_cached_doc("Subscription Plan", plan)
 
 	dimensions = {}
-	for dimension in ["cost_center", *get_accounting_dimensions()]:
+	for dimension in get_accounting_dimensions():
 		value = plan_doc.get(dimension) or get_item_dimension(plan_doc.item, dimension, company, party_type)
 		if value:
 			dimensions[dimension] = value
@@ -833,14 +829,7 @@ def get_item_dimension(
 		return None
 
 	item_defaults = get_item_defaults(item_code, company)
-	if dimension != "cost_center":
-		return item_defaults.get(dimension)
-
-	selling = item_defaults.get("selling_cost_center")
-	buying = item_defaults.get("buying_cost_center")
-	if party_type == "Supplier":
-		return buying or selling
-	return selling or buying
+	return item_defaults.get(dimension)
 
 
 def process_all(subscription: list, posting_date: DateTimeLikeObject | None = None) -> None:

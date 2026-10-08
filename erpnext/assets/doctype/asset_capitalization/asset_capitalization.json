@@ -42,7 +42,6 @@
   "column_break_36",
   "target_incoming_rate",
   "accounting_dimensions_section",
-  "cost_center",
   "dimension_col_break",
   "project",
   "target_fixed_asset_account"
@@ -231,12 +230,6 @@
    "fieldname": "accounting_dimensions_section",
    "fieldtype": "Section Break",
    "label": "Accounting Dimensions"
-  },
-  {
-   "fieldname": "cost_center",
-   "fieldtype": "Link",
-   "label": "Cost Center",
-   "options": "Cost Center"
   },
   {
    "fieldname": "project",

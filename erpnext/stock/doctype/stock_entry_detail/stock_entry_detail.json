@@ -61,7 +61,6 @@
   "accounting",
   "expense_account",
   "accounting_dimensions_section",
-  "cost_center",
   "project",
   "dimension_col_break",
   "more_info",
@@ -72,6 +71,7 @@
   "col_break6",
   "material_request",
   "material_request_item",
+  "custody_loan_item",
   "pick_list_item",
   "original_item",
   "reference_section",
@@ -347,14 +347,6 @@
    "print_hide": 1
   },
   {
-   "depends_on": "eval:cint(erpnext.is_perpetual_inventory_enabled(parent.company))",
-   "fieldname": "cost_center",
-   "fieldtype": "Link",
-   "label": "Cost Center",
-   "options": "Cost Center",
-   "print_hide": 1
-  },
-  {
    "collapsible": 1,
    "fieldname": "more_info",
    "fieldtype": "Section Break",
@@ -422,6 +414,16 @@
    "label": "Material Request Item",
    "no_copy": 1,
    "options": "Material Request Item",
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "custody_loan_item",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Custody Loan Item",
+   "no_copy": 1,
+   "options": "Custody Loan Item",
    "print_hide": 1,
    "read_only": 1
   },

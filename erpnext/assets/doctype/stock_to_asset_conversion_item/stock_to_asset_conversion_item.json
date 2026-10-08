@@ -1,0 +1,112 @@
+{
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "item_code",
+  "qty",
+  "stock_qty",
+  "stock_uom",
+  "warehouse",
+  "material_request_item",
+  "column_break_1",
+  "serial_and_batch_bundle",
+  "bundle_summary",
+  "asset_item_code",
+  "valuation_rate",
+  "amount"
+ ],
+ "fields": [
+  {
+   "fieldname": "item_code",
+   "fieldtype": "Link",
+   "label": "Stock Item",
+   "options": "Item",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "qty",
+   "fieldtype": "Float",
+   "label": "Qty",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "stock_qty",
+   "fieldtype": "Float",
+   "label": "Stock Qty",
+   "read_only": 1,
+   "hidden": 1
+  },
+  {
+   "fieldname": "stock_uom",
+   "fieldtype": "Link",
+   "label": "Stock UOM",
+   "options": "UOM",
+   "fetch_from": "item_code.stock_uom",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "warehouse",
+   "fieldtype": "Link",
+   "label": "Warehouse",
+   "options": "Warehouse",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "material_request_item",
+   "fieldtype": "Link",
+   "label": "Material Request Item",
+   "options": "Material Request Item",
+   "hidden": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "serial_and_batch_bundle",
+   "fieldtype": "Link",
+   "label": "Serial and Batch Bundle",
+   "options": "Serial and Batch Bundle",
+   "read_only": 1
+  },
+  {
+   "fieldname": "bundle_summary",
+   "fieldtype": "Small Text",
+   "label": "SN / Batch Bundle Details",
+   "read_only": 1
+  },
+  {
+   "fieldname": "asset_item_code",
+   "fieldtype": "Link",
+   "label": "Target Asset Item",
+   "options": "Item",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "valuation_rate",
+   "fieldtype": "Currency",
+   "label": "Valuation Rate",
+   "options": "Company:company:default_currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "amount",
+   "fieldtype": "Currency",
+   "label": "Amount",
+   "options": "Company:company:default_currency",
+   "read_only": 1
+  }
+ ],
+ "istable": 1,
+ "module": "Assets",
+ "name": "Stock to Asset Conversion Item",
+ "permissions": [],
+ "track_changes": 1
+}

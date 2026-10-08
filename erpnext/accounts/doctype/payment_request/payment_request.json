@@ -40,7 +40,6 @@
   "branch_code",
   "swift_number",
   "accounting_dimensions_section",
-  "cost_center",
   "dimension_col_break",
   "project",
   "recipient_and_message",
@@ -68,11 +67,11 @@
  ],
  "fields": [
   {
-   "default": "Inward",
+   "default": "Outward",
    "fieldname": "payment_request_type",
    "fieldtype": "Select",
    "label": "Payment Request Type",
-   "options": "Outward\nInward",
+   "options": "Outward",
    "reqd": 1
   },
   {
@@ -252,12 +251,6 @@
    "fieldname": "accounting_dimensions_section",
    "fieldtype": "Section Break",
    "label": "Accounting Dimensions"
-  },
-  {
-   "fieldname": "cost_center",
-   "fieldtype": "Link",
-   "label": "Cost Center",
-   "options": "Cost Center"
   },
   {
    "fieldname": "dimension_col_break",

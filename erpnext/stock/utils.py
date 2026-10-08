@@ -134,8 +134,11 @@ def get_stock_balance(
 						frappe.bold(field), frappe.bold("Inventory Dimension")
 					)
 				)
-			args[field] = value
-			extra_cond += f" and {field} = %({field})s"
+			if value in (None, ""):
+				extra_cond += f" and {field} is null"
+			else:
+				args[field] = value
+				extra_cond += f" and {field} = %({field})s"
 
 	last_entry = get_previous_sle(args, extra_cond=extra_cond)
 
@@ -148,6 +151,7 @@ def get_stock_balance(
 						"warehouse": warehouse,
 						"posting_datetime": get_combine_datetime(posting_date, posting_time),
 						"ignore_warehouse": 1,
+						"inventory_dimensions_dict": inventory_dimensions_dict or {},
 					}
 				)
 			)
@@ -369,7 +373,16 @@ def _get_incoming_rate(args: dict | str, raise_error_if_no_rate: bool = True, fa
 		return batch_obj.get_incoming_rate()
 	else:
 		valuation_method = get_valuation_method(args.get("item_code"), args.get("company"))
-		previous_sle = get_previous_sle(args)
+		extra_conditions = []
+		for fieldname, value in (args.get("inventory_dimensions_dict") or {}).items():
+			if not frappe.db.has_column("Stock Ledger Entry", fieldname):
+				continue
+			if value in (None, ""):
+				extra_conditions.append(f" and {fieldname} is null")
+			else:
+				args[fieldname] = value
+				extra_conditions.append(f" and {fieldname} = %({fieldname})s")
+		previous_sle = get_previous_sle(args, extra_cond="".join(extra_conditions))
 		if valuation_method in ("FIFO", "LIFO"):
 			if previous_sle:
 				previous_stock_queue = json.loads(previous_sle.get("stock_queue", "[]") or "[]")

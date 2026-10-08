@@ -304,9 +304,6 @@ describe("voucher type registry", () => {
     assert.equal(received, dialog_manager);
     assert.ok(fieldnames.includes("against_loan"));
     assert.ok(
-      fieldnames.indexOf("against_loan") > fieldnames.indexOf("cost_center")
-    );
-    assert.ok(
       fieldnames.indexOf("against_loan") < fieldnames.indexOf("details_section")
     );
   });

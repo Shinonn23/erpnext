@@ -211,7 +211,7 @@ class TestBatch(ERPNextTestSuite):
 					item_code="ITEM-BATCH-1",
 					qty=90,
 					t_warehouse="_Test Warehouse - _TC",
-					cost_center="Main - _TC",
+
 					rate=10,
 				)
 			],
@@ -464,7 +464,7 @@ class TestBatch(ERPNextTestSuite):
 					qty=90,
 					serial_and_batch_bundle=sn_doc.name,
 					t_warehouse=warehouse,
-					cost_center="Main - _TC",
+
 					rate=10,
 					allow_zero_valuation_rate=1,
 				)
@@ -675,7 +675,7 @@ def create_batch(item_code, rate, create_item_price_for_batch):
 	pi = make_purchase_invoice(
 		company="_Test Company",
 		warehouse="Stores - _TC",
-		cost_center="Main - _TC",
+
 		update_stock=1,
 		expense_account="_Test Account Cost for Goods Sold - _TC",
 		item_code=item_code,

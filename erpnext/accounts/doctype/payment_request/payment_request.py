@@ -58,7 +58,6 @@ class PaymentRequest(Document):
 		bank_account_no: DF.ReadOnly | None
 		branch_code: DF.ReadOnly | None
 		company: DF.Link | None
-		cost_center: DF.Link | None
 		currency: DF.Link | None
 		email_to: DF.Data | None
 		failed_reason: DF.Data | None
@@ -398,7 +397,6 @@ class PaymentRequest(Document):
 		# Update dimensions
 		payment_entry.update(
 			{
-				"cost_center": self.get("cost_center"),
 				"project": self.get("project"),
 			}
 		)
@@ -764,7 +762,6 @@ def make_payment_request(**args):
 		# Dimensions
 		pr.update(
 			{
-				"cost_center": ref_doc.get("cost_center"),
 				"project": ref_doc.get("project"),
 			}
 		)

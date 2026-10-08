@@ -19,11 +19,6 @@ def make_dunning_type(dunning_type, company="_Test Company", **kwargs):
 	elif kwargs.get("income_account") is not False:
 		doc.income_account = "Sales - _TC" if company == "_Test Company" else "Sales - _TC1"
 
-	if "cost_center" in kwargs:
-		doc.cost_center = kwargs["cost_center"]
-	elif kwargs.get("cost_center") is not False:
-		doc.cost_center = "Main - _TC" if company == "_Test Company" else "Main - _TC1"
-
 	for row in kwargs.get("dunning_letter_text", [{"language": "en", "body_text": "Test body"}]):
 		doc.append("dunning_letter_text", row)
 
@@ -67,38 +62,6 @@ class TestDunningType(ERPNextTestSuite):
 		doc = make_dunning_type("_Test Dunning Valid Income Account", income_account="Sales - _TC")
 		doc.insert()
 		self.assertEqual(doc.income_account, "Sales - _TC")
-
-	def test_cost_center_must_belong_to_company(self):
-		doc = make_dunning_type("_Test Dunning Wrong Company CC", cost_center="Main - _TC1")
-		self.assertRaisesRegex(frappe.ValidationError, "doesn't belong to Company", doc.insert)
-
-	def test_cost_center_must_not_be_disabled(self):
-		disabled_cc = frappe.get_doc(
-			{
-				"doctype": "Cost Center",
-				"cost_center_name": "_Test Disabled Cost Center",
-				"parent_cost_center": "_Test Company - _TC",
-				"company": "_Test Company",
-				"disabled": 1,
-			}
-		).insert()
-
-		doc = make_dunning_type("_Test Dunning Disabled CC", cost_center=disabled_cc.name)
-		self.assertRaisesRegex(frappe.ValidationError, "is disabled", doc.insert)
-
-	def test_cost_center_must_not_be_group(self):
-		doc = make_dunning_type("_Test Dunning Group CC", cost_center="_Test Company - _TC")
-		self.assertRaisesRegex(frappe.ValidationError, "is a group Cost Center", doc.insert)
-
-	def test_cost_center_is_optional(self):
-		doc = make_dunning_type("_Test Dunning No CC", cost_center=False)
-		doc.insert()
-		self.assertFalse(doc.cost_center)
-
-	def test_valid_cost_center_passes(self):
-		doc = make_dunning_type("_Test Dunning Valid CC", cost_center="Main - _TC")
-		doc.insert()
-		self.assertEqual(doc.cost_center, "Main - _TC")
 
 	def test_duplicate_languages_not_allowed(self):
 		doc = make_dunning_type(

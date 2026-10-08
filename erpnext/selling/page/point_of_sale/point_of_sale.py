@@ -371,7 +371,7 @@ def check_opening_entry(user):
 
 @frappe.whitelist(methods=["POST"])
 def create_opening_voucher(pos_profile, company, balance_details):
-	# submit() enforces this per document, but only after the profile and company are accepted from
+	# `submit()` enforces this per document, but only after the profile and company are accepted from
 	# the caller -- check the profile the session is opened against.
 	check_pos_profile_access(pos_profile)
 

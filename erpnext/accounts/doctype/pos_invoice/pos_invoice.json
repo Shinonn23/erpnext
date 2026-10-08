@@ -29,7 +29,6 @@
   "accounting_dimensions_section",
   "project",
   "dimension_col_break",
-  "cost_center",
   "currency_and_price_list",
   "currency",
   "conversion_rate",
@@ -117,7 +116,6 @@
   "write_off_outstanding_amount_automatically",
   "column_break_74",
   "write_off_account",
-  "write_off_cost_center",
   "loyalty_points_redemption",
   "loyalty_points",
   "loyalty_amount",
@@ -125,7 +123,6 @@
   "column_break_77",
   "loyalty_program",
   "loyalty_redemption_account",
-  "loyalty_redemption_cost_center",
   "contact_and_address_tab",
   "address_and_contact",
   "customer_address",
@@ -374,12 +371,6 @@
   {
    "fieldname": "dimension_col_break",
    "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "cost_center",
-   "fieldtype": "Link",
-   "label": "Cost Center",
-   "options": "Cost Center"
   },
   {
    "collapsible": 1,
@@ -865,14 +856,6 @@
    "options": "Account"
   },
   {
-   "depends_on": "redeem_loyalty_points",
-   "fieldname": "loyalty_redemption_cost_center",
-   "fieldtype": "Link",
-   "label": "Redemption Cost Center",
-   "no_copy": 1,
-   "options": "Cost Center"
-  },
-  {
    "collapsible": 1,
    "collapsible_depends_on": "discount_amount",
    "fieldname": "section_break_49",
@@ -1219,13 +1202,6 @@
    "fieldtype": "Link",
    "label": "Write Off Account",
    "options": "Account",
-   "print_hide": 1
-  },
-  {
-   "fieldname": "write_off_cost_center",
-   "fieldtype": "Link",
-   "label": "Write Off Cost Center",
-   "options": "Cost Center",
    "print_hide": 1
   },
   {

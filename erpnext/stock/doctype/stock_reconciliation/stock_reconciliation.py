@@ -44,7 +44,6 @@ class StockReconciliation(StockController):
 
 		amended_from: DF.Link | None
 		company: DF.Link
-		cost_center: DF.Link | None
 		difference_amount: DF.Currency
 		expense_account: DF.Link | None
 		items: DF.Table[StockReconciliationItem]
@@ -56,6 +55,7 @@ class StockReconciliation(StockController):
 		scan_mode: DF.Check
 		set_posting_time: DF.Check
 		set_warehouse: DF.Link | None
+		stock_count: DF.Link | None
 	# end: auto-generated types
 
 	book_expenses_added_to_stock = True
@@ -70,8 +70,6 @@ class StockReconciliation(StockController):
 			self.expense_account = frappe.get_cached_value(
 				"Company", self.company, "stock_adjustment_account"
 			)
-		if not self.cost_center:
-			self.cost_center = frappe.get_cached_value("Company", self.company, "cost_center")
 		self.validate_posting_time()
 		self.set_current_serial_and_batch_bundle()
 		self.set_new_serial_and_batch_bundle()
@@ -99,15 +97,40 @@ class StockReconciliation(StockController):
 		self.set_serial_and_batch_bundle(ignore_validate=True)
 
 	def validate_inventory_dimension(self):
+		# Inventory dimensions are valid for both opening balances and quantity adjustments.
+		# The stock ledger stores each dimensional balance independently.
+		return
+
+	def get_inventory_dimensions_dict(self, row, include_empty=False):
 		dimensions = get_inventory_dimensions()
-		for dimension in dimensions:
-			for row in self.items:
-				if not row.batch_no and row.current_qty and row.get(dimension.get("source_fieldname")):
-					frappe.throw(
-						_(
-							"Row #{0}: You cannot use the inventory dimension '{1}' in Stock Reconciliation to modify the quantity or valuation rate. Stock reconciliation with inventory dimensions is intended solely for performing opening entries."
-						).format(row.idx, bold(dimension.get("doctype")))
-					)
+		if not include_empty and not any(
+			row.get(dimension.get("source_fieldname")) not in (None, "") for dimension in dimensions
+		):
+			return {}
+
+		return {
+			dimension.get("fieldname"): row.get(dimension.get("source_fieldname")) for dimension in dimensions
+		}
+
+	def get_previous_sle_for_row(self, row):
+		from erpnext.stock.stock_ledger import get_previous_sle
+
+		args = {
+			"item_code": row.item_code,
+			"warehouse": row.warehouse,
+			"posting_date": self.posting_date,
+			"posting_time": self.posting_time,
+		}
+		extra_conditions = []
+		for fieldname, value in self.get_inventory_dimensions_dict(
+			row, include_empty=bool(self.stock_count)
+		).items():
+			if value in (None, ""):
+				extra_conditions.append(f" and {fieldname} is null")
+			else:
+				args[fieldname] = value
+				extra_conditions.append(f" and {fieldname} = %({fieldname})s")
+		return get_previous_sle(args, extra_cond="".join(extra_conditions))
 
 	def on_submit(self):
 		self.make_bundle_for_current_qty()
@@ -157,6 +180,9 @@ class StockReconciliation(StockController):
 						else None,
 						"batches": frappe._dict({row.batch_no: row.current_qty}) if row.batch_no else None,
 						"batch_no": row.batch_no,
+						"inventory_dimensions_dict": self.get_inventory_dimensions_dict(
+							row, include_empty=bool(self.stock_count)
+						),
 						"do_not_submit": True,
 					}
 				).make_serial_and_batch_bundle()
@@ -271,6 +297,9 @@ class StockReconciliation(StockController):
 							"warehouse": item.warehouse,
 							"posting_datetime": combine_datetime(self.posting_date, self.posting_time),
 							"ignore_warehouse": 1,
+							"inventory_dimensions_dict": self.get_inventory_dimensions_dict(
+								item, include_empty=bool(self.stock_count)
+							),
 						}
 					)
 				)
@@ -296,6 +325,9 @@ class StockReconciliation(StockController):
 							"posting_time": self.posting_time,
 							"for_stock_levels": True,
 							"ignore_voucher_nos": [self.name],
+							"inventory_dimensions_dict": self.get_inventory_dimensions_dict(
+								item, include_empty=bool(self.stock_count)
+							),
 						}
 					)
 				)
@@ -388,6 +420,9 @@ class StockReconciliation(StockController):
 					for_stock_levels=True,
 					consider_negative_batches=True,
 					do_not_check_future_batches=True,
+					inventory_dimensions_dict=self.get_inventory_dimensions_dict(
+						row, include_empty=bool(self.stock_count)
+					),
 				)
 
 				if not current_qty:
@@ -419,6 +454,9 @@ class StockReconciliation(StockController):
 					"serial_nos": serial_nos,
 					"check_serial_nos": True,
 					"voucher_no": self.name,
+					"inventory_dimensions_dict": self.get_inventory_dimensions_dict(
+						row, include_empty=bool(self.stock_count)
+					),
 				}
 			),
 			[],
@@ -529,13 +567,9 @@ class StockReconciliation(StockController):
 
 				return True
 
-			inventory_dimensions_dict = {}
-			if not item.batch_no and not item.serial_no:
-				for dimension in get_inventory_dimensions():
-					if item.get(dimension.get("fieldname")):
-						inventory_dimensions_dict[dimension.get("fieldname")] = item.get(
-							dimension.get("fieldname")
-						)
+			inventory_dimensions_dict = self.get_inventory_dimensions_dict(
+				item, include_empty=bool(self.stock_count)
+			)
 
 			item_dict = get_stock_balance_for(
 				item.item_code,
@@ -630,8 +664,8 @@ class StockReconciliation(StockController):
 					key.append(row.get(field))
 
 			for dimension in get_inventory_dimensions():
-				if row.get(dimension.get("fieldname")):
-					key.append(row.get(dimension.get("fieldname")))
+				if row.get(dimension.get("source_fieldname")):
+					key.append(row.get(dimension.get("source_fieldname")))
 
 			if key in item_warehouse_combinations:
 				self.validation_messages.append(
@@ -779,8 +813,6 @@ class StockReconciliation(StockController):
 	def update_stock_ledger(self, allow_negative_stock=False):
 		"""find difference between current and expected entries
 		and create stock ledger entries based on the difference"""
-		from erpnext.stock.stock_ledger import get_previous_sle
-
 		if self.docstatus == 2:
 			self.make_sle_on_cancel(allow_negative_stock)
 			return
@@ -805,14 +837,7 @@ class StockReconciliation(StockController):
 						).format(row.idx, frappe.bold(row.item_code))
 					)
 
-				previous_sle = get_previous_sle(
-					{
-						"item_code": row.item_code,
-						"warehouse": row.warehouse,
-						"posting_date": self.posting_date,
-						"posting_time": self.posting_time,
-					}
-				)
+				previous_sle = self.get_previous_sle_for_row(row)
 
 				if previous_sle:
 					if row.qty in ("", None):
@@ -850,16 +875,7 @@ class StockReconciliation(StockController):
 			)
 
 	def get_balance_before_reconciliation(self, row) -> dict:
-		from erpnext.stock.stock_ledger import get_previous_sle
-
-		return get_previous_sle(
-			{
-				"item_code": row.item_code,
-				"warehouse": row.warehouse,
-				"posting_date": self.posting_date,
-				"posting_time": self.posting_time,
-			}
-		)
+		return self.get_previous_sle_for_row(row)
 
 	def get_stranded_stock_value(self, row, previous_sle=None) -> float:
 		"""Stock value the ledger still carries for an item-warehouse that has no quantity on hand.
@@ -879,7 +895,14 @@ class StockReconciliation(StockController):
 			return 0.0
 
 		return get_stock_value_difference(
-			row.item_code, row.warehouse, self.posting_date, self.posting_time, self.name
+			row.item_code,
+			row.warehouse,
+			self.posting_date,
+			self.posting_time,
+			self.name,
+			inventory_dimensions_dict=self.get_inventory_dimensions_dict(
+				row, include_empty=bool(self.stock_count)
+			),
 		)
 
 	def make_adjustment_entry(self, row, sl_entries):
@@ -987,8 +1010,14 @@ class StockReconciliation(StockController):
 				data.stock_value_difference = -1 * flt(row.amount_difference)
 
 		elif self.docstatus == 1 and has_dimensions and (not row.batch_no or not row.serial_and_batch_bundle):
-			data.actual_qty = row.qty
-			data.qty_after_transaction = 0.0
+			if self.purpose == "Opening Stock":
+				data.actual_qty = row.qty
+				data.qty_after_transaction = 0.0
+			else:
+				# For an adjustment, ``qty`` is the target balance of this dimension.
+				# Post only the difference from its current dimensional balance.
+				data.actual_qty = flt(row.qty) - flt(row.current_qty)
+				data.qty_after_transaction = flt(row.qty)
 			data.incoming_rate = flt(row.valuation_rate)
 
 		self.update_inventory_dimensions(row, data)
@@ -1043,10 +1072,7 @@ class StockReconciliation(StockController):
 		return new_sl_entries
 
 	def get_gl_entries(self, inventory_account_map=None):
-		if not self.cost_center:
-			msgprint(_("Please enter Cost Center"), raise_exception=1)
-
-		return super().get_gl_entries(inventory_account_map, self.expense_account, self.cost_center)
+		return super().get_gl_entries(inventory_account_map, self.expense_account)
 
 	def validate_expense_account(self):
 		if not cint(erpnext.is_perpetual_inventory_enabled(self.company)):
@@ -1241,7 +1267,13 @@ class StockReconciliation(StockController):
 			.orderby(sle.posting_datetime, order=frappe.qb.desc)
 			.orderby(sle.creation, order=frappe.qb.desc)
 			.limit(1)
-		).run(as_dict=True)
+		)
+		for fieldname, value in self.get_inventory_dimensions_dict(
+			row, include_empty=bool(self.stock_count)
+		).items():
+			field = sle[fieldname]
+			previous_sle = previous_sle.where(field.isnull() if value in (None, "") else field == value)
+		previous_sle = previous_sle.run(as_dict=True)
 
 		return previous_sle[0] if previous_sle else frappe._dict()
 
@@ -1524,6 +1556,7 @@ def get_stock_balance_for(
 				for_stock_levels=True,
 				consider_negative_batches=True,
 				do_not_check_future_batches=True,
+				inventory_dimensions_dict=inventory_dimensions_dict,
 			)
 			or 0
 		)
@@ -1539,6 +1572,7 @@ def get_stock_balance_for(
 						"company": company,
 						"posting_date": posting_date,
 						"posting_time": posting_time,
+						"inventory_dimensions_dict": inventory_dimensions_dict,
 						"creation": row.get("creation") if row and row.get("creation") else now(),
 					}
 				)

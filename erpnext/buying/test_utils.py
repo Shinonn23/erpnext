@@ -123,8 +123,7 @@ class TestGetLinkedMaterialRequests(ERPNextTestSuite):
 		other_company_request = make_material_request(
 			item_code="_Test Item",
 			company="_Test Company 1",
-			warehouse="_Test Warehouse 2 - _TC1",
-			cost_center="Main - _TC1",
+			warehouse="_Test Warehouse 2 - _TC1"
 		)
 		user = create_user_with_roles("test_buying_restricted_user@example.com", "Purchase User")
 		frappe.permissions.add_user_permission("Company", "_Test Company", user.name)

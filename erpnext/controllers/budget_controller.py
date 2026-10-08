@@ -153,12 +153,8 @@ class BudgetValidation:
 		self.dimensions = []
 		for _x in frappe.db.get_all("Accounting Dimension"):
 			self.dimensions.append(frappe.get_lazy_doc("Accounting Dimension", _x.name))
-		self.dimensions.extend(
-			[
-				{"fieldname": "cost_center", "document_type": "Cost Center"},
-				{"fieldname": "project", "document_type": "Project"},
-			]
-		)
+		if not any(dimension.get("fieldname") == "project" for dimension in self.dimensions):
+			self.dimensions.append({"fieldname": "project", "document_type": "Project"})
 
 	def get_budget_records(self) -> list:
 		bud = qb.DocType("Budget")

@@ -36,7 +36,7 @@ frappe.query_reports["Gross Profit"] = {
 			label: __("Group By"),
 			fieldtype: "Select",
 			options:
-				"Invoice\nItem Code\nItem Group\nBrand\nWarehouse\nCustomer\nCustomer Group\nTerritory\nSales Person\nProject\nCost Center\nMonthly\nPayment Term",
+				"Invoice\nItem Code\nItem Group\nBrand\nWarehouse\nCustomer\nCustomer Group\nTerritory\nSales Person\nProject\nMonthly\nPayment Term",
 			default: "Invoice",
 		},
 		{
@@ -61,17 +61,6 @@ frappe.query_reports["Gross Profit"] = {
 				return {
 					filters: [["Warehouse", "company", "=", company]],
 				};
-			},
-		},
-		{
-			fieldname: "cost_center",
-			label: __("Cost Center"),
-			fieldtype: "MultiSelectList",
-			options: "Cost Center",
-			get_data: function (txt) {
-				return frappe.db.get_link_options("Cost Center", txt, {
-					company: frappe.query_report.get_filter_value("company"),
-				});
 			},
 		},
 		{

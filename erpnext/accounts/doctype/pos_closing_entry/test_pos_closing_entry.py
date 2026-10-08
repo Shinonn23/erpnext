@@ -171,6 +171,8 @@ class TestPOSClosingEntry(ERPNextTestSuite):
 		self.assertTrue(frappe.db.exists("POS Profile", pos_profile.name))
 
 		test_user = init_user_and_profile(do_not_create_pos_profile=1)
+		pos_profile.append("applicable_for_users", {"default": 1, "user": test_user.name})
+		pos_profile.save()
 
 		opening_entry = create_opening_entry(pos_profile, test_user.name)
 		pos_inv1 = create_pos_invoice(rate=350, do_not_submit=1, pos_profile=pos_profile.name)
@@ -462,7 +464,14 @@ def init_user_and_profile(**args):
 	user = "test@example.com"
 	test_user = frappe.get_doc("User", user)
 
-	roles = ("Accounts Manager", "Accounts User", "Sales Manager", "Stock User", "Item Manager")
+	roles = (
+		"Accounts Manager",
+		"Accounts User",
+		"Sales Manager",
+		"Sales User",
+		"Stock User",
+		"Item Manager",
+	)
 	test_user.add_roles(*roles)
 	frappe.set_user(user)
 

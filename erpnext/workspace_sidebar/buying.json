@@ -93,6 +93,61 @@
   {
    "child": 0,
    "collapsible": 1,
+   "icon": "receipt",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Thailand Purchasing & Tax",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Section Break"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Purchase Billing",
+   "link_to": "Purchase Billing",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Purchase Tax Invoices",
+   "link_to": "Purchase Tax Invoice",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Import Supplier Invoice",
+   "link_to": "Import Supplier Invoice",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Purchase Tax Report",
+   "link_to": "Purchase Tax Report",
+   "link_type": "Report",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
    "icon": "database",
    "indent": 1,
    "keep_closed": 1,
@@ -369,7 +424,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-02-20 15:19:47.010810",
+ "modified": "2026-10-05 14:06:47.853876",
  "modified_by": "Administrator",
  "module": "Buying",
  "module_onboarding": "Buying Onboarding",

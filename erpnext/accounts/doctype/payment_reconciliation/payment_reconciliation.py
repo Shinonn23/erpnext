@@ -48,7 +48,6 @@ class PaymentReconciliation(Document):
 		allocation: DF.Table[PaymentReconciliationAllocation]
 		bank_cash_account: DF.Link | None
 		company: DF.Link
-		cost_center: DF.Link | None
 		default_advance_account: DF.Link | None
 		from_invoice_date: DF.Date | None
 		from_payment_date: DF.Date | None
@@ -74,7 +73,7 @@ class PaymentReconciliation(Document):
 		self.common_filter_conditions = []
 		self.accounting_dimension_filter_conditions = []
 		self.ple_posting_date_filter = []
-		self.dimensions = get_dimensions(with_cost_center_and_project=True)[0]
+		self.dimensions = get_dimensions(with_project=True)[0]
 
 	@property
 	def user_permissions(self):
@@ -101,7 +100,6 @@ class PaymentReconciliation(Document):
 				"maximum_invoice_amount": None,
 				"maximum_payment_amount": None,
 				"bank_cash_account": None,
-				"cost_center": None,
 				"payment_name": None,
 				"invoice_name": None,
 			}
@@ -183,7 +181,6 @@ class PaymentReconciliation(Document):
 			{
 				"company": self.get("company"),
 				"get_payments": True,
-				"cost_center": self.get("cost_center"),
 				"from_payment_date": self.get("from_payment_date"),
 				"to_payment_date": self.get("to_payment_date"),
 				"maximum_payment_amount": self.get("maximum_payment_amount"),
@@ -238,9 +235,6 @@ class PaymentReconciliation(Document):
 		if self.payment_name:
 			conditions.append(je.name.like(f"%%{self.payment_name}%%"))
 
-		if self.get("cost_center"):
-			conditions.append(jea.cost_center == self.cost_center)
-
 		account_type = erpnext.get_party_account_type(self.party_type)
 
 		if account_type == "Receivable":
@@ -267,7 +261,6 @@ class PaymentReconciliation(Document):
 				jea.is_advance,
 				jea.exchange_rate,
 				jea.account_currency.as_("currency"),
-				jea.cost_center.as_("cost_center"),
 			)
 			.where(
 				(je.docstatus == 1)
@@ -354,7 +347,6 @@ class PaymentReconciliation(Document):
 								"amount": -(inv.outstanding_in_account_currency),
 								"posting_date": inv.posting_date,
 								"currency": inv.currency,
-								"cost_center": inv.cost_center,
 								"remarks": inv.remarks,
 							}
 						)
@@ -550,7 +542,6 @@ class PaymentReconciliation(Document):
 				"allocated_amount": allocated_amount,
 				"difference_amount": pay.get("difference_amount"),
 				"currency": inv.get("currency"),
-				"cost_center": pay.get("cost_center"),
 			}
 		)
 
@@ -631,7 +622,6 @@ class PaymentReconciliation(Document):
 				"difference_account": row.get("difference_account"),
 				"difference_posting_date": row.get("gain_loss_posting_date"),
 				"debit_or_credit_note_posting_date": row.get("debit_or_credit_note_posting_date"),
-				"cost_center": row.get("cost_center"),
 			}
 		)
 
@@ -795,9 +785,6 @@ class PaymentReconciliation(Document):
 
 		self.common_filter_conditions.append(ple.company == self.company)
 
-		if self.get("cost_center") and (get_invoices or get_return_invoices):
-			self.accounting_dimension_filter_conditions.append(ple.cost_center == self.cost_center)
-
 		if get_invoices:
 			if self.from_invoice_date:
 				self.ple_posting_date_filter.append(ple.posting_date.gte(self.from_invoice_date))
@@ -875,7 +862,6 @@ def reconcile_dr_cr_note(dr_cr_notes, company, active_dimensions=None):
 						inv.dr_or_cr: abs(inv.allocated_amount),
 						"reference_type": inv.against_voucher_type,
 						"reference_name": inv.against_voucher,
-						"cost_center": inv.cost_center or erpnext.get_default_cost_center(company),
 						"exchange_rate": inv.exchange_rate,
 						"user_remark": f"{fmt_money(flt(inv.allocated_amount), currency=company_currency)} against {inv.against_voucher}",
 					},
@@ -890,7 +876,6 @@ def reconcile_dr_cr_note(dr_cr_notes, company, active_dimensions=None):
 						),
 						"reference_type": inv.voucher_type,
 						"reference_name": inv.voucher_no,
-						"cost_center": inv.cost_center or erpnext.get_default_cost_center(company),
 						"exchange_rate": inv.exchange_rate,
 						"user_remark": f"{fmt_money(flt(inv.allocated_amount), currency=company_currency)} from {inv.voucher_no}",
 					},
@@ -939,7 +924,6 @@ def reconcile_dr_cr_note(dr_cr_notes, company, active_dimensions=None):
 				inv.against_voucher_type,
 				inv.against_voucher,
 				None,
-				inv.cost_center,
 				dimensions_dict,
 			)
 

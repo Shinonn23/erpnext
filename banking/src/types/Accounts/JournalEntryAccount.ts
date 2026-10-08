@@ -20,8 +20,6 @@ export interface JournalEntryAccount{
 	party_type?: string
 	/**	Party : Dynamic Link	*/
 	party?: string
-	/**	Cost Center : Link - Cost Center - If Income or Expense	*/
-	cost_center?: string
 	/**	Project : Link - Project	*/
 	project?: string
 	/**	Account Currency : Link - Currency	*/

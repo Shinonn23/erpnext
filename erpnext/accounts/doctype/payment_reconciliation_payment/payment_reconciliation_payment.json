@@ -16,8 +16,7 @@
   "sec_break1",
   "remarks",
   "currency",
-  "exchange_rate",
-  "cost_center"
+  "exchange_rate"
  ],
  "fields": [
   {
@@ -93,12 +92,6 @@
    "fieldtype": "Float",
    "hidden": 1,
    "label": "Exchange Rate"
-  },
-  {
-   "fieldname": "cost_center",
-   "fieldtype": "Link",
-   "label": "Cost Center",
-   "options": "Cost Center"
   },
   {
    "fieldname": "remarks",

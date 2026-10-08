@@ -16,12 +16,14 @@ from erpnext.tests.utils import ERPNextTestSuite
 
 class TestUnreconcilePayment(ERPNextTestSuite, AccountsTestMixin):
 	def setUp(self):
+		frappe.get_doc("User", frappe.session.user).add_roles(
+			"Accounts User", "Accounts Manager", "Sales User"
+		)
 		self.company = "_Test Company"
 		self.customer = "_Test Customer"
 		self.supplier = "_Test Supplier"
 		self.item = "_Test Item"
 		self.debit_to = "Debtors - _TC"
-		self.cost_center = "Main - _TC"
 		self.cash = "Cash - _TC"
 		self.debtors_usd = "_Test Receivable USD - _TC"
 
@@ -32,13 +34,11 @@ class TestUnreconcilePayment(ERPNextTestSuite, AccountsTestMixin):
 			customer=self.customer,
 			debit_to=self.debit_to,
 			posting_date=today(),
-			parent_cost_center=self.cost_center,
-			cost_center=self.cost_center,
+
 			rate=100,
-			price_list_rate=100,
-			do_not_submit=do_not_submit,
+			do_not_submit=True,
 		)
-		return si
+		return si if do_not_submit else si.submit()
 
 	def create_payment_entry(self):
 		pe = create_payment_entry(
@@ -60,7 +60,9 @@ class TestUnreconcilePayment(ERPNextTestSuite, AccountsTestMixin):
 			item=self.item,
 			rate=100,
 			transaction_date=today(),
+			do_not_submit=True,
 		)
+		so.submit()
 		return so
 
 	def test_01_unreconcile_invoice(self):
@@ -110,6 +112,7 @@ class TestUnreconcilePayment(ERPNextTestSuite, AccountsTestMixin):
 		self.assertEqual(len(pe.references), 1)
 		self.assertEqual(pe.unallocated_amount, 100)
 
+
 	def test_02_unreconcile_one_payment_among_multi_payments(self):
 		"""
 		Scenario: 2 payments, both split against 2 different invoices
@@ -128,7 +131,7 @@ class TestUnreconcilePayment(ERPNextTestSuite, AccountsTestMixin):
 			"references",
 			{"reference_doctype": si2.doctype, "reference_name": si2.name, "allocated_amount": 50},
 		)
-		pe1.save().submit()
+		pe1.submit()
 
 		pe2 = self.create_payment_entry()
 		pe2.paid_amount = 100
@@ -141,7 +144,7 @@ class TestUnreconcilePayment(ERPNextTestSuite, AccountsTestMixin):
 			"references",
 			{"reference_doctype": si2.doctype, "reference_name": si2.name, "allocated_amount": 50},
 		)
-		pe2.save().submit()
+		pe2.submit()
 
 		# Assert outstanding and unallocated
 		[doc.reload() for doc in [si1, si2, pe1, pe2]]
@@ -183,14 +186,14 @@ class TestUnreconcilePayment(ERPNextTestSuite, AccountsTestMixin):
 		si1.currency = "USD"
 		si1.debit_to = self.debtors_usd
 		si1.conversion_rate = 80
-		si1.save().submit()
-
+		si1.save()
+		si1.submit()
 		si2 = self.create_sales_invoice(do_not_submit=True)
 		si2.currency = "USD"
 		si2.debit_to = self.debtors_usd
 		si2.conversion_rate = 80
-		si2.save().submit()
-
+		si2.save()
+		si2.submit()
 		pe = self.create_payment_entry()
 		pe.paid_from = self.debtors_usd
 		pe.paid_from_account_currency = "USD"
@@ -206,7 +209,7 @@ class TestUnreconcilePayment(ERPNextTestSuite, AccountsTestMixin):
 			"references",
 			{"reference_doctype": si2.doctype, "reference_name": si2.name, "allocated_amount": 100},
 		)
-		pe.save().submit()
+		pe.submit()
 
 		unreconcile = frappe.get_doc(
 			{
@@ -251,14 +254,14 @@ class TestUnreconcilePayment(ERPNextTestSuite, AccountsTestMixin):
 		si1.currency = "USD"
 		si1.debit_to = self.debtors_usd
 		si1.conversion_rate = 80
-		si1.save().submit()
-
+		si1.save()
+		si1.submit()
 		si2 = self.create_sales_invoice(do_not_submit=True)
 		si2.currency = "USD"
 		si2.debit_to = self.debtors_usd
 		si2.conversion_rate = 80
-		si2.save().submit()
-
+		si2.save()
+		si2.submit()
 		pe1 = self.create_payment_entry()
 		pe1.paid_from = self.debtors_usd
 		pe1.paid_from_account_currency = "USD"
@@ -275,7 +278,7 @@ class TestUnreconcilePayment(ERPNextTestSuite, AccountsTestMixin):
 			"references",
 			{"reference_doctype": si2.doctype, "reference_name": si2.name, "allocated_amount": 50},
 		)
-		pe1.save().submit()
+		pe1.submit()
 
 		pe2 = self.create_payment_entry()
 		pe2.paid_from = self.debtors_usd
@@ -293,7 +296,7 @@ class TestUnreconcilePayment(ERPNextTestSuite, AccountsTestMixin):
 			"references",
 			{"reference_doctype": si2.doctype, "reference_name": si2.name, "allocated_amount": 50},
 		)
-		pe2.save().submit()
+		pe2.submit()
 
 		unreconcile = frappe.get_doc(
 			{
@@ -341,7 +344,7 @@ class TestUnreconcilePayment(ERPNextTestSuite, AccountsTestMixin):
 			"references",
 			{"reference_doctype": so.doctype, "reference_name": so.name, "allocated_amount": 100},
 		)
-		pe.save().submit()
+		pe.submit()
 
 		# Assert 'Advance Paid'
 		so.reload()
@@ -388,7 +391,7 @@ class TestUnreconcilePayment(ERPNextTestSuite, AccountsTestMixin):
 			"references",
 			{"reference_doctype": so2.doctype, "reference_name": so2.name, "allocated_amount": 110},
 		)
-		pe.save().submit()
+		pe.submit()
 
 		# Assert 'Advance Paid'
 		so1.reload()
@@ -436,15 +439,15 @@ class TestUnreconcilePayment(ERPNextTestSuite, AccountsTestMixin):
 			"references",
 			{"reference_doctype": so.doctype, "reference_name": so.name, "allocated_amount": 1000},
 		)
-		pe.save().submit()
+		pe.submit()
 
 		# Assert 'Advance Paid'
 		so.reload()
 		self.assertEqual(so.advance_paid, 1000)
 
 		si = make_sales_invoice(so.name)
-		si.insert().submit()
-
+		si.insert()
+		si.submit()
 		pr = frappe.get_doc(
 			{
 				"doctype": "Payment Reconciliation",
@@ -521,7 +524,8 @@ class TestUnreconcilePayment(ERPNextTestSuite, AccountsTestMixin):
 				],
 			}
 		)
-		je.save().submit()
+		je.save()
+		je.submit()
 		po.reload()
 		self.assertEqual(po.advance_paid, 100)
 

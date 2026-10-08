@@ -1,0 +1,75 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2024-12-28 14:01:46.624547",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "create_payment_receipt_from_sales_billing"
+ ],
+ "fields": [
+  {
+   "default": "0",
+   "description": "From Sales Billing, Create Multi-Payments will also create a Payment Receipt that group Payment Entries.",
+   "fieldname": "create_payment_receipt_from_sales_billing",
+   "fieldtype": "Check",
+   "label": "Create Payment Receipt from Sales Billing"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-10-05 15:25:00.580020",
+ "modified_by": "Administrator",
+ "module": "Regional",
+ "name": "Thai Billing Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "Accounts Manager",
+   "write": 0,
+   "create": 0,
+   "delete": 0,
+   "submit": 0,
+   "cancel": 0,
+   "amend": 0,
+   "report": 0,
+   "export": 0,
+   "import": 0,
+   "share": 0,
+   "print": 0,
+   "email": 0
+  },
+  {
+   "read": 1,
+   "role": "Accounts User",
+   "write": 0,
+   "create": 0,
+   "delete": 0,
+   "submit": 0,
+   "cancel": 0,
+   "amend": 0,
+   "report": 0,
+   "export": 0,
+   "import": 0,
+   "share": 0,
+   "print": 0,
+   "email": 0
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

@@ -84,7 +84,8 @@ class Customer(TransactionBase):
 		loyalty_program_tier: DF.Data | None
 		market_segment: DF.Link | None
 		mobile_no: DF.ReadOnly | None
-		naming_series: DF.Literal["CUST-.YYYY.-"]
+		naming_series: DF.Data
+		old_customer_code: DF.Data | None
 		opportunity_name: DF.Link | None
 		payment_terms: DF.Link | None
 		portal_users: DF.Table[PortalUser]
@@ -116,6 +117,11 @@ class Customer(TransactionBase):
 		if cust_master_name == "Customer Name":
 			self.name = self.get_customer_name()
 		elif cust_master_name == "Naming Series":
+			if self.customer_group:
+				self.naming_series = (
+					frappe.db.get_value("Customer Group", self.customer_group, "naming_series")
+					or "CUST-.YYYY.-"
+				)
 			set_name_by_naming_series(self)
 		else:
 			set_name_from_naming_options(frappe.get_meta(self.doctype).autoname, self)
@@ -809,21 +815,14 @@ def get_overdue_portion(invoice: frappe._dict, payable_amount: float | None) -> 
 	return min(max(payable_amount - paid, 0.0), outstanding)
 
 
-def get_customer_outstanding(customer, company, ignore_outstanding_sales_order=False, cost_center=None):
+def get_customer_outstanding(customer, company, ignore_outstanding_sales_order=False):
 	# Outstanding based on GL Entries
-	cond = ""
-	if cost_center:
-		lft, rgt = frappe.get_cached_value("Cost Center", cost_center, ["lft", "rgt"])
-
-		cond = f""" and cost_center in (select name from `tabCost Center` where
-			lft >= {lft} and rgt <= {rgt})"""
-
 	outstanding_based_on_gle = frappe.db.sql(
 		f"""
 		select sum(debit) - sum(credit)
 		from `tabGL Entry` where party_type = 'Customer'
 		and is_cancelled = 0 and party = %s
-		and company=%s {cond}""",
+		and company=%s""",
 		(customer, company),
 	)
 

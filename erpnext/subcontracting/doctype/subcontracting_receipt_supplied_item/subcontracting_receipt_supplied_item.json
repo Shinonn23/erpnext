@@ -36,8 +36,7 @@
   "batch_no",
   "accounting_details_section",
   "expense_account",
-  "accounting_dimensions_section",
-  "cost_center"
+  "accounting_dimensions_section"
  ],
  "fields": [
   {
@@ -252,14 +251,6 @@
    "fieldname": "accounting_dimensions_section",
    "fieldtype": "Section Break",
    "label": "Accounting Dimensions"
-  },
-  {
-   "depends_on": "eval:cint(erpnext.is_perpetual_inventory_enabled(parent.company))",
-   "fieldname": "cost_center",
-   "fieldtype": "Link",
-   "label": "Cost Center",
-   "options": "Cost Center",
-   "print_hide": 1
   }
  ],
  "idx": 1,

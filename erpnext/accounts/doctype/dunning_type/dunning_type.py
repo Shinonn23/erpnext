@@ -21,7 +21,6 @@ class DunningType(Document):
 		from erpnext.accounts.doctype.dunning_letter_text.dunning_letter_text import DunningLetterText
 
 		company: DF.Link
-		cost_center: DF.Link | None
 		dunning_fee: DF.Currency
 		dunning_letter_text: DF.Table[DunningLetterText]
 		dunning_type: DF.Data
@@ -37,7 +36,6 @@ class DunningType(Document):
 	def validate(self):
 		self.validate_dunning_letter_text()
 		self.validate_income_account()
-		self.validate_cost_center()
 		self.set_default_dunning_type()
 
 	def validate_dunning_letter_text(self):
@@ -84,42 +82,6 @@ class DunningType(Document):
 			frappe.msgprint(
 				msg,
 				title=_("Income Account Validation Error"),
-				as_list=True,
-				raise_exception=frappe.ValidationError,
-			)
-
-	def validate_cost_center(self):
-		if not self.cost_center:
-			return
-
-		cost_center = frappe.get_cached_doc("Cost Center", self.cost_center)
-
-		msg = []
-		if cost_center.company != self.company:
-			msg.append(
-				_(
-					"{0} doesn't belong to Company {1}. Please select a Cost Center that belongs to Company {1}."
-				).format(frappe.bold(self.cost_center), frappe.bold(self.company))
-			)
-
-		if cost_center.disabled:
-			msg.append(
-				_("{0} is disabled. Please select an enabled Cost Center.").format(
-					frappe.bold(self.cost_center)
-				)
-			)
-
-		if cost_center.is_group:
-			msg.append(
-				_("{0} is a group Cost Center. Please select a non-group Cost Center.").format(
-					frappe.bold(self.cost_center)
-				)
-			)
-
-		if msg:
-			frappe.msgprint(
-				msg,
-				title=_("Cost Center Validation Error"),
 				as_list=True,
 				raise_exception=frappe.ValidationError,
 			)

@@ -84,7 +84,6 @@ def _execute(filters=None, additional_table_columns=None, additional_conditions=
 			"sales_order": d.sales_order,
 			"delivery_note": d.delivery_note,
 			"income_account": get_income_account(d),
-			"cost_center": d.cost_center,
 			"stock_qty": d.stock_qty,
 			"stock_uom": d.stock_uom,
 		}
@@ -303,13 +302,6 @@ def get_columns(additional_table_columns, filters):
 			"options": "Account",
 			"width": 100,
 		},
-		{
-			"label": _("Cost Center"),
-			"fieldname": "cost_center",
-			"fieldtype": "Link",
-			"options": "Cost Center",
-			"width": 100,
-		},
 		{"label": _("Stock Qty"), "fieldname": "stock_qty", "fieldtype": "Float", "width": 100},
 		{
 			"label": _("Stock UOM"),
@@ -456,7 +448,6 @@ def get_items(filters, additional_query_columns, additional_conditions=None):
 			sii.sales_order,
 			sii.delivery_note,
 			sii.income_account,
-			sii.cost_center,
 			sii.enable_deferred_revenue,
 			sii.deferred_revenue_account,
 			sii.stock_qty,

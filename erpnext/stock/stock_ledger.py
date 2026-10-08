@@ -2055,6 +2055,21 @@ def get_previous_sle_of_current_voucher(args, operator="<", exclude_current_vouc
 
 	voucher_condition = ""
 	datetime_condition = f"posting_datetime {operator} %(posting_datetime)s"
+	dimension_conditions = []
+	if args.get("voucher_type") == "Stock Reconciliation":
+		dimensions = get_inventory_dimensions()
+		has_dimension_value = any(
+			args.get(dimension.get("fieldname")) not in (None, "") for dimension in dimensions
+		)
+		stock_count = frappe.db.get_value("Stock Reconciliation", args.get("voucher_no"), "stock_count")
+		if has_dimension_value or stock_count:
+			for dimension in dimensions:
+				fieldname = dimension.get("fieldname")
+				value = args.get(fieldname)
+				if value in (None, ""):
+					dimension_conditions.append(f"and {fieldname} is null")
+				else:
+					dimension_conditions.append(f"and {fieldname} = %({fieldname})s")
 	if exclude_current_voucher:
 		voucher_no = args.get("voucher_no")
 		voucher_condition = f"and voucher_no != '{voucher_no}'"
@@ -2065,6 +2080,18 @@ def get_previous_sle_of_current_voucher(args, operator="<", exclude_current_vouc
 		datetime_condition = """posting_datetime < %(posting_datetime)s
 				or (posting_datetime = %(posting_datetime)s and creation < %(creation)s)"""
 
+	query_args = {
+		"item_code": args.get("item_code"),
+		"warehouse": args.get("warehouse"),
+		"posting_datetime": args.get("posting_datetime"),
+		"creation": args.get("creation"),
+	}
+	for dimension in get_inventory_dimensions() if dimension_conditions else []:
+		fieldname = dimension.get("fieldname")
+		value = args.get(fieldname)
+		if value not in (None, ""):
+			query_args[fieldname] = value
+
 	sle = frappe.db.sql(  # nosemgrep
 		f"""
 		select *, posting_datetime as "timestamp"
@@ -2072,6 +2099,7 @@ def get_previous_sle_of_current_voucher(args, operator="<", exclude_current_vouc
 		where item_code = %(item_code)s
 			and warehouse = %(warehouse)s
 			and is_cancelled = 0
+			{" ".join(dimension_conditions)}
 			{voucher_condition}
 			and (
 				{datetime_condition}
@@ -2079,12 +2107,7 @@ def get_previous_sle_of_current_voucher(args, operator="<", exclude_current_vouc
 		order by posting_datetime desc, creation desc
 		limit 1
 		for update""",
-		{
-			"item_code": args.get("item_code"),
-			"warehouse": args.get("warehouse"),
-			"posting_datetime": args.get("posting_datetime"),
-			"creation": args.get("creation"),
-		},
+		query_args,
 		as_dict=1,
 	)
 
@@ -2746,7 +2769,14 @@ def is_internal_transfer(sle):
 
 
 def get_stock_value_difference(
-	item_code, warehouse, posting_date, posting_time, voucher_no=None, voucher_detail_no=None, creation=None
+	item_code,
+	warehouse,
+	posting_date,
+	posting_time,
+	voucher_no=None,
+	voucher_detail_no=None,
+	creation=None,
+	inventory_dimensions_dict=None,
 ):
 	table = frappe.qb.DocType("Stock Ledger Entry")
 	posting_datetime = get_combine_datetime(posting_date, posting_time)
@@ -2764,6 +2794,12 @@ def get_stock_value_difference(
 
 	elif voucher_no:
 		query = query.where(table.voucher_no != voucher_no)
+
+	for fieldname, value in (inventory_dimensions_dict or {}).items():
+		if not frappe.db.has_column("Stock Ledger Entry", fieldname):
+			continue
+		field = table[fieldname]
+		query = query.where(field.isnull() if value in (None, "") else field == value)
 
 	query = query.where(get_prior_ledger_condition(table, posting_datetime, creation))
 

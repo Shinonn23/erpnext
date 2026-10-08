@@ -48,35 +48,7 @@ frappe.ui.form.on("Item Group", {
 			};
 		};
 
-		frm.fields_dict["item_group_defaults"].grid.get_field("buying_cost_center").get_query = function (
-			doc,
-			cdt,
-			cdn
-		) {
-			const row = locals[cdt][cdn];
-			return {
-				filters: {
-					is_group: 0,
-					company: row.company,
-				},
-			};
-		};
-
-		frm.fields_dict["item_group_defaults"].grid.get_field("selling_cost_center").get_query = function (
-			doc,
-			cdt,
-			cdn
-		) {
-			const row = locals[cdt][cdn];
-			return {
-				filters: {
-					is_group: 0,
-					company: row.company,
-				},
-			};
-		};
-
-		frm.set_query("default_warehouse", "item_group_defaults", (doc, cdt, cdn) => {
+frm.set_query("default_warehouse", "item_group_defaults", (doc, cdt, cdn) => {
 			const row = locals[cdt][cdn];
 			return {
 				filters: { company: row.company, is_group: 0 },

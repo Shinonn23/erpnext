@@ -21,7 +21,7 @@ def create_new_cost_center_allocation_records(cc_allocations):
 		cca._skip_from_date_validation = True
 
 		for child_cc, percentage in allocations.items():
-			cca.append("allocation_percentages", ({"cost_center": child_cc, "percentage": percentage}))
+			cca.append("allocation_percentages", ({"percentage": percentage}))
 
 		cca.save()
 		cca.submit()

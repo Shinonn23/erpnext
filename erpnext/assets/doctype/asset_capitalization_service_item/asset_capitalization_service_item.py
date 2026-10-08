@@ -15,7 +15,6 @@ class AssetCapitalizationServiceItem(Document):
 		from frappe.types import DF
 
 		amount: DF.Currency
-		cost_center: DF.Link | None
 		expense_account: DF.Link
 		item_code: DF.Link | None
 		item_name: DF.Data | None

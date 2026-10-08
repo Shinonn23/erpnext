@@ -10,7 +10,6 @@ erpnext.buying = {
 				super.setup();
 				this.toggle_enable_for_stock_uom("allow_to_edit_stock_uom_qty_for_purchase");
 				this.frm.email_field = "contact_email";
-				this.frm.add_fetch("project", "cost_center", "cost_center");
 			}
 
 			onload(doc, cdt, cdn) {

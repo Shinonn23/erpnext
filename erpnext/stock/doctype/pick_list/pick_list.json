@@ -9,6 +9,7 @@
   "company",
   "naming_series",
   "purpose",
+  "pick_list_type",
   "customer",
   "column_break_4",
   "for_qty",
@@ -111,6 +112,14 @@
    "fieldtype": "Select",
    "label": "Purpose",
    "options": "Material Transfer for Manufacture\nMaterial Transfer\nDelivery"
+  },
+  {
+   "default": "Standard",
+   "fieldname": "pick_list_type",
+   "fieldtype": "Select",
+   "label": "Picking Workflow",
+   "options": "Standard\nCustomer Demo - Asset Conversion",
+   "description": "Choose Customer Demo - Asset Conversion when picked stock will be converted into Fixed Assets for a customer."
   },
   {
    "depends_on": "eval:['Material Transfer', 'Material Issue'].includes(doc.purpose)",

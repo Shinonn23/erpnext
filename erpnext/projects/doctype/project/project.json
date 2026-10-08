@@ -37,7 +37,6 @@
   "total_billable_amount",
   "total_billed_amount",
   "total_consumed_material_cost",
-  "cost_center",
   "margin",
   "gross_margin",
   "column_break_37",
@@ -329,12 +328,6 @@
    "fieldtype": "Currency",
    "label": "Total Consumed Material Cost (via Stock Entry)",
    "read_only": 1
-  },
-  {
-   "fieldname": "cost_center",
-   "fieldtype": "Link",
-   "label": "Default Cost Center",
-   "options": "Cost Center"
   },
   {
    "fieldname": "margin",

@@ -6,14 +6,12 @@ import frappe
 from frappe.model import mapper
 from frappe.utils import add_days, nowdate, today
 
-from erpnext import get_default_cost_center
 from erpnext.accounts.doctype.payment_entry.test_payment_entry import get_payment_entry
 from erpnext.accounts.doctype.sales_invoice.sales_invoice import (
 	create_dunning as create_dunning_from_sales_invoice,
 )
 from erpnext.accounts.doctype.sales_invoice.test_sales_invoice import (
 	create_sales_invoice,
-	create_sales_invoice_against_cost_center,
 )
 from erpnext.tests.utils import ERPNextTestSuite
 
@@ -155,7 +153,6 @@ class TestDunning(ERPNextTestSuite):
 		dunning.rate_of_interest = dunning_type.rate_of_interest
 		dunning.dunning_fee = dunning_type.dunning_fee
 		dunning.income_account = dunning_type.income_account
-		dunning.cost_center = dunning_type.cost_center
 		dunning.save()
 
 		self.assertEqual(dunning.currency, "USD")
@@ -176,13 +173,13 @@ class TestDunning(ERPNextTestSuite):
 		"""
 		Create SI with overdue payment. Check if overdue payment is fetched in Dunning.
 		"""
-		si1 = create_sales_invoice_against_cost_center(
+		si1 = create_sales_invoice(
 			posting_date=add_days(today(), -1 * 6),
 			qty=1,
 			rate=100,
 		)
 
-		si2 = create_sales_invoice_against_cost_center(
+		si2 = create_sales_invoice(
 			posting_date=add_days(today(), -1 * 6),
 			qty=1,
 			rate=300,
@@ -207,12 +204,13 @@ class TestDunning(ERPNextTestSuite):
 		Create SI with first installment overdue. Check impact of Dunning and Payment Entry.
 		"""
 		create_payment_terms_template_for_dunning()
-		sales_invoice = create_sales_invoice_against_cost_center(
+		sales_invoice = create_sales_invoice(
 			posting_date=add_days(today(), -1 * 6),
 			qty=1,
 			rate=100,
 			do_not_submit=True,
 		)
+		sales_invoice.payment_schedule = []
 		sales_invoice.payment_terms_template = "_Test 50-50 for Dunning"
 		sales_invoice.submit()
 		dunning = create_dunning_from_sales_invoice(sales_invoice.name)
@@ -249,12 +247,13 @@ class TestDunning(ERPNextTestSuite):
 		"""
 		create_payment_terms_template_for_dunning()
 		# Post far enough in the past that BOTH installments (5 and 10 credit days) are overdue.
-		sales_invoice = create_sales_invoice_against_cost_center(
+		sales_invoice = create_sales_invoice(
 			posting_date=add_days(today(), -15),
 			qty=1,
 			rate=100,
 			do_not_submit=True,
 		)
+		sales_invoice.payment_schedule = []
 		sales_invoice.payment_terms_template = "_Test 50-50 for Dunning"
 		sales_invoice.submit()
 
@@ -279,7 +278,7 @@ class TestDunning(ERPNextTestSuite):
 		"""
 		Test that dunning is resolved when a credit note is issued against the original invoice.
 		"""
-		sales_invoice = create_sales_invoice_against_cost_center(
+		sales_invoice = create_sales_invoice(
 			posting_date=add_days(today(), -10), qty=1, rate=100
 		)
 		dunning = create_dunning_from_sales_invoice(sales_invoice.name)
@@ -309,7 +308,7 @@ class TestDunning(ERPNextTestSuite):
 		"""
 		Test that dunning is NOT resolved when a credit note has update_outstanding_for_self checked.
 		"""
-		sales_invoice = create_sales_invoice_against_cost_center(
+		sales_invoice = create_sales_invoice(
 			posting_date=add_days(today(), -10), qty=1, rate=100
 		)
 		dunning = create_dunning_from_sales_invoice(sales_invoice.name)
@@ -336,7 +335,7 @@ class TestDunning(ERPNextTestSuite):
 
 def create_dunning(overdue_days, dunning_type_name=None):
 	posting_date = add_days(today(), -1 * overdue_days)
-	sales_invoice = create_sales_invoice_against_cost_center(posting_date=posting_date, qty=1, rate=100)
+	sales_invoice = create_sales_invoice(posting_date=posting_date, qty=1, rate=100)
 	dunning = create_dunning_from_sales_invoice(sales_invoice.name)
 
 	if dunning_type_name:
@@ -345,7 +344,6 @@ def create_dunning(overdue_days, dunning_type_name=None):
 		dunning.rate_of_interest = dunning_type.rate_of_interest
 		dunning.dunning_fee = dunning_type.dunning_fee
 		dunning.income_account = dunning_type.income_account
-		dunning.cost_center = dunning_type.cost_center
 
 	return dunning.save()
 
@@ -362,7 +360,6 @@ def create_dunning_type(title, fee, interest, is_default):
 	dunning_type.dunning_fee = fee
 	dunning_type.rate_of_interest = interest
 	dunning_type.income_account = get_income_account(company)
-	dunning_type.cost_center = get_default_cost_center(company)
 	dunning_type.append(
 		"dunning_letter_text",
 		{

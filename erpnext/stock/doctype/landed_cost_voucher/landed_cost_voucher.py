@@ -65,7 +65,6 @@ class LandedCostVoucher(Document):
 					item.description = d.description
 					item.qty = d.qty
 					item.rate = d.base_rate
-					item.cost_center = d.cost_center or erpnext.get_default_cost_center(self.company)
 					item.amount = d.base_amount
 					item.receipt_document_type = pr.receipt_document_type
 					item.receipt_document = pr.receipt_document
@@ -171,10 +170,6 @@ class LandedCostVoucher(Document):
 					)
 				)
 
-			if not item.cost_center:
-				frappe.throw(
-					_("Row {0}: Cost center is required for an item {1}").format(item.idx, item.item_code)
-				)
 
 	def validate_expense_accounts(self):
 		if not is_perpetual_inventory_enabled(self.company):
@@ -524,7 +519,6 @@ def get_pr_items(purchase_receipt):
 			pr_item.description,
 			pr_item.qty,
 			pr_item.name,
-			pr_item.cost_center,
 			ConstantColumn(purchase_receipt.receipt_document_type).as_("receipt_document_type"),
 			ConstantColumn(purchase_receipt.receipt_document).as_("receipt_document"),
 		)
@@ -615,7 +609,7 @@ def get_lcv_dimension_fields():
 		get_accounting_dimensions,
 	)
 
-	return ["cost_center", "project", *get_accounting_dimensions()]
+	return ["project", *get_accounting_dimensions()]
 
 
 def get_row_dimensions(tax_row, lcv_item, dimension_fields):
@@ -628,5 +622,5 @@ def get_custom_dimension_overrides(entry):
 	return {
 		dimension: value
 		for dimension, value in (entry.dimensions or {}).items()
-		if value and dimension not in ("cost_center", "project")
+		if value and dimension != "project"
 	}

@@ -838,7 +838,6 @@ erpnext.TransactionController = class TransactionController extends erpnext.taxe
 							manufacturer: item.manufacturer,
 							stock_uom: item.stock_uom,
 							pos_profile: cint(me.frm.doc.is_pos) ? me.frm.doc.pos_profile : "",
-							cost_center: item.cost_center,
 							tax_category: me.frm.doc.tax_category,
 							item_tax_template: item.item_tax_template,
 							child_doctype: item.doctype,
@@ -1385,10 +1384,6 @@ erpnext.TransactionController = class TransactionController extends erpnext.taxe
 			row[field] = "";
 		});
 		this.frm.refresh_field("payment_schedule");
-	}
-
-	cost_center(doc, cdt, cdn) {
-		erpnext.utils.copy_value_in_all_rows(doc, cdt, cdn, "items", "cost_center");
 	}
 
 	due_date(doc, cdt, cdn) {
@@ -2400,13 +2395,6 @@ erpnext.TransactionController = class TransactionController extends erpnext.taxe
 				row_to_modify[key] = pr_row[key];
 			}
 
-			if (Object.prototype.hasOwnProperty.call(this.frm.doc, "is_pos") && this.frm.doc.is_pos) {
-				let r = await frappe.db.get_value("POS Profile", this.frm.doc.pos_profile, "cost_center");
-				if (r.message.cost_center) {
-					row_to_modify["cost_center"] = r.message.cost_center;
-				}
-			}
-
 			this.frm.script_manager.copy_from_first_row("items", row_to_modify, [
 				"expense_account",
 				"income_account",
@@ -2604,11 +2592,6 @@ erpnext.TransactionController = class TransactionController extends erpnext.taxe
 				callback: function (r) {
 					if (!r.exc) {
 						let taxes = r.message;
-						taxes.forEach((tax) => {
-							if (me.frm.doc?.cost_center && !tax.cost_center) {
-								tax.cost_center = me.frm.doc.cost_center;
-							}
-						});
 						if (me.frm.doc.shipping_rule && me.frm.doc.taxes) {
 							for (let tax of taxes) {
 								me.frm.add_child("taxes", tax);

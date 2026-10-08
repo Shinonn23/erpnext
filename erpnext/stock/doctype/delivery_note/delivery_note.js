@@ -59,17 +59,6 @@ frappe.ui.form.on("Delivery Note", {
 			}
 		});
 
-		frm.set_query("cost_center", "items", function (doc, cdt, cdn) {
-			if (erpnext.is_perpetual_inventory_enabled(doc.company)) {
-				return {
-					filters: {
-						company: doc.company,
-						is_group: 0,
-					},
-				};
-			}
-		});
-
 		frm.set_df_property("packed_items", "cannot_add_rows", true);
 		frm.set_df_property("packed_items", "cannot_delete_rows", true);
 	},
@@ -460,9 +449,9 @@ frappe.ui.form.on("Delivery Note", {
 	},
 
 	unhide_account_head: function (frm) {
-		// unhide expense_account and cost_center if perpetual inventory is enabled in the company
+		// unhide expense_account if perpetual inventory is enabled in the company
 		var aii_enabled = erpnext.is_perpetual_inventory_enabled(frm.doc.company);
-		frm.fields_dict["items"].grid.set_column_disp(["expense_account", "cost_center"], aii_enabled);
+		frm.fields_dict["items"].grid.set_column_disp(["expense_account"], aii_enabled);
 	},
 });
 

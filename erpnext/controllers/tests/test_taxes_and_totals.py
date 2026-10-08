@@ -66,7 +66,7 @@ class TestTaxesAndTotals(ERPNextTestSuite):
 				"account_head": "_Test Account Excise Duty - _TC",
 				"description": "IPI 10% on gross product value",
 				"rate": 10,
-				"cost_center": "_Test Cost Center - _TC",
+
 			},
 		)
 
@@ -111,7 +111,7 @@ class TestTaxesAndTotals(ERPNextTestSuite):
 				"description": "Tax 10% on MRP, inclusive",
 				"rate": 10,
 				"included_in_print_rate": 1,
-				"cost_center": "_Test Cost Center - _TC",
+
 			},
 		)
 

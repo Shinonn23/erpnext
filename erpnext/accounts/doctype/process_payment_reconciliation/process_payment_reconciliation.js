@@ -31,14 +31,6 @@ frappe.ui.form.on("Process Payment Reconciliation", {
 				},
 			};
 		});
-		frm.set_query("cost_center", function (doc) {
-			return {
-				filters: {
-					company: doc.company,
-					is_group: 0,
-				},
-			};
-		});
 		frm.set_query("bank_cash_account", function (doc) {
 			return {
 				filters: [

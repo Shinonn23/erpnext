@@ -21,35 +21,11 @@
   {
    "child": 0,
    "collapsible": 1,
-   "icon": "badge-cent",
-   "indent": 0,
-   "keep_closed": 0,
-   "label": "Cost Center",
-   "link_to": "Cost Center",
-   "link_type": "DocType",
-   "show_arrow": 0,
-   "type": "Link"
-  },
-  {
-   "child": 0,
-   "collapsible": 1,
    "icon": "accounting",
    "indent": 0,
    "keep_closed": 0,
    "label": "Accounting Dimension",
    "link_to": "Accounting Dimension",
-   "link_type": "DocType",
-   "show_arrow": 0,
-   "type": "Link"
-  },
-  {
-   "child": 0,
-   "collapsible": 1,
-   "icon": "notepad-text",
-   "indent": 0,
-   "keep_closed": 0,
-   "label": "Cost Center Allocation",
-   "link_to": "Cost Center Allocation",
    "link_type": "DocType",
    "show_arrow": 0,
    "type": "Link"

@@ -48,11 +48,18 @@ class TestPOSOpeningEntry(ERPNextTestSuite):
 		self.assertEqual(opening_entry_1.user, test_user.name)
 
 		cashier_user = create_user(
-			"test_cashier@example.com", "Accounts Manager", "Sales Manager", "Stock User", "System Manager"
+			"test_cashier@example.com",
+			"Accounts Manager",
+			"Sales Manager",
+			"Sales User",
+			"Stock User",
+			"System Manager",
 		)
 		frappe.set_user(cashier_user.name)
 
 		pos_profile2 = make_pos_profile(name="_Test POS Profile 2")
+		pos_profile2.append("applicable_for_users", {"default": 1, "user": cashier_user.name})
+		pos_profile2.save()
 		opening_entry_2 = create_opening_entry(pos_profile2, cashier_user.name)
 
 		self.assertEqual(opening_entry_2.status, "Open")
@@ -76,6 +83,13 @@ class TestPOSOpeningEntry(ERPNextTestSuite):
 		pos_profile2 = make_pos_profile(name="_Test POS Profile 2")
 		with self.assertRaises(frappe.ValidationError):
 			create_opening_entry(pos_profile2, test_user.name)
+
+	def test_opening_entry_requires_cashier_assigned_to_profile(self):
+		_, pos_profile = self.init_user_and_profile()
+		other_cashier = create_user("unassigned_cashier@example.com", "Sales User")
+
+		with self.assertRaises(frappe.ValidationError):
+			create_opening_entry(pos_profile, other_cashier.name)
 
 	def test_cancel_pos_opening_entry_without_invoices(self):
 		test_user, pos_profile = self.init_user_and_profile()

@@ -9,7 +9,7 @@ def execute():
 	"""
 
 	Fields to move from the item to item defaults child table
-	[ default_warehouse, buying_cost_center, expense_account, selling_cost_center, income_account ]
+	[ default_warehouse, expense_account, income_account ]
 
 	"""
 	if not frappe.db.has_column("Item", "default_warehouse"):
@@ -25,11 +25,11 @@ def execute():
 				"""
 					INSERT INTO `tabItem Default`
 						(name, parent, parenttype, parentfield, idx, company, default_warehouse,
-						buying_cost_center, selling_cost_center, expense_account, income_account, default_supplier)
+						expense_account, income_account, default_supplier)
 					SELECT
 						SUBSTRING(SHA2(name,224), 1, 10) as name, name as parent, 'Item' as parenttype,
 						'item_defaults' as parentfield, 1 as idx, %s as company, default_warehouse,
-						buying_cost_center, selling_cost_center, expense_account, income_account, default_supplier
+						expense_account, income_account, default_supplier
 					FROM `tabItem`;
 			""",
 				companies[0].name,
@@ -39,7 +39,7 @@ def execute():
 	else:
 		item_details = frappe.db.sql(
 			""" SELECT name, default_warehouse,
-				buying_cost_center, expense_account, selling_cost_center, income_account
+				expense_account, income_account
 			FROM tabItem
 			WHERE
 				name not in (select distinct parent from `tabItem Default`) and ifnull(disabled, 0) = 0""",
@@ -52,8 +52,6 @@ def execute():
 				["default_warehouse", "Warehouse"],
 				["expense_account", "Account"],
 				["income_account", "Account"],
-				["buying_cost_center", "Cost Center"],
-				["selling_cost_center", "Cost Center"],
 			]:
 				if item_data.get(d[0]):
 					company = frappe.get_value(d[1], item_data.get(d[0]), "company", cache=True)
@@ -92,8 +90,6 @@ def execute():
 						item_default_data.get("default_warehouse"),
 						item_default_data.get("expense_account"),
 						item_default_data.get("income_account"),
-						item_default_data.get("buying_cost_center"),
-						item_default_data.get("selling_cost_center"),
 					)
 				)
 
@@ -103,7 +99,7 @@ def execute():
 				INSERT INTO `tabItem Default`
 				(
 					`name`, `parent`, `parenttype`, `parentfield`, `company`, `default_warehouse`,
-					`expense_account`, `income_account`, `buying_cost_center`, `selling_cost_center`
+					`expense_account`, `income_account`
 				)
 				VALUES {}
 			""".format(", ".join(["%s"] * len(to_insert_data))),

@@ -239,7 +239,7 @@ frappe.ui.form.on("Stock Reconciliation", {
 	},
 	toggle_display_account_head: function (frm) {
 		frm.toggle_display(
-			["expense_account", "cost_center"],
+		["expense_account"],
 			erpnext.is_perpetual_inventory_enabled(frm.doc.company)
 		);
 	},
@@ -344,20 +344,7 @@ erpnext.stock.StockReconciliation = class StockReconciliation extends erpnext.st
 
 		this.setup_posting_date_time_check();
 
-		if (me.frm.doc.company && erpnext.is_perpetual_inventory_enabled(me.frm.doc.company)) {
-			this.frm.add_fetch("company", "cost_center", "cost_center");
-		}
 		this.frm.fields_dict["expense_account"].get_query = function () {
-			if (erpnext.is_perpetual_inventory_enabled(me.frm.doc.company)) {
-				return {
-					filters: {
-						company: me.frm.doc.company,
-						is_group: 0,
-					},
-				};
-			}
-		};
-		this.frm.fields_dict["cost_center"].get_query = function () {
 			if (erpnext.is_perpetual_inventory_enabled(me.frm.doc.company)) {
 				return {
 					filters: {

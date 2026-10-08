@@ -24,7 +24,6 @@
   "write_off_section",
   "write_off_account",
   "column_break_ukpz",
-  "write_off_cost_center",
   "column_break_pkca",
   "write_off_limit",
   "income_and_expense_account",
@@ -42,7 +41,6 @@
   "apply_discount_on",
   "allow_partial_payment",
   "accounting_dimensions_section",
-  "cost_center",
   "dimension_col_break",
   "project",
   "pos_configurations_tab",
@@ -238,13 +236,6 @@
    "reqd": 1
   },
   {
-   "fieldname": "write_off_cost_center",
-   "fieldtype": "Link",
-   "label": "Write Off Cost Center",
-   "options": "Cost Center",
-   "reqd": 1
-  },
-  {
    "fieldname": "account_for_change_amount",
    "fieldtype": "Link",
    "label": "Account for Change Amount",
@@ -268,14 +259,6 @@
    "label": "Expense Account",
    "options": "Account",
    "print_hide": 1
-  },
-  {
-   "fieldname": "cost_center",
-   "fieldtype": "Link",
-   "label": "Cost Center",
-   "oldfieldname": "cost_center",
-   "oldfieldtype": "Link",
-   "options": "Cost Center"
   },
   {
    "fieldname": "taxes_and_charges",
@@ -428,7 +411,6 @@
    "fieldname": "project",
    "fieldtype": "Link",
    "label": "Project",
-   "oldfieldname": "cost_center",
    "oldfieldtype": "Link",
    "options": "Project"
   },

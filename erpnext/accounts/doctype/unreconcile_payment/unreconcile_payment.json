@@ -63,8 +63,9 @@
  "owner": "Administrator",
  "permissions": [
   {
-   "create": 1,
-   "delete": 1,
+   "cancel": 0,
+   "create": 0,
+   "delete": 0,
    "read": 1,
    "role": "Accounts Manager",
    "select": 1,
@@ -73,13 +74,14 @@
    "write": 1
   },
   {
+   "cancel": 0,
    "create": 1,
-   "delete": 1,
+   "delete": 0,
    "read": 1,
    "role": "Accounts User",
    "select": 1,
    "share": 1,
-   "submit": 1,
+   "submit": 0,
    "write": 1
   }
  ],

@@ -79,7 +79,7 @@ def get_percentage_allocations(budget_doc):
 def create_new_budget_from_row(budget_doc, fiscal_year, account_row, percentage_allocations):
 	new_budget = frappe.new_doc("Budget")
 
-	core_fields = ["budget_against", "company", "cost_center", "project"]
+	core_fields = ["budget_against", "company"]
 	for field in core_fields:
 		new_budget.set(field, budget_doc.get(field))
 

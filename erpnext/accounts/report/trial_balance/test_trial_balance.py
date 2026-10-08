@@ -11,14 +11,8 @@ from erpnext.tests.utils import ERPNextTestSuite
 class TestTrialBalance(ERPNextTestSuite):
 	def setUp(self):
 		from erpnext.accounts.doctype.account.test_account import create_account
-		from erpnext.accounts.doctype.cost_center.test_cost_center import create_cost_center
 		from erpnext.accounts.utils import get_fiscal_year
 
-		create_cost_center(
-			cost_center_name="Test Cost Center",
-			company="Trial Balance Company",
-			parent_cost_center="Trial Balance Company - TBC",
-		)
 		create_account(
 			account_name="Offsetting",
 			company="Trial Balance Company",
@@ -52,7 +46,6 @@ class TestTrialBalance(ERPNextTestSuite):
 		si = create_sales_invoice(
 			company="Trial Balance Company",
 			debit_to="Debtors - TBC",
-			cost_center="Test Cost Center - TBC",
 			income_account="Sales - TBC",
 			do_not_submit=1,
 		)

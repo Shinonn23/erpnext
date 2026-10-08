@@ -9,7 +9,6 @@ import frappe
 from frappe.utils import add_days, cstr, flt, getdate, nowdate, nowtime, today
 
 from erpnext.accounts.doctype.account.test_account import get_inventory_account
-from erpnext.accounts.doctype.cost_center.test_cost_center import create_cost_center
 from erpnext.accounts.utils import get_balance_on
 from erpnext.controllers.accounts_controller import InvalidQtyError
 from erpnext.selling.doctype.product_bundle.test_product_bundle import make_product_bundle
@@ -111,7 +110,6 @@ class TestDeliveryNote(ERPNextTestSuite):
 			item_code="_Test Product Bundle Item",
 			company="_Test Company with perpetual inventory",
 			warehouse="Stores - TCP1",
-			cost_center="Main - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
 		)
 
@@ -256,7 +254,6 @@ class TestDeliveryNote(ERPNextTestSuite):
 			warehouse=warehouse,
 			company=company,
 			expense_account="Cost of Goods Sold - _TC",
-			cost_center="Main - _TC",
 			do_not_submit=1,
 		)
 
@@ -306,7 +303,6 @@ class TestDeliveryNote(ERPNextTestSuite):
 			warehouse="Stores - TCP1",
 			company=company,
 			expense_account="Cost of Goods Sold - TCP1",
-			cost_center="Main - TCP1",
 		)
 
 		actual_qty_1 = get_qty_after_transaction(warehouse="Stores - TCP1")
@@ -331,12 +327,10 @@ class TestDeliveryNote(ERPNextTestSuite):
 			company=company,
 			warehouse="Stores - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
-			cost_center="Main - TCP1",
 			do_not_submit=1,
 		)
 		dn1.items[0].dn_detail = dn.items[0].name
 		dn1.submit()
-
 		actual_qty_2 = get_qty_after_transaction(warehouse="Stores - TCP1")
 
 		self.assertEqual(actual_qty_1 + 2, actual_qty_2)
@@ -408,7 +402,6 @@ class TestDeliveryNote(ERPNextTestSuite):
 			warehouse="Stores - TCP1",
 			company=company,
 			expense_account="Cost of Goods Sold - TCP1",
-			cost_center="Main - TCP1",
 		)
 
 		# return entry
@@ -421,12 +414,10 @@ class TestDeliveryNote(ERPNextTestSuite):
 			company=company,
 			warehouse="Stores - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
-			cost_center="Main - TCP1",
 			do_not_submit=1,
 		)
 		dn1.items[0].dn_detail = dn.items[0].name
 		dn1.submit()
-
 		# hack because new_doc isn't considering is_return portion of status_updater
 		returned = frappe.get_doc("Delivery Note", dn1.name)
 		returned.update_prevdoc_status()
@@ -454,7 +445,6 @@ class TestDeliveryNote(ERPNextTestSuite):
 			warehouse="Stores - TCP1",
 			company=company,
 			expense_account="Cost of Goods Sold - TCP1",
-			cost_center="Main - TCP1",
 		)
 
 		dn.submit()
@@ -464,8 +454,7 @@ class TestDeliveryNote(ERPNextTestSuite):
 
 		return_dn = make_return_doc(dn.doctype, dn.name)
 		return_dn.items[0].warehouse = return_warehouse
-		return_dn.save().submit()
-
+		return_dn.submit()
 		self.assertEqual(return_dn.items[0].incoming_rate, 150)
 
 	def test_sales_return_against_serial_batch_bundle(self):
@@ -501,7 +490,6 @@ class TestDeliveryNote(ERPNextTestSuite):
 			rate=500,
 			warehouse="_Test Warehouse - _TC",
 			expense_account="Cost of Goods Sold - _TC",
-			cost_center="Main - _TC",
 			use_serial_batch_fields=0,
 			do_not_submit=1,
 		)
@@ -514,7 +502,6 @@ class TestDeliveryNote(ERPNextTestSuite):
 				"rate": 500,
 				"warehouse": "_Test Warehouse - _TC",
 				"expense_account": "Cost of Goods Sold - _TC",
-				"cost_center": "Main - _TC",
 				"use_serial_batch_fields": 0,
 			},
 		)
@@ -537,8 +524,7 @@ class TestDeliveryNote(ERPNextTestSuite):
 		for row in return_dn.items:
 			row.qty = -2
 			row.use_serial_batch_fields = 0
-		return_dn.save().submit()
-
+		return_dn.submit()
 		for row in return_dn.items:
 			total_qty = frappe.db.get_value(
 				"Serial and Batch Bundle", row.serial_and_batch_bundle, "total_qty"
@@ -587,7 +573,6 @@ class TestDeliveryNote(ERPNextTestSuite):
 			company=company,
 			warehouse="Stores - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
-			cost_center="Main - TCP1",
 		)
 
 		# Qty after delivery
@@ -613,7 +598,6 @@ class TestDeliveryNote(ERPNextTestSuite):
 			company=company,
 			warehouse="Stores - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
-			cost_center="Main - TCP1",
 		)
 
 		# qty after return
@@ -669,7 +653,6 @@ class TestDeliveryNote(ERPNextTestSuite):
 			company=company,
 			warehouse="Stores - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
-			cost_center="Main - TCP1",
 		)
 
 		# qty after return
@@ -686,7 +669,6 @@ class TestDeliveryNote(ERPNextTestSuite):
 			company=company,
 			warehouse="Stores - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
-			cost_center="Main - TCP1",
 		)
 
 		# qty after return
@@ -937,7 +919,6 @@ class TestDeliveryNote(ERPNextTestSuite):
 			item_code="_Test Product Bundle Item",
 			company="_Test Company with perpetual inventory",
 			customer=customer_name,
-			cost_center="Main - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
 			qty=5,
 			rate=500,
@@ -1006,13 +987,11 @@ class TestDeliveryNote(ERPNextTestSuite):
 		dn = create_delivery_note(
 			company="_Test Company with perpetual inventory",
 			warehouse="Stores - TCP1",
-			cost_center="Main - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
 			do_not_submit=True,
 		)
 
 		dn.submit()
-
 		update_delivery_note_status(dn.name, "Closed")
 		self.assertEqual(frappe.db.get_value("Delivery Note", dn.name, "Status"), "Closed")
 
@@ -1069,11 +1048,9 @@ class TestDeliveryNote(ERPNextTestSuite):
 				"conversion_factor": 1,
 				"allow_zero_valuation_rate": 1,
 				"expense_account": "Cost of Goods Sold - _TC",
-				"cost_center": "_Test Cost Center - _TC",
 			},
 		)
 		dn.submit()
-
 		si = make_sales_invoice(dn.name)
 		si.set("items", [item for item in si.items if item.item_code == "_Test Item"])
 		si.insert()
@@ -1089,7 +1066,6 @@ class TestDeliveryNote(ERPNextTestSuite):
 		# Mimic the submit request, which reconstructs the document from client data.
 		return_dn = frappe.get_doc(return_dn.as_dict())
 		return_dn.submit()
-
 		dn.reload()
 		self.assertEqual(dn.items[1].returned_qty, 1)
 		self.assertEqual(dn.per_billed, 100)
@@ -1124,14 +1100,12 @@ class TestDeliveryNote(ERPNextTestSuite):
 		dn1 = make_delivery_note(so.name)
 		dn1.get("items")[0].qty = 2
 		dn1.submit()
-
 		# Testing if Customer's Purchase Order No was rightly copied
 		self.assertEqual(so.po_no, dn1.po_no)
 
 		dn2 = make_delivery_note(so.name)
 		dn2.get("items")[0].qty = 3
 		dn2.submit()
-
 		# Testing if Customer's Purchase Order No was rightly copied
 		self.assertEqual(so.po_no, dn2.po_no)
 
@@ -1178,12 +1152,10 @@ class TestDeliveryNote(ERPNextTestSuite):
 
 		dnr1 = make_sales_return(dn.name)
 		dnr1.get("items")[0].qty = -3
-		dnr1.save().submit()
-
+		dnr1.submit()
 		dnr2 = make_sales_return(dn.name)
 		dnr2.get("items")[0].qty = -2
-		dnr2.save().submit()
-
+		dnr2.submit()
 		si = make_sales_invoice(dn.name)
 		si.save().submit()
 
@@ -1208,7 +1180,6 @@ class TestDeliveryNote(ERPNextTestSuite):
 		dn1 = make_delivery_note(so.name)
 		dn1.get("items")[0].qty = 2
 		dn1.submit()
-
 		# Testing if Customer's Purchase Order No was rightly copied
 		self.assertEqual(dn1.po_no, so.po_no)
 
@@ -1231,7 +1202,6 @@ class TestDeliveryNote(ERPNextTestSuite):
 		dn2 = make_delivery_note(so.name)
 		dn2.get("items")[0].qty = 5
 		dn2.submit()
-
 		# Testing if Customer's Purchase Order No was rightly copied
 		self.assertEqual(dn2.po_no, so.po_no)
 
@@ -1260,7 +1230,6 @@ class TestDeliveryNote(ERPNextTestSuite):
 
 		dn = make_delivery_note(si.name)
 		dn.submit()
-
 		# Testing if Customer's Purchase Order No was rightly copied
 		self.assertEqual(dn.po_no, si.po_no)
 
@@ -1285,7 +1254,6 @@ class TestDeliveryNote(ERPNextTestSuite):
 
 		dn = make_delivery_note(so.name)
 		dn.submit()
-
 		self.assertEqual(dn.get("items")[0].billed_amt, 0)
 		self.assertEqual(dn.per_billed, 0)
 		self.assertEqual(dn.status, "To Bill")
@@ -1310,66 +1278,6 @@ class TestDeliveryNote(ERPNextTestSuite):
 			dt.submit,
 		)
 
-	def test_delivery_note_with_cost_center(self):
-		from erpnext.accounts.doctype.cost_center.test_cost_center import create_cost_center
-
-		cost_center = "_Test Cost Center for BS Account - TCP1"
-		create_cost_center(
-			cost_center_name="_Test Cost Center for BS Account",
-			company="_Test Company with perpetual inventory",
-		)
-
-		set_valuation_method("_Test Item", "FIFO")
-
-		make_stock_entry(target="Stores - TCP1", qty=5, basic_rate=100)
-
-		stock_in_hand_account = get_inventory_account("_Test Company with perpetual inventory")
-		dn = create_delivery_note(
-			company="_Test Company with perpetual inventory",
-			warehouse="Stores - TCP1",
-			expense_account="Cost of Goods Sold - TCP1",
-			cost_center=cost_center,
-		)
-
-		gl_entries = get_gl_entries("Delivery Note", dn.name)
-		self.assertTrue(gl_entries)
-
-		expected_values = {
-			"Cost of Goods Sold - TCP1": {"cost_center": cost_center},
-			stock_in_hand_account: {"cost_center": cost_center},
-		}
-		for _i, gle in enumerate(gl_entries):
-			self.assertEqual(expected_values[gle.account]["cost_center"], gle.cost_center)
-
-	def test_delivery_note_cost_center_with_balance_sheet_account(self):
-		cost_center = "Main - TCP1"
-
-		set_valuation_method("_Test Item", "FIFO")
-
-		make_stock_entry(target="Stores - TCP1", qty=5, basic_rate=100)
-
-		stock_in_hand_account = get_inventory_account("_Test Company with perpetual inventory")
-		dn = create_delivery_note(
-			company="_Test Company with perpetual inventory",
-			warehouse="Stores - TCP1",
-			cost_center="Main - TCP1",
-			expense_account="Cost of Goods Sold - TCP1",
-			do_not_submit=1,
-		)
-
-		dn.get("items")[0].cost_center = None
-		dn.submit()
-
-		gl_entries = get_gl_entries("Delivery Note", dn.name)
-
-		self.assertTrue(gl_entries)
-		expected_values = {
-			"Cost of Goods Sold - TCP1": {"cost_center": cost_center},
-			stock_in_hand_account: {"cost_center": cost_center},
-		}
-		for _i, gle in enumerate(gl_entries):
-			self.assertEqual(expected_values[gle.account]["cost_center"], gle.cost_center)
-
 	def test_make_sales_invoice_from_dn_for_returned_qty(self):
 		from erpnext.selling.doctype.sales_order.sales_order import make_delivery_note
 		from erpnext.stock.doctype.delivery_note.delivery_note import make_sales_invoice
@@ -1379,13 +1287,11 @@ class TestDeliveryNote(ERPNextTestSuite):
 
 		dn = make_delivery_note(so.name)
 		dn.submit()
-
 		dn1 = create_delivery_note(is_return=1, return_against=dn.name, qty=-1, do_not_submit=True)
 		dn1.items[0].against_sales_order = so.name
 		dn1.items[0].so_detail = so.items[0].name
 		dn1.items[0].dn_detail = dn.items[0].name
 		dn1.submit()
-
 		si = make_sales_invoice(dn.name)
 		self.assertEqual(si.items[0].qty, 1)
 
@@ -1403,11 +1309,9 @@ class TestDeliveryNote(ERPNextTestSuite):
 				"rate": 100,
 				"conversion_factor": 1.0,
 				"expense_account": "Cost of Goods Sold - _TC",
-				"cost_center": "_Test Cost Center - _TC",
 			},
 		)
 		dn.submit()
-
 		si1 = make_sales_invoice(dn.name)
 		si1.items[0].qty = 4
 		si1.items.pop(1)
@@ -1417,7 +1321,6 @@ class TestDeliveryNote(ERPNextTestSuite):
 		dn1 = create_delivery_note(is_return=1, return_against=dn.name, qty=-2, do_not_submit=True)
 		dn1.items[0].dn_detail = dn.items[0].name
 		dn1.submit()
-
 		si2 = make_sales_invoice(dn.name)
 		self.assertEqual(si2.items[0].qty, 2)
 		self.assertEqual(si2.items[1].qty, 1)
@@ -1591,7 +1494,6 @@ class TestDeliveryNote(ERPNextTestSuite):
 				"account_head": "_Test Account Service Tax - _TC",
 				"description": "Tax 1",
 				"rate": 14,
-				"cost_center": "_Test Cost Center - _TC",
 				"included_in_print_rate": 1,
 			},
 		)
@@ -1620,8 +1522,6 @@ class TestDeliveryNote(ERPNextTestSuite):
 		warehouse = "Stores - TCP1"
 		target = "Finished Goods - TCP1"
 		customer = create_internal_customer(represents_company=company)
-		create_cost_center(cost_center_name="_Test Cost Center", company=company)
-
 		# average rate = 128.015
 		rates = [101.45, 150.46, 138.25, 121.9]
 
@@ -1635,7 +1535,6 @@ class TestDeliveryNote(ERPNextTestSuite):
 			qty=4,
 			warehouse=warehouse,
 			target_warehouse=target,
-			cost_center="_Test Cost Center - TCP1",
 		)
 		self.assertFalse(frappe.db.exists("GL Entry", {"voucher_no": dn.name, "voucher_type": dn.doctype}))
 
@@ -1666,8 +1565,7 @@ class TestDeliveryNote(ERPNextTestSuite):
 		frappe.db.set_value("Batch", batch_no, "expiry_date", add_days(today(), -1))
 
 		return_dn = make_return_doc(dn.doctype, dn.name)
-		return_dn.save().submit()
-
+		return_dn.submit()
 		self.assertTrue(return_dn.docstatus == 1)
 
 	def test_reserve_qty_on_sales_return(self):
@@ -1700,14 +1598,12 @@ class TestDeliveryNote(ERPNextTestSuite):
 		self.assertEqual(get_reserved_qty(item, warehouse), qty_to_reserve)
 
 		dn = make_delivery_note(so.name)
-		dn.save().submit()
-
+		dn.submit()
 		# Test that item qty is no longer reserved since qty has been delivered.
 		self.assertEqual(get_reserved_qty(item, warehouse), 0)
 
 		dn_return = make_return_doc("Delivery Note", dn.name)
-		dn_return.save().submit()
-
+		dn_return.submit()
 		returned = frappe.get_doc("Delivery Note", dn_return.name)
 		returned.update_prevdoc_status()
 
@@ -1786,7 +1682,6 @@ class TestDeliveryNote(ERPNextTestSuite):
 			rate=500,
 			company=dn.company,
 			expense_account="Cost of Goods Sold - _TC",
-			cost_center="Main - _TC",
 			do_not_submit=1,
 			posting_date=add_days(nowdate(), -1),
 		)
@@ -1831,7 +1726,6 @@ class TestDeliveryNote(ERPNextTestSuite):
 			company=dn.company,
 			warehouse="_Test Warehouse - _TC",
 			expense_account="Cost of Goods Sold - _TC",
-			cost_center="Main - _TC",
 			posting_date=add_days(nowdate(), -1),
 		)
 
@@ -1875,7 +1769,6 @@ class TestDeliveryNote(ERPNextTestSuite):
 
 		dn.save()
 		dn.submit()
-
 		self.assertEqual(dn.items[0].stock_qty, 5.0)
 		voucher_detail_no = dn.items[0].name
 		delivered_batch_qty = frappe.db.get_value(
@@ -1899,8 +1792,7 @@ class TestDeliveryNote(ERPNextTestSuite):
 		so = make_sales_order(item_code=item, qty=1, rate=rate, customer=customer, warehouse=warehouse)
 		dn = make_delivery_note(so.name)
 		dn.items[0].target_warehouse = target
-		dn.save().submit()
-
+		dn.submit()
 		self.assertEqual(so.items[0].rate, rate)
 		self.assertEqual(dn.items[0].rate, so.items[0].rate)
 
@@ -2037,7 +1929,6 @@ class TestDeliveryNote(ERPNextTestSuite):
 			warehouse=warehouse,
 			company=company,
 			expense_account="Cost of Goods Sold - _TC",
-			cost_center="Main - _TC",
 			use_serial_batch_fields=1,
 			serial_no="\n".join(serial_nos[0:3]),
 		)
@@ -2060,7 +1951,6 @@ class TestDeliveryNote(ERPNextTestSuite):
 			warehouse=warehouse,
 			company=company,
 			expense_account="Cost of Goods Sold - _TC",
-			cost_center="Main - _TC",
 			use_serial_batch_fields=1,
 			serial_no=serial_nos[-1],
 		)
@@ -2101,7 +1991,7 @@ class TestDeliveryNote(ERPNextTestSuite):
 		)
 
 		dn_return = make_sales_return(dn.name)
-		dn_return.save().submit()
+		dn_return.submit()
 		returned_batch_no = get_batch_from_bundle(dn_return.items[0].serial_and_batch_bundle)
 		self.assertEqual(batch_no, returned_batch_no)
 
@@ -2131,7 +2021,17 @@ class TestDeliveryNote(ERPNextTestSuite):
 
 		dn_return = make_sales_return(dn.name)
 		dn_return.items[0].qty = 3 * -1
-		dn_return.save().submit()
+		self.assertTrue(dn.items[0].serial_and_batch_bundle)
+		self.assertEqual(
+			frappe.db.get_value("Serial and Batch Bundle", dn.items[0].serial_and_batch_bundle, "docstatus"), 1
+		)
+		self.assertEqual(dn_return.items[0].dn_detail, dn.items[0].name)
+		dn_return.submit()
+		self.assertTrue(
+			frappe.db.get_value(
+				"Delivery Note Item", dn_return.items[0].name, "serial_and_batch_bundle"
+			)
+		)
 
 		returned_batch_no = get_batch_from_bundle(dn_return.items[0].serial_and_batch_bundle)
 		self.assertEqual(batch_no, returned_batch_no)
@@ -2142,8 +2042,7 @@ class TestDeliveryNote(ERPNextTestSuite):
 
 		dn_return = make_sales_return(dn.name)
 		dn_return.items[0].qty = 2 * -1
-		dn_return.save().submit()
-
+		dn_return.submit()
 		returned_batch_no = get_batch_from_bundle(dn_return.items[0].serial_and_batch_bundle)
 		self.assertEqual(batch_no, returned_batch_no)
 
@@ -2176,7 +2075,7 @@ class TestDeliveryNote(ERPNextTestSuite):
 		)
 
 		dn_return = make_sales_return(dn.name)
-		dn_return.save().submit()
+		dn_return.submit()
 		returned_serial_nos = get_serial_nos_from_bundle(dn_return.items[0].serial_and_batch_bundle)
 		self.assertEqual(serial_nos, returned_serial_nos)
 
@@ -2327,8 +2226,7 @@ class TestDeliveryNote(ERPNextTestSuite):
 		)
 
 		dn_return = make_sales_return(dn.name)
-		dn_return.save().submit()
-
+		dn_return.submit()
 		self.assertEqual(dn_return.items[0].qty, 5 * -1)
 
 		returned_batch_no = get_batch_from_bundle(dn_return.items[0].serial_and_batch_bundle)
@@ -2758,7 +2656,6 @@ class TestDeliveryNote(ERPNextTestSuite):
 		dn_return = create_delivery_note(is_return=1, return_against=dn.name, qty=-2, do_not_submit=True)
 		dn_return.items[0].dn_detail = dn.items[0].name
 		dn_return.submit()
-
 		returned = frappe.get_doc("Delivery Note", dn_return.name)
 		returned.update_prevdoc_status()
 		dn.load_from_db()
@@ -2779,7 +2676,6 @@ class TestDeliveryNote(ERPNextTestSuite):
 		return_dn = make_sales_return(dn.name)
 		return_dn.insert()
 		return_dn.submit()
-
 		# the return reverses the delivery quantities
 		so.load_from_db()
 		self.assertEqual(so.per_delivered, 0)
@@ -2823,7 +2719,6 @@ class TestDeliveryNote(ERPNextTestSuite):
 		dn = make_delivery_note(si.name)
 		dn.insert()
 		dn.submit()
-
 		self._assert_credit_note_from_return_dn_resets_per_billed(so, dn)
 
 	def test_sales_order_per_billed_after_credit_note_from_so_derived_dn(self):
@@ -2847,7 +2742,6 @@ class TestDeliveryNote(ERPNextTestSuite):
 		dn = make_dn_from_so(so.name)
 		dn.insert()
 		dn.submit()
-
 		self.assertIsNone(dn.items[0].si_detail)
 
 		self._assert_credit_note_from_return_dn_resets_per_billed(so, dn)
@@ -3222,6 +3116,8 @@ def make_so_with_reserved_produced_serial_no():
 	return so, reserved, unreserved
 
 
+
+
 def create_delivery_note(**args):
 	dn = frappe.new_doc("Delivery Note")
 	args = frappe._dict(args)
@@ -3279,7 +3175,6 @@ def create_delivery_note(**args):
 			"serial_and_batch_bundle": bundle_id,
 			"allow_zero_valuation_rate": args.allow_zero_valuation_rate or 1,
 			"expense_account": args.expense_account or "Cost of Goods Sold - _TC",
-			"cost_center": args.cost_center or "_Test Cost Center - _TC",
 			"target_warehouse": args.target_warehouse,
 			"use_serial_batch_fields": args.use_serial_batch_fields,
 			"serial_no": args.serial_no if args.use_serial_batch_fields else None,
@@ -3291,7 +3186,6 @@ def create_delivery_note(**args):
 		dn.insert()
 		if not args.do_not_submit:
 			dn.submit()
-
 		dn.load_from_db()
 
 	return dn

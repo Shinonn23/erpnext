@@ -1188,7 +1188,6 @@ class TestPricingRule(ERPNextTestSuite):
 				"description": other_item.description,
 				"stock_uom": other_item.stock_uom,
 				"uom": other_item.stock_uom,
-				"cost_center": si.items[0].cost_center,
 				"expense_account": si.items[0].expense_account,
 				"warehouse": si.items[0].warehouse,
 				"conversion_factor": 1,

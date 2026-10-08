@@ -21,6 +21,8 @@
   "is_group",
   "column_break_qhdh",
   "customer",
+  "asset_location_section",
+  "asset_location",
   "address_and_contact",
   "address_html",
   "column_break_10",
@@ -271,6 +273,17 @@
    "fieldtype": "Link",
    "label": "Customer",
    "options": "Customer"
+  },
+  {
+   "fieldname": "asset_location_section",
+   "fieldtype": "Section Break",
+   "label": "Asset Location Mapping"
+  },
+  {
+   "fieldname": "asset_location",
+   "fieldtype": "Link",
+   "label": "Asset Location",
+   "options": "Location"
   },
   {
    "fieldname": "section_break_ujhu",

@@ -184,7 +184,6 @@ class TestBankReconciliationTool(ERPNextTestSuite, AccountsTestMixin):
 		payment.set_exchange_rate()
 		payment.set_amounts()
 		payment.deductions[-1].account = "_Test Exchange Gain/Loss - _TC"
-		payment.deductions[-1].cost_center = "_Test Cost Center - _TC"
 		payment = payment.save().submit()
 
 		transaction = self.make_bank_transaction(date=today(), deposit=3460.52)

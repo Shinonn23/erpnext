@@ -15,7 +15,6 @@ from erpnext.tests.utils import ERPNextTestSuite
 class TestGrossProfit(ERPNextTestSuite):
 	def setUp(self):
 		self.company = "_Test Company"
-		self.cost_center = "Main - _TC"
 		self.warehouse = "Stores - _TC"
 		self.finished_warehouse = "Finished Goods - _TC"
 		self.income_account = "Sales - _TC"
@@ -42,10 +41,8 @@ class TestGrossProfit(ERPNextTestSuite):
 			customer=self.customer,
 			item_code=self.item,
 			item_name=self.item,
-			cost_center=self.cost_center,
 			warehouse=self.warehouse,
 			debit_to=self.debit_to,
-			parent_cost_center=self.cost_center,
 			update_stock=0,
 			currency="INR",
 			is_pos=0,
@@ -74,7 +71,6 @@ class TestGrossProfit(ERPNextTestSuite):
 			item=item or self.item,
 			qty=qty,
 			rate=rate,
-			cost_center=self.cost_center,
 			warehouse=self.warehouse,
 			return_against=None,
 			expense_account=self.expense_account,
@@ -120,7 +116,6 @@ class TestGrossProfit(ERPNextTestSuite):
 				"transfer_qty": flt(item.qty) * (flt(item.conversion_factor) or 1.0),
 				"serial_no": item.serial_no,
 				"batch_no": item.batch_no,
-				"cost_center": item.cost_center,
 				"expense_account": item.expense_account,
 			},
 		)
@@ -133,10 +128,8 @@ class TestGrossProfit(ERPNextTestSuite):
 			customer=self.customer,
 			item_code=self.item,
 			item_name=self.item,
-			cost_center=self.cost_center,
 			warehouse=self.warehouse,
 			debit_to=self.debit_to,
-			parent_cost_center=self.cost_center,
 			update_stock=0,
 			currency="INR",
 			income_account=self.income_account,
@@ -225,7 +218,6 @@ class TestGrossProfit(ERPNextTestSuite):
 				"transfer_qty": flt(item.qty) * (flt(item.conversion_factor) or 1.0),
 				"serial_no": item.serial_no,
 				"batch_no": item.batch_no,
-				"cost_center": item.cost_center,
 				"expense_account": item.expense_account,
 			},
 		)
@@ -282,7 +274,6 @@ class TestGrossProfit(ERPNextTestSuite):
 				"transfer_qty": flt(item.qty) * (flt(item.conversion_factor) or 1.0),
 				"serial_no": item.serial_no,
 				"batch_no": item.batch_no,
-				"cost_center": item.cost_center,
 				"expense_account": item.expense_account,
 			},
 		)
@@ -449,7 +440,6 @@ class TestGrossProfit(ERPNextTestSuite):
 				"transfer_qty": flt(item.qty) * (flt(item.conversion_factor) or 1.0),
 				"serial_no": item.serial_no,
 				"batch_no": item.batch_no,
-				"cost_center": item.cost_center,
 				"expense_account": item.expense_account,
 			},
 		)
@@ -567,10 +557,8 @@ class TestGrossProfit(ERPNextTestSuite):
 			customer=self.customer,
 			item_code=self.item,
 			item_name=self.item,
-			cost_center=self.cost_center,
 			warehouse=self.warehouse,
 			debit_to=self.debit_to,
-			parent_cost_center=self.cost_center,
 			update_stock=0,
 			currency="INR",
 			income_account=self.income_account,
@@ -1152,10 +1140,8 @@ class TestGrossProfit(ERPNextTestSuite):
 			customer=self.customer,
 			item_code=item.item_code,
 			item_name=item.item_code,
-			cost_center=self.cost_center,
 			warehouse=self.warehouse,
 			debit_to=self.debit_to,
-			parent_cost_center=self.cost_center,
 			update_stock=1,
 			currency="INR",
 			income_account=self.income_account,

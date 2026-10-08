@@ -103,6 +103,9 @@ class StockLedgerEntry(Document):
 		self.validate_and_set_fiscal_year()
 		self.block_transactions_against_group_warehouse()
 		self.validate_with_last_transaction_posting_time()
+		from erpnext.stock.doctype.storage_location.storage_location import validate_storage_location
+
+		validate_storage_location(self)
 		self.validate_inventory_dimension_negative_stock()
 		self.validate_serial_no_inventory_dimension()
 

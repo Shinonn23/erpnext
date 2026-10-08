@@ -119,7 +119,6 @@
   "accounting_dimensions_section",
   "project",
   "dimension_col_break",
-  "cost_center",
   "section_break_82",
   "page_break"
  ],
@@ -518,20 +517,6 @@
    "options": "Project",
    "print_hide": 1,
    "search_index": 1
-  },
-  {
-   "allow_on_submit": 1,
-   "default": ":Company",
-   "depends_on": "eval:!doc.is_fixed_asset",
-   "fieldname": "cost_center",
-   "fieldtype": "Link",
-   "label": "Cost Center",
-   "oldfieldname": "cost_center",
-   "oldfieldtype": "Link",
-   "options": "Cost Center",
-   "print_hide": 1,
-   "print_width": "120px",
-   "width": "120px"
   },
   {
    "collapsible": 1,

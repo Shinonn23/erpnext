@@ -13,6 +13,7 @@
   "basic_info",
   "naming_series",
   "customer_name",
+  "old_customer_code",
   "customer_type",
   "alias",
   "gender",
@@ -111,7 +112,8 @@
    "label": "Series",
    "no_copy": 1,
    "options": "CUST-.YYYY.-",
-   "set_only_once": 1
+   "set_only_once": 1,
+   "hidden": 1
   },
   {
    "bold": 1,
@@ -123,6 +125,13 @@
    "oldfieldname": "customer_name",
    "oldfieldtype": "Data",
    "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "old_customer_code",
+   "fieldtype": "Data",
+   "label": "Old Customer Code",
+   "in_global_search": 1,
    "search_index": 1
   },
   {
@@ -831,7 +840,7 @@
  ],
  "quick_entry": 1,
  "row_format": "Dynamic",
- "search_fields": "customer_group,territory, mobile_no,primary_address, alias",
+ "search_fields": "customer_group,territory,mobile_no,primary_address,alias,old_customer_code",
  "show_name_in_global_search": 1,
  "sort_field": "creation",
  "sort_order": "DESC",

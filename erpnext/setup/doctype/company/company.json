@@ -58,7 +58,6 @@
   "default_income_account",
   "default_discount_account",
   "payment_terms",
-  "cost_center",
   "default_finance_book",
   "exchange_gain__loss_section",
   "exchange_gain_loss_account",
@@ -66,7 +65,6 @@
   "unrealized_exchange_gain_loss_account",
   "round_off_section",
   "round_off_account",
-  "round_off_cost_center",
   "column_break_jqfo",
   "round_off_for_opening",
   "deferred_accounting_section",
@@ -92,7 +90,6 @@
   "series_for_depreciation_entry",
   "column_break_40",
   "disposal_account",
-  "depreciation_cost_center",
   "capital_work_in_progress_account",
   "asset_received_but_not_billed",
   "accounts_closing_tab",
@@ -133,12 +130,19 @@
   "stock_received_but_not_billed",
   "default_provisional_account",
   "default_in_transit_warehouse",
+  "default_in_transit_location",
   "manufacturing_section",
   "default_operating_cost_account",
   "column_break_9prc",
   "default_wip_warehouse",
   "default_fg_warehouse",
   "default_scrap_warehouse",
+  "customer_demo_loan_section",
+  "customer_loan_warehouse",
+  "customer_demo_return_lookahead_days",
+  "column_break_customer_demo_loan",
+  "asset_capitalization_threshold",
+  "low_value_asset_expense_account",
   "dashboard_tab"
  ],
  "fields": [
@@ -360,15 +364,6 @@
   },
   {
    "depends_on": "eval:!doc.__islocal",
-   "fieldname": "round_off_cost_center",
-   "fieldtype": "Link",
-   "ignore_user_permissions": 1,
-   "label": "Round Off Cost Center",
-   "no_copy": 1,
-   "options": "Cost Center"
-  },
-  {
-   "depends_on": "eval:!doc.__islocal",
    "fieldname": "write_off_account",
    "fieldtype": "Link",
    "ignore_user_permissions": 1,
@@ -453,15 +448,6 @@
    "label": "Default Deferred Expense Account",
    "no_copy": 1,
    "options": "Account"
-  },
-  {
-   "depends_on": "eval:!doc.__islocal",
-   "fieldname": "cost_center",
-   "fieldtype": "Link",
-   "ignore_user_permissions": 1,
-   "label": "Default Cost Center",
-   "no_copy": 1,
-   "options": "Cost Center"
   },
   {
    "depends_on": "eval:!doc.__islocal",
@@ -552,15 +538,6 @@
    "label": "Gain/Loss Account on Asset Disposal",
    "no_copy": 1,
    "options": "Account"
-  },
-  {
-   "depends_on": "eval:!doc.__islocal",
-   "fieldname": "depreciation_cost_center",
-   "fieldtype": "Link",
-   "ignore_user_permissions": 1,
-   "label": "Asset Depreciation Cost Center",
-   "no_copy": 1,
-   "options": "Cost Center"
   },
   {
    "depends_on": "eval:!doc.__islocal",
@@ -707,6 +684,12 @@
    "fieldtype": "Link",
    "label": "Default In-Transit Warehouse",
    "options": "Warehouse"
+  },
+  {
+   "fieldname": "default_in_transit_location",
+   "fieldtype": "Link",
+   "label": "Default In-Transit Location",
+   "options": "Location"
   },
   {
    "depends_on": "eval:!doc.__islocal",
@@ -875,6 +858,44 @@
    "label": "Manufacturing"
   },
   {
+   "fieldname": "customer_demo_loan_section",
+   "fieldtype": "Section Break",
+   "label": "Customer Demo / Loan Settings"
+  },
+  {
+   "fieldname": "customer_loan_warehouse",
+   "fieldtype": "Link",
+   "label": "Customer Loan Warehouse",
+   "options": "Warehouse"
+  },
+  {
+   "fieldname": "customer_demo_return_lookahead_days",
+   "fieldtype": "Int",
+   "label": "Asset Return Look-ahead (Days)",
+   "default": "7",
+   "non_negative": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_customer_demo_loan",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "asset_capitalization_threshold",
+   "fieldtype": "Currency",
+   "label": "Asset Capitalization Threshold",
+   "options": "default_currency",
+   "default": "0",
+   "non_negative": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "low_value_asset_expense_account",
+   "fieldtype": "Link",
+   "label": "Low Value Asset Expense Account",
+   "options": "Account"
+  },
+  {
    "fieldname": "default_operating_cost_account",
    "fieldtype": "Link",
    "label": "Default Operating Cost Account",
@@ -1037,7 +1058,7 @@
  "image_field": "company_logo",
  "is_tree": 1,
  "links": [],
- "modified": "2026-09-16 11:42:07.000000",
+ "modified": "2026-10-05 04:00:00",
  "modified_by": "Administrator",
  "module": "Setup",
  "name": "Company",

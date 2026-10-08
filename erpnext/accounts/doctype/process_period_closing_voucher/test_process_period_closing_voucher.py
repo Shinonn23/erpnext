@@ -113,7 +113,6 @@ class TestProcessPeriodClosingVoucher(ERPNextTestSuite):
 		self.assertEqual(len(bal), 1)
 		expected_pl = {
 			"account": "Sales - _TC",
-			"cost_center": "_Test Cost Center - _TC",
 			"debit": 0.0,
 			"credit": 120.0,
 			"debit_in_account_currency": 0.0,
@@ -132,7 +131,6 @@ class TestProcessPeriodClosingVoucher(ERPNextTestSuite):
 		self.assertEqual(len(bal), 1)
 		expected_bs = {
 			"account": "Debtors - _TC",
-			"cost_center": "_Test Cost Center - _TC",
 			"debit": 120.0,
 			"credit": 0.0,
 			"debit_in_account_currency": 120.0,
@@ -153,7 +151,6 @@ class TestProcessPeriodClosingVoucher(ERPNextTestSuite):
 		opening_cash = next(x for x in bal if x["account"] == "Cash - _TC")
 		expected_opening_cash = {
 			"account": "Cash - _TC",
-			"cost_center": "_Test Cost Center - _TC",
 			"debit": 10.0,
 			"credit": 0.0,
 			"debit_in_account_currency": 10.0,
@@ -167,7 +164,6 @@ class TestProcessPeriodClosingVoucher(ERPNextTestSuite):
 		opening_debtors = next(x for x in bal if x["account"] == "Debtors - _TC")
 		expected_opening_debtors = {
 			"account": "Debtors - _TC",
-			"cost_center": "_Test Cost Center - _TC",
 			"debit": 0.0,
 			"credit": 10.0,
 			"debit_in_account_currency": 0.0,

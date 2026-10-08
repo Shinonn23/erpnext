@@ -186,17 +186,6 @@ frappe.treeview_settings["Account"] = {
 			return treeview.page.fields_dict.company.get_value();
 		}
 
-		// tools
-		treeview.page.add_inner_button(
-			__("Chart of Cost Centers"),
-			function () {
-				frappe.set_route("Tree", "Cost Center", { company: get_company() });
-			},
-			__("View"),
-			"default",
-			true
-		);
-
 		treeview.page.add_inner_button(
 			__("Opening Invoice Creation Tool"),
 			function () {

@@ -66,7 +66,6 @@ class DeliveryNote(SellingController):
 		contact_mobile: DF.SmallText | None
 		contact_person: DF.Link | None
 		conversion_rate: DF.Float
-		cost_center: DF.Link | None
 		currency: DF.Link
 		customer: DF.Link
 		customer_address: DF.Link | None
@@ -915,7 +914,6 @@ def make_sales_invoice(
 					"parent": "delivery_note",
 					"so_detail": "so_detail",
 					"against_sales_order": "sales_order",
-					"cost_center": "cost_center",
 				},
 				"postprocess": update_item,
 				"filter": lambda d: get_pending_qty(d) <= 0
@@ -1085,6 +1083,10 @@ def make_packing_slip(source_name, target_doc=None):
 @frappe.whitelist()
 def make_shipment(source_name, target_doc=None):
 	def postprocess(source, target):
+		target.append(
+			"shipment_documents",
+			{"reference_doctype": "Delivery Note", "reference_name": source.name},
+		)
 		user = frappe.db.get_value(
 			"User", frappe.session.user, ["email", "full_name", "phone", "mobile_no"], as_dict=1
 		)

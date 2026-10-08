@@ -3245,6 +3245,14 @@ def get_available_batches(kwargs):
 		else:
 			query = query.where(stock_ledger_entry[field] == kwargs.get(field))
 
+	for field, value in (kwargs.get("inventory_dimensions_dict") or {}).items():
+		if not frappe.db.has_column("Stock Ledger Entry", field):
+			continue
+		if value in (None, ""):
+			query = query.where(stock_ledger_entry[field].isnull())
+		else:
+			query = query.where(stock_ledger_entry[field] == value)
+
 	if kwargs.get("batch_no"):
 		if isinstance(kwargs.batch_no, list):
 			query = query.where(batch_ledger.batch_no.isin(kwargs.batch_no))
@@ -3500,6 +3508,14 @@ def get_stock_ledgers_for_serial_nos(kwargs):
 		else:
 			query = query.where(stock_ledger_entry[field] == kwargs.get(field))
 
+	for field, value in (kwargs.get("inventory_dimensions_dict") or {}).items():
+		if not frappe.db.has_column("Stock Ledger Entry", field):
+			continue
+		if value in (None, ""):
+			query = query.where(stock_ledger_entry[field].isnull())
+		else:
+			query = query.where(stock_ledger_entry[field] == value)
+
 	serial_nos = kwargs.get("serial_nos") or kwargs.get("serial_no")
 	if serial_nos and not isinstance(serial_nos, list):
 		serial_nos = [serial_nos]
@@ -3559,6 +3575,14 @@ def get_stock_ledgers_batches(kwargs):
 			query = query.where(stock_ledger_entry[field].isin(kwargs.get(field)))
 		else:
 			query = query.where(stock_ledger_entry[field] == kwargs.get(field))
+
+	for field, value in (kwargs.get("inventory_dimensions_dict") or {}).items():
+		if not frappe.db.has_column("Stock Ledger Entry", field):
+			continue
+		if value in (None, ""):
+			query = query.where(stock_ledger_entry[field].isnull())
+		else:
+			query = query.where(stock_ledger_entry[field] == value)
 
 	if not kwargs.get("for_stock_levels"):
 		query = query.where((batch_table.expiry_date >= today()) | (batch_table.expiry_date.isnull()))

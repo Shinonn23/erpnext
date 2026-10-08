@@ -23,6 +23,7 @@ class AssetMovementItem(Document):
 		parentfield: DF.Data
 		parenttype: DF.Data
 		source_location: DF.Link | None
+		shipment_destination_location: DF.Link | None
 		target_location: DF.Link | None
 		to_employee: DF.Link | None
 	# end: auto-generated types

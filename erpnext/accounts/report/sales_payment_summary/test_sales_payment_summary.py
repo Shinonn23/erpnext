@@ -128,7 +128,6 @@ def create_sales_invoice_record(qty=1):
 					"qty": qty,
 					"rate": 10000,
 					"income_account": "Sales - _TC",
-					"cost_center": "Main - _TC",
 					"expense_account": "Cost of Goods Sold - _TC",
 				}
 			],

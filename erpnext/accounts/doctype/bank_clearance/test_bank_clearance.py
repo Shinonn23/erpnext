@@ -5,7 +5,6 @@ import unittest
 import frappe
 from frappe.utils import add_months, getdate
 
-from erpnext.accounts.doctype.cost_center.test_cost_center import create_cost_center
 from erpnext.accounts.doctype.mode_of_payment.test_mode_of_payment import (
 	set_default_account_for_mode_of_payment,
 )
@@ -26,8 +25,6 @@ class TestBankClearance(ERPNextTestSuite):
 			company="_Test Company",
 		)
 		create_item("_Test Item")
-		create_cost_center(cost_center_name="_Test Cost Center", company="_Test Company")
-
 		make_bank_account()
 		add_transactions()
 

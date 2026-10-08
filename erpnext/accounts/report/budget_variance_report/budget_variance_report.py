@@ -6,7 +6,10 @@ from frappe import _
 from frappe.query_builder import CustomFunction
 from frappe.utils import add_months, flt, formatdate
 
-from erpnext.accounts.doctype.accounting_dimension.accounting_dimension import get_dimensions
+from erpnext.accounts.doctype.accounting_dimension.accounting_dimension import (
+	get_dimension_with_children,
+	get_dimensions,
+)
 from erpnext.accounts.utils import get_fiscal_year
 from erpnext.controllers.trends import get_period_date_ranges
 
@@ -20,8 +23,8 @@ def execute(filters=None):
 	columns = get_columns(filters)
 	if filters.get("budget_against_filter"):
 		dimensions = filters.get("budget_against_filter")
-		if filters.get("budget_against") == "Cost Center":
-			dimensions = get_cost_center_with_children(dimensions)
+		if frappe.get_cached_value("DocType", filters.budget_against, "is_tree"):
+			dimensions = get_dimension_with_children(filters.budget_against, dimensions)
 	else:
 		dimensions = get_budget_dimensions(filters)
 	if not dimensions:
@@ -147,11 +150,11 @@ def get_actual_transactions(dimension_name, filters):
 		.orderby(gle.fiscal_year)
 	)
 
-	if filters.get("budget_against") == "Cost Center" and dimension_name:
-		cost_centers = get_cost_center_with_children([dimension_name])
-		query = query.where(gle.cost_center.isin(cost_centers))
-	else:
-		query = query.where(budget[budget_against] == gle[budget_against])
+	dimension_values = [dimension_name]
+	if frappe.get_cached_value("DocType", filters.budget_against, "is_tree"):
+		dimension_values = get_dimension_with_children(filters.budget_against, dimension_values)
+
+	query = query.where(gle[budget_against].isin(dimension_values))
 
 	actual_transactions = query.run(as_dict=True)
 
@@ -372,41 +375,15 @@ def get_fiscal_years(filters):
 	return fiscal_year
 
 
-def get_cost_center_with_children(cost_centers):
-	"""Expand each cost center to include itself and all its descendants."""
-	cc = frappe.qb.DocType("Cost Center")
-	all_cost_centers = set()
-	for cost_center in cost_centers:
-		result = frappe.db.get_value("Cost Center", cost_center, ["lft", "rgt"])
-		if not result:
-			continue
-		lft, rgt = result
-		children = (
-			frappe.qb.from_(cc).select(cc.name).where((cc.lft >= lft) & (cc.rgt <= rgt)).run(pluck="name")
-		)
-		all_cost_centers.update(children)
-	return list(all_cost_centers)
-
-
 def get_budget_dimensions(filters):
 	budget_against = filters.get("budget_against")
 	dimension = frappe.qb.DocType(budget_against)
 
-	if budget_against in ["Cost Center", "Project"]:
-		query = (
-			frappe.qb.from_(dimension)
-			.select(dimension.name)
-			.where(dimension.company == filters.get("company"))
-		)
-		if budget_against == "Cost Center":
-			query = query.orderby(dimension.lft)
-		return query.run(pluck="name")
-	else:
-		return frappe.qb.from_(dimension).select(dimension.name).run(pluck="name")
+	return frappe.qb.from_(dimension).select(dimension.name).run(pluck="name")
 
 
 def validate_budget_dimensions(filters):
-	dimensions = [d.get("document_type") for d in get_dimensions(with_cost_center_and_project=True)[0]]
+	dimensions = [d.get("document_type") for d in get_dimensions(with_project=True)[0]]
 	if filters.get("budget_against") and filters.get("budget_against") not in dimensions:
 		frappe.throw(
 			title=_("Invalid Accounting Dimension"),

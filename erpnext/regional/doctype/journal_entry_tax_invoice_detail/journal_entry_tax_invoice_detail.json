@@ -1,0 +1,113 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2023-07-30 10:00:38.519032",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "company_tax_address",
+  "column_break_gg3aa",
+  "party_name",
+  "section_break_gh6bu",
+  "supplier",
+  "column_break_b7ziy",
+  "customer",
+  "section_break_rpmxt",
+  "tax_invoice_number",
+  "tax_invoice_date",
+  "column_break_bxvza",
+  "tax_base_amount",
+  "tax_amount"
+ ],
+ "fields": [
+  {
+   "fieldname": "company_tax_address",
+   "fieldtype": "Link",
+   "label": "Company Tax Address",
+   "options": "Address"
+  },
+  {
+   "fieldname": "supplier",
+   "fieldtype": "Link",
+   "label": "Supplier",
+   "options": "Supplier"
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "tax_invoice_number",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Tax Invoice Number"
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "tax_invoice_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Tax Invoice Date"
+  },
+  {
+   "fieldname": "tax_base_amount",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Tax Base Amount",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "tax_amount",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Tax Amount",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "label": "Customer",
+   "options": "Customer"
+  },
+  {
+   "fieldname": "party_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Party Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_gg3aa",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "section_break_gh6bu",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "column_break_b7ziy",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "section_break_rpmxt",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "column_break_bxvza",
+   "fieldtype": "Column Break"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2023-07-30 15:33:54.967313",
+ "modified_by": "Administrator",
+ "module": "Regional",
+ "name": "Journal Entry Tax Invoice Detail",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

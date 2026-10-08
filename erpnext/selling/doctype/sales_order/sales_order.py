@@ -114,7 +114,6 @@ class SalesOrder(SellingController):
 		contact_person: DF.Link | None
 		contact_phone: DF.Data | None
 		conversion_rate: DF.Float
-		cost_center: DF.Link | None
 		coupon_code: DF.Link | None
 		currency: DF.Link
 		customer: DF.Link
@@ -1282,15 +1281,6 @@ def make_delivery_note(source_name, target_doc=None, kwargs=None):
 		target.amount = remaining_qty(source) * flt(source.rate)
 		target.qty = flt(source.qty) if is_unit_price_row(source) else remaining_qty(source)
 
-		item = get_item_defaults(target.item_code, source_parent.company)
-		item_group = get_item_group_defaults(target.item_code, source_parent.company)
-
-		if item:
-			target.cost_center = (
-				frappe.db.get_value("Project", source_parent.project, "cost_center")
-				or item.get("buying_cost_center")
-				or item_group.get("buying_cost_center")
-			)
 
 	if not kwargs.skip_item_mapping:
 		mapper["Sales Order Item"] = {
@@ -1474,15 +1464,6 @@ def make_sales_invoice(
 		target.base_amount = target.amount * flt(source_parent.conversion_rate)
 		target.qty = source.qty if is_unit_price_row(source) else get_pending_qty(source)
 
-		if source_parent.project:
-			target.cost_center = frappe.db.get_value("Project", source_parent.project, "cost_center")
-		if target.item_code:
-			item = get_item_defaults(target.item_code, source_parent.company)
-			item_group = get_item_group_defaults(target.item_code, source_parent.company)
-			cost_center = item.get("selling_cost_center") or item_group.get("selling_cost_center")
-
-			if cost_center:
-				target.cost_center = cost_center
 
 	def select_item(d):
 		filtered_items = args.get("filtered_children", [])

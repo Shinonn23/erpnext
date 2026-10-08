@@ -13,7 +13,6 @@ class TestItemWiseSalesRegister(ERPNextTestSuite, AccountsTestMixin):
 		self.customer = "_Test Customer"
 		self.item = "_Test Item"
 		self.debit_to = "Debtors - _TC"
-		self.cost_center = "Main - _TC"
 
 	def create_sales_invoice(self, item=None, taxes=None, do_not_submit=False):
 		si = create_sales_invoice(
@@ -24,9 +23,6 @@ class TestItemWiseSalesRegister(ERPNextTestSuite, AccountsTestMixin):
 			customer=self.customer,
 			debit_to=self.debit_to,
 			posting_date=today(),
-			parent_cost_center=self.cost_center,
-			cost_center=self.cost_center,
-			rate=100,
 			price_list_rate=100,
 			do_not_save=1,
 		)
@@ -37,7 +33,6 @@ class TestItemWiseSalesRegister(ERPNextTestSuite, AccountsTestMixin):
 				{
 					"charge_type": "On Net Total",
 					"account_head": tax["account_head"],
-					"cost_center": self.cost_center,
 					"description": tax["description"],
 					"rate": tax["rate"],
 				},

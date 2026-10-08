@@ -51,7 +51,6 @@ class AccountingDimension(Document):
 			*core_doctypes_list,
 			"Accounting Dimension",
 			"Project",
-			"Cost Center",
 			"Accounting Dimension Detail",
 			"Company",
 			"Account",
@@ -174,7 +173,7 @@ def make_dimension_in_accounting_doctypes(doc, doclist=None):
 def add_dimension_to_budget_doctype(df, doc):
 	df.update(
 		{
-			"insert_after": "cost_center",
+			"insert_after": "budget_against",
 			"depends_on": f"eval:doc.budget_against == '{doc.document_type}'",
 		}
 	)
@@ -185,7 +184,10 @@ def add_dimension_to_budget_doctype(df, doc):
 
 	if property_setter:
 		property_setter_doc = frappe.get_doc("Property Setter", "Budget-budget_against-options")
-		property_setter_doc.value = property_setter_doc.value + "\n" + doc.document_type
+		dimension_types = ["Project"] + frappe.get_all(
+			"Accounting Dimension", filters={"disabled": 0}, pluck="document_type"
+		)
+		property_setter_doc.value = "\n" + "\n".join(dimension_types)
 		property_setter_doc.save()
 
 		frappe.clear_cache(doctype="Budget")
@@ -198,7 +200,7 @@ def add_dimension_to_budget_doctype(df, doc):
 				"field_name": "budget_against",
 				"property": "options",
 				"property_type": "Text",
-				"value": "\nCost Center\nProject\n" + doc.document_type,
+				"value": "\nProject\n" + doc.document_type,
 			}
 		).insert(ignore_permissions=True)
 
@@ -223,12 +225,10 @@ def delete_accounting_dimension(doc):
 	)
 
 	budget_against_property = frappe.get_doc("Property Setter", "Budget-budget_against-options")
-	value_list = budget_against_property.value.split("\n")[3:]
-
-	if doc.document_type in value_list:
-		value_list.remove(doc.document_type)
-
-	budget_against_property.value = "\nCost Center\nProject\n" + "\n".join(value_list)
+	dimension_types = ["Project"] + frappe.get_all(
+		"Accounting Dimension", filters={"disabled": 0, "name": ["!=", doc.name]}, pluck="document_type"
+	)
+	budget_against_property.value = "\n" + "\n".join(dimension_types)
 	budget_against_property.save()
 
 	for doctype in doclist:
@@ -307,7 +307,7 @@ def get_dimension_with_children(doctype, dimensions):
 
 
 @frappe.whitelist()
-def get_dimensions(with_cost_center_and_project=False):
+def get_dimensions(with_project=False):
 	c = frappe.qb.DocType("Accounting Dimension Detail")
 	p = frappe.qb.DocType("Accounting Dimension")
 	dimension_filters = (
@@ -321,19 +321,11 @@ def get_dimensions(with_cost_center_and_project=False):
 		.run(as_dict=1)
 	)
 
-	if isinstance(with_cost_center_and_project, str):
-		if with_cost_center_and_project.lower().strip() == "true":
-			with_cost_center_and_project = True
-		else:
-			with_cost_center_and_project = False
+	if isinstance(with_project, str):
+		with_project = with_project.lower().strip() == "true"
 
-	if with_cost_center_and_project:
-		dimension_filters.extend(
-			[
-				frappe._dict({"fieldname": "cost_center", "document_type": "Cost Center"}),
-				frappe._dict({"fieldname": "project", "document_type": "Project"}),
-			]
-		)
+	if with_project:
+		dimension_filters.append(frappe._dict({"fieldname": "project", "document_type": "Project"}))
 
 	default_dimensions_map = {}
 	for dimension in default_dimensions:

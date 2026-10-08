@@ -15,6 +15,7 @@ class TestJournalEntry(ERPNextTestSuite):
 	def setUp(self):
 		self.load_test_records("Journal Entry")
 
+
 	@ERPNextTestSuite.change_settings("Accounts Settings", {"unlink_payment_on_cancellation_of_invoice": 1})
 	def test_journal_entry_with_against_jv(self):
 		jv_invoice = frappe.copy_doc(self.globalTestRecords["Journal Entry"][2])
@@ -132,7 +133,7 @@ class TestJournalEntry(ERPNextTestSuite):
 			"accounts",
 			{
 				"account": stock_account,
-				"cost_center": "Main - TCP1",
+
 				"debit_in_account_currency": 0 if diff > 0 else abs(diff),
 				"credit_in_account_currency": diff if diff > 0 else 0,
 			},
@@ -142,7 +143,7 @@ class TestJournalEntry(ERPNextTestSuite):
 			"accounts",
 			{
 				"account": "Stock Adjustment - TCP1",
-				"cost_center": "Main - TCP1",
+
 				"debit_in_account_currency": diff if diff > 0 else 0,
 				"credit_in_account_currency": 0 if diff > 0 else abs(diff),
 			},
@@ -297,7 +298,7 @@ class TestJournalEntry(ERPNextTestSuite):
 			"Buildings - _TC",
 			100,
 			posting_date=nowdate(),
-			cost_center="Main - _TC",
+
 			save=False,
 		)
 		jv.voucher_type = "Inter Company Journal Entry"
@@ -310,7 +311,7 @@ class TestJournalEntry(ERPNextTestSuite):
 			"Buildings - _TC1",
 			100,
 			posting_date=nowdate(),
-			cost_center="Main - _TC1",
+
 			save=False,
 		)
 		jv1.inter_company_journal_entry_reference = jv.name
@@ -331,41 +332,6 @@ class TestJournalEntry(ERPNextTestSuite):
 
 		self.assertEqual(jv.inter_company_journal_entry_reference, "")
 		self.assertEqual(jv1.inter_company_journal_entry_reference, "")
-
-	def test_jv_with_cost_centre(self):
-		from erpnext.accounts.doctype.cost_center.test_cost_center import create_cost_center
-
-		cost_center = "_Test Cost Center for BS Account - _TC"
-		create_cost_center(cost_center_name="_Test Cost Center for BS Account", company="_Test Company")
-		jv = make_journal_entry(
-			"_Test Cash - _TC", "_Test Bank - _TC", 100, cost_center=cost_center, save=False
-		)
-		jv.voucher_type = "Bank Entry"
-		jv.multi_currency = 0
-		jv.cheque_no = "112233"
-		jv.cheque_date = nowdate()
-		jv.insert()
-		jv.submit()
-
-		self.voucher_no = jv.name
-
-		self.fields = [
-			"account",
-			"cost_center",
-		]
-
-		self.expected_gle = [
-			{
-				"account": "_Test Bank - _TC",
-				"cost_center": cost_center,
-			},
-			{
-				"account": "_Test Cash - _TC",
-				"cost_center": cost_center,
-			},
-		]
-
-		self.check_gl_entries()
 
 	def test_jv_with_project(self):
 		from erpnext.projects.doctype.project.test_project import make_project
@@ -421,7 +387,7 @@ class TestJournalEntry(ERPNextTestSuite):
 				"accounts",
 				{
 					"account": "_Test Cash - _TC",
-					"cost_center": "_Test Cost Center - _TC",
+
 					"debit_in_account_currency": amount,
 				},
 			)
@@ -429,7 +395,7 @@ class TestJournalEntry(ERPNextTestSuite):
 			"accounts",
 			{
 				"account": "_Test Bank - _TC",
-				"cost_center": "_Test Cost Center - _TC",
+
 				"credit_in_account_currency": 0.30,
 			},
 		)
@@ -462,29 +428,7 @@ class TestJournalEntry(ERPNextTestSuite):
 			jv.pay_to_recd_from, frappe.db.get_value("Journal Entry", jv.name, "pay_to_recd_from")
 		)
 
-	def test_jv_account_and_party_balance_with_cost_centre(self):
-		from erpnext.accounts.doctype.cost_center.test_cost_center import create_cost_center
-		from erpnext.accounts.utils import get_balance_on
-
-		cost_center = "_Test Cost Center for BS Account - _TC"
-		create_cost_center(cost_center_name="_Test Cost Center for BS Account", company="_Test Company")
-		jv = make_journal_entry(
-			"_Test Cash - _TC", "_Test Bank - _TC", 100, cost_center=cost_center, save=False
-		)
-		account_balance = get_balance_on(account="_Test Bank - _TC", cost_center=cost_center)
-		jv.voucher_type = "Bank Entry"
-		jv.multi_currency = 0
-		jv.cheque_no = "112233"
-		jv.cheque_date = nowdate()
-		jv.insert()
-		jv.submit()
-
-		expected_account_balance = account_balance - 100
-		account_balance = get_balance_on(account="_Test Bank - _TC", cost_center=cost_center)
-		self.assertEqual(expected_account_balance, account_balance)
-
 	def test_repost_accounting_entries(self):
-		from erpnext.accounts.doctype.cost_center.test_cost_center import create_cost_center
 
 		# Configure Repost Accounting Ledger for JVs
 		settings = frappe.get_doc("Accounts Settings")
@@ -492,7 +436,6 @@ class TestJournalEntry(ERPNextTestSuite):
 			settings.append("repost_allowed_types", {"document_type": "Journal Entry"})
 		settings.save()
 
-		# Create JV with defaut cost center - _Test Cost Center
 		jv = make_journal_entry("_Test Cash - _TC", "_Test Bank - _TC", 100, save=False)
 		jv.multi_currency = 0
 		jv.submit()
@@ -504,7 +447,6 @@ class TestJournalEntry(ERPNextTestSuite):
 			"account",
 			"debit_in_account_currency",
 			"credit_in_account_currency",
-			"cost_center",
 		]
 
 		self.expected_gle = [
@@ -512,27 +454,24 @@ class TestJournalEntry(ERPNextTestSuite):
 				"account": "_Test Bank - _TC",
 				"debit_in_account_currency": 0,
 				"credit_in_account_currency": 100,
-				"cost_center": "_Test Cost Center - _TC",
 			},
 			{
 				"account": "_Test Cash - _TC",
 				"debit_in_account_currency": 100,
 				"credit_in_account_currency": 0,
-				"cost_center": "_Test Cost Center - _TC",
 			},
 		]
 
 		self.check_gl_entries()
 
-		# Change cost center for bank account - _Test Cost Center for BS Account
-		create_cost_center(cost_center_name="_Test Cost Center for BS Account", company="_Test Company")
-		jv.accounts[1].cost_center = "_Test Cost Center for BS Account - _TC"
+		project = frappe.get_value("Project", {"project_name": "_Test Project"})
+		jv.accounts[0].project = project
 		# Ledger reposted implicitly upon 'Update After Submit'
 		jv.save()
 
 		# Check GL entries after reposting
 		jv.load_from_db()
-		self.expected_gle[0]["cost_center"] = "_Test Cost Center for BS Account - _TC"
+		self.expected_gle[0]["project"] = project
 		self.check_gl_entries()
 
 	def check_gl_entries(self):
@@ -554,7 +493,6 @@ class TestJournalEntry(ERPNextTestSuite):
 	def test_negative_debit_and_credit_with_same_account_head(self):
 		from erpnext.accounts.general_ledger import process_gl_map
 
-		# Create JV with defaut cost center - _Test Cost Center
 		frappe.db.set_single_value("Accounts Settings", "merge_similar_account_heads", 0)
 
 		jv = make_journal_entry("_Test Bank - _TC", "_Test Bank - _TC", 100 * -1, save=True)
@@ -591,7 +529,6 @@ class TestJournalEntry(ERPNextTestSuite):
 	def test_toggle_debit_credit_if_negative(self):
 		from erpnext.accounts.general_ledger import process_gl_map
 
-		# Create JV with defaut cost center - _Test Cost Center
 		frappe.db.set_single_value("Accounts Settings", "merge_similar_account_heads", 0)
 
 		jv = frappe.new_doc("Journal Entry")
@@ -751,7 +688,6 @@ def make_journal_entry(
 	account1,
 	account2,
 	amount,
-	cost_center=None,
 	posting_date=None,
 	exchange_rate=1,
 	save=True,
@@ -759,9 +695,6 @@ def make_journal_entry(
 	project=None,
 	company=None,
 ):
-	if not cost_center:
-		cost_center = "_Test Cost Center - _TC"
-
 	jv = frappe.new_doc("Journal Entry")
 	jv.posting_date = posting_date or nowdate()
 	jv.company = company or "_Test Company"
@@ -772,7 +705,6 @@ def make_journal_entry(
 		[
 			{
 				"account": account1,
-				"cost_center": cost_center,
 				"project": project,
 				"debit_in_account_currency": amount if amount > 0 else 0,
 				"credit_in_account_currency": abs(amount) if amount < 0 else 0,
@@ -780,7 +712,6 @@ def make_journal_entry(
 			},
 			{
 				"account": account2,
-				"cost_center": cost_center,
 				"project": project,
 				"credit_in_account_currency": amount if amount > 0 else 0,
 				"debit_in_account_currency": abs(amount) if amount < 0 else 0,

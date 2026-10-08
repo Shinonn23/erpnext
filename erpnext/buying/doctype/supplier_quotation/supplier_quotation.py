@@ -58,7 +58,6 @@ class SupplierQuotation(BuyingController):
 		contact_mobile: DF.SmallText | None
 		contact_person: DF.Link | None
 		conversion_rate: DF.Float
-		cost_center: DF.Link | None
 		currency: DF.Link
 		disable_rounded_total: DF.Check
 		discount_amount: DF.Currency

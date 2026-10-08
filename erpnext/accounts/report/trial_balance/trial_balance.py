@@ -15,7 +15,6 @@ from erpnext.accounts.doctype.accounting_dimension.accounting_dimension import (
 from erpnext.accounts.report.financial_statements import (
 	filter_accounts,
 	filter_out_zero_value_rows,
-	get_cost_centers_with_children,
 	set_gl_entries_by_account,
 )
 from erpnext.accounts.report.utils import convert_to_presentation_currency, get_currency
@@ -292,11 +291,6 @@ def get_opening_balance(
 			opening_balance = opening_balance.where(closing_balance.is_period_closing_voucher_entry == 0)
 		else:
 			opening_balance = opening_balance.where(closing_balance.voucher_type != "Period Closing Voucher")
-
-	if filters.cost_center:
-		opening_balance = opening_balance.where(
-			closing_balance.cost_center.isin(get_cost_centers_with_children(filters.get("cost_center")))
-		)
 
 	if filters.project:
 		opening_balance = opening_balance.where(closing_balance.project.isin(filters.project))
@@ -621,11 +615,6 @@ def get_data_duckdb(filters, conn):
 def _extra_gl_conditions(filters):
 	"""Returns (conditions, params) for optional shared GL Entry filters."""
 	conditions, params = [], []
-
-	if filters.get("cost_center"):
-		cc = get_cost_centers_with_children(filters.get("cost_center"))
-		conditions.append(f"cost_center IN ({', '.join(['?'] * len(cc))})")
-		params.extend(cc)
 
 	if filters.get("project"):
 		proj = filters.project if isinstance(filters.project, list) else [filters.project]

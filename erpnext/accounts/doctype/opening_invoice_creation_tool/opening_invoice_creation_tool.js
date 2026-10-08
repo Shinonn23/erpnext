@@ -81,10 +81,8 @@ frappe.ui.form.on("Opening Invoice Creation Tool", {
 	},
 
 	setup_company_filters: function (frm) {
-		frm.events.apply_company_query_filter(frm, "cost_center", "invoices", { is_group: 0 });
 		frm.events.apply_company_query_filter(frm, "project", "invoices");
 		frm.events.apply_company_query_filter(frm, "project");
-		frm.events.apply_company_query_filter(frm, "cost_center", undefined, { is_group: 0 });
 		frm.events.apply_company_query_filter(frm, "temporary_opening_account", "invoices", {
 			account_type: "Temporary",
 			is_group: 0,
@@ -161,10 +159,6 @@ frappe.ui.form.on("Opening Invoice Creation Tool", {
 				row.temporary_opening_account = frm.doc.__onload.temporary_opening_account;
 			}
 
-			if (!row.cost_center) {
-				row.cost_center = frm.doc.cost_center;
-			}
-
 			row.party_type = frm.doc.invoice_type == "Sales" ? "Customer" : "Supplier";
 		});
 	},
@@ -227,7 +221,7 @@ frappe.ui.form.on("Opening Invoice Creation Tool Item", {
 		const row = frappe.get_doc(cdt, cdn);
 		const field_copy = [];
 
-		["project", "cost_center"].forEach((fieldname) => {
+		["project"].forEach((fieldname) => {
 			if (frm.doc[fieldname]) {
 				frappe.model.set_value(cdt, cdn, fieldname, frm.doc[fieldname]);
 			} else {

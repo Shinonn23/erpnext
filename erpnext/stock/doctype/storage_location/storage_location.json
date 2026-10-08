@@ -1,0 +1,152 @@
+{
+ "doctype": "DocType",
+ "name": "Storage Location",
+ "module": "Stock",
+ "autoname": "format:{warehouse} / {location_code}",
+ "engine": "InnoDB",
+ "field_order": [
+  "location_details_section",
+  "location_code",
+  "warehouse_column",
+  "warehouse",
+  "disabled",
+  "physical_position_section",
+  "zone",
+  "rack_column",
+  "rack",
+  "shelf_column",
+  "shelf",
+  "additional_details_section",
+  "description"
+ ],
+ "fields": [
+  {
+   "fieldname": "location_details_section",
+   "fieldtype": "Section Break",
+   "label": "Location Details"
+  },
+  {
+   "fieldname": "location_code",
+   "fieldtype": "Data",
+   "label": "Location Code",
+   "reqd": 1,
+   "in_list_view": 1,
+   "description": "Unique within the Warehouse. Example: A-01-02."
+  },
+  {
+   "fieldname": "warehouse_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "warehouse",
+   "fieldtype": "Link",
+   "label": "Warehouse",
+   "options": "Warehouse",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "Select the Warehouse that contains this storage location."
+  },
+  {
+   "fieldname": "disabled",
+   "fieldtype": "Check",
+   "label": "Disabled",
+   "default": "0",
+   "in_standard_filter": 1,
+   "description": "Prevent this location from being selected for new stock transactions."
+  },
+  {
+   "fieldname": "physical_position_section",
+   "fieldtype": "Section Break",
+   "label": "Physical Position"
+  },
+  {
+   "fieldname": "zone",
+   "fieldtype": "Data",
+   "label": "Zone",
+   "description": "Area or zone, for example A."
+  },
+  {
+   "fieldname": "rack_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "rack",
+   "fieldtype": "Data",
+   "label": "Rack",
+   "description": "Rack or aisle, for example R-01."
+  },
+  {
+   "fieldname": "shelf_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "shelf",
+   "fieldtype": "Data",
+   "label": "Shelf",
+   "description": "Shelf or level, for example L-02."
+  },
+  {
+   "fieldname": "additional_details_section",
+   "fieldtype": "Section Break",
+   "label": "Additional Details"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1,
+   "share": 1
+  },
+  {
+   "role": "Stock Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1,
+   "share": 1
+  },
+  {
+   "role": "Stock User",
+   "read": 1,
+   "report": 1
+  },
+  {
+   "role": "Purchase User",
+   "read": 1,
+   "report": 1
+  },
+  {
+   "role": "Sales User",
+   "read": 1,
+   "report": 1
+  },
+  {
+   "role": "Accounts User",
+   "read": 1,
+   "report": 1
+  }
+ ],
+ "track_changes": 1,
+ "allow_import": 1,
+ "search_fields": "location_code,warehouse,zone,rack,shelf",
+ "sort_field": "name",
+ "sort_order": "ASC",
+ "actions": [],
+ "links": [],
+ "states": [],
+ "modified": "2026-10-05 02:39:15.898779",
+ "modified_by": "Administrator"
+}

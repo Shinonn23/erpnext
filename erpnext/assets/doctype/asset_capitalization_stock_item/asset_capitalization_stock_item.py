@@ -17,7 +17,6 @@ class AssetCapitalizationStockItem(Document):
 		actual_qty: DF.Float
 		amount: DF.Currency
 		batch_no: DF.Link | None
-		cost_center: DF.Link | None
 		item_code: DF.Link
 		item_name: DF.Data | None
 		parent: DF.Data

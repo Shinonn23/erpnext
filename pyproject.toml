@@ -86,7 +86,6 @@ quote-style = "double"
 indent-style = "tab"
 docstring-code-format = true
 
-
 [project.urls]
 Homepage = "https://frappe.io/erpnext"
 Repository = "https://github.com/frappe/erpnext.git"

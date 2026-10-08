@@ -22,6 +22,7 @@ class CustomerGroup(NestedSet):
 		accounts: DF.Table[PartyAccount]
 		credit_limits: DF.Table[CustomerCreditLimit]
 		customer_group_name: DF.Data
+		naming_series: DF.Data | None
 		default_price_list: DF.Link | None
 		is_group: DF.Check
 		lft: DF.Int

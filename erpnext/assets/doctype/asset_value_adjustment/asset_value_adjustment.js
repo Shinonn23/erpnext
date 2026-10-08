@@ -5,14 +5,6 @@ frappe.provide("erpnext.accounts.dimensions");
 
 frappe.ui.form.on("Asset Value Adjustment", {
 	setup: function (frm) {
-		frm.set_query("cost_center", function () {
-			return {
-				filters: {
-					company: frm.doc.company,
-					is_group: 0,
-				},
-			};
-		});
 		frm.set_query("asset", function () {
 			return {
 				filters: {

@@ -73,16 +73,6 @@ frappe.ui.form.on("Process Statement Of Accounts", {
 				},
 			};
 		});
-		frm.set_query("cost_center", function () {
-			if (!frm.doc.company) {
-				frappe.throw(__("Please set Company"));
-			}
-			return {
-				filters: {
-					company: frm.doc.company,
-				},
-			};
-		});
 		frm.set_query("project", function () {
 			if (!frm.doc.company) {
 				frappe.throw(__("Please set Company"));
@@ -110,7 +100,6 @@ frappe.ui.form.on("Process Statement Of Accounts", {
 	},
 	company: function (frm) {
 		frm.set_value("account", "");
-		frm.set_value("cost_center", "");
 		frm.set_value("project", "");
 		erpnext.utils.set_letter_head(frm);
 	},

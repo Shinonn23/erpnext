@@ -12,7 +12,6 @@ from frappe.query_builder.custom import ConstantColumn
 from frappe.query_builder.functions import Sum
 from frappe.utils import cint, create_batch, flt, getdate
 
-from erpnext import get_default_cost_center
 from erpnext.accounts.doctype.bank_transaction.bank_transaction import get_total_allocated_amount
 from erpnext.accounts.party import get_party_account
 from erpnext.accounts.report.bank_reconciliation_statement.bank_reconciliation_statement import (
@@ -204,7 +203,6 @@ def create_journal_entry_bts(
 		"debit_in_account_currency": bank_transaction.withdrawal,
 		"party_type": party_type,
 		"party": party,
-		"cost_center": get_default_cost_center(company),
 	}
 
 	company_account_dict = {
@@ -213,7 +211,6 @@ def create_journal_entry_bts(
 		"bank_account": bank_transaction.bank_account,
 		"credit_in_account_currency": bank_transaction.withdrawal,
 		"debit_in_account_currency": bank_transaction.deposit,
-		"cost_center": get_default_cost_center(company),
 	}
 
 	# convert transaction amount to company currency
@@ -321,7 +318,6 @@ def create_payment_entry_bts(
 	posting_date: str | date | None = None,
 	mode_of_payment: str | None = None,
 	project: str | None = None,
-	cost_center: str | None = None,
 	allow_edit: bool | int | None = None,
 	company_bank_account: str | None = None,
 ):
@@ -363,7 +359,6 @@ def create_payment_entry_bts(
 	pe.received_amount = amount_in_party_currency if payment_type == "Pay" else amt_in_bank_acc_currency
 	pe.mode_of_payment = mode_of_payment
 	pe.project = project
-	pe.cost_center = cost_center
 
 	if company_bank_account:
 		pe.bank_account = company_bank_account
@@ -700,7 +695,6 @@ def create_bank_entry_and_reconcile(
 	bank_account = frappe.get_cached_value("Bank Account", bank_transaction.bank_account, "account")
 	company = frappe.get_cached_value("Account", bank_account, "company")
 
-	default_cost_center = get_default_cost_center(company)
 
 	bank_entry = frappe.get_doc(
 		{
@@ -718,16 +712,6 @@ def create_bank_entry_and_reconcile(
 		dimensions = {}
 
 	for entry in entries:
-		# Check if this account is a Income or Expense Account
-		# If it is, and no cost center is added, select the company default cost center
-		cost_center = entry.get("cost_center")
-
-		if not cost_center:
-			report_type = frappe.get_cached_value("Account", entry["account"], "report_type")
-			if report_type == "Profit and Loss":
-				# Cost center is required
-				cost_center = default_cost_center
-
 		bank_entry.append(
 			"accounts",
 			{
@@ -741,7 +725,6 @@ def create_bank_entry_and_reconcile(
 				"party": entry.get("party"),
 				"user_remark": entry.get("user_remark"),
 				**entry,
-				"cost_center": cost_center,
 			},
 		)
 

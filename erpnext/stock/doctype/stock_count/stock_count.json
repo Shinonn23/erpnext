@@ -1,0 +1,213 @@
+{
+ "actions": [],
+ "autoname": "naming_series:",
+ "creation": "2026-10-05 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "company",
+  "count_type",
+  "column_break_1",
+  "warehouse",
+  "storage_location",
+  "dimensions_section",
+  "dimensions",
+  "count_setup_section",
+  "item_count",
+  "quarantine_warehouse",
+  "quarantine_storage_location",
+  "snapshot_datetime",
+  "status",
+  "scan_barcode",
+  "items_section",
+  "items",
+  "references_section",
+  "stock_entry",
+  "stock_reconciliation"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "STOCK-COUNT-.YYYY.-",
+   "reqd": 1,
+   "set_only_once": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1,
+   "remember_last_selected_value": 1
+  },
+  {
+   "fieldname": "count_type",
+   "fieldtype": "Select",
+   "label": "Count Type",
+   "options": "Monthly\nAnnual",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "warehouse",
+   "fieldtype": "Link",
+   "label": "Warehouse",
+   "options": "Warehouse",
+   "reqd": 1
+  },
+  {
+   "fieldname": "storage_location",
+   "fieldtype": "Link",
+   "label": "Storage Location",
+   "options": "Storage Location",
+   "description": "Optionally limit the count to one storage location within the selected Warehouse."
+  },
+  {
+   "fieldname": "dimensions_section",
+   "fieldtype": "Section Break",
+   "label": "Inventory Dimension Filters",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "dimensions",
+   "fieldtype": "Table",
+   "label": "Inventory Dimensions",
+   "options": "Stock Count Dimension"
+  },
+  {
+   "fieldname": "count_setup_section",
+   "fieldtype": "Section Break",
+   "label": "Monthly Count Setup",
+   "depends_on": "eval:doc.count_type == 'Monthly'"
+  },
+  {
+   "depends_on": "eval:doc.count_type == 'Monthly'",
+   "fieldname": "item_count",
+   "fieldtype": "Int",
+   "label": "Number of Item Codes to Sample",
+   "default": "10",
+   "mandatory_depends_on": "eval:doc.count_type == 'Monthly'"
+  },
+  {
+   "depends_on": "eval:doc.count_type == 'Monthly'",
+   "fieldname": "quarantine_warehouse",
+   "fieldtype": "Link",
+   "label": "Quarantine Warehouse",
+   "options": "Warehouse",
+   "mandatory_depends_on": "eval:doc.count_type == 'Monthly'"
+  },
+  {
+   "depends_on": "eval:doc.count_type == 'Monthly'",
+   "fieldname": "quarantine_storage_location",
+   "fieldtype": "Link",
+   "label": "Quarantine Storage Location",
+   "options": "Storage Location",
+   "description": "Optional destination location in the Quarantine Warehouse."
+  },
+  {
+   "fieldname": "snapshot_datetime",
+   "fieldtype": "Datetime",
+   "label": "Snapshot Datetime",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Draft\nIn Progress\nCompleted",
+   "default": "Draft",
+   "read_only": 1,
+   "allow_on_submit": 1,
+   "no_copy": 1,
+   "in_list_view": 1
+  },
+  {
+   "depends_on": "eval:doc.status == 'In Progress' && doc.docstatus == 0",
+   "fieldname": "scan_barcode",
+   "fieldtype": "Data",
+   "label": "Scan Item, Batch, or Serial No",
+   "options": "Barcode"
+  },
+  {
+   "fieldname": "items_section",
+   "fieldtype": "Section Break",
+   "label": "Count Items"
+  },
+  {
+   "allow_bulk_edit": 1,
+   "cannot_add_rows": 1,
+   "cannot_delete_rows": 1,
+   "fieldname": "items",
+   "fieldtype": "Table",
+   "label": "Items",
+   "options": "Stock Count Item",
+   "no_copy": 1
+  },
+  {
+   "fieldname": "references_section",
+   "fieldtype": "Section Break",
+   "label": "Generated Documents"
+  },
+  {
+   "fieldname": "stock_entry",
+   "fieldtype": "Link",
+   "label": "Quarantine Stock Entry",
+   "options": "Stock Entry",
+   "read_only": 1,
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "stock_reconciliation",
+   "fieldtype": "Link",
+   "label": "Stock Reconciliation",
+   "options": "Stock Reconciliation",
+   "read_only": 1,
+   "allow_on_submit": 1
+  }
+ ],
+ "is_submittable": 1,
+ "grid_page_length": 50,
+ "links": [],
+ "modified": "2026-10-05 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Stock",
+ "name": "Stock Count",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "read": 1,
+   "write": 1,
+   "role": "Stock User"
+  },
+  {
+   "amend": 1,
+   "cancel": 1,
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Stock Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "Accounts Manager"
+  }
+ ],
+ "row_format": "Dynamic",
+ "show_name_in_global_search": 1,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

@@ -1023,7 +1023,6 @@ class TransactionDeletionRecord(Document):
 def get_doctypes_to_be_ignored():
 	doctypes_to_be_ignored = [
 		"Account",
-		"Cost Center",
 		"Warehouse",
 		"Budget",
 		"Party Account",

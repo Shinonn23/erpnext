@@ -23,7 +23,6 @@ class AdvanceTaxesandCharges(Document):
 		charge_type: DF.Literal[
 			"", "Actual", "On Paid Amount", "On Previous Row Amount", "On Previous Row Total"
 		]
-		cost_center: DF.Link | None
 		currency: DF.Link | None
 		description: DF.SmallText
 		included_in_paid_amount: DF.Check

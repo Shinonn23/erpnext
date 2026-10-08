@@ -69,6 +69,50 @@
   {
    "child": 0,
    "collapsible": 1,
+   "icon": "receipt",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Thailand Sales & Tax",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Section Break"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Sales Billing",
+   "link_to": "Sales Billing",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Sales Tax Invoices",
+   "link_to": "Sales Tax Invoice",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Sales Tax Report",
+   "link_to": "Sales Tax Report",
+   "link_type": "Report",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
    "icon": "computer",
    "indent": 1,
    "keep_closed": 1,
@@ -698,7 +742,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-04-28 14:38:37.179705",
+ "modified": "2026-10-05 14:06:47.944655",
  "modified_by": "Administrator",
  "module": "Selling",
  "module_onboarding": "Selling Onboarding",

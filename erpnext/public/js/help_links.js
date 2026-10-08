@@ -580,10 +580,6 @@ frappe.help.help_links["List/Asset Category"] = [
 	},
 ];
 
-frappe.help.help_links["Tree/Cost Center"] = [
-	{ label: "Budgeting", url: docsUrl + "user/manual/en/budgeting" },
-];
-
 //Stock
 
 frappe.help.help_links["List/Item"] = [

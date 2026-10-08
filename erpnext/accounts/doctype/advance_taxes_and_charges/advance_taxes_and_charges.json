@@ -16,7 +16,6 @@
   "set_by_item_tax_template",
   "is_tax_withholding_account",
   "accounting_dimensions_section",
-  "cost_center",
   "dimension_col_break",
   "project",
   "section_break_8",
@@ -82,15 +81,6 @@
    "fieldname": "accounting_dimensions_section",
    "fieldtype": "Section Break",
    "label": "Accounting Dimensions"
-  },
-  {
-   "default": ":Company",
-   "fieldname": "cost_center",
-   "fieldtype": "Link",
-   "label": "Cost Center",
-   "oldfieldname": "cost_center_other_charges",
-   "oldfieldtype": "Link",
-   "options": "Cost Center"
   },
   {
    "fieldname": "dimension_col_break",

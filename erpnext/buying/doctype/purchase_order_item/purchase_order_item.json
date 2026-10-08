@@ -103,7 +103,6 @@
   "accounting_dimensions_section",
   "project",
   "dimension_col_break",
-  "cost_center",
   "more_info_section_break",
   "is_fixed_asset",
   "item_tax_rate",
@@ -681,13 +680,6 @@
    "fieldtype": "Link",
    "label": "Expense Account",
    "options": "Account",
-   "print_hide": 1
-  },
-  {
-   "fieldname": "cost_center",
-   "fieldtype": "Link",
-   "label": "Cost Center",
-   "options": "Cost Center",
    "print_hide": 1
   },
   {

@@ -1,11 +1,15 @@
 # Copyright (c) 2020, Frappe Technologies Pvt. Ltd. and Contributors
 # See license.txt
 
+import unittest
 from datetime import date, timedelta
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import frappe
 
 from erpnext.stock.doctype.delivery_note.delivery_note import make_shipment
+from erpnext.stock.doctype.shipment.shipment import Shipment
 from erpnext.tests.utils import ERPNextTestSuite
 
 
@@ -32,6 +36,52 @@ class TestShipment(ERPNextTestSuite):
 		self.assertEqual(shipment.get_total_weight(), 35)
 
 
+class TestAssetTransferShipmentSnapshots(unittest.TestCase):
+	def make_shipment(self, locations, material_request="MAT-MR-TRANSFER"):
+		request = frappe._dict(name=material_request, material_request_type="Asset Transfer")
+		movements = [
+			frappe._dict(
+				reference_doctype="Material Request",
+				reference_name=material_request,
+				purpose="Transfer",
+				assets=[
+					frappe._dict(shipment_destination_location=location, target_location="In Transit")
+				],
+			)
+			for location in locations
+		]
+		shipment = SimpleNamespace(
+			material_request=None,
+			shipment_documents=[
+				frappe._dict(reference_doctype="Asset Movement", reference_name=f"AM-{index}")
+				for index in range(len(movements))
+			],
+		)
+		shipment.get = lambda fieldname: getattr(shipment, fieldname)
+		documents = {
+			("Asset Movement", f"AM-{index}"): movement for index, movement in enumerate(movements)
+		}
+		documents[("Material Request", material_request)] = request
+		return shipment, request, documents
+
+	def test_asset_transfer_shipment_uses_the_linked_material_request(self):
+		shipment, request, documents = self.make_shipment(["Target Location"])
+
+		with patch("frappe.get_doc", side_effect=lambda doctype, name: documents[(doctype, name)]):
+			Shipment.sync_material_request_snapshots(shipment)
+
+		self.assertEqual(shipment.material_request, request.name)
+
+	def test_asset_transfer_shipment_rejects_multiple_destinations(self):
+		shipment, _, documents = self.make_shipment(["Location A", "Location B"])
+		with (
+			patch("frappe.get_doc", side_effect=lambda doctype, name: documents[(doctype, name)]),
+			patch("frappe.throw", side_effect=ValueError),
+		):
+			with self.assertRaises(ValueError):
+				Shipment.sync_material_request_snapshots(shipment)
+
+
 def create_test_delivery_note():
 	company = get_shipment_company()
 	customer = get_shipment_customer()
@@ -54,7 +104,6 @@ def create_test_delivery_note():
 			"uom": "Nos",
 			"warehouse": "Stores - _TC",
 			"rate": item.standard_rate,
-			"cost_center": "Main - _TC",
 		},
 	)
 	delivery_note.insert()
@@ -197,7 +246,6 @@ def create_material_receipt(item, company):
 			"qty": 5,
 			"uom": "Nos",
 			"basic_rate": item.standard_rate,
-			"cost_center": "Main - _TC",
 		},
 	)
 	stock.insert()

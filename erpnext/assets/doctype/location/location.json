@@ -13,6 +13,7 @@
   "parent_location",
   "cb_details",
   "is_container",
+  "is_in_transit_location",
   "is_group",
   "sb_location_details",
   "latitude",
@@ -55,6 +56,13 @@
    "fieldname": "is_container",
    "fieldtype": "Check",
    "label": "Is Container"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_in_transit_location",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Is In-Transit Location"
   },
   {
    "bold": 1,
@@ -143,7 +151,7 @@
  ],
  "is_tree": 1,
  "links": [],
- "modified": "2026-09-16 11:42:07.000000",
+ "modified": "2026-10-05 04:10:00",
  "modified_by": "Administrator",
  "module": "Assets",
  "name": "Location",

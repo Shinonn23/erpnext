@@ -3,6 +3,18 @@
 
 frappe.provide("erpnext.stock");
 
+function make_shipment_from_stock_asset_transaction(frm) {
+	frappe.call({
+		method: "erpnext.stock.doctype.shipment.shipment.make_shipment_from_document",
+		args: { source_doctype: frm.doctype, source_name: frm.doc.name },
+		callback: (r) => {
+			if (!r.message) return;
+			const doclist = frappe.model.sync(r.message);
+			frappe.set_route("Form", doclist[0].doctype, doclist[0].name);
+		},
+	});
+}
+
 cur_frm.cscript.tax_table = "Purchase Taxes and Charges";
 
 erpnext.accounts.taxes.setup_tax_filters("Purchase Taxes and Charges");
@@ -36,6 +48,13 @@ frappe.ui.form.on("Purchase Receipt", {
 	},
 
 	refresh: function (frm) {
+		if (frm.doc.docstatus === 1 && !frm.doc.is_return && frappe.model.can_create("Shipment")) {
+			frm.add_custom_button(
+				__("Shipment"),
+				() => make_shipment_from_stock_asset_transaction(frm),
+				__("Create")
+			);
+		}
 		if (frm.doc.company) {
 			frm.trigger("toggle_display_account_head");
 		}
@@ -153,7 +172,6 @@ frappe.ui.form.on("Purchase Receipt", {
 
 	toggle_display_account_head: function (frm) {
 		var enabled = erpnext.is_perpetual_inventory_enabled(frm.doc.company);
-		frm.fields_dict["items"].grid.set_column_disp(["cost_center"], enabled);
 	},
 });
 
@@ -368,7 +386,7 @@ erpnext.stock.PurchaseReceiptController = class PurchaseReceiptController extend
 
 	items_add(doc, cdt, cdn) {
 		const row = frappe.get_doc(cdt, cdn);
-		const field_copy = ["expense_account", "cost_center"];
+		const field_copy = ["expense_account"];
 		if (doc.project) {
 			frappe.model.set_value(cdt, cdn, "project", doc.project);
 		} else {

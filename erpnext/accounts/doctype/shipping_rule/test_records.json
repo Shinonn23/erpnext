@@ -3,7 +3,6 @@
   "account": "_Test Account Shipping Charges - _TC",
   "calculate_based_on": "Net Total",
   "company": "_Test Company",
-  "cost_center": "_Test Cost Center - _TC",
   "doctype": "Shipping Rule",
   "label": "_Test Shipping Rule",
   "name": "_Test Shipping Rule",
@@ -31,7 +30,9 @@
    }
   ],
   "countries": [
-	  {"country": "India"}
+   {
+    "country": "India"
+   }
   ],
   "worldwide_shipping": 1
  },
@@ -39,7 +40,6 @@
   "account": "_Test Account Shipping Charges - _TC",
   "calculate_based_on": "Net Total",
   "company": "_Test Company",
-  "cost_center": "_Test Cost Center - _TC",
   "doctype": "Shipping Rule",
   "label": "_Test Shipping Rule - India",
   "name": "_Test Shipping Rule - India",
@@ -66,14 +66,15 @@
    }
   ],
   "countries": [
-	  {"country": "India"}
+   {
+    "country": "India"
+   }
   ]
  },
  {
   "account": "_Test Account Shipping Charges - _TC",
   "calculate_based_on": "Net Total",
   "company": "_Test Company",
-  "cost_center": "_Test Cost Center - _TC",
   "doctype": "Shipping Rule",
   "label": "_Test Shipping Rule - Rest of the World",
   "name": "_Test Shipping Rule - Rest of the World",
@@ -102,7 +103,9 @@
   ],
   "worldwide_shipping": 1,
   "countries": [
-	  {"country": "Germany"}
+   {
+    "country": "Germany"
+   }
   ]
  }
 ]

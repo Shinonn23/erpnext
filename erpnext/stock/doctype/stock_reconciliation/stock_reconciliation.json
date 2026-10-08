@@ -16,6 +16,7 @@
   "set_posting_time",
   "section_break_8",
   "set_warehouse",
+  "stock_count",
   "section_break_22",
   "scan_barcode",
   "last_scanned_warehouse",
@@ -29,7 +30,6 @@
   "difference_amount",
   "amended_from",
   "accounting_dimensions_section",
-  "cost_center",
   "dimension_col_break"
  ],
  "fields": [
@@ -112,13 +112,6 @@
    "options": "Account"
   },
   {
-   "fieldname": "cost_center",
-   "fieldtype": "Link",
-   "in_standard_filter": 1,
-   "label": "Cost Center",
-   "options": "Cost Center"
-  },
-  {
    "fieldname": "column_break_13",
    "fieldtype": "Column Break"
   },
@@ -172,6 +165,14 @@
    "options": "Warehouse"
   },
   {
+   "fieldname": "stock_count",
+   "fieldtype": "Link",
+   "label": "Stock Count",
+   "options": "Stock Count",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
    "depends_on": "eval:!doc.docstatus",
    "fieldname": "section_break_22",
    "fieldtype": "Section Break"
@@ -210,6 +211,13 @@
    "share": 1,
    "submit": 1,
    "write": 1
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "write": 1,
+   "submit": 1,
+   "role": "Accounts Manager"
   }
  ],
  "row_format": "Dynamic",

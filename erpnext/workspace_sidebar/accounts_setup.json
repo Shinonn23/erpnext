@@ -33,17 +33,6 @@
    "collapsible": 1,
    "indent": 0,
    "keep_closed": 0,
-   "label": "Chart of Cost Centers",
-   "link_to": "Cost Center",
-   "link_type": "DocType",
-   "show_arrow": 0,
-   "type": "Link"
-  },
-  {
-   "child": 1,
-   "collapsible": 1,
-   "indent": 0,
-   "keep_closed": 0,
    "label": "Account Category",
    "link_to": "Account Category",
    "link_type": "DocType",
@@ -275,20 +264,9 @@
    "link_type": "DocType",
    "show_arrow": 0,
    "type": "Link"
-  },
-  {
-   "child": 1,
-   "collapsible": 1,
-   "indent": 0,
-   "keep_closed": 0,
-   "label": "Repost Accounting Ledger Settings",
-   "link_to": "Repost Accounting Ledger Settings",
-   "link_type": "DocType",
-   "show_arrow": 0,
-   "type": "Link"
   }
  ],
- "modified": "2026-02-23 22:20:51.043478",
+ "modified": "2026-10-05 14:06:48.107746",
  "modified_by": "Administrator",
  "module": "Accounts",
  "module_onboarding": "Accounting Onboarding",

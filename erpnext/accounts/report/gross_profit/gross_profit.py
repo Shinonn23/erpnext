@@ -14,7 +14,6 @@ from erpnext.accounts.doctype.accounting_dimension.accounting_dimension import (
 	get_accounting_dimensions,
 	get_dimension_with_children,
 )
-from erpnext.accounts.report.financial_statements import get_cost_centers_with_children
 from erpnext.stock.report.stock_ledger.stock_ledger import get_item_group_condition
 from erpnext.stock.utils import _get_incoming_rate
 
@@ -128,13 +127,6 @@ def execute(filters=None):
 				"gross_profit_percent",
 			],
 			"project": ["project", "base_amount", "buying_amount", "gross_profit", "gross_profit_percent"],
-			"cost_center": [
-				"cost_center",
-				"base_amount",
-				"buying_amount",
-				"gross_profit",
-				"gross_profit_percent",
-			],
 			"territory": [
 				"territory",
 				"base_amount",
@@ -393,13 +385,6 @@ def get_columns(group_wise_columns, filters):
 				"fieldname": "project",
 				"fieldtype": "Link",
 				"options": "Project",
-				"width": 140,
-			},
-			"cost_center": {
-				"label": _("Cost Center"),
-				"fieldname": "cost_center",
-				"fieldtype": "Link",
-				"options": "Cost Center",
 				"width": 140,
 			},
 			"sales_person": {
@@ -864,7 +849,7 @@ class GrossProfitGenerator:
 			if buying_amount is not None:
 				return buying_amount
 
-		if item_code in self.non_stock_items and (row.project or row.cost_center):
+		if item_code in self.non_stock_items and row.project:
 			# Issue 6089-Get last purchasing rate for non-stock item
 			item_rate = self.get_last_purchase_rate(item_code, row)
 			return flt(row.qty) * item_rate
@@ -999,9 +984,6 @@ class GrossProfitGenerator:
 		if row.project:
 			query = query.where(purchase_invoice_item.project == row.project)
 
-		if row.cost_center:
-			query = query.where(purchase_invoice_item.cost_center == row.cost_center)
-
 		query = query.orderby(purchase_invoice.posting_date, order=frappe.qb.desc).limit(1)
 		last_purchase_rate = query.run()
 
@@ -1080,7 +1062,6 @@ class GrossProfitGenerator:
 			SalesInvoiceItem.base_net_amount,
 			SalesInvoiceItem.name.as_("item_row"),
 			SalesInvoice.is_return,
-			SalesInvoiceItem.cost_center,
 			SalesInvoiceItem.serial_and_batch_bundle,
 			SalesInvoiceItem.delivered_by_supplier,
 		)
@@ -1146,11 +1127,6 @@ class GrossProfitGenerator:
 
 		if self.filters.item_code:
 			query = query.where(SalesInvoiceItem.item_code == self.filters.item_code)
-
-		if self.filters.cost_center:
-			self.filters.cost_center = frappe.parse_json(self.filters.get("cost_center"))
-			self.filters.cost_center = get_cost_centers_with_children(self.filters.cost_center)
-			query = query.where(SalesInvoiceItem.cost_center.isin(self.filters.cost_center))
 
 		if self.filters.project:
 			self.filters.project = frappe.parse_json(self.filters.get("project"))
@@ -1259,7 +1235,6 @@ class GrossProfitGenerator:
 				"qty": None,
 				"item_row": None,
 				"is_return": row.is_return,
-				"cost_center": row.cost_center,
 				"base_net_amount": row.invoice_base_net_total,
 			}
 		)
@@ -1291,7 +1266,6 @@ class GrossProfitGenerator:
 				"qty": item.total_qty * -1,
 				"item_row": row.item_row,
 				"is_return": row.is_return,
-				"cost_center": row.cost_center,
 				"invoice": row.parent,
 				"serial_and_batch_bundle": row.serial_and_batch_bundle,
 			}

@@ -125,6 +125,20 @@ frappe.ui.form.on("Customer", {
 		}
 	},
 
+	customer_group(frm) {
+		if (
+			frm.doc.__islocal &&
+			frm.doc.customer_group &&
+			frappe.defaults.get_default("cust_master_name") === "Naming Series"
+		) {
+			frappe.db.get_value("Customer Group", frm.doc.customer_group, "naming_series").then(({ message }) => {
+				const series = message?.naming_series || "CUST-.YYYY.-";
+				frm.set_df_property("naming_series", "options", `CUST-.YYYY.-\n${series}`);
+				frm.set_value("naming_series", series);
+			});
+		}
+	},
+
 	is_internal_customer: function (frm) {
 		if (frm.doc.is_internal_customer == 1) {
 			frm.toggle_reqd("represents_company", true);
@@ -147,12 +161,6 @@ frappe.ui.form.on("Customer", {
 	},
 
 	refresh: function (frm) {
-		if (frappe.defaults.get_default("cust_master_name") != "Naming Series") {
-			frm.toggle_display("naming_series", false);
-		} else {
-			erpnext.toggle_naming_series();
-		}
-
 		if (!frm.doc.__islocal) {
 			frappe.contacts.render_address_and_contact(frm);
 

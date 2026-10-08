@@ -62,7 +62,8 @@ class Supplier(TransactionBase):
 		is_transporter: DF.Check
 		language: DF.Link | None
 		mobile_no: DF.ReadOnly | None
-		naming_series: DF.Literal["SUP-.YYYY.-"]
+		naming_series: DF.Data
+		old_supplier_code: DF.Data | None
 		on_hold: DF.Check
 		payment_terms: DF.Link | None
 		portal_users: DF.Table[PortalUser]
@@ -106,6 +107,11 @@ class Supplier(TransactionBase):
 		if supp_master_name == "Supplier Name":
 			self.name = self.supplier_name
 		elif supp_master_name == "Naming Series":
+			if self.supplier_group:
+				self.naming_series = (
+					frappe.db.get_value("Supplier Group", self.supplier_group, "naming_series")
+					or "SUP-.YYYY.-"
+				)
 			set_name_by_naming_series(self)
 		else:
 			set_name_from_naming_options(frappe.get_meta(self.doctype).autoname, self)

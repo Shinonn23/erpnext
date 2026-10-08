@@ -408,7 +408,6 @@ class TestLandedCostVoucher(ERPNextTestSuite):
 			company="_Test Company with perpetual inventory",
 			supplier_warehouse="Work In Progress - TCP1",
 			warehouse="Stores - TCP1",
-			cost_center="Main - TCP1",
 			expense_account="_Test Account Cost for Goods Sold - TCP1",
 		)
 
@@ -570,7 +569,6 @@ class TestLandedCostVoucher(ERPNextTestSuite):
 			serial_no=[serial_no],
 			qty=1,
 			rate=500,
-			cost_center="Main - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
 		)
 
@@ -598,14 +596,12 @@ class TestLandedCostVoucher(ERPNextTestSuite):
 			supplier_warehouse="Work In Progress - TCP1",
 			do_not_save=True,
 		)
-		pr.items[0].cost_center = "Main - TCP1"
 		for _x in range(2):
 			pr.append(
 				"items",
 				{
 					"item_code": "_Test Item",
 					"warehouse": "Stores - TCP1",
-					"cost_center": "Main - TCP1",
 					"qty": 5,
 					"rate": 50,
 				},
@@ -630,7 +626,6 @@ class TestLandedCostVoucher(ERPNextTestSuite):
 			{
 				"item_code": "_Test Item",
 				"warehouse": "Stores - TCP1",
-				"cost_center": "Main - TCP1",
 				"qty": 5,
 				"rate": 100,
 			},
@@ -1600,7 +1595,7 @@ class TestLandedCostVoucherAccountingDimensions(ERPNextTestSuite):
 				"is_cancelled": 0,
 				**({"account": account} if account else {}),
 			},
-			fields=["account", "debit", "credit", "cost_center", "project", "branch"],
+			fields=["account", "debit", "credit", "project", "branch"],
 			order_by="credit desc",
 		)
 
@@ -1649,16 +1644,7 @@ class TestLandedCostVoucherAccountingDimensions(ERPNextTestSuite):
 		stock_account = get_inventory_account(self.company, self.warehouse)
 		self.assertFalse(self.get_lcv_gl_entries(pr, stock_account)[0].branch)
 
-	def test_charge_row_cost_center_and_project_override_receipt_item(self):
-		from erpnext.accounts.doctype.cost_center.test_cost_center import create_cost_center
-
-		create_cost_center(
-			cost_center_name="_Test LCV Cost Center",
-			company=self.company,
-			parent_cost_center=f"{self.company} - TCP1",
-		)
-		cost_center = "_Test LCV Cost Center - TCP1"
-
+	def test_charge_row_project_reaches_gl_entry(self):
 		if not frappe.db.exists("Project", {"project_name": "_Test LCV Project"}):
 			frappe.get_doc(
 				{"doctype": "Project", "project_name": "_Test LCV Project", "company": self.company}
@@ -1666,25 +1652,18 @@ class TestLandedCostVoucherAccountingDimensions(ERPNextTestSuite):
 		project = frappe.db.get_value("Project", {"project_name": "_Test LCV Project"})
 
 		pr = make_purchase_receipt(company=self.company, warehouse=self.warehouse)
-		item_cost_center = pr.items[0].cost_center
-
-		self.make_lcv(pr, [{"amount": 100, "cost_center": cost_center, "project": project}])
+		self.make_lcv(pr, [{"amount": 100, "project": project}])
 
 		charge_entries = self.get_lcv_gl_entries(pr, self.expense_account)
 		self.assertEqual(len(charge_entries), 1)
-		self.assertEqual(charge_entries[0].cost_center, cost_center)
 		self.assertEqual(charge_entries[0].project, project)
 
-		stock_account = get_inventory_account(self.company, self.warehouse)
-		self.assertEqual(self.get_lcv_gl_entries(pr, stock_account)[0].cost_center, item_cost_center)
-
-	def test_blank_charge_row_falls_back_to_receipt_item(self):
+	def test_blank_charge_row_has_no_branch_dimension(self):
 		pr = make_purchase_receipt(company=self.company, warehouse=self.warehouse)
 		self.make_lcv(pr, [{"amount": 100}])
 
 		charge_entries = self.get_lcv_gl_entries(pr, self.expense_account)
 		self.assertEqual(len(charge_entries), 1)
-		self.assertEqual(charge_entries[0].cost_center, pr.items[0].cost_center)
 		self.assertFalse(charge_entries[0].branch)
 
 	def test_charge_rows_on_same_account_with_different_dimensions_stay_separate(self):

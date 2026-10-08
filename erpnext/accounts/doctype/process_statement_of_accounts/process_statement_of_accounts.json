@@ -14,7 +14,6 @@
   "company",
   "account",
   "categorize_by",
-  "cost_center",
   "territory",
   "ignore_exchange_rate_revaluation_journals",
   "ignore_cr_dr_notes",
@@ -93,12 +92,6 @@
    "fieldtype": "Date",
    "label": "To Date",
    "mandatory_depends_on": "eval:(!doc.enable_auto_email && doc.report == \"General Ledger\") "
-  },
-  {
-   "fieldname": "cost_center",
-   "fieldtype": "Table MultiSelect",
-   "label": "Cost Center",
-   "options": "PSOA Cost Center"
   },
   {
    "depends_on": "eval: (doc.report == 'General Ledger');",

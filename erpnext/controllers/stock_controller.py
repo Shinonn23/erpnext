@@ -764,14 +764,12 @@ class StockController(AccountsController):
 			for row in self.items:
 				row.use_serial_batch_fields = 1
 
-	def get_gl_entries(
-		self, inventory_account_map=None, default_expense_account=None, default_cost_center=None
-	):
+	def get_gl_entries(self, inventory_account_map=None, default_expense_account=None):
 		if not inventory_account_map:
 			inventory_account_map = self.get_inventory_account_map()
 
 		sle_map = self.get_stock_ledger_details()
-		voucher_details = self.get_voucher_details(default_expense_account, default_cost_center, sle_map)
+		voucher_details = self.get_voucher_details(default_expense_account, sle_map)
 
 		gl_list = []
 		warehouse_with_no_account = []
@@ -804,7 +802,6 @@ class StockController(AccountsController):
 								{
 									"account": _inv_dict["account"],
 									"against": expense_account,
-									"cost_center": item_row.cost_center,
 									"project": sle.get("project") or item_row.project or self.get("project"),
 									"remarks": self.get("remarks") or _("Accounting Entry for Stock"),
 									"debit": flt(sle.stock_value_difference, precision),
@@ -822,7 +819,6 @@ class StockController(AccountsController):
 								{
 									"account": expense_account,
 									"against": _inv_dict["account"],
-									"cost_center": item_row.cost_center,
 									"remarks": self.get("remarks") or _("Accounting Entry for Stock"),
 									"debit": -1 * flt(sle.stock_value_difference, precision),
 									"project": sle.get("project")
@@ -864,7 +860,6 @@ class StockController(AccountsController):
 						{
 							"account": expense_account,
 							"against": warehouse_asset_account,
-							"cost_center": item_row.cost_center,
 							"project": item_row.project or self.get("project"),
 							"remarks": _("Rounding gain/loss Entry for Stock Transfer"),
 							"debit": sle_rounding_diff,
@@ -880,7 +875,6 @@ class StockController(AccountsController):
 						{
 							"account": warehouse_asset_account,
 							"against": expense_account,
-							"cost_center": item_row.cost_center,
 							"remarks": _("Rounding gain/loss Entry for Stock Transfer"),
 							"credit": sle_rounding_diff,
 							"project": item_row.get("project") or self.get("project"),
@@ -950,12 +944,8 @@ class StockController(AccountsController):
 					)
 				)
 
-		cost_center = item_row.get("cost_center") or frappe.get_cached_value(
-			"Company", self.company, "cost_center"
-		)
 		remarks = _("Expenses Added To Stock for Item {0}").format(item_code)
 		common_args = {
-			"cost_center": cost_center,
 			"project": item_row.get("project") or self.get("project"),
 			"remarks": remarks,
 		}
@@ -989,7 +979,7 @@ class StockController(AccountsController):
 
 		return frappe.flags.debit_field_precision
 
-	def get_voucher_details(self, default_expense_account, default_cost_center, sle_map):
+	def get_voucher_details(self, default_expense_account, sle_map):
 		if self.doctype == "Stock Reconciliation":
 			reconciliation_purpose = frappe.db.get_value(self.doctype, self.name, "purpose")
 			is_opening = "Yes" if reconciliation_purpose == "Opening Stock" else "No"
@@ -1000,7 +990,6 @@ class StockController(AccountsController):
 						{
 							"name": voucher_detail_no,
 							"expense_account": default_expense_account,
-							"cost_center": default_cost_center,
 							"is_opening": is_opening,
 						}
 					)
@@ -1009,12 +998,10 @@ class StockController(AccountsController):
 		else:
 			details = self.get("items")
 
-			if default_expense_account or default_cost_center:
+			if default_expense_account:
 				for d in details:
 					if default_expense_account and not d.get("expense_account"):
 						d.expense_account = default_expense_account
-					if default_cost_center and not d.get("cost_center"):
-						d.cost_center = default_cost_center
 
 			return details
 
@@ -1102,12 +1089,6 @@ class StockController(AccountsController):
 				frappe.throw(
 					_("Expense / Difference account ({0}) must be a 'Profit or Loss' account").format(
 						item.get("expense_account")
-					)
-				)
-			if is_expense_account and not item.get("cost_center"):
-				frappe.throw(
-					_("{0} {1}: Cost Center is mandatory for Item {2}").format(
-						_(self.doctype), self.name, item.get("item_code")
 					)
 				)
 
@@ -1224,7 +1205,7 @@ class StockController(AccountsController):
 			lcv_item = frappe.qb.DocType("Landed Cost Item")
 			query = (
 				frappe.qb.from_(lcv_item)
-				.select(Sum(lcv_item.applicable_charges), lcv_item.cost_center)
+				.select(Sum(lcv_item.applicable_charges))
 				.where((lcv_item.docstatus == 1) & (lcv_item.receipt_document == self.name))
 			)
 
@@ -1236,8 +1217,6 @@ class StockController(AccountsController):
 			lc_voucher_data = query.run(as_list=True)
 
 			d.landed_cost_voucher_amount = lc_voucher_data[0][0] if lc_voucher_data else 0.0
-			if not d.cost_center and lc_voucher_data and lc_voucher_data[0][1]:
-				d.db_set("cost_center", lc_voucher_data[0][1])
 
 	def has_landed_cost_amount(self):
 		for row in self.items:
@@ -1991,7 +1970,6 @@ class StockController(AccountsController):
 		self,
 		gl_entries,
 		account,
-		cost_center,
 		debit,
 		credit,
 		remarks,
@@ -2007,7 +1985,6 @@ class StockController(AccountsController):
 	):
 		gl_entry = {
 			"account": account,
-			"cost_center": cost_center,
 			"debit": debit,
 			"credit": credit,
 			"against": against_account,
@@ -2237,7 +2214,6 @@ def get_accounting_ledger_preview(doc, filters):
 		"against",
 		"party_type",
 		"party",
-		"cost_center",
 		"against_voucher_type",
 		"against_voucher",
 	]

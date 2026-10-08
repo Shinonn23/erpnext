@@ -44,7 +44,6 @@ class AssetRepair(AccountsController):
 		company: DF.Link | None
 		completion_date: DF.Datetime | None
 		consumed_items_cost: DF.Currency
-		cost_center: DF.Link | None
 		description: DF.LongText | None
 		downtime: DF.Data | None
 		failure_date: DF.Datetime
@@ -277,7 +276,6 @@ class AssetRepair(AccountsController):
 		)
 
 		accounting_dimensions = {
-			"cost_center": self.cost_center,
 			"project": self.project,
 			**{dimension: self.get(dimension) for dimension in get_accounting_dimensions()},
 		}
@@ -351,7 +349,6 @@ class AssetRepair(AccountsController):
 						"against": fixed_asset_account,
 						"voucher_type": self.doctype,
 						"voucher_no": self.name,
-						"cost_center": self.cost_center,
 						"posting_date": self.completion_date,
 						"company": self.company,
 					},
@@ -368,7 +365,6 @@ class AssetRepair(AccountsController):
 					"against": debit_against_account,
 					"voucher_type": self.doctype,
 					"voucher_no": self.name,
-					"cost_center": self.cost_center,
 					"posting_date": self.completion_date,
 					"against_voucher_type": "Asset",
 					"against_voucher": self.asset,
@@ -407,7 +403,6 @@ class AssetRepair(AccountsController):
 							"against": fixed_asset_account,
 							"voucher_type": self.doctype,
 							"voucher_no": self.name,
-							"cost_center": self.cost_center,
 							"posting_date": self.completion_date,
 							"company": self.company,
 						},
@@ -424,7 +419,6 @@ class AssetRepair(AccountsController):
 							"against": item.expense_account or default_expense_account,
 							"voucher_type": self.doctype,
 							"voucher_no": self.name,
-							"cost_center": self.cost_center,
 							"posting_date": self.completion_date,
 							"against_voucher_type": "Stock Entry",
 							"against_voucher": stock_entry_name,

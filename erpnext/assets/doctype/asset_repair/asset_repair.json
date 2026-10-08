@@ -41,7 +41,6 @@
   "column_break_xebe",
   "total_repair_cost",
   "accounting_dimensions_section",
-  "cost_center",
   "column_break_14",
   "project",
   "connection_tab"
@@ -158,13 +157,6 @@
    "label": "Stock Items",
    "mandatory_depends_on": "stock_consumption",
    "options": "Asset Repair Consumed Item"
-  },
-  {
-   "fetch_from": "company.cost_center",
-   "fieldname": "cost_center",
-   "fieldtype": "Link",
-   "label": "Cost Center",
-   "options": "Cost Center"
   },
   {
    "fieldname": "project",

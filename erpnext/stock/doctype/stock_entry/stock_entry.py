@@ -50,7 +50,6 @@ from erpnext.stock.get_item_details import (
 	get_barcode_data,
 	get_bin_details,
 	get_conversion_factor,
-	get_default_cost_center,
 )
 from erpnext.stock.serial_batch_bundle import (
 	SerialBatchCreation,
@@ -138,11 +137,23 @@ class StockEntry(StockController, SubcontractingInwardController):
 		additional_costs: DF.Table[LandedCostTaxesandCharges]
 		address_display: DF.TextEditor | None
 		amended_from: DF.Link | None
+		requires_shipment: DF.Check
+		shipment: DF.Link | None
+		shipment_destination_warehouse: DF.Link | None
 		apply_putaway_rule: DF.Check
 		asset_repair: DF.Link | None
 		bom_no: DF.Link | None
 		company: DF.Link
-		cost_center: DF.Link | None
+		customer_address: DF.Link | None
+		customer_address_display: DF.TextEditor | None
+		customer_contact: DF.Link | None
+		customer_contact_display: DF.TextEditor | None
+		customer_contact_email: DF.Data | None
+		is_system_generated: DF.Check
+		is_custody_loan_transaction: DF.Check
+		custody_loan: DF.Link | None
+		custody_loan_source_doctype: DF.Link | None
+		custody_loan_source_name: DF.DynamicLink | None
 		credit_note: DF.Link | None
 		delivery_note_no: DF.Link | None
 		fg_completed_qty: DF.Float
@@ -190,6 +201,7 @@ class StockEntry(StockController, SubcontractingInwardController):
 		source_stock_entry: DF.Link | None
 		source_warehouse_address: DF.Link | None
 		stock_entry_type: DF.Link
+		stock_count: DF.Link | None
 		subcontracting_inward_order: DF.Link | None
 		subcontracting_order: DF.Link | None
 		supplier: DF.Link | None
@@ -627,12 +639,14 @@ class StockEntry(StockController, SubcontractingInwardController):
 		self.cancel_stock_reservation_entries_for_inward()
 		self.update_stock_ledger()
 
-		self.ignore_linked_doctypes = (
+		ignore_linked_doctypes = set(self.get("ignore_linked_doctypes") or ())
+		ignore_linked_doctypes.update((
 			"GL Entry",
 			"Stock Ledger Entry",
 			"Repost Item Valuation",
 			"Serial and Batch Bundle",
-		)
+		))
+		self.ignore_linked_doctypes = tuple(ignore_linked_doctypes)
 
 		self.make_gl_entries_on_cancel()
 		self.repost_future_sle_and_gle()
@@ -845,7 +859,6 @@ class StockEntry(StockController, SubcontractingInwardController):
 				"uom",
 				"description",
 				"expense_account",
-				"cost_center",
 				"conversion_factor",
 				"barcode",
 			)
@@ -2472,7 +2485,6 @@ class StockEntry(StockController, SubcontractingInwardController):
 							{
 								"account": account,
 								"against": d.expense_account,
-								"cost_center": d.cost_center,
 								"remarks": self.get("remarks") or _("Accounting Entry for Stock"),
 								"credit_in_account_currency": flt(amount["amount"]),
 								"credit": flt(amount["base_amount"]),
@@ -2486,7 +2498,6 @@ class StockEntry(StockController, SubcontractingInwardController):
 							{
 								"account": d.expense_account,
 								"against": account,
-								"cost_center": d.cost_center,
 								"remarks": self.get("remarks") or _("Accounting Entry for Stock"),
 								"credit": -1
 								* amount[
@@ -2530,7 +2541,6 @@ class StockEntry(StockController, SubcontractingInwardController):
 					{
 						"account": entry.expense_account,
 						"against": _inv_dict["account"],
-						"cost_center": entry.dimensions.cost_center or item.cost_center,
 						"debit": 0.0,
 						"credit": credit_amount,
 						"remarks": _("Accounting Entry for LCV in Stock Entry {0}").format(self.name),
@@ -2550,7 +2560,6 @@ class StockEntry(StockController, SubcontractingInwardController):
 						{
 							"account": item.expense_account,
 							"against": _inv_dict["account"],
-							"cost_center": item.cost_center,
 							"debit": 0.0,
 							"credit": credit_amount * -1,
 							"remarks": _("Accounting Entry for LCV in Stock Entry {0}").format(self.name),
@@ -2752,7 +2761,6 @@ class StockEntry(StockController, SubcontractingInwardController):
 				item.has_serial_no,
 				item.allow_alternative_item,
 				item_default.expense_account,
-				item_default.buying_cost_center,
 			)
 			.where(
 				(item.name == args.get("item_code"))
@@ -2782,9 +2790,6 @@ class StockEntry(StockController, SubcontractingInwardController):
 				"description": item.description,
 				"image": item.image,
 				"item_name": item.item_name,
-				"cost_center": get_default_cost_center(
-					args, item, item_group_defaults, brand_defaults, self.company
-				),
 				"qty": args.get("qty"),
 				"transfer_qty": args.get("qty"),
 				"conversion_factor": 1,
@@ -2812,10 +2817,7 @@ class StockEntry(StockController, SubcontractingInwardController):
 				"Company", self.company, "stock_adjustment_account"
 			)
 
-		for company_field, field in {
-			"stock_adjustment_account": "expense_account",
-			"cost_center": "cost_center",
-		}.items():
+		for company_field, field in {"stock_adjustment_account": "expense_account"}.items():
 			if not ret.get(field):
 				ret[field] = frappe.get_cached_value("Company", self.company, company_field)
 
@@ -3473,7 +3475,6 @@ class StockEntry(StockController, SubcontractingInwardController):
 			"description": item.description,
 			"stock_uom": item.stock_uom,
 			"expense_account": expense_account,
-			"cost_center": item.get("buying_cost_center"),
 			"is_finished_item": 1,
 			"sample_quantity": item.get("sample_quantity"),
 		}
@@ -3793,7 +3794,6 @@ class StockEntry(StockController, SubcontractingInwardController):
 							"description": item.description,
 							"stock_uom": item_account_details.stock_uom,
 							"expense_account": item_account_details.get("expense_account"),
-							"cost_center": item_account_details.get("buying_cost_center"),
 						}
 					}
 				)
@@ -3916,7 +3916,6 @@ class StockEntry(StockController, SubcontractingInwardController):
 			"description": item.description,
 			"stock_uom": item.stock_uom,
 			"expense_account": item.expense_account,
-			"cost_center": item.buying_cost_center,
 			"original_item": item.original_item,
 			"serial_no": "\n".join(row.serial_nos)
 			if row.serial_nos and not row.batches_to_be_consume
@@ -4107,9 +4106,6 @@ class StockEntry(StockController, SubcontractingInwardController):
 			se_child.qty = child_qty if child_qty > 0 else 0
 			se_child.allow_alternative_item = item_row.get("allow_alternative_item", 0)
 			se_child.subcontracted_item = item_row.get("main_item_code")
-			se_child.cost_center = item_row.get("cost_center") or get_default_cost_center(
-				item_row, company=self.company
-			)
 			se_child.is_finished_item = item_row.get("is_finished_item", 0)
 			se_child.po_detail = item_row.get("po_detail")
 			se_child.sco_rm_detail = item_row.get("sco_rm_detail")
@@ -4948,7 +4944,6 @@ def get_stock_entry_data(work_order, stock_entry_doc=None):
 			stock_entry_detail.description,
 			stock_entry_detail.stock_uom,
 			stock_entry_detail.expense_account,
-			stock_entry_detail.cost_center,
 			stock_entry_detail.serial_and_batch_bundle,
 			stock_entry_detail.batch_no,
 			stock_entry_detail.serial_no,

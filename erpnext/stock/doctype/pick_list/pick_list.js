@@ -143,6 +143,19 @@ frappe.ui.form.on("Pick List", {
 						() => frm.events.create_delivery(frm, "Sales Invoice"),
 						__("Create")
 					);
+				} else if (frm.doc.pick_list_type === "Customer Demo - Asset Conversion") {
+					frm.add_custom_button(
+						__("Stock to Asset Conversion"),
+						() => frm.call("make_stock_to_asset_conversion").then((r) => {
+							if (r.message) {
+								frappe.model.with_doctype(r.message.doctype, () => {
+									const doc = frappe.model.sync(r.message)[0];
+									frappe.set_route("Form", doc.doctype, doc.name);
+								});
+							}
+						}),
+						__("Create")
+					);
 				} else {
 					frm.add_custom_button(
 						__("Stock Entry"),

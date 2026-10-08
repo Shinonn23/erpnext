@@ -28,7 +28,6 @@ class OpeningInvoiceCreationTool(Document):
 		)
 
 		company: DF.Link
-		cost_center: DF.Link | None
 		create_missing_party: DF.Check
 		invoice_type: DF.Literal["Sales", "Purchase"]
 		invoices: DF.Table[OpeningInvoiceCreationToolItem]
@@ -190,14 +189,6 @@ class OpeningInvoiceCreationTool(Document):
 
 	def get_invoice_dict(self, row=None):
 		def get_item_dict():
-			cost_center = row.get("cost_center") or frappe.get_cached_value(
-				"Company", self.company, "cost_center"
-			)
-			if not cost_center:
-				frappe.throw(
-					_("Please set the Default Cost Center in {0} company.").format(frappe.bold(self.company))
-				)
-
 			income_expense_account_field = (
 				"income_account" if row.party_type == "Customer" else "expense_account"
 			)
@@ -213,7 +204,6 @@ class OpeningInvoiceCreationTool(Document):
 					"item_name": row.item_name or "Opening Invoice Item",
 					"description": row.item_name or "Opening Invoice Item",
 					income_expense_account_field: row.temporary_opening_account,
-					"cost_center": cost_center,
 					"project": row.get("project") or self.get("project"),
 				}
 			)
@@ -231,7 +221,6 @@ class OpeningInvoiceCreationTool(Document):
 				"is_opening": "Yes",
 				"set_posting_time": 1,
 				"company": self.company,
-				"cost_center": self.cost_center,
 				"due_date": row.due_date,
 				"posting_date": row.posting_date,
 				frappe.scrub(row.party_type): row.party,

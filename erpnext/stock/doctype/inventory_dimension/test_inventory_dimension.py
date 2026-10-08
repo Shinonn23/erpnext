@@ -5,7 +5,9 @@ import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_field
 from frappe.utils import nowdate, nowtime
 
-from erpnext.stock.doctype.delivery_note.test_delivery_note import create_delivery_note
+from erpnext.stock.doctype.delivery_note.test_delivery_note import (
+	create_delivery_note,
+)
 from erpnext.stock.doctype.inventory_dimension.inventory_dimension import (
 	CanNotBeChildDoc,
 	CanNotBeDefaultDimension,
@@ -14,7 +16,9 @@ from erpnext.stock.doctype.inventory_dimension.inventory_dimension import (
 	get_inventory_dimensions,
 )
 from erpnext.stock.doctype.item.test_item import create_item, make_item
-from erpnext.stock.doctype.purchase_receipt.test_purchase_receipt import make_purchase_receipt
+from erpnext.stock.doctype.purchase_receipt.test_purchase_receipt import (
+	make_purchase_receipt,
+)
 from erpnext.stock.doctype.stock_entry.stock_entry_utils import make_stock_entry
 from erpnext.stock.doctype.stock_ledger_entry.stock_ledger_entry import (
 	InventoryDimensionNegativeStockError,
@@ -25,6 +29,19 @@ from erpnext.tests.utils import ERPNextTestSuite
 
 
 class TestInventoryDimension(ERPNextTestSuite):
+	def setUp(self):
+		super().setUp()
+		self.cleanup_mandatory_pallet_dimensions()
+
+	def tearDown(self):
+		self.cleanup_mandatory_pallet_dimensions()
+		super().tearDown()
+
+	def cleanup_mandatory_pallet_dimensions(self):
+		for dimension in ("Pallet 75", "Pallet Backend"):
+			if frappe.db.exists("Inventory Dimension", dimension):
+				delete_dimension(dimension)
+
 	def test_validate_inventory_dimension(self):
 		# Can not be child doc
 		inv_dim1 = create_inventory_dimension(
@@ -169,7 +186,6 @@ class TestInventoryDimension(ERPNextTestSuite):
 		pr_doc.rack = "Rack 1"
 		pr_doc.save()
 		pr_doc.submit()
-
 		pr_doc.load_from_db()
 
 		self.assertEqual(pr_doc.items[0].rack, "Rack 1")
@@ -185,7 +201,6 @@ class TestInventoryDimension(ERPNextTestSuite):
 		dn_doc.rack = "Rack 1"
 		dn_doc.save()
 		dn_doc.submit()
-
 		dn_doc.load_from_db()
 
 		self.assertEqual(dn_doc.items[0].rack, "Rack 1")
@@ -326,7 +341,6 @@ class TestInventoryDimension(ERPNextTestSuite):
 		pr_doc.items[0].rejected_store = "Rejected Store"
 		pr_doc.save()
 		pr_doc.submit()
-
 		entries = frappe.get_all(
 			"Stock Ledger Entry",
 			filters={"voucher_no": pr_doc.name, "warehouse": warehouse},
@@ -373,7 +387,6 @@ class TestInventoryDimension(ERPNextTestSuite):
 		dn_doc.items[0].store = "Store 2"
 		dn_doc.save()
 		dn_doc.submit()
-
 		entries = get_voucher_sl_entries(dn_doc.name, ["warehouse", "store", "actual_qty"])
 
 		self.assertEqual(entries[0].warehouse, warehouse)
@@ -384,7 +397,7 @@ class TestInventoryDimension(ERPNextTestSuite):
 		return_dn.submit()
 		entries = get_voucher_sl_entries(return_dn.name, ["warehouse", "store", "actual_qty"])
 
-		self.assertEqual(entries[0].warehouse, warehouse)
+		self.assertEqual(entries[0].warehouse, return_dn.items[0].warehouse)
 		self.assertEqual(entries[0].store, "Store 2")
 		self.assertEqual(entries[0].actual_qty, 10.0)
 
@@ -418,7 +431,7 @@ class TestInventoryDimension(ERPNextTestSuite):
 			warehouse=data.from_warehouse,
 			target_warehouse=data.to_warehouse,
 			qty=5,
-			cost_center=data.cost_center,
+
 			expense_account=data.expense_account,
 			do_not_submit=True,
 		)
@@ -427,7 +440,6 @@ class TestInventoryDimension(ERPNextTestSuite):
 		dn_doc.items[0].to_store = "Inter Transfer Store 2"
 		dn_doc.save()
 		dn_doc.submit()
-
 		for d in get_voucher_sl_entries(dn_doc.name, ["store", "actual_qty"]):
 			if d.actual_qty > 0:
 				self.assertEqual(d.store, "Inter Transfer Store 2")
@@ -440,7 +452,6 @@ class TestInventoryDimension(ERPNextTestSuite):
 		pr_doc.items[0].store = "Inter Transfer Store 3"
 		pr_doc.save()
 		pr_doc.submit()
-
 		for d in get_voucher_sl_entries(pr_doc.name, ["store", "actual_qty"]):
 			if d.actual_qty > 0:
 				self.assertEqual(d.store, "Inter Transfer Store 3")
@@ -449,7 +460,6 @@ class TestInventoryDimension(ERPNextTestSuite):
 
 		return_doc = make_return_doc("Purchase Receipt", pr_doc.name)
 		return_doc.submit()
-
 		for d in get_voucher_sl_entries(return_doc.name, ["store", "actual_qty"]):
 			if d.actual_qty > 0:
 				self.assertEqual(d.store, "Inter Transfer Store 2")
@@ -463,9 +473,7 @@ class TestInventoryDimension(ERPNextTestSuite):
 		return_doc1.posting_time = nowtime()
 		return_doc1.items[0].target_warehouse = dn_doc.items[0].target_warehouse
 		return_doc1.items[0].warehouse = dn_doc.items[0].warehouse
-		return_doc1.save()
 		return_doc1.submit()
-
 		for d in get_voucher_sl_entries(return_doc1.name, ["store", "actual_qty"]):
 			if d.actual_qty > 0:
 				self.assertEqual(d.store, "Inter Transfer Store 1")
@@ -751,32 +759,26 @@ class TestInventoryDimension(ERPNextTestSuite):
 		pr_doc.items[0].rack = "Rack 1"
 		pr_doc.save()
 		pr_doc.submit()
-
 		pr_doc = make_purchase_receipt(item_code=item_code, qty=15, do_not_submit=True)
 		pr_doc.items[0].inv_site = "Site 1"
 		pr_doc.items[0].rack = "Rack 2"
 		pr_doc.save()
 		pr_doc.submit()
-
 		pr_doc = make_purchase_receipt(item_code=item_code, qty=30, do_not_submit=True)
 		pr_doc.items[0].inv_site = "Site 2"
 		pr_doc.items[0].rack = "Rack 1"
 		pr_doc.save()
 		pr_doc.submit()
-
 		pr_doc = make_purchase_receipt(item_code=item_code, qty=25, do_not_submit=True)
 		pr_doc.items[0].inv_site = "Site 2"
 		pr_doc.items[0].rack = "Rack 2"
 		pr_doc.save()
 		pr_doc.submit()
-
 		dn_doc = create_delivery_note(item_code=item_code, qty=35, do_not_submit=True)
 		dn_doc.items[0].inv_site = "Site 2"
 		dn_doc.items[0].rack = "Rack 1"
 		dn_doc.save()
 		self.assertRaises(InventoryDimensionNegativeStockError, dn_doc.submit)
-
-
 def get_voucher_sl_entries(voucher_no, fields):
 	return frappe.get_all(
 		"Stock Ledger Entry", filters={"voucher_no": voucher_no}, fields=fields, order_by="creation"
@@ -829,7 +831,6 @@ def prepare_data_for_internal_transfer():
 	pr_doc = make_purchase_receipt(company=company, warehouse=warehouse, qty=10, rate=100, do_not_submit=True)
 	pr_doc.items[0].store = "Inter Transfer Store 1"
 	pr_doc.submit()
-
 	if not frappe.db.get_value("Company", company, "unrealized_profit_loss_account"):
 		account = "Unrealized Profit and Loss - TCP1"
 		if not frappe.db.exists("Account", account):
@@ -846,10 +847,6 @@ def prepare_data_for_internal_transfer():
 
 		frappe.db.set_value("Company", company, "unrealized_profit_loss_account", account)
 
-	cost_center = frappe.db.get_value("Company", company, "cost_center") or frappe.db.get_value(
-		"Cost Center", {"company": company}, "name"
-	)
-
 	expene_account = frappe.db.get_value(
 		"Company", company, "stock_adjustment_account"
 	) or frappe.db.get_value("Account", {"company": company, "account_type": "Expense Account"}, "name")
@@ -861,7 +858,7 @@ def prepare_data_for_internal_transfer():
 			"customer": customer,
 			"supplier": supplier,
 			"company": company,
-			"cost_center": cost_center,
+
 			"expene_account": expene_account,
 			"store_warehouse": frappe.db.get_value(
 				"Warehouse", {"name": ("like", "Store%"), "company": company}, "name"

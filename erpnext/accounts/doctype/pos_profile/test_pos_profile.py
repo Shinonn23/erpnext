@@ -120,7 +120,7 @@ def get_items_list(pos_profile, company):
 		select
 			i.name, i.item_code, i.item_name, i.description, i.item_group, i.has_batch_no,
 			i.has_serial_no, i.is_stock_item, i.brand, i.stock_uom, i.image,
-			id.expense_account, id.selling_cost_center, id.default_warehouse,
+			id.expense_account, id.default_warehouse,
 			i.sales_uom, c.conversion_factor
 		from
 			`tabItem` i
@@ -144,7 +144,6 @@ def make_pos_profile(**args):
 	pos_profile = frappe.get_doc(
 		{
 			"company": args.company or "_Test Company",
-			"cost_center": args.cost_center or "_Test Cost Center - _TC",
 			"currency": args.currency or "INR",
 			"doctype": "POS Profile",
 			"expense_account": args.expense_account or "_Test Account Cost for Goods Sold - _TC",
@@ -156,7 +155,6 @@ def make_pos_profile(**args):
 			"customer_group": frappe.db.get_value("Customer Group", {"is_group": 0}, "name"),
 			"warehouse": args.warehouse or "_Test Warehouse - _TC",
 			"write_off_account": args.write_off_account or "_Test Write Off - _TC",
-			"write_off_cost_center": args.write_off_cost_center or "_Test Write Off Cost Center - _TC",
 			"location": "Block 1" if not args.do_not_set_accounting_dimension else None,
 			"disabled": cint(args.disabled) or 0,
 		}

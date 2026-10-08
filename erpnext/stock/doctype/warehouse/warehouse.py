@@ -27,6 +27,7 @@ class Warehouse(NestedSet):
 		from frappe.types import DF
 
 		account: DF.Link | None
+		asset_location: DF.Link | None
 		address_line_1: DF.Data | None
 		address_line_2: DF.Data | None
 		city: DF.Data | None

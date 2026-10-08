@@ -16,7 +16,6 @@ class TestCustomerLedgerSummary(ERPNextTestSuite, AccountsTestMixin):
 		self.customer = "_Test Customer"
 		self.item = "_Test Item"
 		self.debit_to = "Debtors - _TC"
-		self.cost_center = "Main - _TC"
 		self.cash = "Cash - _TC"
 
 	def create_sales_invoice(self, do_not_submit=False, **args):
@@ -26,8 +25,6 @@ class TestCustomerLedgerSummary(ERPNextTestSuite, AccountsTestMixin):
 			customer=self.customer,
 			debit_to=self.debit_to,
 			posting_date=today(),
-			parent_cost_center=self.cost_center,
-			cost_center=self.cost_center,
 			rate=100,
 			qty=10,
 			price_list_rate=100,
@@ -54,7 +51,6 @@ class TestCustomerLedgerSummary(ERPNextTestSuite, AccountsTestMixin):
 			item=self.item,
 			qty=-1,
 			debit_to=self.debit_to,
-			cost_center=self.cost_center,
 			is_return=1,
 			return_against=docname,
 			do_not_submit=do_not_submit,

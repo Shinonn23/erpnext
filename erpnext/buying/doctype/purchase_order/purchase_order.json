@@ -24,7 +24,6 @@
   "has_unit_price_items",
   "supplier_warehouse",
   "accounting_dimensions_section",
-  "cost_center",
   "dimension_col_break",
   "project",
   "currency_and_price_list",
@@ -1115,12 +1114,6 @@
    "fieldname": "accounting_dimensions_section",
    "fieldtype": "Section Break",
    "label": "Accounting Dimensions "
-  },
-  {
-   "fieldname": "cost_center",
-   "fieldtype": "Link",
-   "label": "Cost Center",
-   "options": "Cost Center"
   },
   {
    "fieldname": "dimension_col_break",

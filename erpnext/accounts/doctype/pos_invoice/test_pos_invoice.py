@@ -79,7 +79,6 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 			{
 				"charge_type": "On Net Total",
 				"account_head": "_Test Account Service Tax - _TC",
-				"cost_center": "_Test Cost Center - _TC",
 				"description": "Service Tax",
 				"rate": 14,
 				"included_in_print_rate": 1,
@@ -125,7 +124,6 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 			{
 				"account_head": "_Test Account VAT - _TC",
 				"charge_type": "On Net Total",
-				"cost_center": "_Test Cost Center - _TC",
 				"description": "VAT",
 				"doctype": "Sales Taxes and Charges",
 				"rate": 19,
@@ -161,7 +159,6 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 			{
 				"account_head": "_Test Account Excise Duty - _TC",
 				"charge_type": "On Net Total",
-				"cost_center": "_Test Cost Center - _TC",
 				"description": "Excise Duty",
 				"doctype": "Sales Taxes and Charges",
 				"rate": 11,
@@ -172,7 +169,6 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 			{
 				"account_head": "_Test Account Education Cess - _TC",
 				"charge_type": "On Net Total",
-				"cost_center": "_Test Cost Center - _TC",
 				"description": "Education Cess",
 				"doctype": "Sales Taxes and Charges",
 				"rate": 0,
@@ -183,7 +179,6 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 			{
 				"account_head": "_Test Account S&H Education Cess - _TC",
 				"charge_type": "On Net Total",
-				"cost_center": "_Test Cost Center - _TC",
 				"description": "S&H Education Cess",
 				"doctype": "Sales Taxes and Charges",
 				"rate": 3,
@@ -223,7 +218,6 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 			{
 				"account_head": "_Test Account VAT - _TC",
 				"charge_type": "On Net Total",
-				"cost_center": "_Test Cost Center - _TC",
 				"description": "VAT",
 				"doctype": "Sales Taxes and Charges",
 				"rate": 24,
@@ -247,12 +241,10 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 		pos.append("payments", {"mode_of_payment": "Cash", "amount": 500, "default": 1})
 		pos.insert()
 		pos.submit()
-
 		pos_return = make_sales_return(pos.name)
 
 		pos_return.insert()
 		pos_return.submit()
-
 		self.assertEqual(pos_return.get("payments")[0].amount, -500)
 		self.assertEqual(pos_return.get("payments")[1].amount, -500)
 
@@ -263,7 +255,6 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 			self,
 			company="_Test Company",
 			target_warehouse="Stores - _TC",
-			cost_center="Main - _TC",
 			expense_account="Cost of Goods Sold - _TC",
 		)
 
@@ -276,7 +267,6 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 			warehouse="Stores - _TC",
 			income_account="Sales - _TC",
 			expense_account="Cost of Goods Sold - _TC",
-			cost_center="Main - _TC",
 			item=se.get("items")[0].item_code,
 			serial_no=[serial_nos[0]],
 			rate=1000,
@@ -287,7 +277,6 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 
 		pos.insert()
 		pos.submit()
-
 		pos_return = make_sales_return(pos.name)
 
 		pos_return.insert()
@@ -303,7 +292,6 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 			self,
 			company="_Test Company",
 			target_warehouse="Stores - _TC",
-			cost_center="Main - _TC",
 			expense_account="Cost of Goods Sold - _TC",
 		)
 
@@ -316,7 +304,6 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 			warehouse="Stores - _TC",
 			income_account="Sales - _TC",
 			expense_account="Cost of Goods Sold - _TC",
-			cost_center="Main - _TC",
 			item=se.get("items")[0].item_code,
 			serial_no=serial_nos,
 			qty=2,
@@ -355,7 +342,6 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 		pos_return2.append("payments", {"mode_of_payment": "Cash", "amount": -1000, "default": 1})
 		pos_return2.paid_amount = -1000
 		pos_return2.submit()
-
 		self.assertEqual(pos_return2.get("items")[0].qty, -1)
 		serial_no = get_serial_nos_from_bundle(pos_return2.get("items")[0].serial_and_batch_bundle)[0]
 		self.assertEqual(serial_no, serial_nos[1])
@@ -367,7 +353,6 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 			income_account="Sales - _TC",
 			expense_account="Cost of Goods Sold - _TC",
 			rate=105,
-			cost_center="Main - _TC",
 			do_not_save=True,
 		)
 
@@ -377,7 +362,6 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 
 		pos.insert()
 		pos.submit()
-
 		self.assertEqual(pos.grand_total, 105.0)
 		self.assertEqual(pos.change_amount, 5.0)
 
@@ -406,7 +390,6 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 		)
 		pos_inv.save()
 		pos_inv.submit()
-
 		self.assertEqual(pos_inv.paid_amount, 90)
 		self.assertEqual(pos_inv.status, "Partly Paid")
 
@@ -426,7 +409,6 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 		)
 		pos_inv.save()
 		pos_inv.submit()
-
 		self.assertEqual(pos_inv.paid_amount, 90)
 		self.assertEqual(pos_inv.status, "Partly Paid")
 
@@ -447,7 +429,6 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 			self,
 			company="_Test Company",
 			target_warehouse="Stores - _TC",
-			cost_center="Main - _TC",
 			expense_account="Cost of Goods Sold - _TC",
 		)
 
@@ -460,7 +441,6 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 			warehouse="Stores - _TC",
 			income_account="Sales - _TC",
 			expense_account="Cost of Goods Sold - _TC",
-			cost_center="Main - _TC",
 			item=se.get("items")[0].item_code,
 			rate=1000,
 			serial_no=[serial_nos[0]],
@@ -471,7 +451,6 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 
 		pos.insert()
 		pos.submit()
-
 		pos2 = create_pos_invoice(
 			company="_Test Company",
 			debit_to="Debtors - _TC",
@@ -479,7 +458,6 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 			warehouse="Stores - _TC",
 			income_account="Sales - _TC",
 			expense_account="Cost of Goods Sold - _TC",
-			cost_center="Main - _TC",
 			item=se.get("items")[0].item_code,
 			rate=1000,
 			serial_no=[serial_nos[0]],
@@ -498,7 +476,6 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 			self,
 			company="_Test Company",
 			target_warehouse="Stores - _TC",
-			cost_center="Main - _TC",
 			expense_account="Cost of Goods Sold - _TC",
 		)
 
@@ -511,7 +488,6 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 			warehouse="Stores - _TC",
 			income_account="Sales - _TC",
 			expense_account="Cost of Goods Sold - _TC",
-			cost_center="Main - _TC",
 			item=se.get("items")[0].item_code,
 			rate=1000,
 			update_stock=1,
@@ -529,7 +505,6 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 			warehouse="Stores - _TC",
 			income_account="Sales - _TC",
 			expense_account="Cost of Goods Sold - _TC",
-			cost_center="Main - _TC",
 			item=se.get("items")[0].item_code,
 			rate=1000,
 			serial_no=[serial_nos[0]],
@@ -549,7 +524,6 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 			self,
 			company="_Test Company",
 			target_warehouse="Stores - _TC",
-			cost_center="Main - _TC",
 			expense_account="Cost of Goods Sold - _TC",
 		)
 		serial_nos = get_serial_nos_from_bundle(se.get("items")[0].serial_and_batch_bundle)[0] + "wrong"
@@ -561,7 +535,6 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 			warehouse="Stores - _TC",
 			income_account="Sales - _TC",
 			expense_account="Cost of Goods Sold - _TC",
-			cost_center="Main - _TC",
 			item=se.get("items")[0].item_code,
 			rate=1000,
 			qty=2,
@@ -580,7 +553,6 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 			self,
 			company="_Test Company",
 			target_warehouse="Stores - _TC",
-			cost_center="Main - _TC",
 			expense_account="Cost of Goods Sold - _TC",
 		)
 		serial_nos = get_serial_nos_from_bundle(se.get("items")[0].serial_and_batch_bundle)
@@ -593,7 +565,6 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 			warehouse="Stores - _TC",
 			income_account="Sales - _TC",
 			expense_account="Cost of Goods Sold - _TC",
-			cost_center="Main - _TC",
 			item=se.get("items")[0].item_code,
 			rate=1000,
 			serial_no=[serial_nos[0]],
@@ -603,14 +574,13 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 		pos.get("items")[0].has_serial_no = 1
 		pos.set("payments", [])
 		pos.append("payments", {"mode_of_payment": "Cash", "amount": 1000, "default": 1})
-		pos = pos.save().submit()
-
+		pos.save()
+		pos.submit()
 		# make a return
 		pos_return = make_sales_return(pos.name)
 		pos_return.paid_amount = pos_return.grand_total
 		pos_return.save()
 		pos_return.submit()
-
 		# set docstatus to 2 for pos to trigger this issue
 		frappe.db.set_value("POS Invoice", pos.name, "docstatus", 2)
 
@@ -621,7 +591,6 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 			warehouse="Stores - _TC",
 			income_account="Sales - _TC",
 			expense_account="Cost of Goods Sold - _TC",
-			cost_center="Main - _TC",
 			item=se.get("items")[0].item_code,
 			rate=1000,
 			serial_no=[serial_nos[0]],
@@ -650,7 +619,6 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 		)
 		inv.insert()
 		inv.submit()
-
 		lpe = frappe.get_doc(
 			"Loyalty Point Entry",
 			{"invoice_type": "POS Invoice", "invoice": inv.name, "customer": inv.customer},
@@ -683,7 +651,6 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 		)
 		pos_inv.paid_amount = 10000
 		pos_inv.submit()
-
 		before_lp_details = get_loyalty_program_details_with_points(
 			"Test Loyalty Customer", company="_Test Company", loyalty_program="Test Single Loyalty"
 		)
@@ -698,7 +665,6 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 		)
 		inv.paid_amount = 10000
 		inv.submit()
-
 		after_redeem_lp_details = get_loyalty_program_details_with_points(
 			inv.customer, company=inv.company, loyalty_program=inv.loyalty_program
 		)
@@ -796,13 +762,11 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 		pos_inv.items[0].batch_no = batch_no
 		pos_inv.save()
 		pos_inv.submit()
-
 		# POS Invoice return
 		pos_return = make_sales_return(pos_inv.name)
 
 		pos_return.insert()
 		pos_return.submit()
-
 		batches = get_auto_batch_nos(
 			frappe._dict({"item_code": "_Batch Item Reserve Return", "warehouse": "_Test Warehouse - _TC"})
 		)
@@ -840,7 +804,6 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 		)
 		pos_inv1.save()
 		pos_inv1.submit()
-
 		pos_inv2 = create_pos_invoice(item=item.name, rate=300, qty=2, do_not_submit=1)
 
 		sn_doc = SerialBatchCreation(
@@ -989,7 +952,6 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 		pos_inv_sufficient.append("payments", {"mode_of_payment": "Cash", "amount": 100, "default": 1})
 		pos_inv_sufficient.insert()
 		pos_inv_sufficient.submit()
-
 		pos_inv_sufficient.cancel()
 		pos_inv_sufficient.delete()
 
@@ -1006,7 +968,10 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 		)
 		pos_inv_insufficient.append("payments", {"mode_of_payment": "Cash", "amount": 200, "default": 1})
 		pos_inv_insufficient.save()
-		self.assertRaises(ProductBundleStockValidationError, pos_inv_insufficient.submit)
+		self.assertRaises(
+			ProductBundleStockValidationError,
+			pos_inv_insufficient,
+		)
 
 		frappe.set_user("test@example.com")
 
@@ -1080,7 +1045,6 @@ def create_pos_invoice(**args):
 		"rate": args.rate if args.get("rate") is not None else 100,
 		"income_account": args.income_account or "Sales - _TC",
 		"expense_account": args.expense_account or "Cost of Goods Sold - _TC",
-		"cost_center": args.cost_center or "_Test Cost Center - _TC",
 		"serial_and_batch_bundle": bundle_id,
 		"use_serial_batch_fields": args.use_serial_batch_fields,
 		"serial_no": args.serial_no if args.use_serial_batch_fields else None,

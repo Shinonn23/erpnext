@@ -38,7 +38,7 @@ from erpnext.accounts.doctype.pricing_rule.utils import (
 	apply_pricing_rule_on_transaction,
 	get_applied_pricing_rules,
 )
-from erpnext.accounts.general_ledger import get_round_off_account_and_cost_center
+from erpnext.accounts.general_ledger import get_round_off_account
 from erpnext.accounts.party import (
 	PURCHASE_TRANSACTION_TYPES,
 	SALES_TRANSACTION_TYPES,
@@ -497,8 +497,6 @@ class AccountsController(TransactionBase):
 		unreconcile_docs = frappe.db.get_all("Unreconcile Payment", filters={"voucher_no": self.name})
 		for x in unreconcile_docs:
 			_doc = frappe.get_doc("Unreconcile Payment", x.name)
-			if _doc.docstatus == 1:
-				_doc.cancel()
 			_doc.delete()
 
 	def _remove_references_in_repost_doctypes(self):
@@ -617,7 +615,7 @@ class AccountsController(TransactionBase):
 			.where(doc_field.fieldname == "company")
 		).run(as_list=True)
 
-		dimension_list = sum(dimension_list, ["Project", "Cost Center"])
+		dimension_list = sum(dimension_list, ["Project"])
 		self.validate_company(dimension_list)
 
 		for child in self.get_all_children() or []:
@@ -1194,9 +1192,7 @@ class AccountsController(TransactionBase):
 									if not item.get("price_list_rate") and ret.get("price_list_rate"):
 										item.set("price_list_rate", ret.get("price_list_rate"))
 
-							elif fieldname in ["cost_center", "conversion_factor"] and not item.get(
-								fieldname
-							):
+							elif fieldname == "conversion_factor" and not item.get(fieldname):
 								item.set(fieldname, value)
 							elif fieldname == "item_tax_rate" and not (
 								self.get("is_return") and self.get("return_against")
@@ -1239,14 +1235,6 @@ class AccountsController(TransactionBase):
 					):
 						if not item.get("tax_withholding_category") and ret.get("tax_withholding_category"):
 							item.set("tax_withholding_category", ret.get("tax_withholding_category"))
-
-					# Double check for cost center
-					# Items add via promotional scheme may not have cost center set
-					if hasattr(item, "cost_center") and not item.get("cost_center"):
-						item.set(
-							"cost_center",
-							self.get("cost_center") or erpnext.get_default_cost_center(self.company),
-						)
 
 					if ret.get("pricing_rules"):
 						self.apply_pricing_rule_on_items(item, ret)
@@ -1477,10 +1465,12 @@ class AccountsController(TransactionBase):
 		update_gl_dict_with_app_based_fields(self, gl_dict)
 
 		accounting_dimensions = get_accounting_dimensions()
+		_, default_dimensions = get_dimensions()
+		company_defaults = default_dimensions.get(self.company, {})
 		dimension_dict = frappe._dict()
 
 		for dimension in accounting_dimensions:
-			value = self.get(dimension)
+			value = self.get(dimension) or company_defaults.get(dimension)
 			if item and item.get(dimension):
 				value = item.get(dimension)
 			if isinstance(value, list | dict):
@@ -1780,13 +1770,7 @@ class AccountsController(TransactionBase):
 				d.exchange_gain_loss = difference
 
 	def make_precision_loss_gl_entry(self, gl_entries):
-		(
-			round_off_account,
-			round_off_cost_center,
-			round_off_for_opening,
-		) = get_round_off_account_and_cost_center(
-			self.company, "Purchase Invoice", self.name, self.use_company_roundoff_cost_center
-		)
+		round_off_account, round_off_for_opening = get_round_off_account(self.company)
 
 		precision_loss = self.get("base_net_total") - flt(
 			self.get("net_total") * self.conversion_rate, self.precision("net_total")
@@ -1802,9 +1786,6 @@ class AccountsController(TransactionBase):
 						"account": round_off_account,
 						"against": against,
 						credit_or_debit: precision_loss,
-						"cost_center": round_off_cost_center
-						if self.use_company_roundoff_cost_center
-						else self.cost_center or round_off_cost_center,
 						"remarks": _("Net total calculation precision loss"),
 					}
 				)
@@ -1911,7 +1892,6 @@ class AccountsController(TransactionBase):
 									self.doctype,
 									self.name,
 									arg.get("referenced_row"),
-									arg.get("cost_center"),
 									dimensions_dict,
 									arg.get("project"),
 								)
@@ -1996,7 +1976,6 @@ class AccountsController(TransactionBase):
 							self.doctype,
 							self.name,
 							d.idx,
-							self.cost_center,
 							dimensions_dict,
 							self.project,
 						)
@@ -2234,7 +2213,6 @@ class AccountsController(TransactionBase):
 								"debit_in_transaction_currency": flt(
 									discount_amount, item.precision("discount_amount")
 								),
-								"cost_center": item.cost_center,
 								"project": item.project,
 							},
 							account_currency,
@@ -2255,7 +2233,6 @@ class AccountsController(TransactionBase):
 								"credit_in_transaction_currency": flt(
 									discount_amount, item.precision("discount_amount")
 								),
-								"cost_center": item.cost_center,
 								"project": item.project or self.project,
 							},
 							account_currency,
@@ -2274,7 +2251,7 @@ class AccountsController(TransactionBase):
 						"account": self.additional_discount_account,
 						"against": self.customer,
 						"debit": self.base_discount_amount,
-						"cost_center": self.cost_center or erpnext.get_default_cost_center(self.company),
+
 					},
 					item=self,
 				)
@@ -3087,12 +3064,10 @@ class AccountsController(TransactionBase):
 		reconcilation_entry.party = secondary_party
 		reconcilation_entry.reference_type = self.doctype
 		reconcilation_entry.reference_name = self.name
-		reconcilation_entry.cost_center = self.cost_center or erpnext.get_default_cost_center(self.company)
 
 		advance_entry.account = primary_account
 		advance_entry.party_type = primary_party_type
 		advance_entry.party = primary_party
-		advance_entry.cost_center = self.cost_center or erpnext.get_default_cost_center(self.company)
 		# For returns the direction is reversed, so this entry cannot be an advance
 		# (JE validation: Supplier advance must be debit, Customer advance must be credit)
 		advance_entry.is_advance = "No" if self.is_return else "Yes"
@@ -3185,7 +3160,7 @@ class AccountsController(TransactionBase):
 	def check_if_fields_updated(self, fields_to_check, child_tables):
 		# Check if any field affecting accounting entry is altered
 		doc_before_update = self.get_doc_before_save()
-		accounting_dimensions = [*get_accounting_dimensions(), "cost_center", "project"]
+		accounting_dimensions = [*get_accounting_dimensions(), "project"]
 
 		# Parent Level Accounts excluding party account
 		fields_to_check += accounting_dimensions
@@ -3439,21 +3414,6 @@ def validate_account_head(idx: int, account: str, company: str, context: str | N
 		)
 
 
-def validate_cost_center(tax, doc):
-	if not tax.cost_center:
-		return
-
-	company = frappe.get_cached_value("Cost Center", tax.cost_center, "company")
-
-	if company != doc.company:
-		frappe.throw(
-			_("Row {0}: Cost Center {1} does not belong to Company {2}").format(
-				tax.idx, frappe.bold(tax.cost_center), frappe.bold(doc.company)
-			),
-			title=_("Invalid Cost Center"),
-		)
-
-
 def validate_inclusive_tax(tax, doc):
 	def _on_previous_row_error(row_range):
 		throw(
@@ -3692,9 +3652,6 @@ def get_common_query(
 			common_filter_conditions.append(payment_entry.posting_date.lte(condition["to_payment_date"]))
 
 		if condition.get("get_payments") is True:
-			if condition.get("cost_center"):
-				common_filter_conditions.append(payment_entry.cost_center == condition["cost_center"])
-
 			if condition.get("accounting_dimensions"):
 				apply_strict_user_permissions = frappe.get_system_settings("apply_strict_user_permissions")
 				for field, val in condition.get("accounting_dimensions").items():
@@ -4509,7 +4466,7 @@ def update_child_qty_rate(
 
 
 def check_if_child_table_updated(child_table_before_update, child_table_after_update, fields_to_check):
-	fields_to_check = list(fields_to_check) + get_accounting_dimensions() + ["cost_center", "project"]
+	fields_to_check = list(fields_to_check) + get_accounting_dimensions() + ["project"]
 
 	# Check if any field affecting accounting entry is altered
 	for index, item in enumerate(child_table_before_update):
@@ -4525,7 +4482,7 @@ def merge_taxes(source_doc, target_doc):
 	for tax in source_doc.get("taxes") or []:
 		found = False
 		for t in target_doc.get("taxes") or []:
-			if t.account_head == tax.account_head and t.cost_center == tax.cost_center:
+			if t.account_head == tax.account_head:
 				t.tax_amount = flt(t.tax_amount) + flt(tax.tax_amount_after_discount_amount)
 				t.base_tax_amount = flt(t.base_tax_amount) + flt(tax.base_tax_amount_after_discount_amount)
 				tax_map[tax.name] = t

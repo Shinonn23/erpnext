@@ -6,8 +6,8 @@
    "label": "Purchase Order Trends"
   }
  ],
- "content": "[{\"id\":\"j3dJGo8Ok6\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Purchase Order Trends\",\"col\":12}},{\"id\":\"k75jSq2D6Z\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Purchase Orders Count\",\"col\":4}},{\"id\":\"UPXys0lQLj\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Total Purchase Amount\",\"col\":4}},{\"id\":\"yQGK3eb2hg\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Average Order Values\",\"col\":4}},{\"id\":\"oN7lXSwQji\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"Xe2GVLOq8J\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Reports &amp; Masters</b></span>\",\"col\":12}},{\"id\":\"QwqyG6XuUt\",\"type\":\"card\",\"data\":{\"card_name\":\"Buying\",\"col\":4}},{\"id\":\"bTPjOxC_N_\",\"type\":\"card\",\"data\":{\"card_name\":\"Items & Pricing\",\"col\":4}},{\"id\":\"87ht0HIneb\",\"type\":\"card\",\"data\":{\"card_name\":\"Settings\",\"col\":4}},{\"id\":\"EDOsBOmwgw\",\"type\":\"card\",\"data\":{\"card_name\":\"Supplier\",\"col\":4}},{\"id\":\"oWNNIiNb2i\",\"type\":\"card\",\"data\":{\"card_name\":\"Supplier Scorecard\",\"col\":4}},{\"id\":\"7F_13-ihHB\",\"type\":\"card\",\"data\":{\"card_name\":\"Key Reports\",\"col\":4}},{\"id\":\"pfwiLvionl\",\"type\":\"card\",\"data\":{\"card_name\":\"Other Reports\",\"col\":4}},{\"id\":\"8ySDy6s4qn\",\"type\":\"card\",\"data\":{\"card_name\":\"Regional\",\"col\":4}}]",
- "creation": "2020-01-28 11:50:26.195467",
+ "content": "[{\"id\":\"j3dJGo8Ok6\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Purchase Order Trends\",\"col\":12}},{\"id\":\"k75jSq2D6Z\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Purchase Orders Count\",\"col\":4}},{\"id\":\"UPXys0lQLj\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Total Purchase Amount\",\"col\":4}},{\"id\":\"yQGK3eb2hg\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Average Order Values\",\"col\":4}},{\"id\":\"oN7lXSwQji\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"Xe2GVLOq8J\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Reports &amp; Masters</b></span>\",\"col\":12}},{\"id\":\"QwqyG6XuUt\",\"type\":\"card\",\"data\":{\"card_name\":\"Buying\",\"col\":4}},{\"id\":\"bTPjOxC_N_\",\"type\":\"card\",\"data\":{\"card_name\":\"Items & Pricing\",\"col\":4}},{\"id\":\"87ht0HIneb\",\"type\":\"card\",\"data\":{\"card_name\":\"Settings\",\"col\":4}},{\"id\":\"EDOsBOmwgw\",\"type\":\"card\",\"data\":{\"card_name\":\"Supplier\",\"col\":4}},{\"id\":\"oWNNIiNb2i\",\"type\":\"card\",\"data\":{\"card_name\":\"Supplier Scorecard\",\"col\":4}},{\"id\":\"7F_13-ihHB\",\"type\":\"card\",\"data\":{\"card_name\":\"Key Reports\",\"col\":4}},{\"id\":\"pfwiLvionl\",\"type\":\"card\",\"data\":{\"card_name\":\"Other Reports\",\"col\":4}},{\"id\":\"8ySDy6s4qn\",\"type\":\"card\",\"data\":{\"card_name\":\"Thailand Purchasing & Tax\",\"col\":4}}]",
+ "creation": "2026-10-05 13:31:07.468733",
  "custom_blocks": [],
  "docstatus": 0,
  "doctype": "Workspace",
@@ -22,7 +22,8 @@
    "hidden": 0,
    "is_query_report": 0,
    "label": "Buying",
-   "link_count": 0,
+   "link_count": 5,
+   "link_type": "DocType",
    "onboard": 0,
    "type": "Card Break"
   },
@@ -85,7 +86,8 @@
    "hidden": 0,
    "is_query_report": 0,
    "label": "Items & Pricing",
-   "link_count": 0,
+   "link_count": 7,
+   "link_type": "DocType",
    "onboard": 0,
    "type": "Card Break"
   },
@@ -170,7 +172,8 @@
    "hidden": 0,
    "is_query_report": 0,
    "label": "Settings",
-   "link_count": 0,
+   "link_count": 3,
+   "link_type": "DocType",
    "onboard": 0,
    "type": "Card Break"
   },
@@ -211,7 +214,8 @@
    "hidden": 0,
    "is_query_report": 0,
    "label": "Supplier",
-   "link_count": 0,
+   "link_count": 4,
+   "link_type": "DocType",
    "onboard": 0,
    "type": "Card Break"
   },
@@ -263,7 +267,8 @@
    "hidden": 0,
    "is_query_report": 0,
    "label": "Supplier Scorecard",
-   "link_count": 0,
+   "link_count": 4,
+   "link_type": "DocType",
    "onboard": 0,
    "type": "Card Break"
   },
@@ -315,7 +320,8 @@
    "hidden": 0,
    "is_query_report": 0,
    "label": "Key Reports",
-   "link_count": 0,
+   "link_count": 6,
+   "link_type": "DocType",
    "onboard": 0,
    "type": "Card Break"
   },
@@ -389,7 +395,8 @@
    "hidden": 0,
    "is_query_report": 0,
    "label": "Other Reports",
-   "link_count": 0,
+   "link_count": 9,
+   "link_type": "DocType",
    "onboard": 0,
    "type": "Card Break"
   },
@@ -495,8 +502,9 @@
   {
    "hidden": 0,
    "is_query_report": 0,
-   "label": "Regional",
-   "link_count": 0,
+   "label": "Thailand Purchasing & Tax",
+   "link_count": 4,
+   "link_type": "DocType",
    "onboard": 0,
    "type": "Card Break"
   },
@@ -510,9 +518,39 @@
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Purchase Billing",
+   "link_count": 0,
+   "link_to": "Purchase Billing",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Purchase Tax Invoices",
+   "link_count": 0,
+   "link_to": "Purchase Tax Invoice",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Purchase Tax Report",
+   "link_count": 0,
+   "link_to": "Purchase Tax Report",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
   }
  ],
- "modified": "2026-01-02 14:55:59.078773",
+ "modified": "2026-10-05 14:06:48.517503",
  "modified_by": "Administrator",
  "module": "Buying",
  "name": "Buying",

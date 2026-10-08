@@ -1213,7 +1213,7 @@ class SerialBatchCreation:
 			package.remove(d)
 
 	def make_serial_and_batch_bundle(
-		self, serial_nos=None, batch_nos=None
+		self, serial_nos=None, batch_nos=None, ignore_permissions=False
 	):  # passing None instead of [] due to ruff linter error B006
 		serial_nos = serial_nos or []
 		batch_nos = batch_nos or []
@@ -1237,6 +1237,8 @@ class SerialBatchCreation:
 
 		if hasattr(self, "via_landed_cost_voucher") and self.via_landed_cost_voucher:
 			doc.flags.via_landed_cost_voucher = self.via_landed_cost_voucher
+		if ignore_permissions:
+			doc.flags.ignore_permissions = True
 
 		self.set_serial_batch_entries(doc)
 		if not doc.get("entries"):

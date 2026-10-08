@@ -1,0 +1,107 @@
+[
+ {
+  "description": "เงินเดือน ค่าจ้าง ฯลฯ 40(1)",
+  "docstatus": 0,
+  "doctype": "Withholding Tax Type Of Income",
+  "modified": "2024-12-22 17:52:02.915590",
+  "name": "1"
+ },
+ {
+  "description": "ค่าธรรมเนียม ค่านายหน้า ฯลฯ 40(2)",
+  "docstatus": 0,
+  "doctype": "Withholding Tax Type Of Income",
+  "modified": "2024-12-22 17:52:02.937900",
+  "name": "2"
+ },
+ {
+  "description": "ค่าแห่งลิขสิทธิ์ ฯลฯ 40(3)",
+  "docstatus": 0,
+  "doctype": "Withholding Tax Type Of Income",
+  "modified": "2024-12-22 17:52:02.945087",
+  "name": "3"
+ },
+ {
+  "description": "ดอกเบี้ย ฯลฯ 40(4)ก",
+  "docstatus": 0,
+  "doctype": "Withholding Tax Type Of Income",
+  "modified": "2024-12-22 17:52:02.951258",
+  "name": "4"
+ },
+ {
+  "description": "เงินปันผล เงินส่วนแบ่งกำไร ฯลฯ 40(4)ข (1.1) กิจการที่ต้องเสียภาษีเงินได้นิติบุคคลร้อยละ 30 ของกำไรสุทธิ",
+  "docstatus": 0,
+  "doctype": "Withholding Tax Type Of Income",
+  "modified": "2024-12-22 17:52:02.957155",
+  "name": "4.1.1"
+ },
+ {
+  "description": "เงินปันผล เงินส่วนแบ่งกำไร ฯลฯ 40(4)ข (1.2) กิจการที่ต้องเสียภาษีเงินได้นิติบุคคลร้อยละ 25 ของกำไรสุทธิ",
+  "docstatus": 0,
+  "doctype": "Withholding Tax Type Of Income",
+  "modified": "2024-12-22 17:52:02.963302",
+  "name": "4.1.2"
+ },
+ {
+  "description": "เงินปันผล เงินส่วนแบ่งกำไร ฯลฯ 40(4)ข (1.3) กิจการที่ต้องเสียภาษีเงินได้นิติบุคคลร้อยละ 20 ของกำไรสุทธิ",
+  "docstatus": 0,
+  "doctype": "Withholding Tax Type Of Income",
+  "modified": "2024-12-22 17:52:02.969817",
+  "name": "4.1.3"
+ },
+ {
+  "description": "เงินปันผล เงินส่วนแบ่งกำไร ฯลฯ 40(4)ข (1.4) กิจการที่ต้องเสียภาษีเงินได้นิติบุคคลร้อยละ อื่นๆ (ระบุ) ของกำไรสุทธิ",
+  "docstatus": 0,
+  "doctype": "Withholding Tax Type Of Income",
+  "modified": "2024-12-22 17:52:02.975748",
+  "name": "4.1.4"
+ },
+ {
+  "description": "เงินปันผล เงินส่วนแบ่งกำไร ฯลฯ 40(4)ข (2.1) กำไรสุทธิกิจการที่ได้รับยกเว้นภาษีเงินได้นิติบุคคล",
+  "docstatus": 0,
+  "doctype": "Withholding Tax Type Of Income",
+  "modified": "2024-12-22 17:52:02.982136",
+  "name": "4.2.1"
+ },
+ {
+  "description": "เงินปันผล เงินส่วนแบ่งกำไร ฯลฯ 40(4)ข (2.2) ได้รับยกเว้นไม่ต้องนำมารวมคำนวณเป็นรายได้",
+  "docstatus": 0,
+  "doctype": "Withholding Tax Type Of Income",
+  "modified": "2024-12-22 17:52:02.988178",
+  "name": "4.2.2"
+ },
+ {
+  "description": "เงินปันผล เงินส่วนแบ่งกำไร ฯลฯ 40(4)ข (2.3) กำไรสุทธิส่วนที่หักผลขาดทุนสุทธิยกมาไม่เกิน 5 ปี",
+  "docstatus": 0,
+  "doctype": "Withholding Tax Type Of Income",
+  "modified": "2024-12-22 17:52:02.995137",
+  "name": "4.2.3"
+ },
+ {
+  "description": "เงินปันผล เงินส่วนแบ่งกำไร ฯลฯ 40(4)ข (2.4) กำไรที่รับรู้ทางบัญชีโดยวิธีส่วนได้เสีย",
+  "docstatus": 0,
+  "doctype": "Withholding Tax Type Of Income",
+  "modified": "2024-12-22 17:52:03.001718",
+  "name": "4.2.4"
+ },
+ {
+  "description": "เงินปันผล เงินส่วนแบ่งกำไร ฯลฯ 40(4)ข (2.5) อื่นๆ (ระบุ)",
+  "docstatus": 0,
+  "doctype": "Withholding Tax Type Of Income",
+  "modified": "2024-12-22 17:52:03.008170",
+  "name": "4.2.5"
+ },
+ {
+  "description": "ค่าจ้างทำของ ค่าบริการ ค่าเช่า ค่าขนส่ง ฯลฯ 3 เตรส",
+  "docstatus": 0,
+  "doctype": "Withholding Tax Type Of Income",
+  "modified": "2024-12-22 17:52:03.013590",
+  "name": "5"
+ },
+ {
+  "description": "อื่นๆ (ระบุ)",
+  "docstatus": 0,
+  "doctype": "Withholding Tax Type Of Income",
+  "modified": "2024-12-22 17:52:03.020073",
+  "name": "6"
+ }
+]

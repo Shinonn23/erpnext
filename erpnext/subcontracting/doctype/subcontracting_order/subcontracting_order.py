@@ -50,7 +50,6 @@ class SubcontractingOrder(SubcontractingController):
 		contact_mobile: DF.SmallText | None
 		contact_person: DF.Link | None
 		conversion_rate: DF.Float
-		cost_center: DF.Link | None
 		distribute_additional_costs_based_on: DF.Literal["Qty", "Amount"]
 		items: DF.Table[SubcontractingOrderItem]
 		letter_head: DF.Link | None

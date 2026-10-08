@@ -3,6 +3,38 @@
 frappe.provide("erpnext.stock");
 frappe.provide("erpnext.accounts.dimensions");
 
+function make_shipment_from_stock_asset_transaction(frm) {
+	const create_shipment = () =>
+		frappe.call({
+			method: "erpnext.stock.doctype.shipment.shipment.make_shipment_from_document",
+			args: { source_doctype: frm.doctype, source_name: frm.doc.name },
+			callback: (r) => {
+				if (!r.message) return;
+				const doclist = frappe.model.sync(r.message);
+				frappe.set_route("Form", doclist[0].doctype, doclist[0].name);
+			},
+		});
+
+	if (frm.doc.docstatus === 0 && frm.is_dirty()) {
+		frm.save().then(create_shipment);
+	} else {
+		create_shipment();
+	}
+}
+
+function sync_shipment_warehouse_fields(frm) {
+	const shipping = Boolean(frm.doc.requires_shipment);
+	frm.toggle_display("to_warehouse", !shipping);
+	frm.toggle_display("shipment_destination_warehouse", shipping);
+	frm.toggle_display("add_to_transit", !shipping);
+	frm.set_df_property("shipment_destination_warehouse", "reqd", shipping);
+	frm.set_df_property("shipment_destination_warehouse", "read_only", Boolean(frm.doc.shipment));
+	frm.set_df_property("requires_shipment", "read_only", Boolean(frm.doc.shipment));
+	if (frm.fields_dict.items) {
+		frm.fields_dict.items.grid.update_docfield_property("t_warehouse", "hidden", shipping);
+	}
+}
+
 erpnext.landed_cost_taxes_and_charges.setup_triggers("Stock Entry");
 
 frappe.ui.form.on("Stock Entry", {
@@ -10,6 +42,18 @@ frappe.ui.form.on("Stock Entry", {
 		frm.ignore_doctypes_on_cancel_all = ["Serial and Batch Bundle"];
 
 		frm.trigger("toggle_enable_for_stock_uom_qty");
+		frm.set_query("shipment_destination_warehouse", function () {
+			return {
+				filters: {
+					company: frm.doc.company,
+					is_group: 0,
+				},
+				or_filters: [
+					["Warehouse", "warehouse_type", "is", "not set"],
+					["Warehouse", "warehouse_type", "!=", "Transit"],
+				],
+			};
+		});
 
 		frm.set_indicator_formatter("item_code", function (doc) {
 			if (!doc.s_warehouse) {
@@ -308,6 +352,34 @@ frappe.ui.form.on("Stock Entry", {
 	refresh: function (frm) {
 		frm.trigger("get_items_from_transit_entry");
 		frm.trigger("toggle_warehouse_fields");
+		sync_shipment_warehouse_fields(frm);
+		if (frm.doc.shipment && frappe.model.can_read("Shipment")) {
+			frm.add_custom_button(
+				__("Shipment"),
+				() => frappe.set_route("Form", "Shipment", frm.doc.shipment),
+				__("View")
+			);
+		} else if (
+			frm.doc.docstatus === 0 &&
+			frm.doc.requires_shipment &&
+			frappe.model.can_create("Shipment")
+		) {
+			frm.add_custom_button(
+				__("Shipment"),
+				() => make_shipment_from_stock_asset_transaction(frm),
+				__("Create")
+			);
+		} else if (
+			frm.doc.docstatus === 1 &&
+			!["Manufacture", "Repack", "Material Consumption for Manufacture"].includes(frm.doc.purpose) &&
+			frappe.model.can_create("Shipment")
+		) {
+			frm.add_custom_button(
+				__("Shipment"),
+				() => make_shipment_from_stock_asset_transaction(frm),
+				__("Create")
+			);
+		}
 
 		// only BOM-less rows are editable, and they cannot allocate a BOM percentage;
 		// read-only rows from a BOM still display their stored % of Component Cost
@@ -594,6 +666,18 @@ frappe.ui.form.on("Stock Entry", {
 				].includes(frm.doc.purpose)
 		);
 	},
+	requires_shipment: function (frm) {
+		if (frm.doc.requires_shipment) {
+			const destination = frm.doc.to_warehouse;
+			frm.set_value("shipment_destination_warehouse", frm.doc.shipment_destination_warehouse || destination);
+			frm.set_value("to_warehouse", "");
+			frm.set_value("add_to_transit", 1);
+		} else {
+			frm.set_value("to_warehouse", frm.doc.shipment_destination_warehouse || "");
+			frm.set_value("add_to_transit", 0);
+		}
+		sync_shipment_warehouse_fields(frm);
+	},
 
 	get_items_from_transit_entry: function (frm) {
 		if (frm.doc.docstatus === 0 && !frm.doc.subcontracting_inward_order) {
@@ -625,6 +709,12 @@ frappe.ui.form.on("Stock Entry", {
 	},
 
 	before_save: function (frm) {
+		if (frm.doc.requires_shipment && frm.doc.shipment_destination_warehouse) {
+			frm.doc.to_warehouse = frm.doc.shipment_destination_warehouse;
+			(frm.doc.items || []).forEach((item) => {
+				if (!item.t_warehouse) item.t_warehouse = frm.doc.shipment_destination_warehouse;
+			});
+		}
 		frm.doc.items.forEach((item) => {
 			item.uom = item.uom || item.stock_uom;
 		});
@@ -664,9 +754,6 @@ frappe.ui.form.on("Stock Entry", {
 		frm.fields_dict.items.grid.refresh();
 		frm.cscript.toggle_related_fields(frm.doc);
 	},
-	cost_center(frm, cdt, cdn) {
-		erpnext.utils.copy_value_in_all_rows(frm.doc, cdt, cdn, "items", "cost_center");
-	},
 	validate_purpose_consumption: function (frm) {
 		frappe
 			.call({
@@ -698,7 +785,7 @@ frappe.ui.form.on("Stock Entry", {
 
 	toggle_display_account_head: function (frm) {
 		var enabled = erpnext.is_perpetual_inventory_enabled(frm.doc.company);
-		frm.fields_dict["items"].grid.set_column_disp(["cost_center", "expense_account"], enabled);
+		frm.fields_dict["items"].grid.set_column_disp(["expense_account"], enabled);
 	},
 
 	set_basic_rate: function (frm, cdt, cdn) {
@@ -1114,7 +1201,6 @@ frappe.ui.form.on("Stock Entry Detail", {
 				batch_no: d.batch_no,
 				bom_no: d.bom_no,
 				expense_account: d.expense_account,
-				cost_center: d.cost_center,
 				company: frm.doc.company,
 				qty: d.qty,
 				voucher_type: frm.doc.doctype,
@@ -1164,9 +1250,6 @@ frappe.ui.form.on("Stock Entry Detail", {
 		erpnext.utils.copy_value_in_all_rows(frm.doc, cdt, cdn, "items", "expense_account");
 	},
 
-	cost_center(frm, cdt, cdn) {
-		erpnext.utils.copy_value_in_all_rows(frm.doc, cdt, cdn, "items", "cost_center");
-	},
 
 	sample_quantity(frm, cdt, cdn) {
 		validate_sample_quantity(frm, cdt, cdn);
@@ -1443,10 +1526,6 @@ erpnext.stock.StockEntry = class StockEntry extends erpnext.stock.StockControlle
 
 			erpnext.accounts.dimensions.update_dimension(this.frm, this.frm.doctype);
 
-			if (!this.frm.doc.__onload?.load_after_mapping) {
-				this.set_default_account("cost_center", "cost_center");
-			}
-
 			this.frm.refresh_fields("items");
 		}
 	}
@@ -1580,8 +1659,8 @@ erpnext.stock.StockEntry = class StockEntry extends erpnext.stock.StockControlle
 	items_add(doc, cdt, cdn) {
 		var row = frappe.get_doc(cdt, cdn);
 
-		if (!(row.expense_account && row.cost_center)) {
-			this.frm.script_manager.copy_from_first_row("items", row, ["expense_account", "cost_center"]);
+		if (!row.expense_account) {
+			this.frm.script_manager.copy_from_first_row("items", row, ["expense_account"]);
 		}
 
 		if (this.frm.doc.from_warehouse) row.s_warehouse = this.frm.doc.from_warehouse;

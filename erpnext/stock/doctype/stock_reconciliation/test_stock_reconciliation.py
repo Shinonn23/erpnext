@@ -2106,6 +2106,33 @@ class TestStockReconciliation(ERPNextTestSuite, StockTestMixin):
 			elif s.id_plant == plant_b.name:
 				self.assertEqual(s.actual_qty, 3)
 
+		adjustment = frappe.new_doc("Stock Reconciliation")
+		adjustment.purpose = "Stock Reconciliation"
+		adjustment.posting_date = nowdate()
+		adjustment.posting_time = nowtime()
+		adjustment.company = "_Test Company"
+		adjustment.append(
+			"items",
+			{
+				"item_code": item.name,
+				"warehouse": warehouse,
+				"qty": 6,
+				"valuation_rate": 100,
+				"id_plant": plant_a.name,
+			},
+		)
+		adjustment.insert()
+		adjustment.submit()
+
+		self.assertEqual(
+			get_stock_balance(item.name, warehouse, inventory_dimensions_dict={"id_plant": plant_a.name}),
+			6,
+		)
+		self.assertEqual(
+			get_stock_balance(item.name, warehouse, inventory_dimensions_dict={"id_plant": plant_b.name}),
+			3,
+		)
+
 	def test_serial_no_status_with_backdated_stock_reco(self):
 		from erpnext.stock.doctype.delivery_note.test_delivery_note import create_delivery_note
 
@@ -2543,12 +2570,6 @@ def create_stock_reconciliation(**args):
 		if frappe.get_all("Stock Ledger Entry", {"company": sr.company})
 		else frappe.get_cached_value("Account", {"account_type": "Temporary", "company": sr.company}, "name")
 	)
-	sr.cost_center = (
-		args.cost_center
-		or frappe.get_cached_value("Company", sr.company, "cost_center")
-		or frappe.get_cached_value("Cost Center", filters={"is_group": 0, "company": sr.company})
-	)
-
 	bundle_id = None
 	if not args.use_serial_batch_fields and (args.batch_no or args.serial_no) and args.qty:
 		batches = frappe._dict({})

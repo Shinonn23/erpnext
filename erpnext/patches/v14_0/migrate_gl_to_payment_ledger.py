@@ -56,7 +56,6 @@ def get_columns():
 		"amount_in_account_currency",
 		"account_currency",
 		"company",
-		"cost_center",
 		"due_date",
 		"finance_book",
 	]

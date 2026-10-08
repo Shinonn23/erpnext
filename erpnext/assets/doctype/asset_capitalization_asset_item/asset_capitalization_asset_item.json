@@ -16,7 +16,6 @@
   "asset_value",
   "column_break_9",
   "accounting_dimensions_section",
-  "cost_center",
   "dimension_col_break",
   "project",
   "fixed_asset_account"
@@ -84,12 +83,6 @@
    "read_only": 1
   },
   {
-   "fieldname": "cost_center",
-   "fieldtype": "Link",
-   "label": "Cost Center",
-   "options": "Cost Center"
-  },
-  {
    "collapsible": 1,
    "fieldname": "accounting_dimensions_section",
    "fieldtype": "Section Break",
@@ -100,11 +93,11 @@
    "fieldtype": "Column Break"
   },
   {
-    "allow_on_submit": 1,
-    "fieldname": "project",
-    "fieldtype": "Link",
-    "label": "Project",
-    "options": "Project"
+   "allow_on_submit": 1,
+   "fieldname": "project",
+   "fieldtype": "Link",
+   "label": "Project",
+   "options": "Project"
   },
   {
    "fieldname": "finance_book",

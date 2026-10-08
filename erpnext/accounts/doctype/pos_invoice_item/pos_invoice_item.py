@@ -30,7 +30,6 @@ class POSInvoiceItem(SalesInvoiceItem):
 		batch_no: DF.Link | None
 		brand: DF.Data | None
 		conversion_factor: DF.Float
-		cost_center: DF.Link
 		customer_item_code: DF.Data | None
 		deferred_revenue_account: DF.Link | None
 		delivered_by_supplier: DF.Check

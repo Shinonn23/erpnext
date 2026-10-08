@@ -110,11 +110,53 @@ class PickList(TransactionBase):
 				item.update(get_item_details(item.item_code, item.uom, item.warehouse, company))
 
 	def validate(self):
+		self.validate_customer_demo_workflow()
 		self.validate_expired_batches()
 		self.validate_for_qty()
 		self.validate_stock_qty()
 		self.check_serial_no_status()
 		self.validate_with_previous_doc()
+
+	def validate_customer_demo_workflow(self):
+		request_type = frappe.db.get_value(
+			"Material Request", self.material_request, "material_request_type"
+		) if self.material_request else None
+		if request_type == "Customer Demo" and self.pick_list_type != "Customer Demo - Asset Conversion":
+			frappe.throw(_("Pick Lists linked to a Customer Demo request must use Customer Demo - Asset Conversion"))
+		if self.pick_list_type != "Customer Demo - Asset Conversion":
+			return
+		if self.purpose != "Material Transfer" or not self.material_request:
+			frappe.throw(_("Customer Demo - Asset Conversion requires Material Transfer and a Material Request"))
+		request = frappe.db.get_value(
+			"Material Request", self.material_request,
+			["docstatus", "company", "material_request_type"], as_dict=True,
+		)
+		if not request or request.docstatus != 1 or request.company != self.company or request.material_request_type != "Customer Demo":
+			frappe.throw(_("Select a submitted Customer Demo request for the same Company"))
+		if not self.locations:
+			frappe.throw(_("Add the Stock Items needed to fulfill the Customer Demo request"))
+		from erpnext.assets.doctype.material_request.material_request import get_in_transit_asset_movement_qty
+
+		picked_by_request_item = defaultdict(float)
+		for location in self.locations:
+			request_item = frappe.db.get_value(
+				"Material Request Item", location.material_request_item,
+				["parent", "item_code", "item_type", "from_warehouse", "qty", "fulfilled_qty"], as_dict=True,
+			)
+			if (
+				not request_item or request_item.parent != self.material_request
+				or request_item.item_type != "Stock Item" or request_item.item_code != location.item_code
+				or request_item.from_warehouse != location.warehouse
+			):
+				frappe.throw(_("Pick List row {0} must match a Stock Item and Source Warehouse on the linked request").format(location.idx))
+			picked_by_request_item[location.material_request_item] += flt(location.picked_qty or location.stock_qty)
+			available_qty = (
+				flt(request_item.qty)
+				- flt(request_item.fulfilled_qty)
+				- get_in_transit_asset_movement_qty(location.material_request_item, "Transfer")
+			)
+			if picked_by_request_item[location.material_request_item] > max(available_qty, 0):
+				frappe.throw(_("Pick List row {0}: Picked Qty exceeds the unfulfilled request quantity").format(location.idx))
 
 	def before_save(self):
 		self.update_status()
@@ -284,6 +326,44 @@ class PickList(TransactionBase):
 		self.update_reference_qty()
 		self.update_sales_order_picking_status()
 		self.update_prevdoc_status()
+
+	@frappe.whitelist()
+	def make_stock_to_asset_conversion(self):
+		self.check_permission("read")
+		if self.docstatus != 1 or self.purpose != "Material Transfer" or self.pick_list_type != "Customer Demo - Asset Conversion" or not self.material_request:
+			frappe.throw(_("Submit the Customer Demo Pick List before creating a Stock to Asset Conversion"))
+		request = frappe.get_doc("Material Request", self.material_request)
+		if request.docstatus != 1 or request.material_request_type != "Customer Demo" or request.company != self.company:
+			frappe.throw(_("Pick List must be linked to a submitted Customer Demo request for the same Company"))
+		existing = frappe.db.get_value("Stock to Asset Conversion", {"pick_list": self.name, "docstatus": ["<", 2]}, "name")
+		if existing:
+			return frappe.get_doc("Stock to Asset Conversion", existing).as_dict()
+		conversion = frappe.new_doc("Stock to Asset Conversion")
+		conversion.company = self.company
+		conversion.material_request = request.name
+		conversion.pick_list = self.name
+		for location in self.locations:
+			request_item = frappe.db.get_value(
+				"Material Request Item", location.material_request_item,
+				["parent", "item_code", "item_type", "from_warehouse", "qty", "fulfilled_qty"], as_dict=True,
+			)
+			if (
+				not request_item or request_item.parent != request.name
+				or request_item.item_type != "Stock Item" or request_item.item_code != location.item_code
+				or request_item.from_warehouse != location.warehouse
+			):
+				frappe.throw(_("Pick List row {0} does not match a Stock Item row on the linked request").format(location.idx))
+			if flt(location.picked_qty) <= 0 or flt(location.picked_qty) > flt(request_item.qty) - flt(request_item.fulfilled_qty):
+				frappe.throw(_("Pick List row {0}: Picked Qty exceeds the unfulfilled request quantity").format(location.idx))
+			conversion.append("stock_items", {
+				"item_code": location.item_code, "qty": location.picked_qty,
+				"warehouse": location.warehouse,
+				"material_request_item": location.material_request_item,
+			})
+		if not conversion.stock_items:
+			frappe.throw(_("Add picked Stock Items before creating the conversion"))
+		conversion.insert()
+		return conversion.as_dict()
 
 	def validate_expired_batches(self):
 		batches = []
@@ -1589,6 +1669,8 @@ def add_product_bundles_to_target(pick_list, target_doc, item_mapper, sales_orde
 def create_stock_entry(pick_list: str | dict):
 	pick_list = frappe.get_doc(frappe.parse_json(pick_list))
 	pick_list.check_permission("read")
+	if pick_list.get("pick_list_type") == "Customer Demo - Asset Conversion":
+		frappe.throw(_("Create a Stock to Asset Conversion from this Pick List. It will consume the picked stock and create the Assets."))
 	validate_item_locations(pick_list)
 
 	stock_entry = frappe.new_doc("Stock Entry")
@@ -1671,23 +1753,7 @@ def update_delivery_note_item(source, target, delivery_note):
 
 
 def update_child_item(source, target, target_doc):
-	cost_center = frappe.db.get_value("Project", target_doc.project, "cost_center")
-	if not cost_center:
-		cost_center = get_cost_center(source.item_code, "Item", target_doc.company)
-
-	if not cost_center:
-		cost_center = get_cost_center(source.item_group, "Item Group", target_doc.company)
-
-	target.cost_center = cost_center
-
-
-def get_cost_center(for_item, from_doctype, company):
-	"""Returns Cost Center for Item or Item Group"""
-	return frappe.db.get_value(
-		"Item Default",
-		fieldname=["buying_cost_center"],
-		filters={"parent": for_item, "parenttype": from_doctype, "company": company},
-	)
+	return
 
 
 def set_delivery_note_missing_values(target):

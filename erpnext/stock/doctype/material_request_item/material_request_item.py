@@ -18,11 +18,13 @@ class MaterialRequestItem(Document):
 		from frappe.types import DF
 
 		actual_qty: DF.Float
+		asset_transfer_asset: DF.Link | None
+		asset_transfer_source_location: DF.Link | None
+		asset_transfer_target_location: DF.Link | None
 		amount: DF.Currency
 		bom_no: DF.Link | None
 		brand: DF.Link | None
 		conversion_factor: DF.Float
-		cost_center: DF.Link | None
 		description: DF.TextEditor | None
 		expense_account: DF.Link | None
 		from_warehouse: DF.Link | None

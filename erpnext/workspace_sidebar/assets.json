@@ -81,6 +81,18 @@
   {
    "child": 0,
    "collapsible": 1,
+   "icon": "landmark",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Stock to Asset Conversion",
+   "link_to": "Stock to Asset Conversion",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
    "icon": "getting-started",
    "indent": 1,
    "keep_closed": 1,
@@ -206,6 +218,18 @@
    "keep_closed": 0,
    "label": "Asset Activity",
    "link_to": "Asset Activity",
+   "link_type": "Report",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "icon": "",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Stock to Asset Conversion Audit",
+   "link_to": "Stock to Asset Conversion Audit",
    "link_type": "Report",
    "show_arrow": 0,
    "type": "Link"

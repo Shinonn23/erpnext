@@ -23,7 +23,6 @@ class TestAccountingDimension(ERPNextTestSuite):
 				"rate": 100,
 				"income_account": "Sales - _TC",
 				"expense_account": "Cost of Goods Sold - _TC",
-				"cost_center": "_Test Cost Center - _TC",
 				"department": "_Test Department - _TC",
 				"location": "Block 1",
 			},
@@ -84,7 +83,6 @@ class TestAccountingDimension(ERPNextTestSuite):
 				"rate": 100,
 				"income_account": "Sales - _TC",
 				"expense_account": "Cost of Goods Sold - _TC",
-				"cost_center": "_Test Cost Center - _TC",
 				"location": "",
 			},
 		)

@@ -517,34 +517,6 @@ erpnext.sales_common = {
 						});
 					}
 				}
-				let me = this;
-				if (["Delivery Note", "Sales Invoice", "Sales Order"].includes(this.frm.doc.doctype)) {
-					if (this.frm.doc.project) {
-						frappe.call({
-							method: "erpnext.projects.doctype.project.project.get_cost_center_name",
-							args: { project: this.frm.doc.project },
-							callback: function (r, rt) {
-								if (!r.exc) {
-									if (r.message) {
-										$.each(me.frm.doc["items"] || [], function (i, row) {
-											frappe.model.set_value(
-												row.doctype,
-												row.name,
-												"cost_center",
-												r.message
-											);
-										});
-										frappe.msgprint(
-											__("Cost Center for Item rows has been updated to {0}", [
-												r.message,
-											])
-										);
-									}
-								}
-							},
-						});
-					}
-				}
 			}
 
 			coupon_code() {

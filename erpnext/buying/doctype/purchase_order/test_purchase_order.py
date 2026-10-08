@@ -522,7 +522,6 @@ class TestPurchaseOrder(ERPNextTestSuite):
 			{
 				"account_head": "_Test Account Excise Duty - _TC",
 				"charge_type": "On Net Total",
-				"cost_center": "_Test Cost Center - _TC",
 				"description": "Excise Duty",
 				"doctype": "Purchase Taxes and Charges",
 				"rate": 10,
@@ -1172,7 +1171,6 @@ class TestPurchaseOrder(ERPNextTestSuite):
 	@ERPNextTestSuite.change_settings("Selling Settings", {"maintain_same_sales_rate": 1})
 	@ERPNextTestSuite.change_settings("Buying Settings", {"maintain_same_rate": 1})
 	def test_internal_transfer_flow(self):
-		from erpnext.accounts.doctype.cost_center.test_cost_center import create_cost_center
 		from erpnext.accounts.doctype.sales_invoice.sales_invoice import (
 			make_inter_company_purchase_invoice,
 		)
@@ -1185,16 +1183,10 @@ class TestPurchaseOrder(ERPNextTestSuite):
 		prepare_data_for_internal_transfer()
 		supplier = "_Test Internal Supplier 2"
 
-		create_cost_center(
-			cost_center_name="_Test Cost Center for perpetual inventory Account",
-			company="_Test Company with perpetual inventory",
-		)
-
 		mr = make_material_request(
 			qty=2,
 			company="_Test Company with perpetual inventory",
 			warehouse="Stores - TCP1",
-			cost_center="_Test Cost Center for perpetual inventory Account - TCP1",
 		)
 
 		po = create_purchase_order(
@@ -1799,6 +1791,7 @@ def create_purchase_order(**args):
 				"against_blanket": args.against_blanket,
 				"material_request": args.material_request,
 				"material_request_item": args.material_request_item,
+				"project": args.project,
 			},
 		)
 

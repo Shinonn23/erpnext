@@ -14,7 +14,6 @@
             "Equipment": {
                 "Accumulated Depreciation - Equipment": {}
             },
-            "Input VAT": {},
             "Inventory": {},
             "Outstanding Cheques": {},
             "Withholding Income Tax": {},
@@ -44,7 +43,6 @@
             "Account Payable": {},
             "Accrued Expenses": {},
             "Loans": {},
-            "Output VAT": {},
             "Uninvoiced Receipts": {},
             "Withholding Tax": {},
             "root_type": "Liability"

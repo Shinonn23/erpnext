@@ -14,7 +14,6 @@ class ItemDefault(Document):
 	if TYPE_CHECKING:
 		from frappe.types import DF
 
-		buying_cost_center: DF.Link | None
 		company: DF.Link
 		default_cogs_account: DF.Link | None
 		default_discount_account: DF.Link | None
@@ -36,7 +35,6 @@ class ItemDefault(Document):
 		purchase_expense_account: DF.Link | None
 		purchase_expense_contra_account: DF.Link | None
 		purchase_price_variance_account: DF.Link | None
-		selling_cost_center: DF.Link | None
 	# end: auto-generated types
 
 	pass

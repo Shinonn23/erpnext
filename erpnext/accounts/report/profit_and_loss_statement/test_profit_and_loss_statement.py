@@ -18,7 +18,6 @@ class TestProfitAndLossStatement(ERPNextTestSuite, AccountsTestMixin):
 		self.customer = "_Test Customer"
 		self.item = "_Test Item"
 		self.debit_to = "Debtors - _TC"
-		self.cost_center = "Main - _TC"
 
 	def create_sales_invoice(self, qty=1, rate=150, no_payment_schedule=False, do_not_submit=False):
 		frappe.set_user("Administrator")
@@ -28,8 +27,6 @@ class TestProfitAndLossStatement(ERPNextTestSuite, AccountsTestMixin):
 			customer=self.customer,
 			debit_to=self.debit_to,
 			posting_date=today(),
-			parent_cost_center=self.cost_center,
-			cost_center=self.cost_center,
 			rate=rate,
 			price_list_rate=rate,
 			qty=qty,

@@ -75,7 +75,10 @@ class SalesPartnerSummaryReportTestMixin(ERPNextTestSuite):
 		if doctype == "POS Invoice":
 			POSInvoiceTestMixin.setUp(self)
 
-			from erpnext.accounts.doctype.pos_opening_entry.test_pos_opening_entry import create_opening_entry
+			from erpnext.accounts.doctype.pos_opening_entry.test_pos_opening_entry import (
+				cancel_opening_entry,
+				create_opening_entry,
+			)
 
 			pos_opening_entry = create_opening_entry(self.pos_profile, self.test_user.name, get_obj=1)
 
@@ -93,7 +96,7 @@ class SalesPartnerSummaryReportTestMixin(ERPNextTestSuite):
 		self.transaction_doc_returned()
 
 		if doctype == "POS Invoice":
-			pos_opening_entry.cancel()
+			cancel_opening_entry(pos_opening_entry)
 
 	def transaction_doc_with_7pc_commision(self):
 		args = {"rate": 100, "qty": 10, self.date_field: "2026-01-14", "do_not_save": 1}

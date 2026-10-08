@@ -36,6 +36,11 @@
   "add_template",
   "total_weight",
   "column_break_28",
+  "material_request",
+  "material_request_direction",
+  "custody_loan",
+  "custody_loan_direction",
+  "shipment_documents",
   "shipment_delivery_note",
   "shipment_details_section",
   "pallets",
@@ -60,6 +65,11 @@
   "carrier_service",
   "awb_number",
   "tracking_status",
+  "proof_of_delivery_section",
+  "received_by",
+  "received_on",
+  "delivery_signature",
+  "delivery_notes",
   "tracking_status_info",
   "amended_from"
  ],
@@ -123,7 +133,7 @@
    "fieldname": "pickup_contact_name",
    "fieldtype": "Link",
    "label": "Contact",
-   "mandatory_depends_on": "eval: doc.pickup_from_type !== 'Company'",
+   "mandatory_depends_on": "eval: doc.pickup_from_type !== 'Company' && !doc.material_request",
    "options": "Contact"
   },
   {
@@ -201,7 +211,7 @@
    "fieldname": "delivery_contact_name",
    "fieldtype": "Link",
    "label": "Contact",
-   "mandatory_depends_on": "eval: doc.delivery_from_type !== 'Company'",
+   "mandatory_depends_on": "eval: doc.delivery_to_type !== 'Company' && !doc.material_request",
    "options": "Contact"
   },
   {
@@ -391,6 +401,44 @@
    "print_hide": 1
   },
   {
+   "fieldname": "proof_of_delivery_section",
+   "fieldtype": "Section Break",
+   "label": "Proof of Delivery",
+   "collapsible": 1,
+   "depends_on": "eval:doc.docstatus == 1"
+  },
+  {
+   "fieldname": "received_by",
+   "fieldtype": "Data",
+   "label": "Received By",
+   "allow_on_submit": 1,
+   "depends_on": "eval:doc.tracking_status == \"Delivered\"",
+   "mandatory_depends_on": "eval:doc.tracking_status == \"Delivered\""
+  },
+  {
+   "fieldname": "received_on",
+   "fieldtype": "Datetime",
+   "label": "Received On",
+   "allow_on_submit": 1,
+   "depends_on": "eval:doc.tracking_status == \"Delivered\"",
+   "mandatory_depends_on": "eval:doc.tracking_status == \"Delivered\""
+  },
+  {
+   "fieldname": "delivery_signature",
+   "fieldtype": "Signature",
+   "label": "Receiver Signature",
+   "allow_on_submit": 1,
+   "depends_on": "eval:doc.tracking_status == \"Delivered\"",
+   "mandatory_depends_on": "eval:doc.tracking_status == \"Delivered\""
+  },
+  {
+   "fieldname": "delivery_notes",
+   "fieldtype": "Small Text",
+   "label": "Delivery Notes",
+   "allow_on_submit": 1,
+   "depends_on": "eval:doc.tracking_status == \"Delivered\""
+  },
+  {
    "fieldname": "tracking_status_info",
    "fieldtype": "Data",
    "label": "Tracking Status Info",
@@ -419,10 +467,20 @@
    "options": "Incoterm"
   },
   {
+   "fieldname": "shipment_documents",
+   "fieldtype": "Table",
+   "label": "Stock / Asset Transactions",
+   "options": "Shipment Document",
+   "description": "Link submitted stock and asset movement documents carried by this shipment.",
+   "allow_on_submit": 1
+  },
+  {
    "fieldname": "shipment_delivery_note",
    "fieldtype": "Table",
    "label": "Shipment Delivery Note",
-   "options": "Shipment Delivery Note"
+   "options": "Shipment Delivery Note",
+   "hidden": 1,
+   "description": "Legacy Delivery Note references are retained for existing shipments."
   },
   {
    "depends_on": "eval:doc.pickup_from_type === 'Company'",
@@ -437,11 +495,47 @@
    "fieldtype": "Float",
    "label": "Total Weight (kg)",
    "read_only": 1
+  },
+  {
+   "fieldname": "material_request",
+   "fieldtype": "Link",
+   "label": "Material Request",
+   "options": "Material Request",
+   "hidden": 1,
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "material_request_direction",
+   "fieldtype": "Select",
+   "label": "Material Request Direction",
+   "options": "Delivery\nPickup",
+   "hidden": 1,
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "custody_loan",
+   "fieldtype": "Link",
+   "label": "Custody Loan",
+   "options": "Custody Loan",
+   "hidden": 1,
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "custody_loan_direction",
+   "fieldtype": "Select",
+   "label": "Custody Loan Direction",
+   "options": "Delivery\nPickup",
+   "hidden": 1,
+   "read_only": 1,
+   "no_copy": 1
   }
  ],
  "is_submittable": 1,
  "links": [],
- "modified": "2026-01-16 14:59:28.547953",
+ "modified": "2026-10-05 05:55:00",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Shipment",

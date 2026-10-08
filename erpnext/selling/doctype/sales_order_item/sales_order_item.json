@@ -115,7 +115,6 @@
   "material_request_item",
   "purchase_order_item",
   "accounting_dimensions_section",
-  "cost_center",
   "column_break_ihdh",
   "project"
  ],
@@ -962,17 +961,6 @@
    "fieldname": "accounting_dimensions_section",
    "fieldtype": "Section Break",
    "label": "Accounting Dimensions"
-  },
-  {
-   "allow_on_submit": 1,
-   "default": ":Company",
-   "fieldname": "cost_center",
-   "fieldtype": "Link",
-   "label": "Cost Center",
-   "options": "Cost Center",
-   "print_hide": 1,
-   "print_width": "120px",
-   "width": "120px"
   },
   {
    "fieldname": "column_break_ihdh",

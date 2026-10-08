@@ -1133,64 +1133,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 		pr_return.cancel()
 		pr.cancel()
 
-	def test_purchase_receipt_cost_center(self):
-		from erpnext.accounts.doctype.cost_center.test_cost_center import create_cost_center
-
-		cost_center = "_Test Cost Center for BS Account - TCP1"
-		create_cost_center(
-			cost_center_name="_Test Cost Center for BS Account",
-			company="_Test Company with perpetual inventory",
-		)
-
-		if not frappe.db.exists("Location", "Test Location"):
-			frappe.get_doc({"doctype": "Location", "location_name": "Test Location"}).insert()
-
-		pr = make_purchase_receipt(
-			cost_center=cost_center,
-			company="_Test Company with perpetual inventory",
-			warehouse="Stores - TCP1",
-			supplier_warehouse="Work In Progress - TCP1",
-		)
-
-		stock_in_hand_account = get_inventory_account(pr.company, pr.get("items")[0].warehouse)
-		gl_entries = get_gl_entries("Purchase Receipt", pr.name)
-
-		self.assertTrue(gl_entries)
-
-		expected_values = {
-			"Stock Received But Not Billed - TCP1": {"cost_center": cost_center},
-			stock_in_hand_account: {"cost_center": cost_center},
-		}
-		for _i, gle in enumerate(gl_entries):
-			self.assertEqual(expected_values[gle.account]["cost_center"], gle.cost_center)
-
-		pr.cancel()
-
-	def test_purchase_receipt_cost_center_with_balance_sheet_account(self):
-		if not frappe.db.exists("Location", "Test Location"):
-			frappe.get_doc({"doctype": "Location", "location_name": "Test Location"}).insert()
-
-		pr = make_purchase_receipt(
-			company="_Test Company with perpetual inventory",
-			warehouse="Stores - TCP1",
-			supplier_warehouse="Work In Progress - TCP1",
-		)
-
-		stock_in_hand_account = get_inventory_account(pr.company, pr.get("items")[0].warehouse)
-		gl_entries = get_gl_entries("Purchase Receipt", pr.name)
-
-		self.assertTrue(gl_entries)
-		cost_center = pr.get("items")[0].cost_center
-
-		expected_values = {
-			"Stock Received But Not Billed - TCP1": {"cost_center": cost_center},
-			stock_in_hand_account: {"cost_center": cost_center},
-		}
-		for _i, gle in enumerate(gl_entries):
-			self.assertEqual(expected_values[gle.account]["cost_center"], gle.cost_center)
-
-		pr.cancel()
-
 	def test_make_purchase_invoice_from_pr_for_returned_qty(self):
 		from erpnext.buying.doctype.purchase_order.test_purchase_order import (
 			create_pr_against_po,
@@ -1269,7 +1211,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 			item_code=pr1.items[0].item_code,
 			company=company,
 			customer=customer,
-			cost_center="Main - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
 			qty=5,
 			rate=500,
@@ -1309,7 +1250,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 		dn = create_delivery_note(
 			company=company,
 			customer=customer,
-			cost_center="Main - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
 			qty=1,
 			rate=100,
@@ -1357,7 +1297,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 			item_code=pr1.items[0].item_code,
 			company=company,
 			customer=customer,
-			cost_center="Main - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
 			qty=10,
 			rate=500,
@@ -1469,7 +1408,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 			item_code=pr1.items[0].item_code,
 			company=company,
 			customer=customer,
-			cost_center="Main - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
 			qty=5,
 			rate=50,
@@ -1487,7 +1425,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 				"charge_type": "On Net Total",
 				"account_head": "_Test Account Shipping Charges - TCP1",
 				"category": "Valuation and Total",
-				"cost_center": "Main - TCP1",
 				"description": "Test",
 				"rate": 9,
 			},
@@ -1534,7 +1471,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 				"add_deduct_tax": "Deduct",
 				"account_head": "_Test Account Shipping Charges - TCP1",
 				"category": "Valuation and Total",
-				"cost_center": "Main - TCP1",
 				"description": "Valuation Discount",
 				"tax_amount": 20,
 			},
@@ -1563,7 +1499,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 				"add_deduct_tax": "Deduct",
 				"account_head": "_Test Account Shipping Charges - TCP1",
 				"category": "Valuation and Total",
-				"cost_center": "Main - TCP1",
 				"description": "Valuation Discount",
 				"rate": 10,
 			},
@@ -1603,7 +1538,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 					"qty": 1,
 					"rate": 100,
 					"warehouse": warehouse,
-					"cost_center": "Main - TCP1",
 					"expense_account": "Cost of Goods Sold - TCP1",
 				},
 			)
@@ -1614,7 +1548,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 				"charge_type": "Actual",
 				"account_head": "_Test Account Shipping Charges - TCP1",
 				"category": "Valuation and Total",
-				"cost_center": "Main - TCP1",
 				"description": "Valuation Tax",
 				"tax_amount": 30,
 				# Spread across all items (incl. non-stock); do not allocate full amount to stock items
@@ -1672,7 +1605,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 					"qty": 1,
 					"rate": 100,
 					"warehouse": warehouse,
-					"cost_center": "Main - TCP1",
 					"expense_account": "Cost of Goods Sold - TCP1",
 				},
 			)
@@ -1683,7 +1615,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 				"charge_type": "Actual",
 				"account_head": "_Test Account Shipping Charges - TCP1",
 				"category": "Valuation and Total",
-				"cost_center": "Main - TCP1",
 				"description": "Freight",
 				"tax_amount": 30,
 				# Default behavior: allocate the full amount to stock/asset items only
@@ -1741,7 +1672,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 					"qty": 1,
 					"rate": 100,
 					"warehouse": warehouse,
-					"cost_center": "Main - TCP1",
 					"expense_account": "Cost of Goods Sold - TCP1",
 				},
 			)
@@ -1753,7 +1683,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 				"charge_type": "Actual",
 				"account_head": "_Test Account Shipping Charges - TCP1",
 				"category": "Valuation and Total",
-				"cost_center": "Main - TCP1",
 				"description": "Valuation Tax",
 				"tax_amount": 30,
 				"allocate_full_amount_to_stock_items": 0,
@@ -1766,7 +1695,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 				"charge_type": "Actual",
 				"account_head": "_Test Account Customs Duty - TCP1",
 				"category": "Valuation and Total",
-				"cost_center": "Main - TCP1",
 				"description": "Freight",
 				"tax_amount": 20,
 				"allocate_full_amount_to_stock_items": 1,
@@ -1826,7 +1754,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 					"qty": 1,
 					"rate": rate,
 					"warehouse": warehouse,
-					"cost_center": "Main - TCP1",
 					"expense_account": "Cost of Goods Sold - TCP1",
 				},
 			)
@@ -1841,7 +1768,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 					"charge_type": "Actual",
 					"account_head": account,
 					"category": "Valuation and Total",
-					"cost_center": "Main - TCP1",
 					"description": account,
 					"tax_amount": amount,
 					"allocate_full_amount_to_stock_items": 1,
@@ -1937,7 +1863,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 
 		pi = create_purchase_invoice(
 			company="_Test Company with perpetual inventory",
-			cost_center="Main - TCP1",
 			warehouse="Stores - TCP1",
 			expense_account="_Test Account Cost for Goods Sold - TCP1",
 			currency="USD",
@@ -2053,7 +1978,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 			item_code=item_doc.name,
 			company=company,
 			customer=customer,
-			cost_center="Main - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
 			qty=1,
 			rate=500,
@@ -2152,7 +2076,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 			item_code=item_doc.name,
 			company=company,
 			customer=customer,
-			cost_center="Main - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
 			qty=1,
 			rate=500,
@@ -2250,7 +2173,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 			item_code=item_doc.name,
 			company=company,
 			customer=customer,
-			cost_center="Main - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
 			qty=10,
 			rate=100,
@@ -2315,7 +2237,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 			item_code=item_doc.name,
 			company=company,
 			customer="_Test Internal Customer 2",
-			cost_center="Main - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
 			qty=10,
 			rate=100,
@@ -2383,7 +2304,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 			item_code=item_doc.name,
 			company=company,
 			customer=customer,
-			cost_center="Main - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
 			qty=1,
 			rate=100,
@@ -2468,7 +2388,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 			qty=1,
 			update_stock=1,
 			expense_account="Cost of Goods Sold - TCP1",
-			cost_center="Main - TCP1",
 			rate=100,
 		)
 
@@ -2482,7 +2401,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 				update_stock=1,
 				qty=1,
 				expense_account="Cost of Goods Sold - TCP1",
-				cost_center="Main - TCP1",
 				rate=320 * i,
 			)
 
@@ -2490,7 +2408,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 			item_code=item_doc.name,
 			company=company,
 			customer=customer,
-			cost_center="Main - TCP1",
 			income_account="Sales - TCP1",
 			qty=1,
 			rate=500,
@@ -2664,7 +2581,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 			item_code=item.name,
 			company=company,
 			customer=customer,
-			cost_center="Main - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
 			qty=10,
 			rate=100,
@@ -2734,7 +2650,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 			item_code=item.name,
 			company=company,
 			customer=customer,
-			cost_center="Main - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
 			qty=10,
 			rate=100,
@@ -2812,7 +2727,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 			item_code=item.name,
 			company=company,
 			customer=customer,
-			cost_center="Main - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
 			qty=10,
 			rate=100,
@@ -3379,7 +3293,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 					"qty": 1,
 					"rate": 100,
 					"warehouse": pr.items[0].warehouse,
-					"cost_center": pr.items[0].cost_center,
 					"expense_account": pr.items[0].expense_account,
 					"uom": pr.items[0].uom,
 					"stock_uom": pr.items[0].stock_uom,
@@ -3419,7 +3332,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 					"qty": 1,
 					"rate": 100,
 					"warehouse": pr.items[0].warehouse,
-					"cost_center": pr.items[0].cost_center,
 					"expense_account": pr.items[0].expense_account,
 					"uom": pr.items[0].uom,
 					"stock_uom": pr.items[0].stock_uom,
@@ -3694,7 +3606,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 			item_code=inward_entry.items[0].item_code,
 			company=company,
 			customer=customer,
-			cost_center="Main - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
 			qty=10,
 			rate=500,
@@ -3833,7 +3744,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 			item_code=inward_entry.items[0].item_code,
 			company=company,
 			customer=customer,
-			cost_center="Main - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
 			qty=10,
 			rate=500,
@@ -4118,7 +4028,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 
 		stock_rbnb = "Stock Received But Not Billed - _TC"
 		stock_in_hand = "Stock In Hand - _TC"
-		test_cc = "_Test Cost Center - _TC"
 		test_company = "_Test Company"
 		creditors = "Creditors - _TC"
 		lcv_expense_account = "Expenses Included In Valuation - _TC"
@@ -4143,7 +4052,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 			{
 				"category": "Valuation and Total",
 				"account_head": packaging_charges_account,
-				"cost_center": test_cc,
 				"description": "Test",
 				"add_deduct_tax": "Add",
 				"charge_type": "Actual",
@@ -4155,9 +4063,9 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 		pr = make_pr_against_po(po.name, received_qty=10)
 		pr_gl_entries = get_gl_entries(pr.doctype, pr.name, skip_cancelled=True)
 		expected_pr_gles = [
-			{"account": stock_rbnb, "debit": 0.0, "credit": 1000.0, "cost_center": test_cc},
-			{"account": stock_in_hand, "debit": 1250.0, "credit": 0.0, "cost_center": test_cc},
-			{"account": packaging_charges_account, "debit": 0.0, "credit": 250.0, "cost_center": test_cc},
+			{"account": stock_rbnb, "debit": 0.0, "credit": 1000.0},
+			{"account": stock_in_hand, "debit": 1250.0, "credit": 0.0},
+			{"account": packaging_charges_account, "debit": 0.0, "credit": 250.0},
 		]
 		self.assertEqual(expected_pr_gles, pr_gl_entries)
 
@@ -4165,19 +4073,19 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 		pi = make_purchase_invoice(pr.name).save().submit()
 		pi_gl_entries = get_gl_entries(pi.doctype, pi.name, skip_cancelled=True)
 		expected_pi_gles = [
-			{"account": stock_rbnb, "debit": 1000.0, "credit": 0.0, "cost_center": test_cc},
-			{"account": packaging_charges_account, "debit": 250.0, "credit": 0.0, "cost_center": test_cc},
-			{"account": creditors, "debit": 0.0, "credit": 1250.0, "cost_center": None},
+			{"account": stock_rbnb, "debit": 1000.0, "credit": 0.0},
+			{"account": packaging_charges_account, "debit": 250.0, "credit": 0.0},
+			{"account": creditors, "debit": 0.0, "credit": 1250.0},
 		]
 		self.assertEqual(expected_pi_gles, pi_gl_entries)
 
 		lcv = self.create_lcv(pr.doctype, pr.name, test_company, lcv_expense_account)
 		pr_gles_after_lcv = get_gl_entries(pr.doctype, pr.name, skip_cancelled=True)
 		expected_pr_gles_after_lcv = [
-			{"account": stock_rbnb, "debit": 0.0, "credit": 1000.0, "cost_center": test_cc},
-			{"account": stock_in_hand, "debit": 1300.0, "credit": 0.0, "cost_center": test_cc},
-			{"account": packaging_charges_account, "debit": 0.0, "credit": 250.0, "cost_center": test_cc},
-			{"account": lcv_expense_account, "debit": 0.0, "credit": 50.0, "cost_center": test_cc},
+			{"account": stock_rbnb, "debit": 0.0, "credit": 1000.0},
+			{"account": stock_in_hand, "debit": 1300.0, "credit": 0.0},
+			{"account": packaging_charges_account, "debit": 0.0, "credit": 250.0},
+			{"account": lcv_expense_account, "debit": 0.0, "credit": 50.0},
 		]
 		self.assertEqual(expected_pr_gles_after_lcv, pr_gles_after_lcv)
 
@@ -4200,10 +4108,10 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 
 		pr_gles_after_repost = get_gl_entries(pr.doctype, pr.name, skip_cancelled=True)
 		expected_pr_gles_after_repost = [
-			{"account": stock_rbnb, "debit": 0.0, "credit": 1000.0, "cost_center": test_cc},
-			{"account": stock_in_hand, "debit": 1300.0, "credit": 0.0, "cost_center": test_cc},
-			{"account": packaging_charges_account, "debit": 0.0, "credit": 250.0, "cost_center": test_cc},
-			{"account": lcv_expense_account, "debit": 0.0, "credit": 50.0, "cost_center": test_cc},
+			{"account": stock_rbnb, "debit": 0.0, "credit": 1000.0},
+			{"account": stock_in_hand, "debit": 1300.0, "credit": 0.0},
+			{"account": packaging_charges_account, "debit": 0.0, "credit": 250.0},
+			{"account": lcv_expense_account, "debit": 0.0, "credit": 50.0},
 		]
 		self.assertEqual(len(pr_gles_after_repost), len(expected_pr_gles_after_repost))
 		self.assertEqual(expected_pr_gles_after_repost, pr_gles_after_repost)
@@ -4268,7 +4176,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 
 		stock_rbnb = "Stock Received But Not Billed - _TC"
 		stock_in_hand = "Stock In Hand - _TC"
-		test_cc = "_Test Cost Center - _TC"
 		test_company = "_Test Company"
 		creditors = "Creditors - _TC"
 
@@ -4292,7 +4199,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 			{
 				"category": "Valuation and Total",
 				"account_head": packaging_charges_account,
-				"cost_center": test_cc,
 				"description": "Test",
 				"add_deduct_tax": "Add",
 				"charge_type": "Actual",
@@ -4304,9 +4210,9 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 		pr = make_pr_against_po(po.name, received_qty=10)
 		pr_gl_entries = get_gl_entries(pr.doctype, pr.name, skip_cancelled=True)
 		expected_pr_gles = [
-			{"account": stock_rbnb, "debit": 0.0, "credit": 1000.0, "cost_center": test_cc},
-			{"account": stock_in_hand, "debit": 1250.0, "credit": 0.0, "cost_center": test_cc},
-			{"account": packaging_charges_account, "debit": 0.0, "credit": 250.0, "cost_center": test_cc},
+			{"account": stock_rbnb, "debit": 0.0, "credit": 1000.0},
+			{"account": stock_in_hand, "debit": 1250.0, "credit": 0.0},
+			{"account": packaging_charges_account, "debit": 0.0, "credit": 250.0},
 		]
 		self.assertEqual(expected_pr_gles, pr_gl_entries)
 
@@ -4314,9 +4220,9 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 		pi = make_purchase_invoice(pr.name).save().submit()
 		pi_gl_entries = get_gl_entries(pi.doctype, pi.name, skip_cancelled=True)
 		expected_pi_gles = [
-			{"account": stock_rbnb, "debit": 1000.0, "credit": 0.0, "cost_center": test_cc},
-			{"account": packaging_charges_account, "debit": 250.0, "credit": 0.0, "cost_center": test_cc},
-			{"account": creditors, "debit": 0.0, "credit": 1250.0, "cost_center": None},
+			{"account": stock_rbnb, "debit": 1000.0, "credit": 0.0},
+			{"account": packaging_charges_account, "debit": 250.0, "credit": 0.0},
+			{"account": creditors, "debit": 0.0, "credit": 1250.0},
 		]
 		self.assertEqual(expected_pi_gles, pi_gl_entries)
 
@@ -4339,9 +4245,9 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 
 		pr_gles_after_repost = get_gl_entries(pr.doctype, pr.name, skip_cancelled=True)
 		expected_pr_gles_after_repost = [
-			{"account": stock_rbnb, "debit": 0.0, "credit": 1000.0, "cost_center": test_cc},
-			{"account": stock_in_hand, "debit": 1250.0, "credit": 0.0, "cost_center": test_cc},
-			{"account": packaging_charges_account, "debit": 0.0, "credit": 250.0, "cost_center": test_cc},
+			{"account": stock_rbnb, "debit": 0.0, "credit": 1000.0},
+			{"account": stock_in_hand, "debit": 1250.0, "credit": 0.0},
+			{"account": packaging_charges_account, "debit": 0.0, "credit": 250.0},
 		]
 		self.assertEqual(len(pr_gles_after_repost), len(expected_pr_gles_after_repost))
 		self.assertEqual(expected_pr_gles_after_repost, pr_gles_after_repost)
@@ -4489,7 +4395,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 			item_code=inward_entry.items[0].item_code,
 			company=company,
 			customer=customer,
-			cost_center="Main - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
 			qty=10,
 			rate=500,
@@ -4606,7 +4511,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 			item_code=inward_entry.items[0].item_code,
 			company=company,
 			customer=customer,
-			cost_center="Main - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
 			qty=10,
 			rate=500,
@@ -5257,7 +5161,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 			rate=100,
 			company="_Test Company with perpetual inventory",
 			customer="_Test Internal Customer 2",
-			cost_center="Main - TCP1",
 			warehouse="Stores - TCP1",
 			target_warehouse="Work In Progress - TCP1",
 		)
@@ -6116,7 +6019,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 			item_code=item_doc.name,
 			company=company,
 			customer=customer,
-			cost_center="Main - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
 			qty=5,
 			rate=100,
@@ -6446,7 +6348,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 				"uom": "_Test UOM",
 				"stock_uom": "_Test UOM",
 				"conversion_factor": 1.0,
-				"cost_center": frappe.get_cached_value("Company", pr.company, "cost_center"),
 			},
 		)
 		pr.insert()
@@ -6485,7 +6386,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 		"""
 		company = "_Test Company with perpetual inventory"
 		warehouse = "Stores - TCP1"
-		cost_center = "Main - TCP1"
 
 		item_code = make_item(
 			"Test Item for SRBNB Inclusive Tax Rate Change",
@@ -6498,7 +6398,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 			rate=1000,
 			company=company,
 			warehouse=warehouse,
-			cost_center=cost_center,
 		)
 
 		pi = make_purchase_invoice(pr.name)
@@ -6513,7 +6412,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 				"included_in_print_rate": 1,
 				"rate": 5,
 				"description": "Test Inclusive Tax",
-				"cost_center": cost_center,
 			},
 		)
 		pi.save()
@@ -6552,7 +6450,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 
 		company = "_Test Company with perpetual inventory"
 		warehouse = "Stores - TCP1"
-		cost_center = "Main - TCP1"
 
 		party_account = create_account(
 			account_name="USD Payable For SRBNB Exchange Rate Test",
@@ -6596,7 +6493,6 @@ class TestPurchaseReceipt(ERPNextTestSuite):
 				"included_in_print_rate": 1,
 				"rate": 5,
 				"description": "Test Inclusive Tax",
-				"cost_center": cost_center,
 			},
 		)
 		pi.save()
@@ -6723,7 +6619,6 @@ def get_gl_entries(voucher_type, voucher_no, skip_cancelled=False, as_dict=True)
 			gl.account,
 			gl.debit,
 			gl.credit,
-			gl.cost_center,
 		)
 		.where((gl.voucher_type == voucher_type) & (gl.voucher_no == voucher_no))
 		.orderby(gl.account, order=frappe.qb.desc)
@@ -6744,7 +6639,6 @@ def get_taxes(**args):
 			"add_deduct_tax": "Add",
 			"category": "Valuation and Total",
 			"charge_type": "Actual",
-			"cost_center": args.cost_center or "Main - TCP1",
 			"description": "Shipping Charges",
 			"doctype": "Purchase Taxes and Charges",
 			"parentfield": "taxes",
@@ -6756,7 +6650,6 @@ def get_taxes(**args):
 			"add_deduct_tax": "Add",
 			"category": "Total",
 			"charge_type": "Actual",
-			"cost_center": args.cost_center or "Main - TCP1",
 			"description": "VAT",
 			"doctype": "Purchase Taxes and Charges",
 			"parentfield": "taxes",
@@ -6768,7 +6661,6 @@ def get_taxes(**args):
 			"add_deduct_tax": "Add",
 			"category": "Valuation",
 			"charge_type": "Actual",
-			"cost_center": args.cost_center or "Main - TCP1",
 			"description": "Customs Duty",
 			"doctype": "Purchase Taxes and Charges",
 			"parentfield": "taxes",
@@ -6796,7 +6688,6 @@ def get_items(**args):
 			"stock_uom": "_Test UOM",
 			"uom": "_Test UOM",
 			"warehouse": args.warehouse or "_Test Warehouse - _TC",
-			"cost_center": args.cost_center or "Main - _TC",
 		},
 		{
 			"base_amount": 250.0,
@@ -6813,7 +6704,6 @@ def get_items(**args):
 			"stock_uom": "_Test UOM",
 			"uom": "_Test UOM",
 			"warehouse": args.warehouse or "_Test Warehouse 1 - _TC",
-			"cost_center": args.cost_center or "Main - _TC",
 		},
 	]
 
@@ -6890,7 +6780,6 @@ def make_purchase_receipt(**args):
 			"serial_and_batch_bundle": bundle_id,
 			"stock_uom": args.stock_uom or "_Test UOM",
 			"uom": uom,
-			"cost_center": args.cost_center or frappe.get_cached_value("Company", pr.company, "cost_center"),
 			"asset_location": args.location or "Test Location",
 			"use_serial_batch_fields": args.use_serial_batch_fields or 0,
 			"serial_no": args.serial_no if args.use_serial_batch_fields else "",
@@ -6901,10 +6790,7 @@ def make_purchase_receipt(**args):
 	if args.get_multiple_items:
 		pr.items = []
 
-		company_cost_center = frappe.get_cached_value("Company", pr.company, "cost_center")
-		cost_center = args.cost_center or company_cost_center
-
-		for item in get_items(warehouse=args.warehouse, cost_center=cost_center):
+		for item in get_items(warehouse=args.warehouse):
 			pr.append("items", item)
 
 	if args.get_taxes_and_charges:

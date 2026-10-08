@@ -4,6 +4,8 @@ import unittest
 
 from erpnext.tests.utils import ERPNextTestSuite
 
+IGNORE_TEST_RECORD_DEPENDENCIES = ["Payment Gateway"]
+
 
 class TestPaymentGatewayAccount(ERPNextTestSuite):
 	pass

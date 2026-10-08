@@ -37,8 +37,7 @@
   "cb_2",
   "additional_discount_percentage",
   "additional_discount_amount",
-  "accounting_dimensions_section",
-  "cost_center"
+  "accounting_dimensions_section"
  ],
  "fields": [
   {
@@ -219,12 +218,6 @@
    "fieldtype": "Date",
    "label": "Subscription Start Date",
    "set_only_once": 1
-  },
-  {
-   "fieldname": "cost_center",
-   "fieldtype": "Link",
-   "label": "Cost Center",
-   "options": "Cost Center"
   },
   {
    "fieldname": "company",

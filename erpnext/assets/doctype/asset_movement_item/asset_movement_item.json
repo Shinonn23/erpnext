@@ -7,12 +7,20 @@
  "field_order": [
   "company",
   "asset",
+  "asset_serial_number",
+  "is_demo_asset",
+  "demo_loan_status",
   "source_location",
   "from_employee",
   "column_break_2",
   "asset_name",
   "target_location",
-  "to_employee"
+  "shipment_destination_location",
+  "to_employee",
+  "request_item",
+  "custody_loan_item",
+  "asset_item_code",
+  "demo_asset_required"
  ],
  "fields": [
   {
@@ -31,6 +39,30 @@
    "read_only": 1
   },
   {
+   "fetch_from": "asset.asset_serial_number",
+   "fieldname": "asset_serial_number",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Asset Serial Number",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "asset.is_demo_asset",
+   "fieldname": "is_demo_asset",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Is Demo Asset",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "asset.demo_loan_status",
+   "fieldname": "demo_loan_status",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Demo / Loan Status",
+   "read_only": 1
+  },
+  {
    "fieldname": "source_location",
    "fieldtype": "Link",
    "in_list_view": 1,
@@ -43,6 +75,15 @@
    "in_list_view": 1,
    "label": "Target Location",
    "options": "Location"
+  },
+  {
+   "fieldname": "shipment_destination_location",
+   "fieldtype": "Link",
+   "label": "Final Target Location",
+   "options": "Location",
+   "depends_on": "eval:parent.requires_shipment",
+   "mandatory_depends_on": "eval:parent.requires_shipment",
+   "in_list_view": 1
   },
   {
    "fieldname": "from_employee",
@@ -71,11 +112,43 @@
    "label": "Company",
    "options": "Company",
    "read_only": 1
+  },
+  {
+   "fieldname": "request_item",
+   "fieldtype": "Link",
+   "label": "Material Request Item",
+   "options": "Material Request Item",
+   "no_copy": 1
+  },
+  {
+   "fieldname": "custody_loan_item",
+   "fieldtype": "Link",
+   "label": "Custody Loan Item",
+   "options": "Custody Loan Item",
+   "hidden": 1,
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "asset_item_code",
+   "fieldtype": "Link",
+   "label": "Requested Asset Item",
+   "options": "Item",
+   "read_only": 1,
+   "hidden": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "demo_asset_required",
+   "fieldtype": "Check",
+   "label": "Demo Asset Required",
+   "read_only": 1,
+   "hidden": 1
   }
  ],
  "istable": 1,
  "links": [],
- "modified": "2024-03-27 13:06:35.272015",
+ "modified": "2026-10-05 04:00:00",
  "modified_by": "Administrator",
  "module": "Assets",
  "name": "Asset Movement Item",

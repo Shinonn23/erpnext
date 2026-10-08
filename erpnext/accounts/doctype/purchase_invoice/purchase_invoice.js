@@ -462,7 +462,7 @@ erpnext.accounts.PurchaseInvoice = class PurchaseInvoice extends erpnext.buying.
 
 	items_add(doc, cdt, cdn) {
 		const row = frappe.get_doc(cdt, cdn);
-		const field_copy = ["expense_account", "discount_account", "cost_center"];
+		const field_copy = ["expense_account", "discount_account"];
 		if (doc.project) {
 			frappe.model.set_value(cdt, cdn, "project", doc.project);
 		} else {
@@ -566,15 +566,6 @@ cur_frm.cscript.expense_account = function (doc, cdt, cdn) {
 	refresh_field("items");
 };
 
-cur_frm.fields_dict["items"].grid.get_field("cost_center").get_query = function (doc) {
-	return {
-		filters: {
-			company: doc.company,
-			is_group: 0,
-		},
-	};
-};
-
 frappe.ui.form.on("Purchase Invoice", {
 	setup: function (frm) {
 		frm.custom_make_buttons = {
@@ -600,15 +591,6 @@ frappe.ui.form.on("Purchase Invoice", {
 			return {
 				filters: {
 					report_type: "Profit and Loss",
-					is_group: 0,
-					company: doc.company,
-				},
-			};
-		});
-
-		frm.set_query("write_off_cost_center", function (doc) {
-			return {
-				filters: {
 					is_group: 0,
 					company: doc.company,
 				},

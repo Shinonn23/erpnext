@@ -8,6 +8,9 @@
  "engine": "InnoDB",
  "field_order": [
   "item_code",
+  "asset_transfer_asset",
+  "asset_transfer_source_location",
+  "asset_transfer_target_location",
   "item_name",
   "col_break1",
   "schedule_date",
@@ -51,7 +54,6 @@
   "accounting_dimensions_section",
   "project",
   "dimension_col_break",
-  "cost_center",
   "more_info",
   "lead_time_date",
   "sales_order",
@@ -67,7 +69,14 @@
   "reorder_level",
   "reorder_qty",
   "section_break_46",
-  "page_break"
+  "page_break",
+  "item_type",
+  "fulfilled_qty",
+  "returned_qty",
+  "outstanding_qty",
+  "status",
+  "stock_entry",
+  "asset_movement"
  ],
  "fields": [
   {
@@ -362,13 +371,6 @@
    "print_hide": 1
   },
   {
-   "fieldname": "cost_center",
-   "fieldtype": "Link",
-   "label": "Cost Center",
-   "options": "Cost Center",
-   "print_hide": 1
-  },
-  {
    "allow_on_submit": 1,
    "default": "0",
    "fieldname": "page_break",
@@ -430,11 +432,13 @@
    "fieldtype": "Column Break"
   },
   {
-   "depends_on": "eval:parent.material_request_type == \"Material Transfer\"",
+   "depends_on": "eval:parent.material_request_type == \"Material Transfer\" || ((parent.material_request_type == \"Customer Demo\" || parent.material_request_type == \"Customer Borrow / Loan\") && item_type == \"Stock Item\")",
    "fieldname": "from_warehouse",
    "fieldtype": "Link",
+   "in_list_view": 1,
    "ignore_user_permissions": 1,
    "label": "Source Warehouse",
+   "mandatory_depends_on": "eval:(parent.material_request_type == \"Customer Demo\" || parent.material_request_type == \"Customer Borrow / Loan\") && item_type == \"Stock Item\"",
    "options": "Warehouse"
   },
   {
@@ -540,6 +544,85 @@
    "print_hide": 1,
    "read_only": 1,
    "search_index": 1
+  },
+  {
+   "fieldname": "item_type",
+   "fieldtype": "Select",
+   "label": "Request Item Type",
+   "options": "Stock Item\nFixed Asset",
+   "read_only": 1,
+   "hidden": 1
+  },
+  {
+   "fieldname": "fulfilled_qty",
+   "fieldtype": "Float",
+   "label": "Fulfilled Qty",
+   "read_only": 1,
+   "hidden": 1
+  },
+  {
+   "fieldname": "returned_qty",
+   "fieldtype": "Float",
+   "label": "Returned Qty",
+   "read_only": 1,
+   "hidden": 1
+  },
+  {
+   "fieldname": "outstanding_qty",
+   "fieldtype": "Float",
+   "label": "Outstanding Qty",
+   "read_only": 1,
+   "hidden": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Data",
+   "label": "Request Status",
+   "read_only": 1,
+   "hidden": 1
+  },
+  {
+   "fieldname": "stock_entry",
+   "fieldtype": "Link",
+   "label": "Latest Custody Stock Entry",
+   "options": "Stock Entry",
+   "read_only": 1,
+   "hidden": 1
+  },
+  {
+   "fieldname": "asset_movement",
+   "fieldtype": "Link",
+   "label": "Latest Custody Asset Movement",
+   "options": "Asset Movement",
+   "read_only": 1,
+   "hidden": 1
+  },
+  {
+   "depends_on": "eval:parent.material_request_type == 'Asset Transfer'",
+   "fieldname": "asset_transfer_asset",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Asset",
+   "mandatory_depends_on": "eval:parent.material_request_type == 'Asset Transfer'",
+   "options": "Asset"
+  },
+  {
+   "depends_on": "eval:parent.material_request_type == 'Asset Transfer'",
+   "fieldname": "asset_transfer_target_location",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Target Location",
+   "mandatory_depends_on": "eval:parent.material_request_type == 'Asset Transfer'",
+   "options": "Location"
+  },
+  {
+   "depends_on": "eval:parent.material_request_type == 'Asset Transfer'",
+   "fieldname": "asset_transfer_source_location",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Source Location",
+   "options": "Location",
+   "read_only": 1
   }
  ],
  "idx": 1,

@@ -9,7 +9,6 @@ from frappe.permissions import add_permission, update_permission_property
 
 def setup(company=None, patch=True):
 	make_custom_fields()
-	add_print_formats()
 	add_custom_roles_for_reports()
 	add_permissions()
 
@@ -244,17 +243,6 @@ def make_custom_fields():
 	}
 
 	create_custom_fields(custom_fields, ignore_validate=True)
-
-
-def add_print_formats():
-	frappe.reload_doc("regional", "print_format", "detailed_tax_invoice")
-	frappe.reload_doc("regional", "print_format", "simplified_tax_invoice")
-	frappe.reload_doc("regional", "print_format", "tax_invoice")
-
-	frappe.db.sql(
-		""" update `tabPrint Format` set disabled = 0 where
-		name in('Simplified Tax Invoice', 'Detailed Tax Invoice', 'Tax Invoice') """
-	)
 
 
 def add_custom_roles_for_reports():

@@ -9,18 +9,6 @@
   {
    "child": 0,
    "collapsible": 1,
-   "icon": "home",
-   "indent": 0,
-   "keep_closed": 0,
-   "label": "Home",
-   "link_to": "Stock",
-   "link_type": "Workspace",
-   "show_arrow": 0,
-   "type": "Link"
-  },
-  {
-   "child": 0,
-   "collapsible": 1,
    "icon": "chart",
    "indent": 0,
    "keep_closed": 0,
@@ -38,6 +26,18 @@
    "keep_closed": 0,
    "label": "Stock Entry",
    "link_to": "Stock Entry",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "clipboard-list",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Stock Count",
+   "link_to": "Stock Count",
    "link_type": "DocType",
    "show_arrow": 0,
    "type": "Link"
@@ -223,6 +223,18 @@
    "keep_closed": 0,
    "label": "Warehouse",
    "link_to": "Warehouse",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "icon": "",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Storage Location",
+   "link_to": "Storage Location",
    "link_type": "DocType",
    "show_arrow": 0,
    "type": "Link"
@@ -569,6 +581,30 @@
    "type": "Link"
   },
   {
+   "child": 1,
+   "collapsible": 1,
+   "icon": "",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Customer Demo Fulfillment",
+   "link_to": "Customer Demo Fulfillment",
+   "link_type": "Report",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "icon": "",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Asset Shipment In Transit",
+   "link_to": "Asset Shipment In Transit",
+   "link_type": "Report",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
    "child": 0,
    "collapsible": 1,
    "icon": "settings",
@@ -625,7 +661,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-02-20 16:45:15.295668",
+ "modified": "2026-10-05 02:35:36.152136",
  "modified_by": "Administrator",
  "module": "Stock",
  "module_onboarding": "Stock Onboarding",

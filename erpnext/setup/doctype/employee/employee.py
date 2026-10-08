@@ -29,15 +29,10 @@ class Employee(NestedSet):
 	from typing import TYPE_CHECKING
 
 	if TYPE_CHECKING:
-		from frappe.types import DF
-
 		from erpnext.setup.doctype.employee_education.employee_education import EmployeeEducation
-		from erpnext.setup.doctype.employee_external_work_history.employee_external_work_history import (
-			EmployeeExternalWorkHistory,
-		)
-		from erpnext.setup.doctype.employee_internal_work_history.employee_internal_work_history import (
-			EmployeeInternalWorkHistory,
-		)
+		from erpnext.setup.doctype.employee_external_work_history.employee_external_work_history import EmployeeExternalWorkHistory
+		from erpnext.setup.doctype.employee_internal_work_history.employee_internal_work_history import EmployeeInternalWorkHistory
+		from frappe.types import DF
 
 		attendance_device_id: DF.Data | None
 		bank_ac_no: DF.Data | None

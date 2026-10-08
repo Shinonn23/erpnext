@@ -584,7 +584,7 @@ erpnext.accounts.SalesInvoiceController = class SalesInvoiceController extends (
 
 	items_add(doc, cdt, cdn) {
 		const row = frappe.get_doc(cdt, cdn);
-		const field_copy = ["income_account", "discount_account", "cost_center"];
+		const field_copy = ["income_account", "discount_account"];
 		if (doc.project) {
 			frappe.model.set_value(cdt, cdn, "project", doc.project);
 		} else {
@@ -617,13 +617,12 @@ erpnext.accounts.SalesInvoiceController = class SalesInvoiceController extends (
 		var row = locals[cdt][cdn];
 		if (row.asset) {
 			frappe.call({
-				method: erpnext.assets.doctype.asset.depreciation.get_disposal_account_and_cost_center,
+				method: erpnext.assets.doctype.asset.depreciation.get_disposal_account,
 				args: {
 					company: frm.doc.company,
 				},
-				callback: function (r, rt) {
-					frappe.model.set_value(cdt, cdn, "income_account", r.message[0]);
-					frappe.model.set_value(cdt, cdn, "cost_center", r.message[1]);
+				callback: function (r) {
+					frappe.model.set_value(cdt, cdn, "income_account", r.message);
 				},
 			});
 		}
@@ -784,24 +783,6 @@ frappe.ui.form.on("Sales Invoice", {
 			};
 		});
 
-		frm.set_query("write_off_cost_center", function (doc) {
-			return {
-				filters: {
-					is_group: 0,
-					company: doc.company,
-				},
-			};
-		});
-
-		frm.set_query("cost_center", "items", function (doc) {
-			return {
-				filters: {
-					company: doc.company,
-					is_group: 0,
-				},
-			};
-		});
-
 		frm.set_query("debit_to", function (doc) {
 			return {
 				filters: {
@@ -930,14 +911,6 @@ frappe.ui.form.on("Sales Invoice", {
 			};
 		});
 
-		frm.set_query("loyalty_redemption_cost_center", function () {
-			return {
-				filters: {
-					company: frm.doc.company,
-					is_group: 0,
-				},
-			};
-		});
 
 		frm.set_query("sales_person", "sales_team", function () {
 			return {
@@ -1031,7 +1004,6 @@ frappe.ui.form.on("Sales Invoice", {
 				callback: function (r) {
 					if (r) {
 						frm.set_value("loyalty_redemption_account", r.message.expense_account);
-						frm.set_value("loyalty_redemption_cost_center", r.message.cost_center);
 						frm.redemption_conversion_factor = r.message.conversion_factor;
 					}
 				},

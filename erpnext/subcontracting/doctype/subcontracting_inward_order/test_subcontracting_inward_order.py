@@ -183,7 +183,6 @@ class IntegrationTestSubcontractingInwardOrder(ERPNextTestSuite):
 			transfer_qty=5,
 			uom="Nos",
 			conversion_factor=1,
-			cost_center="Main - _TC",
 		).insert()
 		manufacture.reload()
 		manufacture.submit()

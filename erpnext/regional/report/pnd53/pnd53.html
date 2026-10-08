@@ -1,0 +1,411 @@
+<style>
+	@font-face {
+		font-family: "THSarabun";
+		src: url("{{ frappe.urllib.get_full_url('/assets/erpnext/fonts/THSarabun.ttf') }}") format("truetype");
+	}
+	.print-format {
+		margin-top: 0mm;
+		margin-left: 0mm;
+		margin-right: 0mm;
+		margin-bottom: 0mm;
+	}
+	.o_report_rd_withholding_tax_report_pnd53 {
+		font-family: "THSarabun";
+		font-size: 18px;
+		line-height: 90%;
+	}
+	.box-tax {
+		width: 12px;
+		text-align: center;
+		vertical-align: sub;
+		display: inline-block;
+	}
+	.tab-tax {
+		margin-left: 7px;
+	}
+	.company-tax-group {
+		height: 38px;
+	}
+	.number-page-group {
+		margin-top: 5px;
+		height: 16px;
+	}
+	.wht-group {
+		margin-top: 89px;
+		height: 420px;
+	}
+	.supplier-tax-group {
+		height: 20px;
+	}
+	.supplier-name-group {
+		margin-top: 3px;
+		height: 19px;
+	}
+	.total-group {
+		margin-top: 6px;
+		height: 16px;
+	}
+	.sum-total-group {
+		margin-top: 10px;
+		height: 16px;
+	}
+	.company-tax {
+		margin-top: 18px;
+		margin-left: 501px;
+		width: 234px;
+		display: inline-block;
+	}
+	.company-branch {
+		margin-top: 18px;
+		margin-left: 45px;
+		width: 76px;
+		display: inline-block;
+	}
+	.number-page-from {
+		margin-left: 930px;
+		width: 38px;
+		text-align: center;
+		display: inline-block;
+	}
+	.number-page-to {
+		margin-left: 44px;
+		width: 48px;
+		text-align: center;
+		display: inline-block;
+	}
+	.number {
+		margin-left: 31px;
+		width: 43px;
+		text-align: center;
+		vertical-align: sub;
+		display: inline-block;
+	}
+	.supplier-tax {
+		margin-left: 4px;
+		display: inline-block;
+	}
+	.supplier-branch {
+		margin-left: 130px;
+		display: inline-block;
+	}
+	.supplier-name {
+		margin-left: 97px;
+		width: 350px;
+		vertical-align: top;
+		display: inline-block;
+	}
+	.wht-date {
+		margin-left: 84px;
+		width: 83px;
+		text-align: center;
+		vertical-align: top;
+		display: inline-block;
+	}
+	.description {
+		margin-left: -2px;
+		width: 150px;
+		line-height: 0.8;
+		vertical-align: top;
+		display: inline-block;
+	}
+	.tax-rate {
+		margin-left: -3px;
+		width: 30px;
+		text-align: center;
+		vertical-align: top;
+		display: inline-block;
+	}
+	.tax-base {
+		margin-left: -3px;
+		margin-right: 10px;
+		width: 123px;
+		vertical-align: top;
+		text-align: right;
+		display: inline-block;
+	}
+	.tax-amount {
+		margin-right: 10px;
+		width: 115px;
+		text-align: right;
+		vertical-align: top;
+		display: inline-block;
+	}
+	.tax-payer {
+		margin-left: -5px;
+		width: 30px;
+		text-align: center;
+		vertical-align: top;
+		display: inline-block;
+	}
+	.supplier-address {
+		margin-top: -3px;
+		margin-left: 104px;
+		height: 31px;
+		width: 344px;
+		line-height: 0.7;
+		vertical-align: top;
+		display: inline-block;
+	}
+	.total-base {
+		margin-left: 801px;
+		margin-right: 10px;
+		width: 124px;
+		text-align: right;
+		display: inline-block;
+	}
+	.total-amount {
+		margin-left: -2px;
+		margin-right: 10px;
+		width: 117px;
+		text-align: right;
+		display: inline-block;
+	}
+	.sum-total-base {
+		margin-left: 801px;
+		margin-right: 10px;
+		width: 124px;
+		text-align: right;
+		display: inline-block;
+	}
+	.sum-total-amount {
+		margin-left: -2px;
+		margin-right: 10px;
+		width: 117px;
+		text-align: right;
+		display: inline-block;
+	}
+</style>
+
+{% var number = 0 %}
+{% var sum_total_base = 0 %}
+{% var sum_total_amount = 0 %}
+{% var total_page = Math.ceil((data.length - 1) / 6) %}
+{% for(var page = 1; page <= total_page; page++) { %}
+	<div
+		class="o_report_rd_withholding_tax_report_pnd53"
+		{% if page < total_page %}
+			style="background-image: url('{{ frappe.urllib.get_full_url('/assets/erpnext/images/thailand/pnd/pnd53.png') }}');background-size: 295mm 210mm;width: 295mm;height: 210mm;"
+		{% else %}
+			style="background-image: url('{{ frappe.urllib.get_full_url('/assets/erpnext/images/thailand/pnd/pnd53_lastpage.png') }}');background-size: 295mm 210mm;width: 295mm;height: 210mm;"
+		{% endif %}
+	>
+		{% var total_base = 0 %}
+		{% var total_amount = 0 %}
+		<!-- Company Tax -->
+		<div class="company-tax-group">
+			<div class="company-tax">
+				{% var company_tax = data[0].company_tax_id %}
+				{% if(company_tax) { %}
+					<div class="box-tax">
+						{%= company_tax.substring(0, 1) %}
+					</div>
+					<div class="box-tax tab-tax">
+						{%= company_tax.substring(1, 2) %}
+					</div>
+					<div class="box-tax">
+						{%= company_tax.substring(2, 3) %}
+					</div>
+					<div class="box-tax">
+						{%= company_tax.substring(3, 4) %}
+					</div>
+					<div class="box-tax">
+						{%= company_tax.substring(4, 5) %}
+					</div>
+					<div class="box-tax tab-tax">
+						{%= company_tax.substring(5, 6) %}
+					</div>
+					<div class="box-tax">
+						{%= company_tax.substring(6, 7) %}
+					</div>
+					<div class="box-tax">
+						{%= company_tax.substring(7, 8) %}
+					</div>
+					<div class="box-tax">
+						{%= company_tax.substring(8, 9) %}
+					</div>
+					<div class="box-tax">
+						{%= company_tax.substring(9, 10) %}
+					</div>
+					<div class="box-tax tab-tax">
+						{%= company_tax.substring(10, 11) %}
+					</div>
+					<div class="box-tax">
+						{%= company_tax.substring(11, 12) %}
+					</div>
+					<div class="box-tax tab-tax">
+						{%= company_tax.substring(12, 13) %}
+					</div>
+				{% } %}
+			</div>
+			<div class="company-branch">
+				{% var company_branch = data[0].company_branch %}
+				{% if (company_branch) { %}
+					<div class="box-tax">
+						{%= company_branch.substring(0, 1) %}
+					</div>
+					<div class="box-tax">
+						{%= company_branch.substring(1, 2) %}
+					</div>
+					<div class="box-tax">
+						{%= company_branch.substring(2, 3) %}
+					</div>
+					<div class="box-tax">
+						{%= company_branch.substring(3, 4) %}
+					</div>
+					<div class="box-tax">
+						{%= company_branch.substring(4, 5) %}
+					</div>
+				{% } %}
+			</div>
+		</div>
+		<!-- Page Number -->
+		<div class="number-page-group">
+			<div class="number-page-from">
+				{%= page %}
+			</div>
+			<div class="number-page-to">
+				{%= total_page %}
+			</div>
+		</div>
+		<!-- WHT Cert -->
+		<div class="wht-group">
+			{% for (var index = (page - 1) * 6; index < Math.min(page * 6, data.length - 1); index++) { %}
+				{% var wht_line = data[index] %}
+				<div class="supplier-tax-group">
+					<div class="number">
+						{% var number = number + 1 %}
+						{%= number %}
+					</div>
+					<div class="supplier-tax">
+						{% var supplier_tax = wht_line.supplier_tax_id %}
+						{% if supplier_tax %}
+							<div class="box-tax">
+								{%= supplier_tax.substring(0, 1) %}
+							</div>
+							<div class="box-tax tab-tax">
+								{%= supplier_tax.substring(1, 2) %}
+							</div>
+							<div class="box-tax">
+								{%= supplier_tax.substring(2, 3) %}
+							</div>
+							<div class="box-tax tab-tax">
+								{%= supplier_tax.substring(3, 4) %}
+							</div>
+							<div class="box-tax tab-tax">
+								{%= supplier_tax.substring(4, 5) %}
+							</div>
+							<div class="box-tax">
+								{%= supplier_tax.substring(5, 6) %}
+							</div>
+							<div class="box-tax">
+								{%= supplier_tax.substring(6, 7) %}
+							</div>
+							<div class="box-tax tab-tax">
+								{%= supplier_tax.substring(7, 8) %}
+							</div>
+							<div class="box-tax">
+								{%= supplier_tax.substring(8, 9) %}
+							</div>
+							<div class="box-tax">
+								{%= supplier_tax.substring(9, 10) %}
+							</div>
+							<div class="box-tax">
+								{%= supplier_tax.substring(10, 11) %}
+							</div>
+							<div class="box-tax">
+								{%= supplier_tax.substring(11, 12) %}
+							</div>
+							<div class="box-tax tab-tax">
+								{%= supplier_tax.substring(12, 13) %}
+							</div>
+						{% endif %}
+					</div>
+					<div class="supplier-branch">
+						{% var supplier_branch = wht_line.branch %}
+						{% if supplier_branch %}
+							<div class="box-tax">
+								{%= supplier_branch.substring(0, 1) %}
+							</div>
+							<div class="box-tax">
+								{%= supplier_branch.substring(1, 2) %}
+							</div>
+							<div class="box-tax">
+								{%= supplier_branch.substring(2, 3) %}
+							</div>
+							<div class="box-tax">
+								{%= supplier_branch.substring(3, 4) %}
+							</div>
+							<div class="box-tax">
+								{%= supplier_branch.substring(4, 5) %}
+							</div>
+						{% endif %}
+					</div>
+				</div>
+				<div class="supplier-name-group">
+					<div class="supplier-name">
+						{%= wht_line.supplier_name %}
+					</div>
+					<div class="wht-date">
+						{% if wht_line.date %}
+							{%= wht_line.date.substring(8, 10) + "/" + wht_line.date.substring(5, 7) + "/" + (Number(wht_line.date.substring(0, 4)) + 543) %}
+						{% endif %}
+					</div>
+					<div class="description">
+						{%= wht_line.description %}
+					</div>
+					<div class="tax-rate">
+						{%= wht_line.tax_rate.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %}
+					</div>
+					<div class="tax-base">
+						{% var total_base = total_base + wht_line.tax_base %}
+						{% var sum_total_base = sum_total_base + wht_line.tax_base %}
+						{%= wht_line.tax_base.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %}
+					</div>
+					<div class="tax-amount">
+						{% var total_amount = total_amount + wht_line.tax_amount %}
+						{% var sum_total_amount = sum_total_amount + wht_line.tax_amount %}
+						{%= wht_line.tax_amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %}
+					</div>
+					<div class="tax-payer">
+						{%= wht_line.tax_payer %}
+					</div>
+				</div>
+				<div class="supplier-address">
+					{% if wht_line.address_line1 %}
+						{%= wht_line.address_line1 %}
+					{% endif %}
+					{% if wht_line.city %}
+						{%= wht_line.city %}
+					{% endif %}
+					{% if wht_line.county %}
+						{%= wht_line.county %}
+					{% endif %}
+					{% if wht_line.state %}
+						{%= wht_line.state %}
+					{% endif %}
+					{% if wht_line.pincode %}
+						{%= wht_line.pincode %}
+					{% endif %}
+				</div>
+			{% } %}
+		</div>
+		<div class="total-group">
+			<div class="total-base">
+				{%= total_base.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %}
+			</div>
+			<div class="total-amount">
+				{%= total_amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %}
+			</div>
+		</div>
+		{% if page == total_page %}
+			<div class="sum-total-group">
+				<div class="sum-total-base">
+					{%= sum_total_base.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %}
+				</div>
+				<div class="sum-total-amount">
+					{%= sum_total_amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %}
+				</div>
+			</div>
+		{% endif %}
+	</div>
+{% } %}

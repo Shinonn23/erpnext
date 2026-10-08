@@ -23,15 +23,6 @@ frappe.ui.form.on("Dunning", {
 				},
 			};
 		});
-		frm.set_query("cost_center", () => {
-			return {
-				filters: {
-					company: frm.doc.company,
-					is_group: 0,
-				},
-			};
-		});
-
 		frm.set_query("contact_person", erpnext.queries.contact_query);
 		frm.set_query("customer_address", erpnext.queries.address_query);
 		frm.set_query("company_address", erpnext.queries.company_address_query);

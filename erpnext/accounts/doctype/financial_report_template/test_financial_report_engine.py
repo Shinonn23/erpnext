@@ -1821,7 +1821,7 @@ class TestFinancialQueryBuilder(FinancialReportTemplateTestCase):
 					"period_end_date": fy_2023[2],
 					"company": company,
 					"fiscal_year": fy_2023[0],
-					"cost_center": "_Test Cost Center - _TC",
+
 					"closing_account_head": closing_account,
 					"remarks": "Test Period Closing",
 				}
@@ -1954,103 +1954,6 @@ class TestFinancialQueryBuilder(FinancialReportTemplateTestCase):
 
 			jv_2023.cancel()
 
-	@change_settings("Accounts Settings", {"use_legacy_controller_for_pcv": 1})
-	def test_opening_balance_sums_acb_rows_across_dimensions(self):
-		"""
-		Account Closing Balance stores one row per (account, cost_center,
-		project, finance_book). The closing-balance fetch must sum all rows.
-		"""
-		company = "_Test Company"
-		cash_account = "_Test Cash - _TC"
-		sales_account = "Sales - _TC"
-		cc_1 = "_Test Cost Center - _TC"
-		cc_2 = "_Test Cost Center 2 - _TC"
-		docs = []
-
-		try:
-			jv_2023_cc1 = make_journal_entry(
-				account1=cash_account,
-				account2=sales_account,
-				amount=3000,
-				posting_date="2023-06-15",
-				cost_center=cc_1,
-				company=company,
-				submit=True,
-			)
-			docs.append(jv_2023_cc1)
-			jv_2023_cc2 = make_journal_entry(
-				account1=cash_account,
-				account2=sales_account,
-				amount=2000,
-				posting_date="2023-06-15",
-				cost_center=cc_2,
-				company=company,
-				submit=True,
-			)
-			docs.append(jv_2023_cc2)
-
-			fy_2023 = get_fiscal_year("2023-06-15", company=company)
-
-			pcv = frappe.get_doc(
-				{
-					"doctype": "Period Closing Voucher",
-					"transaction_date": "2023-12-31",
-					"period_start_date": fy_2023[1],
-					"period_end_date": fy_2023[2],
-					"company": company,
-					"fiscal_year": fy_2023[0],
-					"cost_center": cc_1,
-					"closing_account_head": "Deferred Revenue - _TC",
-					"remarks": "Test multi-dim PCV",
-				}
-			)
-			pcv.insert()
-			pcv.submit()
-			docs.append(pcv)
-
-			jv_2024 = make_journal_entry(
-				account1=cash_account,
-				account2=sales_account,
-				amount=100,
-				posting_date="2024-01-15",
-				cost_center=cc_1,
-				company=company,
-				submit=True,
-			)
-			docs.append(jv_2024)
-
-			filters = {
-				"company": company,
-				"from_fiscal_year": "2024",
-				"to_fiscal_year": "2024",
-				"period_start_date": "2024-01-01",
-				"period_end_date": "2024-03-31",
-				"filter_based_on": "Date Range",
-				"periodicity": "Monthly",
-				"ignore_closing_entries": True,
-			}
-			periods = [
-				{"key": "2024_jan", "from_date": "2024-01-01", "to_date": "2024-01-31"},
-				{"key": "2024_feb", "from_date": "2024-02-01", "to_date": "2024-02-29"},
-				{"key": "2024_mar", "from_date": "2024-03-01", "to_date": "2024-03-31"},
-			]
-
-			query_builder = FinancialQueryBuilder(filters, periods)
-			accounts = [
-				frappe._dict({"name": cash_account, "account_name": "Cash", "account_number": "1001"}),
-			]
-
-			balances_data = query_builder.fetch_account_balances(accounts)
-			cash_data = balances_data.get(cash_account)
-			self.assertIsNotNone(cash_data, "Cash account must appear in results")
-
-			jan_cash = cash_data.get_period("2024_jan")
-			self.assertEqual(jan_cash.opening, 5000.0)
-			self.assertEqual(jan_cash.movement, 100.0)
-			self.assertEqual(jan_cash.closing, 5100.0)
-
-		finally:
-			self.cancel_docs(docs)
 
 	def test_opening_entries_roll_into_opening_after_period_closing(self):
 		"""
@@ -2127,7 +2030,7 @@ class TestFinancialQueryBuilder(FinancialReportTemplateTestCase):
 					"period_end_date": fy_2023[2],
 					"company": company,
 					"fiscal_year": fy_2023[0],
-					"cost_center": "_Test Cost Center - _TC",
+
 					"closing_account_head": closing_account,
 					"remarks": "Test Period Closing",
 				}
@@ -2343,7 +2246,7 @@ class TestFinancialQueryBuilder(FinancialReportTemplateTestCase):
 					"period_end_date": fy_2024[2],
 					"company": company,
 					"fiscal_year": fy_2024[0],
-					"cost_center": "_Test Cost Center - _TC",
+
 					"closing_account_head": closing_account,
 					"remarks": "Test PCV FY 2024",
 				}
@@ -2392,7 +2295,7 @@ class TestFinancialQueryBuilder(FinancialReportTemplateTestCase):
 					"period_end_date": fy_2025[2],
 					"company": company,
 					"fiscal_year": fy_2025[0],
-					"cost_center": "_Test Cost Center - _TC",
+
 					"closing_account_head": closing_account,
 					"remarks": "Test PCV FY 2025",
 				}

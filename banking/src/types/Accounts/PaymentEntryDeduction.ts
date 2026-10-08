@@ -12,8 +12,6 @@ export interface PaymentEntryDeduction{
 	idx?: number
 	/**	Account : Link - Account	*/
 	account: string
-	/**	Cost Center : Link - Cost Center	*/
-	cost_center: string
 	/**	Amount (Company Currency) : Currency	*/
 	amount: number
 	/**	Is Exchange Gain / Loss? : Check	*/

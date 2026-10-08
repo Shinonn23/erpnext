@@ -74,7 +74,6 @@ class PurchaseReceipt(BuyingController):
 		contact_mobile: DF.SmallText | None
 		contact_person: DF.Link | None
 		conversion_rate: DF.Float
-		cost_center: DF.Link | None
 		currency: DF.Link
 		disable_rounded_total: DF.Check
 		discount_amount: DF.Currency
@@ -512,7 +511,6 @@ class PurchaseReceipt(BuyingController):
 			self.add_gl_entry(
 				gl_entries=gl_entries,
 				account=stock_asset_account_name,
-				cost_center=d.cost_center,
 				debit=stock_value_diff,
 				credit=0.0,
 				remarks=remarks,
@@ -567,7 +565,6 @@ class PurchaseReceipt(BuyingController):
 				self.add_gl_entry(
 					gl_entries=gl_entries,
 					account=account,
-					cost_center=item.cost_center,
 					debit=-1 * flt(outgoing_amount, item.precision("base_net_amount")),
 					credit=0.0,
 					remarks=remarks,
@@ -592,7 +589,6 @@ class PurchaseReceipt(BuyingController):
 						self.add_gl_entry(
 							gl_entries=gl_entries,
 							account=account,
-							cost_center=item.cost_center,
 							debit=0.0,
 							credit=discrepancy_caused_by_exchange_rate_difference,
 							remarks=remarks,
@@ -606,7 +602,6 @@ class PurchaseReceipt(BuyingController):
 						self.add_gl_entry(
 							gl_entries=gl_entries,
 							account=self.get_company_default("exchange_gain_loss_account"),
-							cost_center=d.cost_center,
 							debit=discrepancy_caused_by_exchange_rate_difference,
 							credit=0.0,
 							remarks=remarks,
@@ -642,7 +637,6 @@ class PurchaseReceipt(BuyingController):
 				self.add_gl_entry(
 					gl_entries=gl_entries,
 					account=account,
-					cost_center=entry.dimensions.cost_center or item.cost_center,
 					debit=0.0,
 					credit=credit_amount,
 					remarks=remarks,
@@ -668,7 +662,6 @@ class PurchaseReceipt(BuyingController):
 				self.add_gl_entry(
 					gl_entries=gl_entries,
 					account=stock_asset_rbnb,
-					cost_center=item.cost_center,
 					debit=0.0,
 					credit=flt(item.amount_difference_with_purchase_invoice),
 					remarks=_("Adjustment based on Purchase Invoice rate"),
@@ -684,7 +677,6 @@ class PurchaseReceipt(BuyingController):
 				self.add_gl_entry(
 					gl_entries=gl_entries,
 					account=supplier_warehouse_account,
-					cost_center=item.cost_center,
 					debit=0.0,
 					credit=flt(item.rm_supp_cost),
 					remarks=remarks,
@@ -724,14 +716,10 @@ class PurchaseReceipt(BuyingController):
 				if self.is_return and item.expense_account:
 					loss_account = item.expense_account
 
-				cost_center = item.cost_center or frappe.get_cached_value(
-					"Company", self.company, "cost_center"
-				)
 				account_currency = get_account_currency(loss_account)
 				self.add_gl_entry(
 					gl_entries=gl_entries,
 					account=loss_account,
-					cost_center=cost_center,
 					debit=divisional_loss,
 					credit=0.0,
 					remarks=remarks,
@@ -865,7 +853,6 @@ class PurchaseReceipt(BuyingController):
 		self.add_gl_entry(
 			gl_entries=gl_entries,
 			account=provisional_account,
-			cost_center=item.cost_center,
 			debit=0.0,
 			credit=multiplication_factor * amount,
 			remarks=remarks,
@@ -880,7 +867,6 @@ class PurchaseReceipt(BuyingController):
 		self.add_gl_entry(
 			gl_entries=gl_entries,
 			account=expense_account,
-			cost_center=item.cost_center,
 			debit=multiplication_factor * amount,
 			credit=0.0,
 			remarks=remarks,
@@ -907,19 +893,12 @@ class PurchaseReceipt(BuyingController):
 		# of a spread-across-all-items charge is not capitalized, so it is excluded here.
 		capitalized_valuation_tax = self.get_capitalized_valuation_tax()
 
-		# Cost center-wise amount breakup for other charges included for valuation
+		# Amount breakup for other charges included for valuation
 		valuation_tax = {}
 		for tax in self.get("taxes"):
 			if tax.category in ("Valuation", "Valuation and Total") and flt(
 				tax.base_tax_amount_after_discount_amount
 			):
-				if not tax.cost_center:
-					frappe.throw(
-						_("Cost Center is required in row {0} in Taxes table for type {1}").format(
-							tax.idx, _(tax.category)
-						)
-					)
-
 				valuation_tax[tax.name] = capitalized_valuation_tax.get(tax.name, 0.0)
 
 		if negative_expense_to_be_booked and valuation_tax:
@@ -944,7 +923,6 @@ class PurchaseReceipt(BuyingController):
 					self.add_gl_entry(
 						gl_entries=gl_entries,
 						account=account,
-						cost_center=tax.cost_center,
 						debit=0.0,
 						credit=applicable_amount,
 						remarks=self.remarks or _("Accounting Entry for Stock"),

@@ -18,8 +18,7 @@
   "dunning_letter_text",
   "section_break_9",
   "income_account",
-  "column_break_13",
-  "cost_center"
+  "column_break_13"
  ],
  "fields": [
   {
@@ -77,12 +76,6 @@
    "fieldtype": "Link",
    "label": "Income Account",
    "options": "Account"
-  },
-  {
-   "fieldname": "cost_center",
-   "fieldtype": "Link",
-   "label": "Cost Center",
-   "options": "Cost Center"
   },
   {
    "fieldname": "column_break_3",

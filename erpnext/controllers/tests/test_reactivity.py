@@ -27,7 +27,6 @@ class TestReactivity(ERPNextTestSuite):
 				"customer": "_Test Customer",
 				"debit_to": "Debtors - _TC",
 				"posting_date": today(),
-				"cost_center": "Main - _TC",
 				"currency": "INR",
 				"conversion_rate": 1,
 				"selling_price_list": "Standard Selling",

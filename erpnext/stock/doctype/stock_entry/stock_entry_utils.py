@@ -127,9 +127,6 @@ def make_stock_entry(**args):
 	s.delivery_note_no = args.delivery_note_no
 	s.sales_invoice_no = args.sales_invoice_no
 	s.is_opening = args.is_opening or "No"
-	if not args.cost_center:
-		args.cost_center = frappe.get_value("Company", s.company, "cost_center")
-
 	if not args.expense_account and s.is_opening == "No":
 		args.expense_account = frappe.get_value("Company", s.company, "stock_adjustment_account")
 
@@ -187,7 +184,6 @@ def make_stock_entry(**args):
 			"transfer_qty": flt(args.qty) * (flt(args.conversion_factor) or 1.0),
 			"serial_no": args.serial_no,
 			"batch_no": args.batch_no,
-			"cost_center": args.cost_center,
 			"expense_account": args.expense_account,
 			"use_serial_batch_fields": args.use_serial_batch_fields,
 			"sample_quantity": frappe.get_value("Item", args.item, "sample_quantity") or 0,

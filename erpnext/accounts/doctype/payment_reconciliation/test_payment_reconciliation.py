@@ -7,7 +7,6 @@ from frappe import qb
 from frappe.utils import add_days, add_years, cint, flt, getdate, nowdate, today
 from frappe.utils.data import getdate as convert_to_date
 
-from erpnext import get_default_cost_center
 from erpnext.accounts.doctype.payment_entry.payment_entry import get_payment_entry
 from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_payment_entry
 from erpnext.accounts.doctype.purchase_invoice.test_purchase_invoice import make_purchase_invoice
@@ -27,8 +26,6 @@ class TestPaymentReconciliation(ERPNextTestSuite):
 		self.bank = "HDFC - _TC"
 		self.cash = "Cash - _TC"
 		self.item = "_Test Item"
-		self.cost_center = self.main_cc = "Main - _TC"
-		self.sub_cc = "Sub - _TC"
 		self.customer = "_Test Customer"
 		self.advance_receivable_account = "Advance Received - _TC"
 		self.advance_payable_account = "Advance Paid - _TC"
@@ -56,10 +53,8 @@ class TestPaymentReconciliation(ERPNextTestSuite):
 			customer=self.customer,
 			item_code=self.item,
 			item_name=self.item,
-			cost_center=self.cost_center,
 			warehouse=self.warehouse,
 			debit_to=self.debit_to,
-			parent_cost_center=self.cost_center,
 			update_stock=0,
 			currency="INR",
 			is_pos=0,
@@ -107,10 +102,8 @@ class TestPaymentReconciliation(ERPNextTestSuite):
 			customer=self.supplier,
 			item_code=self.item,
 			item_name=self.item,
-			cost_center=self.cost_center,
 			warehouse=self.warehouse,
 			debit_to=self.debit_to,
-			parent_cost_center=self.cost_center,
 			update_stock=0,
 			currency="INR",
 			is_pos=0,
@@ -139,10 +132,8 @@ class TestPaymentReconciliation(ERPNextTestSuite):
 			customer=self.supplier,
 			item_code=self.item,
 			item_name=self.item,
-			cost_center=self.cost_center,
 			warehouse=self.warehouse,
 			debit_to=self.debit_to,
-			parent_cost_center=self.cost_center,
 			update_stock=0,
 			currency="INR",
 			is_pos=0,
@@ -164,25 +155,21 @@ class TestPaymentReconciliation(ERPNextTestSuite):
 		pr.from_invoice_date = pr.to_invoice_date = pr.from_payment_date = pr.to_payment_date = nowdate()
 		return pr
 
-	def create_journal_entry(self, acc1=None, acc2=None, amount=0, posting_date=None, cost_center=None):
+	def create_journal_entry(self, acc1=None, acc2=None, amount=0, posting_date=None):
 		je = frappe.new_doc("Journal Entry")
 		je.posting_date = posting_date or nowdate()
 		je.company = self.company
 		je.user_remark = "test"
-		if not cost_center:
-			cost_center = self.cost_center
 		je.set(
 			"accounts",
 			[
 				{
 					"account": acc1,
-					"cost_center": cost_center,
 					"debit_in_account_currency": amount if amount > 0 else 0,
 					"credit_in_account_currency": abs(amount) if amount < 0 else 0,
 				},
 				{
 					"account": acc2,
-					"cost_center": cost_center,
 					"credit_in_account_currency": amount if amount > 0 else 0,
 					"debit_in_account_currency": abs(amount) if amount < 0 else 0,
 				},
@@ -405,7 +392,6 @@ class TestPaymentReconciliation(ERPNextTestSuite):
 					"party_type": "Supplier",
 					"party": self.supplier,
 					"exchange_rate": exc_rate1,
-					"cost_center": self.cost_center,
 					"credit": amount * exc_rate1,
 					"credit_in_account_currency": amount,
 				},
@@ -414,13 +400,11 @@ class TestPaymentReconciliation(ERPNextTestSuite):
 					"party_type": "Supplier",
 					"party": self.supplier2,
 					"exchange_rate": exc_rate2,
-					"cost_center": self.cost_center,
 					"credit": amount * exc_rate2,
 					"credit_in_account_currency": amount,
 				},
 				{
 					"account": self.expense_account,
-					"cost_center": self.cost_center,
 					"debit": (amount * exc_rate1) + (amount * exc_rate2),
 					"debit_in_account_currency": (amount * exc_rate1) + (amount * exc_rate2),
 				},
@@ -1022,185 +1006,6 @@ class TestPaymentReconciliation(ERPNextTestSuite):
 		self.assertEqual(pr.allocation[0].allocated_amount, 100)
 		self.assertEqual(pr.allocation[0].difference_amount, -500)
 
-	def test_differing_cost_center_on_invoice_and_payment(self):
-		"""
-		Cost Center filter should not affect outstanding amount calculation
-		"""
-
-		si = self.create_sales_invoice(qty=1, rate=100, do_not_submit=True)
-		si.cost_center = self.main_cc
-		si.submit()
-		pr = get_payment_entry(si.doctype, si.name)
-		pr.cost_center = self.sub_cc
-		pr = pr.save().submit()
-
-		pr = self.create_payment_reconciliation()
-		pr.cost_center = self.main_cc
-
-		pr.get_unreconciled_entries()
-
-		# check PR tool output
-		self.assertEqual(len(pr.get("invoices")), 0)
-		self.assertEqual(len(pr.get("payments")), 0)
-
-	def test_cost_center_filter_on_vouchers(self):
-		"""
-		Test Cost Center filter is applied on Invoices, Payment Entries and Journals
-		"""
-		transaction_date = nowdate()
-		rate = 100
-
-		# 'Main - PR' Cost Center
-		si1 = self.create_sales_invoice(qty=1, rate=rate, posting_date=transaction_date, do_not_submit=True)
-		si1.cost_center = self.main_cc
-		si1.submit()
-
-		pe1 = self.create_payment_entry(posting_date=transaction_date, amount=rate)
-		pe1.cost_center = self.main_cc
-		pe1 = pe1.save().submit()
-
-		je1 = self.create_journal_entry(self.bank, self.debit_to, 100, transaction_date)
-		je1.accounts[0].cost_center = self.main_cc
-		je1.accounts[1].cost_center = self.main_cc
-		je1.accounts[1].party_type = "Customer"
-		je1.accounts[1].party = self.customer
-		je1 = je1.save().submit()
-
-		# 'Sub - PR' Cost Center
-		si2 = self.create_sales_invoice(qty=1, rate=rate, posting_date=transaction_date, do_not_submit=True)
-		si2.cost_center = self.sub_cc
-		si2.submit()
-
-		pe2 = self.create_payment_entry(posting_date=transaction_date, amount=rate)
-		pe2.cost_center = self.sub_cc
-		pe2 = pe2.save().submit()
-
-		je2 = self.create_journal_entry(self.bank, self.debit_to, 100, transaction_date)
-		je2.accounts[0].cost_center = self.sub_cc
-		je2.accounts[1].cost_center = self.sub_cc
-		je2.accounts[1].party_type = "Customer"
-		je2.accounts[1].party = self.customer
-		je2 = je2.save().submit()
-
-		pr = self.create_payment_reconciliation()
-		pr.cost_center = self.main_cc
-
-		pr.get_unreconciled_entries()
-
-		# check PR tool output
-		self.assertEqual(len(pr.get("invoices")), 1)
-		self.assertEqual(pr.get("invoices")[0].get("invoice_number"), si1.name)
-		self.assertEqual(len(pr.get("payments")), 2)
-		payment_vouchers = [x.get("reference_name") for x in pr.get("payments")]
-		self.assertCountEqual(payment_vouchers, [pe1.name, je1.name])
-
-		# Change cost center
-		pr.cost_center = self.sub_cc
-
-		pr.get_unreconciled_entries()
-
-		# check PR tool output
-		self.assertEqual(len(pr.get("invoices")), 1)
-		self.assertEqual(pr.get("invoices")[0].get("invoice_number"), si2.name)
-		self.assertEqual(len(pr.get("payments")), 2)
-		payment_vouchers = [x.get("reference_name") for x in pr.get("payments")]
-		self.assertCountEqual(payment_vouchers, [je2.name, pe2.name])
-
-	def test_user_permission_on_accounting_dimension_filters_vouchers(self):
-		test_user = "test@example.com"
-		permitted_ccs = ["_Test Cost Center - _TC", "_Test Cost Center 2 - _TC"]
-		restricted_cc = "_Test Write Off Cost Center - _TC"
-		existing_apply_strict_user_permissions = cint(
-			frappe.db.get_single_value("System Settings", "apply_strict_user_permissions")
-		)
-		self.addCleanup(
-			frappe.db.set_single_value,
-			"System Settings",
-			"apply_strict_user_permissions",
-			existing_apply_strict_user_permissions,
-		)
-		transaction_date = nowdate()
-		rate = 100
-
-		def make_invoice(cost_center):
-			si = self.create_sales_invoice(
-				qty=1, rate=rate, posting_date=transaction_date, do_not_submit=True
-			)
-			si.cost_center = cost_center
-			for row in si.items:
-				row.cost_center = cost_center
-			return si.submit()
-
-		def make_payment(cost_center):
-			pe = self.create_payment_entry(posting_date=transaction_date, amount=rate)
-			pe.cost_center = cost_center
-			return pe.save().submit()
-
-		def make_journal(cost_center):
-			je = self.create_journal_entry(
-				self.bank, self.debit_to, 100, transaction_date, cost_center=cost_center
-			)
-			je.accounts[1].party_type = "Customer"
-			je.accounts[1].party = self.customer
-			return je.save().submit()
-
-		# Vouchers tagged with the two permitted cost centers
-		si_allowed = make_invoice(permitted_ccs[0])
-		pe_allowed = make_payment(permitted_ccs[1])
-		je_allowed = make_journal(permitted_ccs[0])
-
-		# Vouchers tagged with the restricted cost center
-		si_restricted = make_invoice(restricted_cc)
-		pe_restricted = make_payment(restricted_cc)
-		je_restricted = make_journal(restricted_cc)
-
-		# Payment entry with a BLANK cost center
-		pe_blank = make_payment(None)
-
-		for cc in permitted_ccs:
-			frappe.permissions.add_user_permission("Cost Center", cc, test_user)
-
-		# Without strict user permissions
-		frappe.db.set_single_value("System Settings", "apply_strict_user_permissions", 0)
-		with self.set_user(test_user):
-			pr = self.create_payment_reconciliation()
-			pr.get_unreconciled_entries()
-
-		invoice_numbers = [x.get("invoice_number") for x in pr.get("invoices")]
-		payment_vouchers = [x.get("reference_name") for x in pr.get("payments")]
-		self.assertIn(si_allowed.name, invoice_numbers)
-		self.assertIn(pe_allowed.name, payment_vouchers)
-		self.assertIn(je_allowed.name, payment_vouchers)
-		self.assertIn(pe_blank.name, payment_vouchers)
-		self.assertNotIn(si_restricted.name, invoice_numbers)
-		self.assertNotIn(pe_restricted.name, payment_vouchers)
-		self.assertNotIn(je_restricted.name, payment_vouchers)
-
-		# With strict user permissions
-		frappe.db.set_single_value("System Settings", "apply_strict_user_permissions", 1)
-		with self.set_user(test_user):
-			pr = self.create_payment_reconciliation()
-			pr.get_unreconciled_entries()
-
-		invoice_numbers = [x.get("invoice_number") for x in pr.get("invoices")]
-		payment_vouchers = [x.get("reference_name") for x in pr.get("payments")]
-		self.assertIn(si_allowed.name, invoice_numbers)
-		self.assertIn(pe_allowed.name, payment_vouchers)
-		self.assertIn(je_allowed.name, payment_vouchers)
-		self.assertNotIn(pe_blank.name, payment_vouchers)
-		self.assertNotIn(si_restricted.name, invoice_numbers)
-		self.assertNotIn(pe_restricted.name, payment_vouchers)
-		self.assertNotIn(je_restricted.name, payment_vouchers)
-
-		# with restricted dimension as a filter
-		with self.set_user(test_user):
-			pr = self.create_payment_reconciliation()
-			pr.cost_center = restricted_cc
-			self.assertRaises(frappe.PermissionError, pr.get_unreconciled_entries)
-
-		for cc in permitted_ccs:
-			frappe.permissions.remove_user_permission("Cost Center", cc, test_user)
-
 	@ERPNextTestSuite.change_settings(
 		"Accounts Settings",
 		{
@@ -1753,10 +1558,8 @@ class TestPaymentReconciliation(ERPNextTestSuite):
 		)
 		amount = 200.0
 		je = self.create_journal_entry(self.debit_to, self.bank, amount)
-		je.accounts[0].cost_center = self.main_cc
 		je.accounts[0].party_type = "Customer"
 		je.accounts[0].party = self.customer
-		je.accounts[1].cost_center = self.main_cc
 		je = je.save().submit()
 
 		pe = self.create_payment_entry(amount=amount).save().submit()
@@ -1862,10 +1665,8 @@ class TestPaymentReconciliation(ERPNextTestSuite):
 		)
 		amount = 200.0
 		je = self.create_journal_entry(self.creditors, self.bank, -amount)
-		je.accounts[0].cost_center = self.main_cc
 		je.accounts[0].party_type = "Supplier"
 		je.accounts[0].party = self.supplier
-		je.accounts[1].cost_center = self.main_cc
 		je = je.save().submit()
 
 		pe = self.create_payment_entry(amount=amount)
@@ -2025,7 +1826,6 @@ class TestPaymentReconciliation(ERPNextTestSuite):
 			[
 				{
 					"account": self.debit_to,
-					"cost_center": self.cost_center,
 					"party_type": "Customer",
 					"party": self.customer,
 					"debit_in_account_currency": 0,
@@ -2033,13 +1833,11 @@ class TestPaymentReconciliation(ERPNextTestSuite):
 				},
 				{
 					"account": self.bank,
-					"cost_center": self.sub_cc,
 					"credit_in_account_currency": 0,
 					"debit_in_account_currency": 500,
 				},
 				{
 					"account": self.cash,
-					"cost_center": self.sub_cc,
 					"credit_in_account_currency": 0,
 					"debit_in_account_currency": 500,
 				},
@@ -2049,7 +1847,6 @@ class TestPaymentReconciliation(ERPNextTestSuite):
 
 		# make period closing voucher
 		pcv = make_period_closing_voucher(
-			company=self.company, cost_center=self.cost_center, posting_date=prev_fy_end_date
 		)
 		pcv.reload()
 		# check if period closing voucher is completed
@@ -2253,7 +2050,6 @@ class TestPaymentReconciliation(ERPNextTestSuite):
 
 		# Close accounting period for March (previous FY)
 		pcv = make_period_closing_voucher(
-			company=self.company, cost_center=self.cost_center, posting_date=prev_fy_end_date
 		)
 		pcv.reload()
 		self.assertEqual(pcv.gle_processing_status, "Completed")
@@ -2684,7 +2480,7 @@ def create_fiscal_year(company, year_start_date, year_end_date):
 		return fy_doc
 
 
-def make_period_closing_voucher(company, cost_center, posting_date=None, submit=True):
+def make_period_closing_voucher(company, posting_date=None, submit=True):
 	from erpnext.accounts.doctype.account.test_account import create_account
 
 	parent_account = frappe.db.get_value(
@@ -2709,7 +2505,6 @@ def make_period_closing_voucher(company, cost_center, posting_date=None, submit=
 			"period_end_date": fy[2],
 			"company": company,
 			"fiscal_year": fy[0],
-			"cost_center": cost_center,
 			"closing_account_head": surplus_account,
 			"remarks": "test",
 		}

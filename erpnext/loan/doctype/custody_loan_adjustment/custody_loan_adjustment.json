@@ -1,0 +1,31 @@
+{
+ "actions": [],
+ "autoname": "naming_series:",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["company", "naming_series", "custody_loan", "adjustment_date", "adjustment_account", "status", "items_section", "items", "stock_entry", "amended_from"],
+ "fields": [
+  {"fieldname": "company", "fieldtype": "Link", "label": "Company", "options": "Company", "read_only": 1, "reqd": 1, "in_list_view": 1},
+  {"fieldname": "naming_series", "fieldtype": "Select", "label": "Series", "options": "CUST-ADJ-.YYYY.-", "reqd": 1, "no_copy": 1},
+  {"fieldname": "custody_loan", "fieldtype": "Link", "label": "Custody Loan", "options": "Custody Loan", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "adjustment_date", "fieldtype": "Date", "label": "Adjustment Date", "default": "Today", "reqd": 1},
+  {"fieldname": "adjustment_account", "fieldtype": "Link", "label": "Company Stock Adjustment Account", "options": "Account", "reqd": 1, "read_only": 1},
+  {"fieldname": "status", "fieldtype": "Select", "label": "Status", "options": "Draft\nSubmitted\nCancelled", "default": "Draft", "read_only": 1, "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "items_section", "fieldtype": "Section Break", "label": "Adjusted Items"},
+  {"fieldname": "items", "fieldtype": "Table", "label": "Items", "options": "Custody Loan Adjustment Item", "reqd": 1},
+  {"fieldname": "stock_entry", "fieldtype": "Link", "label": "Stock Entry", "options": "Stock Entry", "read_only": 1},
+  {"fieldname": "amended_from", "fieldtype": "Link", "label": "Amended From", "options": "Custody Loan Adjustment", "no_copy": 1, "read_only": 1, "print_hide": 1}
+ ],
+ "is_submittable": 1,
+ "module": "Loan",
+ "name": "Custody Loan Adjustment",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {"role": "System Manager", "read": 1, "write": 1, "create": 1, "submit": 1, "cancel": 1, "delete": 1, "print": 1, "email": 1, "export": 1, "report": 1, "share": 1},
+  {"role": "Stock User", "read": 1, "write": 1, "create": 1, "submit": 1, "print": 1, "email": 1, "export": 1, "report": 1},
+  {"role": "Stock Manager", "read": 1, "write": 1, "create": 1, "submit": 1, "cancel": 1, "delete": 1, "print": 1, "email": 1, "export": 1, "report": 1, "share": 1}
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC"
+}

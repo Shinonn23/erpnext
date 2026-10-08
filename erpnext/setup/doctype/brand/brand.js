@@ -21,16 +21,6 @@ frappe.ui.form.on("Brand", {
 			};
 		});
 
-		frm.set_query("buying_cost_center", "brand_defaults", function (doc, cdt, cdn) {
-			const row = locals[cdt][cdn];
-			return {
-				filters: {
-					is_group: 0,
-					company: row.company,
-				},
-			};
-		});
-
 		frm.set_query("expense_account", "brand_defaults", function (doc, cdt, cdn) {
 			const row = locals[cdt][cdn];
 			return {
@@ -46,16 +36,6 @@ frappe.ui.form.on("Brand", {
 					company: row.company,
 					root_type: ["in", ["Liability", "Asset"]],
 					is_group: 0,
-				},
-			};
-		});
-
-		frm.set_query("selling_cost_center", "brand_defaults", function (doc, cdt, cdn) {
-			const row = locals[cdt][cdn];
-			return {
-				filters: {
-					is_group: 0,
-					company: row.company,
 				},
 			};
 		});

@@ -44,17 +44,7 @@ frappe.query_reports["Trial Balance"] = {
 			fieldtype: "Date",
 			default: erpnext.utils.get_fiscal_year(frappe.datetime.get_today(), true)[2],
 		},
-		{
-			fieldname: "cost_center",
-			label: __("Cost Center"),
-			fieldtype: "MultiSelectList",
-			get_data: function (txt) {
-				return frappe.db.get_link_options("Cost Center", txt, {
-					company: frappe.query_report.get_filter_value("company"),
-				});
-			},
-			options: "Cost Center",
-		},
+
 		{
 			fieldname: "project",
 			label: __("Project"),

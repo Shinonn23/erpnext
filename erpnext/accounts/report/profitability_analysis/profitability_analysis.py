@@ -33,22 +33,7 @@ def execute(filters=None):
 
 
 def get_accounts_data(based_on, company):
-	if based_on == "Cost Center":
-		cc = qb.DocType("Cost Center")
-		return (
-			qb.from_(cc)
-			.select(
-				cc.name,
-				cc.parent_cost_center.as_("parent_account"),
-				cc.cost_center_name.as_("account_name"),
-				cc.lft,
-				cc.rgt,
-			)
-			.where(cc.company.eq(company))
-			.orderby(cc.name)
-			.run(as_dict=True)
-		)
-	elif based_on == "Project":
+	if based_on == "Project":
 		return frappe.get_all("Project", fields=["name"], filters={"company": company}, order_by="name")
 	else:
 		filters = {}
@@ -69,7 +54,7 @@ def get_data(accounts, filters, based_on):
 
 	gl_entries_by_account = {}
 
-	accounting_dimensions = get_dimensions(with_cost_center_and_project=True)[0]
+	accounting_dimensions = get_dimensions(with_project=True)[0]
 	fieldname = ""
 	for dimension in accounting_dimensions:
 		if dimension["document_type"] == based_on:
@@ -99,7 +84,6 @@ def calculate_values(accounts, gl_entries_by_account, filters):
 	init = {"income": 0.0, "expense": 0.0, "gross_profit_loss": 0.0}
 
 	total_row = {
-		"cost_center": None,
 		"account_name": "'" + _("Total") + "'",
 		"warn_if_negative": True,
 		"income": 0.0,
@@ -155,6 +139,8 @@ def prepare_data(accounts, filters, total_row, parent_children_map, based_on):
 			"currency": company_currency,
 			"based_on": based_on,
 		}
+		if based_on == "Accounting Dimension":
+			row["dimension_field"] = scrub(filters.get("accounting_dimension"))
 
 		for key in value_fields:
 			row[key] = flt(d.get(key, 0.0), 3)

@@ -20,7 +20,6 @@ class TestOpeningInvoiceCreationTool(ERPNextTestSuite):
 		company=None,
 		invoices=None,
 		project=None,
-		cost_center=None,
 		department=None,
 		return_doc=False,
 	):
@@ -30,7 +29,6 @@ class TestOpeningInvoiceCreationTool(ERPNextTestSuite):
 			company=company,
 			invoices=invoices,
 			project=project,
-			cost_center=cost_center,
 			department=department,
 		)
 		doc.update(args)
@@ -235,7 +233,7 @@ def get_opening_invoice_creation_dict(**args):
 				or get_temporary_opening_account(company),
 				"invoice_number": row.get("invoice_number"),
 				"project": row.get("project"),
-				"cost_center": row.get("cost_center"),
+
 			}
 		)
 
@@ -244,7 +242,6 @@ def get_opening_invoice_creation_dict(**args):
 			"company": company,
 			"invoice_type": args.get("invoice_type", "Sales"),
 			"project": args.get("project"),
-			"cost_center": args.get("cost_center"),
 			"invoices": default_invoices,
 		}
 	)

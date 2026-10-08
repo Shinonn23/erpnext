@@ -101,6 +101,12 @@ erpnext.accounts.unreconcile_payment = {
 			];
 			let unreconcile_dialog_fields = [
 				{
+					label: __("Reason for Unreconciliation"),
+					fieldname: "unreconcile_reason",
+					fieldtype: "Small Text",
+					reqd: 1,
+				},
+				{
 					label: __("Allocations"),
 					fieldname: "allocations",
 					fieldtype: "Table",
@@ -120,16 +126,16 @@ erpnext.accounts.unreconcile_payment = {
 				callback: function (r) {
 					if (r.message) {
 						// populate child table with allocations
-						unreconcile_dialog_fields[0].data = r.message;
-						unreconcile_dialog_fields[0].get_data = function () {
+						unreconcile_dialog_fields[1].data = r.message;
+						unreconcile_dialog_fields[1].get_data = function () {
 							return r.message;
 						};
 
 						let d = new frappe.ui.Dialog({
-							title: __("UnReconcile Allocations"),
+							title: __("Request Unreconciliation"),
 							fields: unreconcile_dialog_fields,
 							size: "large",
-							primary_action_label: __("UnReconcile"),
+							primary_action_label: __("Request Unreconciliation"),
 							primary_action(values) {
 								let selected_allocations = values.allocations.filter((x) => x.__checked);
 								if (selected_allocations.length > 0) {
@@ -138,6 +144,9 @@ erpnext.accounts.unreconcile_payment = {
 											frm,
 											selected_allocations
 										);
+									selection_map.forEach((selection) => {
+										selection.unreconcile_reason = values.unreconcile_reason;
+									});
 									erpnext.accounts.unreconcile_payment.create_unreconcile_docs(
 										selection_map
 									);
@@ -160,6 +169,16 @@ erpnext.accounts.unreconcile_payment = {
 			method: "erpnext.accounts.doctype.unreconcile_payment.unreconcile_payment.create_unreconcile_doc_for_selection",
 			args: {
 				selections: selection_map,
+			},
+			callback(r) {
+				if (r.message && r.message.length) {
+					frappe.msgprint({
+						title: __("Unreconciliation Requests Created"),
+						message: r.message
+							.map((name) => frappe.utils.get_form_link("Unreconcile Payment", name, true))
+							.join("<br>"),
+					});
+				}
 			},
 		});
 	},

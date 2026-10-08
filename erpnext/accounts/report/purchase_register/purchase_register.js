@@ -42,12 +42,6 @@ frappe.query_reports["Purchase Register"] = {
 			options: "Mode of Payment",
 		},
 		{
-			fieldname: "cost_center",
-			label: __("Cost Center"),
-			fieldtype: "Link",
-			options: "Cost Center",
-		},
-		{
 			fieldname: "warehouse",
 			label: __("Warehouse"),
 			fieldtype: "Link",

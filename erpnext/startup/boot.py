@@ -54,7 +54,7 @@ def boot_session(bootinfo):
 			)
 
 		bootinfo.docs += frappe.db.sql(
-			"""select name, default_currency, cost_center, default_selling_terms, default_buying_terms,
+			"""select name, default_currency, default_selling_terms, default_buying_terms,
 			default_letter_head, default_bank_account, enable_perpetual_inventory, country, exchange_gain_loss_account from `tabCompany`""",
 			as_dict=1,
 			update={"doctype": ":Company"},
@@ -91,7 +91,6 @@ def update_page_info(bootinfo):
 	bootinfo.page_info.update(
 		{
 			"Chart of Accounts": {"title": "Chart of Accounts", "route": "Tree/Account"},
-			"Chart of Cost Centers": {"title": "Chart of Cost Centers", "route": "Tree/Cost Center"},
 			"Item Group Tree": {"title": "Item Group Tree", "route": "Tree/Item Group"},
 			"Customer Group Tree": {"title": "Customer Group Tree", "route": "Tree/Customer Group"},
 			"Territory Tree": {"title": "Territory Tree", "route": "Tree/Territory"},

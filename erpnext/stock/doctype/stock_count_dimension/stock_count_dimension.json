@@ -1,0 +1,49 @@
+{
+ "actions": [],
+ "creation": "2026-10-05 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "inventory_dimension",
+  "reference_document",
+  "dimension_value"
+ ],
+ "fields": [
+  {
+   "fieldname": "inventory_dimension",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Inventory Dimension",
+   "options": "Inventory Dimension",
+   "reqd": 1
+  },
+  {
+   "fieldname": "reference_document",
+   "fieldtype": "Data",
+   "label": "Reference Document",
+   "read_only": 1,
+   "hidden": 1
+  },
+  {
+   "fieldname": "dimension_value",
+   "fieldtype": "Dynamic Link",
+   "in_list_view": 1,
+   "label": "Dimension Value",
+   "options": "reference_document",
+   "reqd": 1
+  }
+ ],
+ "istable": 1,
+ "links": [],
+ "modified": "2026-10-05 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Stock",
+ "name": "Stock Count Dimension",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

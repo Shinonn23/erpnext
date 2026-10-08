@@ -16,7 +16,6 @@ erpnext.accounts.bank_reconciliation.voucher_types = {
 					posting_date: values.posting_date,
 					mode_of_payment: values.mode_of_payment,
 					project: values.project,
-					cost_center: values.cost_center,
 					allow_edit: allow_edit,
 					company_bank_account: values?.bank_account || dialog_manager?.bank_account,
 				}
@@ -460,21 +459,6 @@ erpnext.accounts.bank_reconciliation.DialogManager = class DialogManager {
 				options: "Project",
 				depends_on: "eval:doc.action=='Create Voucher' && doc.document_type=='Payment Entry'",
 			},
-			{
-				fieldname: "cost_center",
-				fieldtype: "Link",
-				label: "Cost Center",
-				options: "Cost Center",
-				depends_on: "eval:doc.action=='Create Voucher' && doc.document_type=='Payment Entry'",
-				get_query: () => {
-					return {
-						filters: {
-							is_group: 0,
-							company: this.company,
-						},
-					};
-				},
-			},
 			...this.get_additional_voucher_fields(),
 			{
 				fieldtype: "Section Break",
@@ -639,7 +623,6 @@ erpnext.accounts.bank_reconciliation.DialogManager = class DialogManager {
 		return this.create_voucher(values, true);
 	}
 };
-
 const pending_reconciliations = new Map();
 
 const voucher_key = (doctype, docname) => `${doctype}:${docname}`;

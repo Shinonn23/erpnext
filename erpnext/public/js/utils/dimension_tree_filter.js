@@ -11,15 +11,8 @@ erpnext.accounts.dimensions = {
 		let me = this;
 		frappe.call({
 			method: "erpnext.accounts.doctype.accounting_dimension.accounting_dimension.get_dimensions",
-			args: {
-				with_cost_center_and_project: true,
-			},
 			callback: function (r) {
 				me.accounting_dimensions = r.message[0];
-				// Ignoring "Project" as it is already handled specifically in Sales Order and Delivery Note
-				me.accounting_dimensions = me.accounting_dimensions.filter((x) => {
-					return x.document_type != "Project";
-				});
 				me.default_dimensions = r.message[1];
 				me.setup_filters(frm, doctype);
 				me.update_dimension(frm, doctype);

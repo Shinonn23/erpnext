@@ -48,12 +48,6 @@ frappe.query_reports["Sales Register"] = {
 			options: "User",
 		},
 		{
-			fieldname: "cost_center",
-			label: __("Cost Center"),
-			fieldtype: "Link",
-			options: "Cost Center",
-		},
-		{
 			fieldname: "warehouse",
 			label: __("Warehouse"),
 			fieldtype: "Link",

@@ -16,28 +16,8 @@ class TestItemWiseSalesRegister(ERPNextTestSuite, AccountsTestMixin):
 		self.customer = "_Test Customer"
 		self.item = "_Test Item"
 		self.debit_to = "Debtors - _TC"
-		self.cost_center = "Main - _TC"
 		self.income_account = "Sales - _TC"
 		self.cash = "Cash - _TC"
-		self.create_child_cost_center()
-
-	def create_child_cost_center(self):
-		cc_name = "South Wing"
-		if frappe.db.exists("Cost Center", cc_name):
-			cc = frappe.get_doc("Cost Center", cc_name)
-		else:
-			parent = frappe.db.get_value("Cost Center", self.cost_center, "parent_cost_center")
-			cc = frappe.get_doc(
-				{
-					"doctype": "Cost Center",
-					"company": self.company,
-					"is_group": False,
-					"parent_cost_center": parent,
-					"cost_center_name": cc_name,
-				}
-			)
-			cc = cc.save()
-		self.south_cc = cc.name
 
 	def create_sales_invoice(self, rate=100, do_not_submit=False):
 		si = create_sales_invoice(
@@ -46,8 +26,6 @@ class TestItemWiseSalesRegister(ERPNextTestSuite, AccountsTestMixin):
 			customer=self.customer,
 			debit_to=self.debit_to,
 			posting_date=today(),
-			parent_cost_center=self.cost_center,
-			cost_center=self.cost_center,
 			rate=rate,
 			price_list_rate=rate,
 			do_not_save=1,
@@ -116,7 +94,7 @@ class TestItemWiseSalesRegister(ERPNextTestSuite, AccountsTestMixin):
 		self.assertEqual(result.tax_total, 0)
 		self.assertEqual(result.grand_total, 98.0)
 
-	def test_journal_with_cost_center_filter(self):
+	def test_journal_entries_in_sales_register(self):
 		je1 = frappe.get_doc(
 			{
 				"doctype": "Journal Entry",
@@ -131,7 +109,7 @@ class TestItemWiseSalesRegister(ERPNextTestSuite, AccountsTestMixin):
 						"credit_in_account_currency": 77,
 						"credit": 77,
 						"is_advance": "Yes",
-						"cost_center": self.cost_center,
+
 					},
 					{
 						"account": self.cash,
@@ -157,7 +135,7 @@ class TestItemWiseSalesRegister(ERPNextTestSuite, AccountsTestMixin):
 						"credit_in_account_currency": 98,
 						"credit": 98,
 						"is_advance": "Yes",
-						"cost_center": self.south_cc,
+
 					},
 					{
 						"account": self.cash,
@@ -176,7 +154,7 @@ class TestItemWiseSalesRegister(ERPNextTestSuite, AccountsTestMixin):
 				"company": self.company,
 				"include_payments": True,
 				"customer": self.customer,
-				"cost_center": self.cost_center,
+
 			}
 		)
 		report_output = execute(filters)[1]
@@ -201,7 +179,7 @@ class TestItemWiseSalesRegister(ERPNextTestSuite, AccountsTestMixin):
 				"company": self.company,
 				"include_payments": True,
 				"customer": self.customer,
-				"cost_center": self.south_cc,
+
 			}
 		)
 		report_output = execute(filters)[1]
@@ -229,9 +207,6 @@ class TestItemWiseSalesRegister(ERPNextTestSuite, AccountsTestMixin):
 			customer=self.customer,
 			debit_to=self.debit_to,
 			posting_date=today(),
-			parent_cost_center=self.cost_center,
-			cost_center=self.cost_center,
-			rate=100,
 			price_list_rate=100,
 			do_not_save=1,
 		)

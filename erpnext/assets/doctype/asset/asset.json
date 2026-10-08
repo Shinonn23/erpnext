@@ -20,6 +20,14 @@
   "asset_type",
   "maintenance_required",
   "calculate_depreciation",
+  "tracking_details_section",
+  "asset_serial_number",
+  "source_serial_no",
+  "source_batch_no",
+  "source_warehouse",
+  "is_demo_asset",
+  "demo_loan_status",
+  "material_request",
   "purchase_details_section",
   "purchase_receipt",
   "purchase_receipt_item",
@@ -56,7 +64,6 @@
   "depreciation_schedule_view",
   "other_info_tab",
   "accounting_dimensions_section",
-  "cost_center",
   "column_break_rjyw",
   "asset_owner_section",
   "asset_owner",
@@ -192,12 +199,6 @@
    "options": "Employee"
   },
   {
-   "fieldname": "cost_center",
-   "fieldtype": "Link",
-   "label": "Cost Center",
-   "options": "Cost Center"
-  },
-  {
    "fieldname": "department",
    "fieldtype": "Link",
    "label": "Department",
@@ -238,6 +239,61 @@
    "fieldtype": "Check",
    "label": "Calculate Depreciation",
    "read_only_depends_on": "eval:(doc.asset_type == \"Composite Asset\" && !doc.net_purchase_amount) || doc.asset_type == \"Composite Component\""
+  },
+  {
+   "fieldname": "tracking_details_section",
+   "fieldtype": "Section Break",
+   "label": "Tracking Details"
+  },
+  {
+   "fieldname": "asset_serial_number",
+   "fieldtype": "Data",
+   "label": "Asset Serial Number",
+   "unique": 1
+  },
+  {
+   "fieldname": "source_serial_no",
+   "fieldtype": "Link",
+   "label": "Source Serial No",
+   "options": "Serial No",
+   "read_only": 1
+  },
+  {
+   "fieldname": "source_batch_no",
+   "fieldtype": "Link",
+   "label": "Source Batch No",
+   "options": "Batch",
+   "read_only": 1
+  },
+  {
+   "fieldname": "source_warehouse",
+   "fieldtype": "Link",
+   "label": "Source Warehouse",
+   "options": "Warehouse",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "is_demo_asset",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Is Demo Asset"
+  },
+  {
+   "fieldname": "demo_loan_status",
+   "fieldtype": "Select",
+   "label": "Demo / Loan Status",
+   "options": "Available\nIn Transit\nWith Customer",
+   "default": "Available",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "material_request",
+   "fieldtype": "Link",
+   "label": "Material Request",
+   "options": "Material Request",
+   "read_only": 1
   },
   {
    "depends_on": "eval:(doc.asset_type == \"Existing Asset\")",

@@ -61,8 +61,14 @@ class POSOpeningEntry(StatusUpdater):
 		if not cint(frappe.db.get_value("User", self.user, "enabled")):
 			frappe.throw(_("User {} is disabled. Please select valid user/cashier").format(self.user))
 
+		if not frappe.db.exists("POS Profile User", {"parent": self.pos_profile, "user": self.user}):
+			frappe.throw(_("User {} is not an authorized cashier for POS Profile {}").format(self.user, self.pos_profile))
+
 	def check_open_pos_exists(self):
-		if frappe.db.exists("POS Opening Entry", {"pos_profile": self.pos_profile, "status": "Open"}):
+		filters = {"pos_profile": self.pos_profile, "status": "Open"}
+		if self.name:
+			filters["name"] = ["!=", self.name]
+		if frappe.db.exists("POS Opening Entry", filters):
 			frappe.throw(
 				title=_("POS Opening Entry Exists"),
 				msg=_(
@@ -70,12 +76,17 @@ class POSOpeningEntry(StatusUpdater):
 				).format(frappe.bold(self.pos_profile)),
 			)
 
+
 	def check_user_already_assigned(self):
-		if frappe.db.exists("POS Opening Entry", {"user": self.user, "status": "Open"}):
+		filters = {"user": self.user, "status": "Open"}
+		if self.name:
+			filters["name"] = ["!=", self.name]
+		if frappe.db.exists("POS Opening Entry", filters):
 			frappe.throw(
 				title=_("Cannot Assign Cashier"),
 				msg=_("Cashier is currently assigned to another POS."),
 			)
+
 
 	def validate_payment_method_account(self):
 		invalid_modes = []

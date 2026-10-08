@@ -1,5 +1,5 @@
 import { useAtomValue, useSetAtom } from 'jotai'
-import { bankRecSelectedTransactionAtom, bankRecTransferModalAtom, bankRecUnreconcileModalAtom, SelectedBank, selectedBankAccountAtom } from './bankRecAtoms'
+import { bankRecSelectedTransactionAtom, bankRecTransferModalAtom, SelectedBank, selectedBankAccountAtom } from './bankRecAtoms'
 import { DialogFooter, DialogClose } from '@/components/ui/dialog'
 import _ from '@/lib/translate'
 import { UnreconciledTransaction, useGetBankAccounts, useGetRuleForTransaction, useRefreshUnreconciledTransactions, useUpdateActionLog } from './utils'
@@ -29,6 +29,7 @@ import { BankTransaction } from '@/types/Accounts/BankTransaction'
 import { useHotkeys } from 'react-hotkeys-hook'
 import { useDirection } from '@/components/ui/direction'
 import BankLogo from '@/components/common/BankLogo'
+import { slug } from '@/lib/frappe'
 const TransferModalContent = () => {
 
     const selectedBankAccount = useAtomValue(selectedBankAccountAtom)
@@ -87,7 +88,7 @@ const BulkInternalTransferForm = ({ transactions }: { transactions: Unreconciled
                     bank_account: data.bank_account,
                 }
             })
-            toast.success(_("Transfer Recorded"), {
+            toast.success(_("Payment Entry drafts created. Request approval on each entry to post and match."), {
                 duration: 4000,
                 closeButton: true,
             })
@@ -167,7 +168,6 @@ const InternalTransferForm = ({ selectedBankAccount, selectedTransaction }: { se
 
     const { call: createPaymentEntry, loading, error, isCompleted } = useFrappePostCall<{ message: { transaction: BankTransaction, payment_entry: PaymentEntry } }>('erpnext.accounts.doctype.bank_reconciliation_tool.bank_reconciliation_tool.create_internal_transfer')
 
-    const setBankRecUnreconcileModalAtom = useSetAtom(bankRecUnreconcileModalAtom)
     const addToActionLog = useUpdateActionLog()
 
     const { file: frappeFile } = useContext(FrappeContext) as FrappeConfig
@@ -204,16 +204,13 @@ const InternalTransferForm = ({ selectedBankAccount, selectedTransaction }: { se
                     }
                 ]
             })
-            toast.success(_("Transfer Recorded"), {
+            toast.success(_("Payment Entry draft created. Request approval to post and match it."), {
                 duration: 4000,
                 closeButton: true,
                 action: {
-                    label: _("Undo"),
-                    onClick: () => setBankRecUnreconcileModalAtom(selectedTransaction.name)
+                    label: _("Open Payment Entry"),
+                    onClick: () => window.open(`/desk/${slug("Payment Entry")}/${message.payment_entry.name}`, "_blank")
                 },
-                actionButtonStyle: {
-                    backgroundColor: "rgb(0, 138, 46)"
-                }
             })
 
             if (files.length > 0) {

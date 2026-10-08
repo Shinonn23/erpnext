@@ -203,22 +203,6 @@ frappe.ui.form.on("Journal Entry", {
 	},
 
 	company: function (frm) {
-		frappe.call({
-			method: "frappe.client.get_value",
-			args: {
-				doctype: "Company",
-				filters: { name: frm.doc.company },
-				fieldname: "cost_center",
-			},
-			callback: function (r) {
-				if (r.message) {
-					$.each(frm.doc.accounts || [], function (i, jvd) {
-						frappe.model.set_value(jvd.doctype, jvd.name, "cost_center", r.message.cost_center);
-					});
-				}
-			},
-		});
-
 		erpnext.accounts.dimensions.update_dimension(frm, frm.doctype);
 		erpnext.utils.set_letter_head(frm);
 		frm.clear_table("tax_withholding_entries");
@@ -359,10 +343,6 @@ erpnext.accounts.JournalEntry = class JournalEntry extends frappe.ui.form.Contro
 
 			if (["Sales Invoice", "Purchase Invoice"].includes(jvd.reference_type)) {
 				out.filters.push([jvd.reference_type, "outstanding_amount", "!=", 0]);
-				// Filter by cost center
-				if (jvd.cost_center) {
-					out.filters.push([jvd.reference_type, "cost_center", "in", ["", jvd.cost_center]]);
-				}
 				// account filter
 				frappe.model.validate_missing(jvd, "account");
 				var party_account_field = jvd.reference_type === "Sales Invoice" ? "debit_to" : "credit_to";

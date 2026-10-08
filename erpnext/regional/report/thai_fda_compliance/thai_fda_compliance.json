@@ -1,0 +1,26 @@
+{
+ "add_total_row": 0,
+ "columns": [],
+ "doctype": "Report",
+ "filters": [
+  {"fieldname": "item", "fieldtype": "Link", "label": "Item", "options": "Item"},
+  {"fieldname": "assessment_status", "fieldtype": "Select", "label": "ผลประเมิน อย.", "options": "\nยังไม่ประเมิน\nต้องมีทะเบียน\nไม่ต้องมี/ได้รับยกเว้น"},
+  {"fieldname": "regulatory_category", "fieldtype": "Select", "label": "กลุ่มผลิตภัณฑ์", "options": "\nอาหาร\nยา\nเครื่องสำอาง\nเครื่องมือแพทย์\nวัตถุอันตราย\nผลิตภัณฑ์สมุนไพร\nอื่นๆ"},
+  {"fieldname": "compliance_status", "fieldtype": "Select", "label": "สถานะ", "options": "\nยังไม่ประเมิน\nต้องมีทะเบียนแต่ยังไม่มี\nไม่ต้องมี/ได้รับยกเว้น\nรออนุมัติ\nมีผล\nใกล้หมดอายุ\nหมดอายุแล้ว\nเอกสารไม่ระบุวันหมดอายุ\nยังยืนยันวันหมดอายุไม่ได้\nพักใช้\nเพิกถอน\nยกเลิก\nถูกแทนที่"},
+  {"fieldname": "responsible_user", "fieldtype": "Link", "label": "ผู้รับผิดชอบ", "options": "User"},
+  {"fieldname": "renewal_status", "fieldtype": "Select", "label": "สถานะการต่ออายุ", "options": "\nยังไม่เริ่ม\nกำลังดำเนินการ\nยื่นแล้ว\nได้รับฉบับใหม่"}
+ ],
+ "is_standard": "Yes",
+ "module": "Regional",
+ "name": "Thai FDA Compliance",
+ "prepared_report": 0,
+ "ref_doctype": "Thai FDA Registration",
+ "report_name": "Thai FDA Compliance",
+ "report_type": "Script Report",
+ "roles": [
+  {"role": "Stock User"},
+  {"role": "Item Manager"},
+  {"role": "Stock Manager"},
+  {"role": "System Manager"}
+ ]
+}

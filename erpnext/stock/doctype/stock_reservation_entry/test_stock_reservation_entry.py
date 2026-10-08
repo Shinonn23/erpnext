@@ -830,7 +830,6 @@ def create_material_receipt(
 	se = frappe.new_doc("Stock Entry")
 	se.purpose = "Material Receipt"
 	se.company = "_Test Company"
-	cost_center = frappe.get_value("Company", se.company, "cost_center")
 	expense_account = frappe.get_value("Company", se.company, "stock_adjustment_account")
 
 	for item in items.values():
@@ -843,7 +842,6 @@ def create_material_receipt(
 				"basic_rate": item.valuation_rate or 100,
 				"conversion_factor": 1.0,
 				"transfer_qty": qty,
-				"cost_center": cost_center,
 				"expense_account": expense_account,
 			},
 		)

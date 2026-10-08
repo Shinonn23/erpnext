@@ -37,7 +37,6 @@ class ProcessStatementOfAccounts(Document):
 		from erpnext.accounts.doctype.process_statement_of_accounts_customer.process_statement_of_accounts_customer import (
 			ProcessStatementOfAccountsCustomer,
 		)
-		from erpnext.accounts.doctype.psoa_cost_center.psoa_cost_center import PSOACostCenter
 		from erpnext.accounts.doctype.psoa_project.psoa_project import PSOAProject
 
 		account: DF.Link | None
@@ -48,7 +47,6 @@ class ProcessStatementOfAccounts(Document):
 		cc_to: DF.TableMultiSelect[ProcessStatementOfAccountsCC]
 		collection_name: DF.DynamicLink | None
 		company: DF.Link
-		cost_center: DF.TableMultiSelect[PSOACostCenter]
 		currency: DF.Link | None
 		customer_collection: DF.Literal["", "Customer Group", "Territory", "Sales Partner", "Sales Person"]
 		customers: DF.Table[ProcessStatementOfAccountsCustomer]
@@ -85,7 +83,6 @@ class ProcessStatementOfAccounts(Document):
 
 	def validate(self):
 		self.validate_account()
-		self.validate_company_for_table("Cost Center")
 		self.validate_company_for_table("Project")
 
 		if not self.subject:
@@ -253,7 +250,6 @@ def get_common_filters(doc):
 			"company": doc.company,
 			"finance_book": doc.finance_book if doc.finance_book else None,
 			"account": [doc.account] if doc.account else None,
-			"cost_center": [cc.cost_center_name for cc in doc.cost_center],
 			"show_remarks": doc.show_remarks,
 		}
 	)

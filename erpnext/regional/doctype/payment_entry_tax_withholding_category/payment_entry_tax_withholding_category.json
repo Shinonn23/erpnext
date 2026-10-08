@@ -1,0 +1,28 @@
+{
+ "doctype": "DocType",
+ "name": "Payment Entry Tax Withholding Category",
+ "module": "Regional",
+ "istable": 1,
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": ["tax_withholding_category", "taxable_amount"],
+ "fields": [
+  {
+   "fieldname": "tax_withholding_category",
+   "fieldtype": "Link",
+   "label": "Tax Withholding Category",
+   "options": "Tax Withholding Category",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "taxable_amount",
+   "fieldtype": "Currency",
+   "label": "Taxable Amount (Company Currency)",
+   "options": "Company:company:default_currency",
+   "reqd": 1,
+   "in_list_view": 1
+  }
+ ],
+ "permissions": []
+}

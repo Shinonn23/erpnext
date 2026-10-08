@@ -1,0 +1,26 @@
+{
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": ["custody_loan_item", "item_code", "returned_qty", "batch_no", "serial_no", "asset", "target_location", "matched_qty", "matched_serial_no", "replacement_qty", "replacement_serial_no", "replacement_reason"],
+ "fields": [
+  {"fieldname": "custody_loan_item", "fieldtype": "Link", "label": "Loan Item", "options": "Custody Loan Item", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "item_code", "fieldtype": "Link", "label": "Item", "options": "Item", "read_only": 1, "in_list_view": 1},
+  {"fieldname": "returned_qty", "fieldtype": "Float", "label": "Received Qty", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "batch_no", "fieldtype": "Link", "label": "Actual Batch No", "options": "Batch", "depends_on": "eval:parent.loan_type == 'Stock'"},
+  {"fieldname": "serial_no", "fieldtype": "Small Text", "label": "Actual Serial Nos", "depends_on": "eval:parent.loan_type == 'Stock'"},
+  {"fieldname": "asset", "fieldtype": "Link", "label": "Asset", "options": "Asset", "depends_on": "eval:parent.loan_type == 'Asset'"},
+  {"fieldname": "target_location", "fieldtype": "Link", "label": "Return Location", "options": "Location", "depends_on": "eval:parent.loan_type == 'Asset'"},
+  {"fieldname": "matched_qty", "fieldtype": "Float", "label": "Matched Original Qty", "read_only": 1, "hidden": 1},
+  {"fieldname": "matched_serial_no", "fieldtype": "Small Text", "label": "Matched Serial Nos", "read_only": 1, "hidden": 1},
+  {"fieldname": "replacement_qty", "fieldtype": "Float", "label": "Replacement Qty", "read_only": 1, "hidden": 1},
+  {"fieldname": "replacement_serial_no", "fieldtype": "Small Text", "label": "Replacement Serial Nos", "read_only": 1, "hidden": 1},
+  {"fieldname": "replacement_reason", "fieldtype": "Small Text", "label": "Replacement / Batch Difference Reason", "depends_on": "eval:parent.loan_type == 'Stock'"}
+ ],
+ "istable": 1,
+ "module": "Loan",
+ "name": "Custody Loan Return Item",
+ "permissions": [],
+ "sort_field": "idx",
+ "sort_order": "ASC"
+}

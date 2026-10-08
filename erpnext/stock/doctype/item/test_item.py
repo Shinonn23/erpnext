@@ -111,7 +111,6 @@ class TestItem(ERPNextTestSuite):
 			"warehouse": "_Test Warehouse - _TC",
 			"income_account": "Sales - _TC",
 			"expense_account": "_Test Account Cost for Goods Sold - _TC",
-			"cost_center": "_Test Cost Center - _TC",
 			"qty": 1.0,
 			"price_list_rate": 100.0,
 			"base_price_list_rate": 0.0,
@@ -317,7 +316,7 @@ class TestItem(ERPNextTestSuite):
 						"default_warehouse": "_Test Warehouse 2 - _TC",  # no override
 						"expense_account": "_Test Account Stock Expenses - _TC",  # override brand default
 						"default_cogs_account": "_Test Account Cost for Goods Sold - _TC",  # override brand default
-						"buying_cost_center": "_Test Write Off Cost Center - _TC",  # override item group default
+						  # override item group default
 					}
 				],
 			},
@@ -328,7 +327,7 @@ class TestItem(ERPNextTestSuite):
 			"warehouse": "_Test Warehouse 2 - _TC",  # from item
 			"income_account": "_Test Account Sales - _TC",  # from brand
 			"expense_account": "_Test Account Cost for Goods Sold - _TC",  # from item
-			"cost_center": "_Test Cost Center 2 - _TC",  # from item group
+			  # from item group
 		}
 		sales_item_details = get_item_details(
 			ItemDetailsCtx(
@@ -353,7 +352,7 @@ class TestItem(ERPNextTestSuite):
 			"warehouse": "_Test Warehouse 2 - _TC",  # from item
 			"expense_account": "_Test Account Stock Expenses - _TC",  # from item
 			"income_account": "_Test Account Sales - _TC",  # from brand
-			"cost_center": "_Test Write Off Cost Center - _TC",  # from item
+			  # from item
 		}
 		purchase_item_details = get_item_details(
 			ItemDetailsCtx(
@@ -384,8 +383,7 @@ class TestItem(ERPNextTestSuite):
 							"company": "_Test Company 1",
 							"default_warehouse": "_Test Warehouse - _TC",
 							"expense_account": "Stock In Hand - _TC",
-							"buying_cost_center": "_Test Cost Center - _TC",
-							"selling_cost_center": "_Test Cost Center - _TC",
+
 						}
 					],
 				},
@@ -1263,8 +1261,6 @@ def create_item(
 	opening_stock=0,
 	is_fixed_asset=0,
 	asset_category=None,
-	buying_cost_center=None,
-	selling_cost_center=None,
 	company="_Test Company",
 ):
 	if not frappe.db.exists("Item", item_code):
@@ -1287,8 +1283,7 @@ def create_item(
 			{
 				"default_warehouse": warehouse,
 				"company": company,
-				"selling_cost_center": selling_cost_center,
-				"buying_cost_center": buying_cost_center,
+
 			},
 		)
 		item.save()

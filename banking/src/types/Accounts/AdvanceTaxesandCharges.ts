@@ -22,8 +22,6 @@ export interface AdvanceTaxesandCharges{
 	description: string
 	/**	Considered In Paid Amount : Check	*/
 	included_in_paid_amount?: 0 | 1
-	/**	Cost Center : Link - Cost Center	*/
-	cost_center?: string
 	/**	Tax Rate : Float	*/
 	rate?: number
 	/**	Account Currency : Link - Currency	*/

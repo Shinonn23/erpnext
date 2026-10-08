@@ -6,8 +6,8 @@
    "label": "Profit and Loss"
   }
  ],
- "content": "[{\"id\":\"nDhfcJYbKH\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Profit and Loss\",\"col\":12}},{\"id\":\"VVvJ1lUcfc\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Outgoing Bills\",\"col\":3}},{\"id\":\"Vlj2FZtlHV\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Incoming Bills\",\"col\":3}},{\"id\":\"VVVjQVAhPf\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Incoming Payment\",\"col\":3}},{\"id\":\"DySNdlysIW\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Outgoing Payment\",\"col\":3}},{\"id\":\"tHb3yxthkR\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Reports &amp; Masters</b></span>\",\"col\":12}},{\"id\":\"DnNtsmxpty\",\"type\":\"card\",\"data\":{\"card_name\":\"Accounting Masters\",\"col\":4}},{\"id\":\"nKKr6fjgjb\",\"type\":\"card\",\"data\":{\"card_name\":\"Payments\",\"col\":4}},{\"id\":\"KlqilF5R_V\",\"type\":\"card\",\"data\":{\"card_name\":\"Tax Masters\",\"col\":4}},{\"id\":\"jTUy8LB0uw\",\"type\":\"card\",\"data\":{\"card_name\":\"Cost Center and Budgeting\",\"col\":4}},{\"id\":\"Wn2lhs7WLn\",\"type\":\"card\",\"data\":{\"card_name\":\"Multi Currency\",\"col\":4}},{\"id\":\"PAQMqqNkBM\",\"type\":\"card\",\"data\":{\"card_name\":\"Banking\",\"col\":4}},{\"id\":\"kxhoaiqdLq\",\"type\":\"card\",\"data\":{\"card_name\":\"Opening and Closing\",\"col\":4}},{\"id\":\"q0MAlU2j_Z\",\"type\":\"card\",\"data\":{\"card_name\":\"Subscription Management\",\"col\":4}},{\"id\":\"ptm7T6Hwu-\",\"type\":\"card\",\"data\":{\"card_name\":\"Share Management\",\"col\":4}}]",
- "creation": "2020-03-02 15:41:59.515192",
+ "content": "[{\"id\":\"nDhfcJYbKH\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Profit and Loss\",\"col\":12,\"card_name\":null}},{\"id\":\"VVvJ1lUcfc\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Outgoing Bills\",\"col\":3,\"card_name\":null}},{\"id\":\"Vlj2FZtlHV\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Incoming Bills\",\"col\":3,\"card_name\":null}},{\"id\":\"VVVjQVAhPf\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Incoming Payment\",\"col\":3,\"card_name\":null}},{\"id\":\"DySNdlysIW\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Outgoing Payment\",\"col\":3,\"card_name\":null}},{\"id\":\"tHb3yxthkR\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Reports &amp; Masters</b></span>\",\"col\":12,\"card_name\":null}},{\"id\":\"DnNtsmxpty\",\"type\":\"card\",\"data\":{\"card_name\":\"Accounting Masters\",\"col\":4}},{\"id\":\"nKKr6fjgjb\",\"type\":\"card\",\"data\":{\"card_name\":\"Payments\",\"col\":4}},{\"id\":\"KlqilF5R_V\",\"type\":\"card\",\"data\":{\"card_name\":\"Tax Masters\",\"col\":4}},{\"id\":\"thTaxSetup1\",\"type\":\"card\",\"data\":{\"card_name\":\"Thailand Tax Setup\",\"col\":4}},{\"id\":\"jTUy8LB0uw\",\"type\":\"card\",\"data\":{\"card_name\":\"Budgeting\",\"col\":4}},{\"id\":\"Wn2lhs7WLn\",\"type\":\"card\",\"data\":{\"card_name\":\"Multi Currency\",\"col\":4}},{\"id\":\"PAQMqqNkBM\",\"type\":\"card\",\"data\":{\"card_name\":\"Banking\",\"col\":4}},{\"id\":\"kxhoaiqdLq\",\"type\":\"card\",\"data\":{\"card_name\":\"Opening and Closing\",\"col\":4}},{\"id\":\"q0MAlU2j_Z\",\"type\":\"card\",\"data\":{\"card_name\":\"Subscription Management\",\"col\":4}},{\"id\":\"ptm7T6Hwu-\",\"type\":\"card\",\"data\":{\"card_name\":\"Share Management\",\"col\":4}},{\"id\":\"thTaxFile01\",\"type\":\"card\",\"data\":{\"card_name\":\"Withholding Tax Filing\",\"col\":4}}]",
+ "creation": "2026-10-05 13:31:07.366186",
  "custom_blocks": [],
  "docstatus": 0,
  "doctype": "Workspace",
@@ -23,7 +23,8 @@
    "hidden": 0,
    "is_query_report": 0,
    "label": "Multi Currency",
-   "link_count": 0,
+   "link_count": 3,
+   "link_type": "DocType",
    "onboard": 0,
    "type": "Card Break"
   },
@@ -64,7 +65,8 @@
    "hidden": 0,
    "is_query_report": 0,
    "label": "Subscription Management",
-   "link_count": 0,
+   "link_count": 3,
+   "link_type": "DocType",
    "onboard": 0,
    "type": "Card Break"
   },
@@ -105,7 +107,8 @@
    "hidden": 0,
    "is_query_report": 0,
    "label": "Share Management",
-   "link_count": 0,
+   "link_count": 4,
+   "link_type": "DocType",
    "onboard": 0,
    "type": "Card Break"
   },
@@ -154,25 +157,6 @@
    "type": "Link"
   },
   {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Cost Center and Budgeting",
-   "link_count": 0,
-   "onboard": 0,
-   "type": "Card Break"
-  },
-  {
-   "dependencies": "",
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Chart of Cost Centers",
-   "link_count": 0,
-   "link_to": "Cost Center",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
    "dependencies": "",
    "hidden": 0,
    "is_query_report": 0,
@@ -195,28 +179,6 @@
    "type": "Link"
   },
   {
-   "dependencies": "Cost Center",
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Cost Center Allocation",
-   "link_count": 0,
-   "link_to": "Cost Center Allocation",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "dependencies": "Cost Center",
-   "hidden": 0,
-   "is_query_report": 1,
-   "label": "Budget Variance Report",
-   "link_count": 0,
-   "link_to": "Budget Variance Report",
-   "link_type": "Report",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
    "dependencies": "",
    "hidden": 0,
    "is_query_report": 0,
@@ -231,7 +193,8 @@
    "hidden": 0,
    "is_query_report": 0,
    "label": "Opening and Closing",
-   "link_count": 0,
+   "link_count": 3,
+   "link_type": "DocType",
    "onboard": 0,
    "type": "Card Break"
   },
@@ -529,7 +492,7 @@
    "hidden": 0,
    "is_query_report": 0,
    "label": "Payments",
-   "link_count": 5,
+   "link_count": 7,
    "link_type": "DocType",
    "onboard": 0,
    "type": "Card Break"
@@ -585,9 +548,117 @@
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Payment Receipt",
+   "link_count": 0,
+   "link_to": "Payment Receipt",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Petty Cash Holder",
+   "link_count": 0,
+   "link_to": "Petty Cash Holder",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Thailand Tax Setup",
+   "link_count": 4,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Thailand Tax Settings",
+   "link_count": 0,
+   "link_to": "Thai Tax Settings",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Withholding Tax Settings",
+   "link_count": 0,
+   "link_to": "Withholding Tax Setting",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Withholding Tax Income Types",
+   "link_count": 0,
+   "link_to": "Withholding Tax Type Of Income",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Thailand Billing Settings",
+   "link_count": 0,
+   "link_to": "Thai Billing Settings",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Withholding Tax Filing",
+   "link_count": 3,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Withholding Tax Certificates",
+   "link_count": 0,
+   "link_to": "Withholding Tax Cert",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "PND 3 Return",
+   "link_count": 0,
+   "link_to": "PND3",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "PND 53 Return",
+   "link_count": 0,
+   "link_to": "PND53",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
   }
  ],
- "modified": "2026-01-23 11:05:47.246213",
+ "modified": "2026-10-05 14:06:48.287823",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Invoicing",

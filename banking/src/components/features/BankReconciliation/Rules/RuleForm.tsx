@@ -493,7 +493,6 @@ const ConfigureAccountsModalContent = () => {
 
     const { call } = useContext(FrappeContext) as FrappeConfig
 
-    // const costCenterMapRef = useRef<Record<string, string>>({})
 
     const partyMapRef = useRef<Record<string, string>>({})
 
@@ -590,7 +589,6 @@ const ConfigureAccountsModalContent = () => {
                             onCheckedChange={onSelectAll} /></TableHead>
                         <TableHead>{_("Party")}</TableHead>
                         <TableHead>{_("Account")} <span className="text-ink-red-3">*</span></TableHead>
-                        {/* <TableHead>{_("Cost Center")}</TableHead> */}
                         <TableHead>{_("Remarks")}</TableHead>
                         <TableHead className="text-end">{_("Debit")}</TableHead>
                         <TableHead className="text-end">{_("Credit")}</TableHead>
@@ -666,17 +664,6 @@ const ConfigureAccountsModalContent = () => {
                                     hideLabel
                                 />
                             </TableCell>
-                            {/* <TableCell className="align-top">
-                                <LinkFormField
-                                    doctype="Cost Center"
-                                    name={`accounts.${index}.cost_center`}
-                                    label={_("Cost Center")}
-                                    filters={[["company", "=", company], ["is_group", "=", 0], ["disabled", "=", 0]]}
-                                    buttonClassName="min-w-48"
-                                    readOnly={index === 0}
-                                    hideLabel
-                                />
-                            </TableCell> */}
                             <TableCell className="align-top">
                                 <DataField
                                     name={`accounts.${index}.user_remark`}

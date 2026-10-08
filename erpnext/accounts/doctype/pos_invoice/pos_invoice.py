@@ -10,7 +10,6 @@ from frappe.utils import cint, flt, get_link_to_form, getdate, nowdate
 from frappe.utils.nestedset import get_descendants_of
 
 from erpnext.accounts.doctype.loyalty_program.loyalty_program import validate_loyalty_points
-from erpnext.accounts.doctype.payment_request.payment_request import make_payment_request
 from erpnext.accounts.doctype.sales_invoice.sales_invoice import (
 	SalesInvoice,
 	get_mode_of_payment_info,
@@ -85,7 +84,6 @@ class POSInvoice(SalesInvoice):
 		contact_mobile: DF.Data | None
 		contact_person: DF.Link | None
 		conversion_rate: DF.Float
-		cost_center: DF.Link | None
 		coupon_code: DF.Link | None
 		currency: DF.Link
 		customer: DF.Link | None
@@ -113,7 +111,6 @@ class POSInvoice(SalesInvoice):
 		loyalty_points: DF.Int
 		loyalty_program: DF.Link | None
 		loyalty_redemption_account: DF.Link | None
-		loyalty_redemption_cost_center: DF.Link | None
 		naming_series: DF.Literal["ACC-PSINV-.YYYY.-"]
 		net_total: DF.Currency
 		other_charges_calculation: DF.TextEditor | None
@@ -189,7 +186,6 @@ class POSInvoice(SalesInvoice):
 		utm_source: DF.Link | None
 		write_off_account: DF.Link | None
 		write_off_amount: DF.Currency
-		write_off_cost_center: DF.Link | None
 		write_off_outstanding_amount_automatically: DF.Check
 	# end: auto-generated types
 
@@ -217,7 +213,6 @@ class POSInvoice(SalesInvoice):
 		self.validate_write_off_account()
 		self.validate_change_amount()
 		self.validate_change_account()
-		self.validate_item_cost_centers()
 		self.validate_warehouse()
 		self.validate_serialised_or_batched_item()
 		self.validate_stock_availablility()
@@ -582,16 +577,12 @@ class POSInvoice(SalesInvoice):
 		self.outstanding_amount = total - flt(self.paid_amount) if total > flt(self.paid_amount) else 0
 
 	def validate_loyalty_transaction(self):
-		if self.redeem_loyalty_points and (
-			not self.loyalty_redemption_account or not self.loyalty_redemption_cost_center
-		):
-			expense_account, cost_center = frappe.db.get_value(
-				"Loyalty Program", self.loyalty_program, ["expense_account", "cost_center"]
+		if self.redeem_loyalty_points and not self.loyalty_redemption_account:
+			expense_account = frappe.db.get_value(
+				"Loyalty Program", self.loyalty_program, "expense_account"
 			)
 			if not self.loyalty_redemption_account:
 				self.loyalty_redemption_account = expense_account
-			if not self.loyalty_redemption_cost_center:
-				self.loyalty_redemption_cost_center = cost_center
 
 		if self.redeem_loyalty_points and self.loyalty_program and self.loyalty_points:
 			validate_loyalty_points(self, self.loyalty_points)
@@ -698,9 +689,7 @@ class POSInvoice(SalesInvoice):
 				"select_print_heading",
 				"write_off_account",
 				"taxes_and_charges",
-				"write_off_cost_center",
 				"apply_discount_on",
-				"cost_center",
 				"tax_category",
 				"ignore_pricing_rule",
 				"company_address",
@@ -814,6 +803,8 @@ class POSInvoice(SalesInvoice):
 				return pay_req
 
 	def get_new_payment_request(self, mop):
+		from erpnext.accounts.doctype.payment_request.payment_request import make_payment_request
+
 		payment_gateway_account = frappe.db.get_value(
 			"Payment Gateway Account",
 			{

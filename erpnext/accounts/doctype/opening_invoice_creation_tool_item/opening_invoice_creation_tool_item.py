@@ -14,7 +14,6 @@ class OpeningInvoiceCreationToolItem(Document):
 	if TYPE_CHECKING:
 		from frappe.types import DF
 
-		cost_center: DF.Link | None
 		due_date: DF.Date | None
 		invoice_number: DF.Data | None
 		item_name: DF.Data | None
