@@ -857,6 +857,7 @@ class BuyingController(SubcontractingController):
 							{
 								"actual_qty": -1 * source_qty,
 								"warehouse": d.from_warehouse,
+								"storage_location": d.get("from_storage_location") or d.get("storage_location"),
 								"outgoing_rate": d.rate,
 								"recalculate_rate": 1,
 								"dependant_sle_voucher_detail_no": d.name,
@@ -874,6 +875,7 @@ class BuyingController(SubcontractingController):
 						d,
 						{
 							"actual_qty": flt(pr_qty),
+							"storage_location": d.get("storage_location"),
 							"serial_and_batch_bundle": (
 								d.serial_and_batch_bundle
 								if not self.is_internal_transfer()
@@ -932,6 +934,7 @@ class BuyingController(SubcontractingController):
 							{
 								"actual_qty": -1 * source_qty,
 								"warehouse": d.from_warehouse,
+								"storage_location": d.get("from_storage_location") or d.get("storage_location"),
 								"recalculate_rate": 1,
 								"serial_and_batch_bundle": (
 									self.get_package_for_target_warehouse(d, d.from_warehouse, "Inward")
@@ -953,6 +956,7 @@ class BuyingController(SubcontractingController):
 						d,
 						{
 							"warehouse": d.rejected_warehouse,
+							"storage_location": d.get("rejected_storage_location"),
 							"actual_qty": flt(
 								flt(d.rejected_qty) * flt(d.conversion_factor), d.precision("stock_qty")
 							),

@@ -705,6 +705,7 @@ class SellingController(StockController):
 			item_row,
 			{
 				"actual_qty": -1 * flt(item_row.qty),
+				"storage_location": (item_row.get("item_row") or item_row).get("storage_location"),
 				"incoming_rate": item_row.incoming_rate,
 				"recalculate_rate": cint(self.is_return),
 				"serial_and_batch_bundle": serial_and_batch_bundle,
@@ -717,7 +718,13 @@ class SellingController(StockController):
 
 	def get_sle_for_target_warehouse(self, item_row):
 		sle = self.get_sl_entries(
-			item_row, {"actual_qty": flt(item_row.qty), "warehouse": item_row.target_warehouse}
+			item_row,
+			{
+				"actual_qty": flt(item_row.qty),
+				"warehouse": item_row.target_warehouse,
+				"storage_location": (item_row.get("item_row") or item_row).get("to_storage_location")
+				or (item_row.get("item_row") or item_row).get("storage_location"),
+			},
 		)
 
 		if self.docstatus == 1:

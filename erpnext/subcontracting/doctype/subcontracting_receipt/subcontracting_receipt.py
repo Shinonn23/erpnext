@@ -161,6 +161,7 @@ class SubcontractingReceipt(SubcontractingController):
 
 		self.set_supplied_items_expense_account()
 		self.set_supplied_items_inventory_dimensions()
+		self.validate_storage_locations()
 
 		# SubcontractingController.validate() does not call super() for Subcontracting Receipt, so
 		# the shared mandatory inventory dimension check must be invoked explicitly here. It runs

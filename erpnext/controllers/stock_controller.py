@@ -45,6 +45,10 @@ from erpnext.stock.doctype.serial_and_batch_bundle.serial_and_batch_bundle impor
 	combine_datetime,
 	get_type_of_transaction,
 )
+from erpnext.stock.doctype.storage_location.storage_location import (
+	get_storage_location_warehouses,
+	validate_storage_location_warehouse,
+)
 from erpnext.stock.stock_ledger import get_items_to_be_repost
 
 # Purposes whose inward (t_warehouse) row is inspected.
@@ -122,6 +126,7 @@ class StockController(AccountsController):
 		self.validate_internal_transfer()
 		self.validate_putaway_capacity()
 		self.reset_conversion_factor()
+		self.validate_storage_locations()
 		self.validate_inventory_dimension_mandatory()
 
 	def on_update(self):
@@ -1308,6 +1313,52 @@ class StockController(AccountsController):
 
 		return {key: list(charges.values()) for key, charges in item_account_wise_cost.items()}
 
+	def validate_storage_locations(self):
+		if self.docstatus == 2:
+			return
+		if self.doctype in ("Sales Invoice", "Purchase Invoice", "POS Invoice") and not self.get("update_stock"):
+			return
+
+		for table in self.meta.get_table_fields():
+			for row in self.get(table.fieldname) or []:
+				item_code = row.get("item_code") or row.get("rm_item_code")
+				if not item_code or not frappe.get_cached_value("Item", item_code, "is_stock_item"):
+					continue
+				for fieldname, warehouse in get_storage_location_warehouses(self, row).items():
+					if row.meta.has_field(fieldname) and row.get(fieldname):
+						validate_storage_location_warehouse(row.get(fieldname), warehouse)
+
+	def update_storage_location(self, row, sl_dict):
+		"""Copy the native stock location independently of configurable Inventory Dimensions."""
+		# Preserve explicit None so ledger validation rejects a missing location on the chosen leg.
+		if "storage_location" in sl_dict:
+			return
+		row = row.get("item_row") or row
+		warehouse = sl_dict.get("warehouse")
+		fieldname = "storage_location"
+		if self.doctype == "Stock Entry":
+			# Callers supply the original movement signs even on cancellation; stock_ledger
+			# reverses them later. The sign also distinguishes locations within one warehouse.
+			if warehouse == row.get("t_warehouse") and flt(sl_dict.get("actual_qty")) > 0:
+				fieldname = "to_storage_location"
+		elif self.doctype in ("Purchase Receipt", "Purchase Invoice", "Subcontracting Receipt"):
+			if row.get("rejected_warehouse") and warehouse == row.get("rejected_warehouse"):
+				fieldname = "rejected_storage_location"
+			elif row.get("from_warehouse") and warehouse == row.get("from_warehouse"):
+				fieldname = "from_storage_location"
+		elif self.doctype in ("Delivery Note", "Sales Invoice", "POS Invoice"):
+			if row.get("target_warehouse") and warehouse == row.get("target_warehouse"):
+				fieldname = "to_storage_location"
+
+		location = row.get(fieldname)
+		if (
+			not location
+			and fieldname in ("from_storage_location", "to_storage_location")
+			and self.doctype != "Stock Entry"
+		):
+			location = row.get("storage_location")
+		sl_dict.storage_location = location
+
 	def validate_inventory_dimension_mandatory(self):
 		# Mandatory inventory dimensions are enforced here (instead of via field-level `reqd`)
 		# so we can skip service rows and never block a document that is being cancelled.
@@ -1327,6 +1378,9 @@ class StockController(AccountsController):
 
 		child_meta = frappe.get_meta(child_doctype)
 		for dimension in dimensions:
+			# Location is required at the ledger boundary, never on planning or draft rows.
+			if dimension.source_fieldname == "storage_location":
+				continue
 			mandatory_fields = get_mandatory_dimension_fields(child_doctype, dimension)
 			for row in rows:
 				if mandatory_fields and not self.is_service_item_row(row):
@@ -1353,6 +1407,8 @@ class StockController(AccountsController):
 			)
 
 	def update_inventory_dimensions(self, row, sl_dict) -> None:
+		# Stock Reconciliation builds its own ledger dictionaries and enters here directly.
+		self.update_storage_location(row, sl_dict)
 		# To handle delivery note and sales invoice
 		if row.get("item_row"):
 			row = row.get("item_row")
@@ -1360,6 +1416,9 @@ class StockController(AccountsController):
 		dimensions = get_evaluated_inventory_dimension(row, sl_dict, parent_doc=self)
 		for dimension in dimensions:
 			if not dimension:
+				continue
+			if dimension.target_fieldname == "storage_location":
+				# Storage Location is a native stock field, like Project; its mapping belongs above.
 				continue
 
 			if (

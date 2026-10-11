@@ -343,6 +343,7 @@ class StockEntry(StockController, SubcontractingInwardController):
 		if not self.from_bom:
 			self.fg_completed_qty = 0.0
 
+		self.validate_storage_locations()
 		self.make_serial_and_batch_bundle_for_outward()
 		self.validate_serialized_batch()
 		self.calculate_rate_and_amount()

@@ -4,7 +4,6 @@
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import flt
 
 
 class StorageLocation(Document):
@@ -162,6 +161,21 @@ def remove_loan_inventory_dimension_custom_fields():
 			frappe.clear_cache(doctype=doctype)
 
 
+def get_storage_location_warehouses(doc, row):
+	"""Warehouse owning each native location field on a stock voucher row."""
+	warehouses = {
+		"storage_location": row.get("s_warehouse") if doc.doctype == "Stock Entry" else row.get("warehouse"),
+		"to_storage_location": row.get("t_warehouse")
+		or row.get("target_warehouse")
+		or row.get("to_warehouse"),
+		"from_storage_location": row.get("from_warehouse"),
+		"rejected_storage_location": row.get("rejected_warehouse"),
+	}
+	if row.get("rm_item_code") and row.get("parentfield") == "supplied_items":
+		warehouses["storage_location"] = doc.get("supplier_warehouse")
+	return warehouses
+
+
 def set_default_storage_locations(doc, method=None):
 	"""Persist warehouse defaults before stock valuation and serial/batch processing."""
 	# Historical submissions and cancellations must retain their original dimensions.
@@ -173,15 +187,7 @@ def set_default_storage_locations(doc, method=None):
 
 	for table in doc.meta.get_table_fields():
 		for row in doc.get(table.fieldname) or []:
-			warehouses = {
-				"storage_location": row.get("s_warehouse") if doc.doctype == "Stock Entry" else row.get("warehouse"),
-				"to_storage_location": row.get("t_warehouse") or row.get("target_warehouse") or row.get("to_warehouse"),
-				"from_storage_location": row.get("from_warehouse"),
-				"rejected_storage_location": row.get("rejected_warehouse"),
-			}
-			if row.doctype == "Subcontracting Receipt Supplied Item":
-				warehouses["storage_location"] = doc.get("supplier_warehouse")
-			for fieldname, warehouse in warehouses.items():
+			for fieldname, warehouse in get_storage_location_warehouses(doc, row).items():
 				if not warehouse or not row.meta.has_field(fieldname) or row.get(fieldname):
 					continue
 				location = frappe.get_cached_value("Warehouse", warehouse, "default_storage_location")
@@ -191,11 +197,12 @@ def set_default_storage_locations(doc, method=None):
 
 
 def validate_storage_location(ledger_entry):
+	"""Require a location for new ledger postings, while permitting historical reversals."""
 	location_name = ledger_entry.get("storage_location")
 	if not location_name:
-		if flt(ledger_entry.get("actual_qty")) < 0 and not ledger_entry.get("is_cancelled"):
+		if not ledger_entry.get("is_cancelled"):
 			frappe.throw(
-				_("Storage Location is required to issue Item {0} from Warehouse {1}.").format(
+				_("Storage Location is required to post stock for Item {0} in Warehouse {1}.").format(
 					ledger_entry.get("item_code"), ledger_entry.get("warehouse")
 				),
 				title=_("Storage Location Required"),

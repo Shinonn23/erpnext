@@ -109,19 +109,17 @@ class TestStorageLocation(ERPNextTestSuite):
 		})
 		self.assertRaises(frappe.ValidationError, location.insert)
 
-	def test_location_required_only_for_new_outgoing_stock(self):
+	def test_location_required_only_for_new_stock_ledger_entries(self):
 		ledger = frappe._dict(
 			item_code="_Test Item", warehouse=self.warehouse, actual_qty=-1
 		)
-		with self.assertRaisesRegex(frappe.ValidationError, "Storage Location is required"):
+		for qty in (-1, 0, 1):
+			ledger.actual_qty = qty
+			ledger.is_cancelled = 0
+			with self.assertRaisesRegex(frappe.ValidationError, "Storage Location is required"):
+				validate_storage_location(ledger)
+			ledger.is_cancelled = 1
 			validate_storage_location(ledger)
-		ledger.actual_qty = 1
-		validate_storage_location(ledger)
-		ledger.actual_qty = 0
-		validate_storage_location(ledger)
-		ledger.actual_qty = -1
-		ledger.is_cancelled = 1
-		validate_storage_location(ledger)
 
 	def test_issue_without_location_cannot_post_stock(self):
 		item = make_item("_Test Required Location " + frappe.generate_hash(length=8))

@@ -71,6 +71,7 @@ class StockReconciliation(StockController):
 				"Company", self.company, "stock_adjustment_account"
 			)
 		self.validate_posting_time()
+		self.validate_storage_locations()
 		self.set_current_serial_and_batch_bundle()
 		self.set_new_serial_and_batch_bundle()
 		self.validate_duplicate_serial_and_batch_bundle("items")

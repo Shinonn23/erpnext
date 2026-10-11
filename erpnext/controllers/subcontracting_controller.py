@@ -1207,7 +1207,9 @@ class SubcontractingController(StockController):
 				scr_qty = flt(item.qty) * flt(item.conversion_factor)
 
 				if scr_qty:
-					sle = self.get_sl_entries(item, {"actual_qty": flt(scr_qty)})
+					sle = self.get_sl_entries(
+						item, {"actual_qty": flt(scr_qty), "storage_location": item.get("storage_location")}
+					)
 					rate_db_precision = 6 if cint(self.precision("rate", item)) <= 6 else 9
 					incoming_rate = flt(item.rate, rate_db_precision)
 					sle.update(
@@ -1224,6 +1226,7 @@ class SubcontractingController(StockController):
 							item,
 							{
 								"warehouse": item.rejected_warehouse,
+								"storage_location": item.get("rejected_storage_location"),
 								"serial_and_batch_bundle": item.get("rejected_serial_and_batch_bundle"),
 								"actual_qty": flt(item.rejected_qty) * flt(item.conversion_factor),
 								"incoming_rate": 0.0,

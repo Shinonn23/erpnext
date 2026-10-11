@@ -94,6 +94,7 @@ class AssetCapitalization(StockController):
 		self.validate_consumed_asset_item()
 		self.validate_service_item()
 		self.set_warehouse_details()
+		self.validate_storage_locations()
 		self.set_asset_values()
 		self.calculate_totals()
 		self.set_title()

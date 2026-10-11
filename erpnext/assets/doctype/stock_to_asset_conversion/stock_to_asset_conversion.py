@@ -55,6 +55,7 @@ class StocktoAssetConversion(StockController):
 		from erpnext.stock.doctype.storage_location.storage_location import set_default_storage_locations
 
 		set_default_storage_locations(self)
+		self.validate_storage_locations()
 		self.set_missing_values()
 		self.validate_stock_items()
 		self.build_asset_preview()
