@@ -9,6 +9,11 @@ from frappe.utils.nestedset import get_descendants_of
 from pypika.terms import ExistsCriterion
 
 from erpnext.accounts.doctype.pos_invoice.pos_invoice import get_pos_reserved_qty
+from erpnext.stock.report.storage_location_utils import (
+	add_location_column,
+	show_location_wise_stock,
+	split_bin_rows,
+)
 from erpnext.stock.utils import (
 	is_reposting_item_valuation_in_progress,
 	update_included_uom_in_report,
@@ -19,8 +24,12 @@ def execute(filters=None):
 	is_reposting_item_valuation_in_progress()
 	filters = frappe._dict(filters or {})
 	include_uom = filters.get("include_uom")
-	columns = get_columns()
+	columns = add_location_column(get_columns(), filters)
 	bin_list = get_bin_list(filters)
+	for bin in bin_list:
+		bin.reserved_qty_for_pos = get_pos_reserved_qty(bin.item_code, bin.warehouse)
+		bin.projected_qty -= bin.reserved_qty_for_pos
+	bin_list = split_bin_rows(bin_list, filters)
 	item_map = get_item_map(filters.get("item_code"), include_uom)
 	item_groups = []
 	if filters.get("item_group"):
@@ -53,7 +62,7 @@ def execute(filters=None):
 
 		re_order_level = re_order_qty = 0
 
-		for d in item.get("reorder_levels"):
+		for d in item.get("reorder_levels") if not bin.get("storage_location") else []:
 			if d.warehouse == bin.warehouse:
 				re_order_level = d.warehouse_reorder_level
 				re_order_qty = d.warehouse_reorder_qty
@@ -62,9 +71,7 @@ def execute(filters=None):
 		if (re_order_level or re_order_qty) and re_order_level > bin.projected_qty:
 			shortage_qty = re_order_level - flt(bin.projected_qty)
 
-		reserved_qty_for_pos = get_pos_reserved_qty(bin.item_code, bin.warehouse)
-		if reserved_qty_for_pos:
-			bin.projected_qty -= reserved_qty_for_pos
+		reserved_qty_for_pos = bin.reserved_qty_for_pos
 
 		data.append(
 			[
@@ -91,6 +98,9 @@ def execute(filters=None):
 				shortage_qty,
 			]
 		)
+
+		if show_location_wise_stock(filters):
+			data[-1].append(bin.get("storage_location"))
 
 		if include_uom:
 			conversion_factors.append(item.conversion_factor)

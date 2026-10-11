@@ -130,7 +130,6 @@
   "stock_received_but_not_billed",
   "default_provisional_account",
   "default_in_transit_warehouse",
-  "default_in_transit_location",
   "manufacturing_section",
   "default_operating_cost_account",
   "column_break_9prc",
@@ -684,12 +683,6 @@
    "fieldtype": "Link",
    "label": "Default In-Transit Warehouse",
    "options": "Warehouse"
-  },
-  {
-   "fieldname": "default_in_transit_location",
-   "fieldtype": "Link",
-   "label": "Default In-Transit Location",
-   "options": "Location"
   },
   {
    "depends_on": "eval:!doc.__islocal",

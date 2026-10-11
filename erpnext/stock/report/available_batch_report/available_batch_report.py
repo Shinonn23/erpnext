@@ -8,6 +8,13 @@ from frappe import _
 from frappe.query_builder.functions import Sum
 from frappe.utils import flt, get_datetime, today
 
+from erpnext.stock.report.storage_location_utils import (
+	add_location_column,
+	apply_location_query,
+	location_key,
+	show_location_wise_stock,
+)
+
 
 def execute(filters=None):
 	columns, data = [], []
@@ -64,7 +71,7 @@ def get_columns(filters):
 		]
 	)
 
-	return columns
+	return add_location_column(columns, filters)
 
 
 def get_data(filters):
@@ -110,10 +117,11 @@ def get_batchwise_data_from_stock_ledger(filters):
 		.groupby(table.batch_no, table.item_code, table.warehouse)
 	)
 
+	query = apply_location_query(query, table, filters, group_by=True)
 	query = get_query_based_on_filters(query, batch, table, filters)
 
 	for d in query.run(as_dict=True):
-		key = (d.item_code, d.warehouse, d.batch_no)
+		key = (d.item_code, d.warehouse, d.batch_no, location_key(d, filters))
 		batchwise_data.setdefault(key, d)
 
 	return batchwise_data
@@ -141,10 +149,11 @@ def get_batchwise_data_from_serial_batch_bundle(batchwise_data, filters):
 		.groupby(ch_table.batch_no, table.item_code, ch_table.warehouse)
 	)
 
+	query = apply_location_query(query, table, filters, group_by=True)
 	query = get_query_based_on_filters(query, batch, table, filters)
 
 	for d in query.run(as_dict=True):
-		key = (d.item_code, d.warehouse, d.batch_no)
+		key = (d.item_code, d.warehouse, d.batch_no, location_key(d, filters))
 		if key in batchwise_data:
 			batchwise_data[key].balance_qty += flt(d.balance_qty)
 		else:

@@ -49,51 +49,47 @@ class MaterialRequest(BuyingController):
 	from typing import TYPE_CHECKING
 
 	if TYPE_CHECKING:
+		from erpnext.stock.doctype.material_request_item.material_request_item import MaterialRequestItem
 		from frappe.types import DF
 
-		from erpnext.stock.doctype.material_request_item.material_request_item import MaterialRequestItem
-
 		amended_from: DF.Link | None
+		asset_item_filter: DF.Link | None
+		asset_source_location: DF.Link | None
+		asset_transfer_status: DF.Literal[
+			"Draft", "Pending", "Partially Fulfilled", "Fulfilled", "Cancelled"
+		]
 		auto_created_via_reorder: DF.Check
+		borrow_item_type: DF.Literal["Stock Item", "Asset"]
 		buying_price_list: DF.Link | None
 		company: DF.Link
+		contact_person: DF.Link | None
 		customer: DF.Link | None
+		customer_contact_display: DF.TextEditor | None
+		customer_contact_email: DF.Data | None
+		customer_loan_warehouse: DF.Link | None
+		customer_location: DF.Link | None
+		expected_return_date: DF.Date | None
 		items: DF.Table[MaterialRequestItem]
 		job_card: DF.Link | None
-		letter_head: DF.Link | None
-		material_request_type: DF.Literal[
-			"Purchase",
-			"Material Transfer",
-			"Material Issue",
-			"Manufacture",
-			"Subcontracting",
-			"Customer Provided",
-			"Customer Demo",
-			"Customer Borrow / Loan",
-			"Asset Transfer",
-		]
+		loan_recipient: DF.DynamicLink | None
+		loan_recipient_contact: DF.Link | None
+		loan_recipient_contact_display: DF.TextEditor | None
+		loan_recipient_contact_email: DF.Data | None
+		loan_recipient_location: DF.Link | None
+		loan_recipient_type: DF.Literal["Employee", "Customer", "Supplier", "Contact"]
+		material_request_type: DF.Literal["Purchase", "Material Transfer", "Asset Transfer", "Customer Demo", "Customer Borrow / Loan"]
 		naming_series: DF.Literal["MAT-MR-.YYYY.-"]
 		per_ordered: DF.Percent
 		per_received: DF.Percent
+		request_progress_status: DF.Literal["Draft", "Pending", "On Hold", "Partially Fulfilled", "Fulfilled", "Partially Returned", "Returned", "Closed", "Cancelled"]
+		request_remarks: DF.SmallText | None
+		recipient_address: DF.Link | None
+		recipient_address_display: DF.TextEditor | None
 		scan_barcode: DF.Data | None
 		schedule_date: DF.Date | None
-		select_print_heading: DF.Link | None
 		set_from_warehouse: DF.Link | None
 		set_warehouse: DF.Link | None
-		status: DF.Literal[
-			"",
-			"Draft",
-			"Submitted",
-			"Stopped",
-			"Cancelled",
-			"Pending",
-			"Partially Ordered",
-			"Partially Received",
-			"Ordered",
-			"Issued",
-			"Transferred",
-			"Received",
-		]
+		status: DF.Literal["", "Draft", "Submitted", "Stopped", "Cancelled", "Pending", "Partially Ordered", "Partially Received", "Ordered", "Issued", "Transferred", "Received"]
 		tc_name: DF.Link | None
 		terms: DF.TextEditor | None
 		title: DF.Data | None
@@ -166,14 +162,14 @@ class MaterialRequest(BuyingController):
 					docstatus = 1 and parent != %s""",
 					(item, so_no, self.name),
 				)
-				already_indented = already_indented and flt(already_indented[0][0]) or 0
+				already_indented = flt(already_indented[0][0]) if already_indented else 0
 
 				actual_so_qty = frappe.db.sql(
 					"""select sum(stock_qty) from `tabSales Order Item`
 					where parent = %s and item_code = %s and docstatus = 1""",
 					(so_no, item),
 				)
-				actual_so_qty = actual_so_qty and flt(actual_so_qty[0][0]) or 0
+				actual_so_qty = flt(actual_so_qty[0][0]) if actual_so_qty else 0
 
 				if actual_so_qty and (flt(so_items[so_no][item]) + already_indented > actual_so_qty):
 					frappe.throw(
@@ -984,14 +980,17 @@ def make_stock_entry(source_name: str, target_doc: str | dict | None = None):
 			or source_parent.material_request_type == "Customer Provided"
 		):
 			target.t_warehouse = obj.warehouse
+			target.to_storage_location = obj.storage_location
 		else:
 			target.s_warehouse = obj.warehouse
+			target.storage_location = obj.storage_location
 
 		if source_parent.material_request_type == "Customer Provided":
 			target.allow_zero_valuation_rate = 1
 
 		if source_parent.material_request_type == "Material Transfer":
 			target.s_warehouse = obj.from_warehouse
+			target.storage_location = obj.from_storage_location
 
 	def set_missing_values(source, target):
 		target.purpose = source.material_request_type
@@ -1101,6 +1100,7 @@ def raise_work_orders(material_request: str, company: str):
 						"production_item": d.item_code,
 						"qty": d.stock_qty - d.ordered_qty,
 						"fg_warehouse": d.warehouse,
+						"fg_storage_location": d.storage_location,
 						"wip_warehouse": default_wip_warehouse,
 						"description": d.description,
 						"stock_uom": d.stock_uom,
@@ -1176,6 +1176,7 @@ def create_pick_list(source_name, target_doc=None):
 					"name": "material_request_item",
 					"stock_qty": "stock_qty",
 					"from_warehouse": "warehouse",
+					"from_storage_location": "storage_location",
 				},
 				"postprocess": update_item,
 				"condition": lambda doc: (

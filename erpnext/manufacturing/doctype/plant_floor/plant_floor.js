@@ -35,6 +35,12 @@ frappe.ui.form.on("Plant Floor", {
 				},
 			};
 		});
+		frm.set_query("storage_location", (doc) => ({
+			filters: { warehouse: doc.warehouse || "", disabled: 0 },
+		}));
+	},
+	warehouse(frm) {
+		frm.set_value("storage_location", "");
 	},
 
 	refresh(frm) {
@@ -160,6 +166,7 @@ class VisualStock {
 			method: "erpnext.manufacturing.doctype.plant_floor.plant_floor.get_stock_summary",
 			args: {
 				warehouse: this.frm.doc.warehouse,
+				storage_location: this.frm.doc.storage_location,
 				start: start,
 				item_code: item_code,
 				item_group: item_group,
@@ -234,6 +241,19 @@ class VisualStock {
 								},
 							};
 						},
+						onchange: () => cur_dialog.set_value("to_storage_location", ""),
+					},
+					{
+						label: __("To Storage Location"),
+						fieldname: "to_storage_location",
+						fieldtype: "Link",
+						options: "Storage Location",
+						get_query: () => ({
+							filters: {
+								warehouse: cur_dialog.fields_dict.to_warehouse.get_value() || "",
+								disabled: 0,
+							},
+						}),
 					},
 				],
 				__("Move Stock"),

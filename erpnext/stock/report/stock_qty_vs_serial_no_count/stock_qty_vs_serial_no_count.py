@@ -9,13 +9,36 @@ from frappe.query_builder.functions import Coalesce, Sum
 from frappe.utils import cstr, flt
 from pypika import analytics as an
 
+from erpnext.stock.report.storage_location_utils import (
+	add_location_column,
+	get_location_balances,
+	show_location_wise_stock,
+)
 from erpnext.stock.serial_batch_bundle import get_serial_no_status
 
 
 def execute(filters=None):
 	validate_warehouse(filters)
 	columns = get_columns()
-	data = get_data(filters.warehouse, filters.show_disabled_items)
+	columns.append(
+		{
+			"label": _("Warehouse"),
+			"fieldname": "warehouse",
+			"fieldtype": "Link",
+			"options": "Warehouse",
+			"width": 150,
+		}
+	)
+	add_location_column(columns, filters)
+	data = (
+		get_location_data(filters)
+		if show_location_wise_stock(filters)
+		else [
+			frappe._dict(row, warehouse=warehouse)
+			for warehouse in get_warehouses(filters.warehouse)
+			for row in get_data(warehouse, filters.show_disabled_items)
+		]
+	)
 	return columns, data
 
 
@@ -175,6 +198,7 @@ def set_serial_no_state_from_ledger(serial_no, row):
 		frappe._dict(
 			actual_qty=flt(row.qty),
 			warehouse=row.warehouse,
+			storage_location=row.storage_location,
 			voucher_type=row.voucher_type,
 			voucher_no=row.voucher_no,
 			is_cancelled=0,
@@ -227,6 +251,7 @@ def get_last_bundle_moves_chunk(item_code, serial_nos):
 		.select(
 			entry.serial_no,
 			entry.qty,
+			sle.storage_location,
 			Coalesce(entry.warehouse, bundle.warehouse).as_("warehouse"),
 			bundle.voucher_type,
 			bundle.voucher_no,
@@ -243,7 +268,14 @@ def get_last_bundle_moves_chunk(item_code, serial_nos):
 
 	return (
 		frappe.qb.from_(ranked)
-		.select(ranked.serial_no, ranked.qty, ranked.warehouse, ranked.voucher_type, ranked.voucher_no)
+		.select(
+			ranked.serial_no,
+			ranked.qty,
+			ranked.warehouse,
+			ranked.storage_location,
+			ranked.voucher_type,
+			ranked.voucher_no,
+		)
 		.where(ranked.row_no == 1)
 		.run(as_dict=True)
 	)
@@ -258,7 +290,7 @@ def set_legacy_last_moves(item_code, serial_nos, last_moves):
 	rows = frappe.get_all(
 		"Stock Ledger Entry",
 		filters={"item_code": item_code, "is_cancelled": 0, "serial_no": ("is", "set")},
-		fields=["serial_no", "actual_qty", "warehouse", "voucher_type", "voucher_no"],
+		fields=["serial_no", "actual_qty", "warehouse", "storage_location", "voucher_type", "voucher_no"],
 		order_by="posting_datetime asc, creation asc",
 	)
 
@@ -272,3 +304,47 @@ def set_legacy_last_moves(item_code, serial_nos, last_moves):
 					voucher_type=row.voucher_type,
 					voucher_no=row.voucher_no,
 				)
+
+
+def get_location_data(filters):
+	warehouses = get_warehouses(filters.warehouse)
+	item_filters = {"has_serial_no": 1}
+	if not filters.get("show_disabled_items"):
+		item_filters["disabled"] = 0
+	items = frappe.get_all("Item", filters=item_filters, fields=["name", "item_name"])
+	balances = get_location_balances([item.name for item in items], warehouses)
+	data = []
+	for item in items:
+		serials = frappe.get_all(
+			"Serial No",
+			filters={
+				"item_code": item.name,
+				"warehouse": ["in", warehouses],
+				"status": ["in", ["Active", "Expired"]],
+			},
+			fields=["name", "warehouse"],
+		)
+		moves = get_last_ledger_moves(item.name, [serial.name for serial in serials])
+		counts = {}
+		for serial in serials:
+			key = (serial.warehouse, (moves.get(serial.name) or {}).get("storage_location") or "")
+			counts[key] = counts.get(key, 0) + 1
+		quantities = {
+			(warehouse, balance.storage_location or ""): balance.actual_qty
+			for warehouse in warehouses
+			for balance in balances.get((item.name, warehouse), [])
+		}
+		for warehouse, location in sorted(counts.keys() | quantities.keys()):
+			count, qty = counts.get((warehouse, location), 0), flt(quantities.get((warehouse, location), 0))
+			data.append(
+				frappe._dict(
+					item_code=item.name,
+					item_name=item.item_name,
+					warehouse=warehouse,
+					storage_location=location or None,
+					total=count,
+					stock_qty=qty,
+					difference=count - qty,
+				)
+			)
+	return data

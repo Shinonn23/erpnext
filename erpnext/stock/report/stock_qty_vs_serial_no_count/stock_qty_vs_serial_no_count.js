@@ -27,6 +27,7 @@ frappe.query_reports["Stock Qty vs Serial No Count"] = {
 	},
 
 	filters: [
+		{fieldname: "show_location_wise_stock", label: __("Show Storage Location Wise Stock"), fieldtype: "Check", default: 1},
 		{
 			fieldname: "company",
 			label: __("Company"),

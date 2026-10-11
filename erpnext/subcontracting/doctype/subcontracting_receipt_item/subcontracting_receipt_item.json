@@ -77,7 +77,9 @@
   "section_break_80",
   "page_break",
   "purchase_order",
-  "purchase_order_item"
+  "purchase_order_item",
+  "inventory_dimension",
+  "storage_location"
  ],
  "fields": [
   {
@@ -629,6 +631,19 @@
    "fieldtype": "Float",
    "label": "Process Loss Qty",
    "non_negative": 1
+  },
+  {
+   "fieldname": "inventory_dimension",
+   "fieldtype": "Section Break",
+   "label": "Inventory Dimension",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "storage_location",
+   "fieldtype": "Link",
+   "label": "Storage Location",
+   "options": "Storage Location",
+   "search_index": 1
   }
  ],
  "grid_page_length": 50,

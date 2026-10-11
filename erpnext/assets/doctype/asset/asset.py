@@ -60,20 +60,23 @@ class Asset(AccountsController):
 		asset_type: DF.Literal["", "Existing Asset", "Composite Asset", "Composite Component"]
 		available_for_use_date: DF.Date | None
 		booked_fixed_asset: DF.Check
+		stock_to_asset_accounting_treatment: DF.Literal[
+			"", "Expense", "Immediate Depreciation", "Scheduled Depreciation", "Hold Value"
+		]
+		stock_to_asset_depreciation_journal_entry: DF.Link | None
+		stock_to_asset_conversion: DF.Link | None
+		stock_to_asset_conversion_item: DF.Link | None
+		stock_to_asset_conversion_unit: DF.Int
 		calculate_depreciation: DF.Check
 		company: DF.Link
 		comprehensive_insurance: DF.Data | None
 		custodian: DF.Link | None
 		customer: DF.Link | None
-		material_request: DF.Link | None
-		demo_loan_status: DF.Literal["", "Available", "With Customer"]
-		is_demo_asset: DF.Check
 		default_finance_book: DF.Link | None
+		demo_loan_status: DF.Literal["Available", "With Customer"]
 		department: DF.Link | None
 		depr_entry_posting_status: DF.Literal["", "Successful", "Failed"]
-		depreciation_method: DF.Literal[
-			"", "Straight Line", "Double Declining Balance", "Written Down Value", "Manual"
-		]
+		depreciation_method: DF.Literal["", "Straight Line", "Double Declining Balance", "Written Down Value", "Manual"]
 		disposal_date: DF.Date | None
 		finance_books: DF.Table[AssetFinanceBook]
 		frequency_of_depreciation: DF.Int
@@ -82,12 +85,14 @@ class Asset(AccountsController):
 		insurance_start_date: DF.Date | None
 		insured_value: DF.Data | None
 		insurer: DF.Data | None
+		is_demo_asset: DF.Check
 		is_fully_depreciated: DF.Check
 		item_code: DF.Link
 		item_name: DF.ReadOnly | None
 		journal_entry_for_scrap: DF.Link | None
 		location: DF.Link
 		maintenance_required: DF.Check
+		material_request: DF.Link | None
 		naming_series: DF.Literal["ACC-ASS-.YYYY.-"]
 		net_purchase_amount: DF.Currency
 		next_depreciation_date: DF.Date | None
@@ -100,25 +105,11 @@ class Asset(AccountsController):
 		purchase_invoice_item: DF.Data | None
 		purchase_receipt: DF.Link | None
 		purchase_receipt_item: DF.Data | None
-		split_from: DF.Link | None
-		status: DF.Literal[
-			"Draft",
-			"Submitted",
-			"Cancelled",
-			"Partially Depreciated",
-			"Fully Depreciated",
-			"Sold",
-			"Scrapped",
-			"In Maintenance",
-			"Out of Order",
-			"Issue",
-			"Receipt",
-			"Capitalized",
-			"Work In Progress",
-		]
 		source_batch_no: DF.Link | None
 		source_serial_no: DF.Link | None
 		source_warehouse: DF.Link | None
+		split_from: DF.Link | None
+		status: DF.Literal["Draft", "Submitted", "Cancelled", "Partially Depreciated", "Fully Depreciated", "Sold", "Scrapped", "In Maintenance", "Out of Order", "Issue", "Receipt", "Capitalized", "Work In Progress"]
 		supplier: DF.Link | None
 		total_asset_cost: DF.Currency
 		total_number_of_depreciations: DF.Int
@@ -140,6 +131,8 @@ class Asset(AccountsController):
 		if self.calculate_depreciation:
 			# Is Fully Depreciated is only applicable to manually entered existing assets
 			self.is_fully_depreciated = 0
+		if self.docstatus == 0 or self._action == "submit":
+			self.set_depr_rate_and_value_after_depreciation()
 
 	def before_save(self):
 		self.total_asset_cost = self.net_purchase_amount + self.additional_asset_cost
@@ -224,6 +217,20 @@ class Asset(AccountsController):
 	def set_depr_rate_and_value_after_depreciation(self):
 		if self.split_from:
 			return
+		if self.stock_to_asset_accounting_treatment == "Expense":
+			self.finance_books = []
+			self.value_after_depreciation = 0
+			return
+		if self.stock_to_asset_accounting_treatment == "Immediate Depreciation":
+			self.finance_books = []
+			if (
+				self.stock_to_asset_depreciation_journal_entry
+				and frappe.db.get_value("Journal Entry", self.stock_to_asset_depreciation_journal_entry, "docstatus") == 1
+			):
+				self.value_after_depreciation = 0
+			else:
+				self.value_after_depreciation = flt(self.net_purchase_amount) + flt(self.additional_asset_cost)
+			return
 
 		self.value_after_depreciation = (
 			flt(self.net_purchase_amount)
@@ -233,7 +240,7 @@ class Asset(AccountsController):
 		if self.calculate_depreciation:
 			self.set_depreciation_rate()
 			for d in self.finance_books:
-				d.db_set("value_after_depreciation", self.value_after_depreciation)
+				d.value_after_depreciation = self.value_after_depreciation
 		else:
 			self.finance_books = []
 
@@ -252,6 +259,12 @@ class Asset(AccountsController):
 		self.set_total_booked_depreciations()
 
 	def before_submit(self):
+		if self.stock_to_asset_conversion and not self.flags.from_stock_to_asset_conversion:
+			frappe.throw(
+				_("Submit this Asset through Stock to Asset Conversion {0}.").format(
+					frappe.bold(self.stock_to_asset_conversion)
+				)
+			)
 		if self.asset_type == "Composite Asset" and not has_active_capitalization(self.name):
 			if self.split_from and has_active_capitalization(self.split_from):
 				return
@@ -545,8 +558,12 @@ class Asset(AccountsController):
 			frappe.throw(error_message, title=_("Invalid Net Purchase Amount"))
 
 	def make_asset_movement(self):
-		reference_doctype = "Purchase Receipt" if self.purchase_receipt else "Purchase Invoice"
-		reference_docname = self.purchase_receipt or self.purchase_invoice
+		if self.stock_to_asset_conversion:
+			reference_doctype = "Stock to Asset Conversion"
+			reference_docname = self.stock_to_asset_conversion
+		else:
+			reference_doctype = "Purchase Receipt" if self.purchase_receipt else "Purchase Invoice"
+			reference_docname = self.purchase_receipt or self.purchase_invoice
 		transaction_date = getdate(self.purchase_date)
 		if reference_docname:
 			posting_date, posting_time = frappe.db.get_value(
@@ -762,6 +779,12 @@ class Asset(AccountsController):
 
 			if self.journal_entry_for_scrap:
 				status = "Scrapped"
+			elif (
+				self.stock_to_asset_accounting_treatment == "Immediate Depreciation"
+				and self.stock_to_asset_depreciation_journal_entry
+				and frappe.db.get_value("Journal Entry", self.stock_to_asset_depreciation_journal_entry, "docstatus") == 1
+			):
+				status = "Fully Depreciated"
 			else:
 				expected_value_after_useful_life = 0
 				value_after_depreciation = self.value_after_depreciation
@@ -785,6 +808,15 @@ class Asset(AccountsController):
 		return status
 
 	def get_value_after_depreciation(self, finance_book=None):
+		if self.stock_to_asset_accounting_treatment == "Expense":
+			return 0
+		if self.stock_to_asset_accounting_treatment == "Immediate Depreciation":
+			if (
+				self.stock_to_asset_depreciation_journal_entry
+				and frappe.db.get_value("Journal Entry", self.stock_to_asset_depreciation_journal_entry, "docstatus") == 1
+			):
+				return 0
+			return flt(self.net_purchase_amount, self.precision("net_purchase_amount"))
 		if not self.calculate_depreciation:
 			return flt(self.value_after_depreciation, self.precision("net_purchase_amount"))
 
@@ -1220,7 +1252,7 @@ def get_asset_account(account_name, asset=None, asset_category=None, company=Non
 def make_journal_entry(asset_name):
 	asset = frappe.get_doc("Asset", asset_name)
 	(
-		fixed_asset_account,
+		_fixed_asset_account,
 		accumulated_depreciation_account,
 		depreciation_expense_account,
 	) = get_depreciation_accounts(asset.asset_category, asset.company)

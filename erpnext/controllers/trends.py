@@ -74,7 +74,7 @@ def validate_filters(filters):
 		)
 
 
-def get_data(filters, conditions):
+def get_data(filters, conditions, stock_scope=None):
 	data = []
 	inc, cond = "", ""
 	query_details = conditions["based_on_select"] + conditions["period_wise_select"]
@@ -99,6 +99,11 @@ def get_data(filters, conditions):
 
 	if conditions.get("trans") == "Quotation" and filters.get("group_by") == "Customer":
 		cond += " and t1.quotation_to = 'Customer'"
+
+	if stock_scope and conditions.get("trans") in ("Delivery Note", "Purchase Receipt"):
+		cond += " and coalesce(t2.warehouse, '') = " + frappe.db.escape(stock_scope[0] or "")
+		if len(stock_scope) == 2:
+			cond += " and coalesce(t2.storage_location, '') = " + frappe.db.escape(stock_scope[1] or "")
 
 	year_start_date, year_end_date = frappe.get_cached_value(
 		"Fiscal Year", filters.get("fiscal_year"), ["year_start_date", "year_end_date"]

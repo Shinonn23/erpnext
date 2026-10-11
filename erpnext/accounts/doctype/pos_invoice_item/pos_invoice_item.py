@@ -79,6 +79,7 @@ class POSInvoiceItem(SalesInvoiceItem):
 		so_detail: DF.Data | None
 		stock_qty: DF.Float
 		stock_uom: DF.Link | None
+		storage_location: DF.Link | None
 		target_warehouse: DF.Link | None
 		total_weight: DF.Float
 		uom: DF.Link

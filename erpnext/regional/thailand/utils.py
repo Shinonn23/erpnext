@@ -43,14 +43,14 @@ def get_prefix_for_address(data):
 		else frappe.db.get_single_value("Global Defaults", "default_company")
 	)
 	company_doc = frappe.get_cached_doc("Company", company)
-	if company_doc.enable_prefix_for_address:
-		prefix_thambol = company_doc.prefix_thambol_other_province or ""
-		prefix_amphur = company_doc.prefix_amphur_other_province or ""
-		prefix_province = company_doc.prefix_province_other_province or ""
+	if company_doc.get("enable_prefix_for_address"):
+		prefix_thambol = company_doc.get("prefix_thambol_other_province") or ""
+		prefix_amphur = company_doc.get("prefix_amphur_other_province") or ""
+		prefix_province = company_doc.get("prefix_province_other_province") or ""
 		if "กรุงเทพมหานคร" in [data.get("vProvince", ""), data.get("province", "")]:
-			prefix_thambol = company_doc.prefix_thambol_bangkok or ""
-			prefix_amphur = company_doc.prefix_amphur_bangkok or ""
-			prefix_province = company_doc.prefix_province_bangkok or ""
+			prefix_thambol = company_doc.get("prefix_thambol_bangkok") or ""
+			prefix_amphur = company_doc.get("prefix_amphur_bangkok") or ""
+			prefix_province = company_doc.get("prefix_province_bangkok") or ""
 	return prefix_thambol, prefix_amphur, prefix_province
 
 

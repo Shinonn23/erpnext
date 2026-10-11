@@ -38,6 +38,7 @@ from erpnext.manufacturing.doctype.workstation_type.workstation_type import get_
 from erpnext.subcontracting.doctype.subcontracting_bom.subcontracting_bom import (
 	get_subcontracting_boms_for_finished_goods,
 )
+from erpnext.stock.doctype.storage_location.storage_location import validate_storage_location_warehouse
 
 
 class OverlapError(frappe.ValidationError):
@@ -67,17 +68,12 @@ class JobCard(Document):
 	from typing import TYPE_CHECKING
 
 	if TYPE_CHECKING:
-		from frappe.types import DF
-
 		from erpnext.manufacturing.doctype.job_card_item.job_card_item import JobCardItem
 		from erpnext.manufacturing.doctype.job_card_operation.job_card_operation import JobCardOperation
-		from erpnext.manufacturing.doctype.job_card_scheduled_time.job_card_scheduled_time import (
-			JobCardScheduledTime,
-		)
-		from erpnext.manufacturing.doctype.job_card_secondary_item.job_card_secondary_item import (
-			JobCardSecondaryItem,
-		)
+		from erpnext.manufacturing.doctype.job_card_scheduled_time.job_card_scheduled_time import JobCardScheduledTime
+		from erpnext.manufacturing.doctype.job_card_secondary_item.job_card_secondary_item import JobCardSecondaryItem
 		from erpnext.manufacturing.doctype.job_card_time_log.job_card_time_log import JobCardTimeLog
+		from frappe.types import DF
 
 		actual_end_date: DF.Datetime | None
 		actual_start_date: DF.Datetime | None
@@ -123,17 +119,12 @@ class JobCard(Document):
 		serial_no: DF.SmallText | None
 		skip_material_transfer: DF.Check
 		source_warehouse: DF.Link | None
-		status: DF.Literal[
-			"Open",
-			"Work In Progress",
-			"Partially Transferred",
-			"Material Transferred",
-			"On Hold",
-			"Submitted",
-			"Cancelled",
-			"Completed",
-		]
+		source_storage_location: DF.Link | None
+		status: DF.Literal["Open", "Work In Progress", "Partially Transferred", "Material Transferred", "On Hold", "Submitted", "Cancelled", "Completed"]
 		stock_uom: DF.Link | None
+		target_storage_location: DF.Link | None
+		scrap_warehouse: DF.Link | None
+		scrap_storage_location: DF.Link | None
 		sub_operations: DF.Table[JobCardOperation]
 		target_warehouse: DF.Link | None
 		time_logs: DF.Table[JobCardTimeLog]
@@ -143,6 +134,7 @@ class JobCard(Document):
 		track_semi_finished_goods: DF.Check
 		transferred_qty: DF.Float
 		wip_warehouse: DF.Link | None
+		wip_storage_location: DF.Link | None
 		work_order: DF.Link
 		workstation: DF.Link
 		workstation_type: DF.Link | None
@@ -164,6 +156,7 @@ class JobCard(Document):
 
 	def before_validate(self):
 		self.set_wip_warehouse()
+		self.set_storage_locations()
 		self.set_stock_uom()
 
 	def validate(self):
@@ -179,6 +172,7 @@ class JobCard(Document):
 
 		self.validate_work_order()
 		self.set_employees()
+		self.validate_storage_locations()
 
 		if self.docstatus == 1:
 			self.validate_semi_finished_goods()
@@ -764,11 +758,17 @@ class JobCard(Document):
 				or self.operation_row_id == d.operation_row_id
 				or self.is_corrective_job_card
 			):
+				source_warehouse = self.source_warehouse or d.source_warehouse
+				source_storage_location = d.source_storage_location
+				if self.source_storage_location and source_warehouse == self.source_warehouse:
+					source_storage_location = self.source_storage_location
+
 				self.append(
 					"items",
 					{
 						"item_code": d.item_code,
-						"source_warehouse": self.source_warehouse or d.source_warehouse,
+						"source_warehouse": source_warehouse,
+						"source_storage_location": source_storage_location,
 						"uom": frappe.db.get_value("Item", d.item_code, "stock_uom"),
 						"item_name": d.item_name,
 						"description": d.description,
@@ -1316,7 +1316,59 @@ class JobCard(Document):
 
 	def set_wip_warehouse(self):
 		if not self.wip_warehouse:
-			self.wip_warehouse = frappe.get_cached_value("Company", self.company, "default_wip_warehouse")
+			if self.operation_id:
+				self.wip_warehouse = frappe.get_cached_value(
+					"Work Order Operation", self.operation_id, "wip_warehouse"
+				)
+			if self.work_order:
+				self.wip_warehouse = self.wip_warehouse or frappe.get_cached_value(
+					"Work Order", self.work_order, "wip_warehouse"
+				)
+			if not self.wip_warehouse:
+				self.wip_warehouse = frappe.get_cached_value("Company", self.company, "default_wip_warehouse")
+
+	def set_storage_locations(self):
+		if not self.work_order:
+			return
+
+		work_order = frappe.get_cached_doc("Work Order", self.work_order)
+		operation = None
+		if self.operation_id:
+			operation = frappe.get_cached_doc("Work Order Operation", self.operation_id)
+
+		if not self.source_storage_location:
+			if operation and operation.source_warehouse == self.source_warehouse:
+				self.source_storage_location = operation.source_storage_location
+			if not self.source_storage_location and self.source_warehouse == work_order.source_warehouse:
+				self.source_storage_location = work_order.source_storage_location
+
+		if not self.wip_storage_location:
+			if operation and operation.wip_warehouse == self.wip_warehouse:
+				self.wip_storage_location = operation.wip_storage_location
+			if not self.wip_storage_location and self.wip_warehouse == work_order.wip_warehouse:
+				self.wip_storage_location = work_order.wip_storage_location
+
+		if not self.target_storage_location:
+			if operation and operation.fg_warehouse == self.target_warehouse:
+				self.target_storage_location = operation.fg_storage_location
+			if not self.target_storage_location and self.target_warehouse == work_order.fg_warehouse:
+				self.target_storage_location = work_order.fg_storage_location
+
+		self.scrap_warehouse = self.scrap_warehouse or work_order.scrap_warehouse
+		if not self.scrap_storage_location and self.scrap_warehouse == work_order.scrap_warehouse:
+			self.scrap_storage_location = work_order.scrap_storage_location
+
+	def validate_storage_locations(self):
+		for location_field, warehouse_field in (
+			("source_storage_location", "source_warehouse"),
+			("wip_storage_location", "wip_warehouse"),
+			("target_storage_location", "target_warehouse"),
+			("scrap_storage_location", "scrap_warehouse"),
+		):
+			validate_storage_location_warehouse(self.get(location_field), self.get(warehouse_field))
+
+		for row in self.items:
+			validate_storage_location_warehouse(row.source_storage_location, row.source_warehouse)
 
 	def set_stock_uom(self):
 		item_code = self.finished_good or self.production_item
@@ -1755,7 +1807,11 @@ class JobCard(Document):
 				"production_item": self.finished_good,
 				"company": self.company,
 				"wip_warehouse": self.wip_warehouse,
+				"wip_storage_location": self.wip_storage_location,
 				"fg_warehouse": self.target_warehouse,
+				"fg_storage_location": self.target_storage_location,
+				"scrap_warehouse": self.scrap_warehouse,
+				"scrap_storage_location": self.scrap_storage_location,
 				"bom_no": self.semi_fg_bom,
 				"project": frappe.db.get_value("Work Order", self.work_order, "project"),
 			}
@@ -1769,8 +1825,18 @@ class JobCard(Document):
 		ste.stock_entry.pro_doc = frappe.get_doc("Work Order", self.work_order)
 		ste.stock_entry.set_secondary_items_from_job_card()
 		for row in ste.stock_entry.items:
-			if (row.secondary_item_type or row.valuation_type) and not row.t_warehouse:
-				row.t_warehouse = self.target_warehouse
+			if row.secondary_item_type or row.valuation_type:
+				is_scrap = row.secondary_item_type == "Scrap" or row.valuation_type == "Valuation Rate"
+				if is_scrap:
+					row.t_warehouse = self.scrap_warehouse or self.target_warehouse
+					row.to_storage_location = self.scrap_storage_location or (
+						self.target_storage_location
+						if row.t_warehouse == self.target_warehouse
+						else None
+					)
+				else:
+					row.t_warehouse = self.target_warehouse
+					row.to_storage_location = self.target_storage_location
 
 		if auto_submit:
 			ste.stock_entry.submit()
@@ -1871,7 +1937,10 @@ def get_operations(doctype, txt, searchfield, start, page_len, filters):
 @frappe.whitelist()
 def make_material_request(source_name, target_doc=None):
 	def update_item(obj, target, source_parent):
+		target.from_warehouse = obj.source_warehouse
 		target.warehouse = source_parent.wip_warehouse
+		target.from_storage_location = obj.source_storage_location
+		target.storage_location = source_parent.wip_storage_location
 
 	def set_missing_values(source, target):
 		target.material_request_type = "Material Transfer"
@@ -1934,6 +2003,8 @@ def make_stock_entry(source_name: str, target_doc: Document | str | None = None)
 
 		target.set_missing_values()
 		target.set_stock_entry_type()
+		for item in target.items:
+			item.to_storage_location = source.wip_storage_location
 
 		from erpnext.stock.doctype.stock_entry.stock_entry import set_previous_operation_serial_batch
 
@@ -1959,6 +2030,7 @@ def make_stock_entry(source_name: str, target_doc: Document | str | None = None)
 				"doctype": "Stock Entry Detail",
 				"field_map": {
 					"source_warehouse": "s_warehouse",
+					"source_storage_location": "storage_location",
 					"required_qty": "qty",
 					"name": "job_card_item",
 				},

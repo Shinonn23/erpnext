@@ -11,7 +11,7 @@ from frappe.model.mapper import map_child_doc
 from frappe.query_builder import Case
 from frappe.query_builder.custom import GROUP_CONCAT
 from frappe.query_builder.functions import Coalesce, Locate, Replace, Sum
-from frappe.utils import ceil, cint, floor, flt, get_link_to_form
+from frappe.utils import ceil, cint, floor, flt, get_link_to_form, now_datetime
 from frappe.utils.nestedset import get_descendants_of
 
 from erpnext.selling.doctype.sales_order.sales_order import (
@@ -22,6 +22,7 @@ from erpnext.selling.doctype.sales_order.sales_order import (
 )
 from erpnext.stock.doctype.serial_and_batch_bundle.serial_and_batch_bundle import (
 	get_auto_batch_nos,
+	get_available_serial_nos,
 )
 from erpnext.stock.get_item_details import get_company_total_stock, get_conversion_factor
 from erpnext.stock.serial_batch_bundle import (
@@ -29,6 +30,7 @@ from erpnext.stock.serial_batch_bundle import (
 	get_batches_from_bundle,
 	get_serial_nos_from_bundle,
 )
+from erpnext.stock.utils import get_stock_balance
 from erpnext.utilities.transaction_base import TransactionBase
 
 
@@ -57,6 +59,7 @@ class PickList(TransactionBase):
 		amended_from: DF.Link | None
 		company: DF.Link
 		consider_rejected_warehouses: DF.Check
+		custody_loan: DF.Link | None
 		customer: DF.Link | None
 		customer_name: DF.Data | None
 		delivery_status: DF.Literal["Not Delivered", "Fully Delivered", "Partly Delivered"]
@@ -111,11 +114,22 @@ class PickList(TransactionBase):
 
 	def validate(self):
 		self.validate_customer_demo_workflow()
+		self.validate_custody_loan()
 		self.validate_expired_batches()
 		self.validate_for_qty()
 		self.validate_stock_qty()
 		self.check_serial_no_status()
 		self.validate_with_previous_doc()
+
+	def validate_custody_loan(self):
+		if not self.get("custody_loan"):
+			if any(row.get("custody_loan_item") for row in self.locations):
+				frappe.throw(_("Custody Loan Pick List rows must have a linked Custody Loan"))
+			return
+
+		from erpnext.loan.doctype.custody_loan.custody_loan_core import validate_custody_loan_pick_list
+
+		validate_custody_loan_pick_list(self)
 
 	def validate_customer_demo_workflow(self):
 		request_type = frappe.db.get_value(
@@ -123,6 +137,9 @@ class PickList(TransactionBase):
 		) if self.material_request else None
 		if request_type == "Customer Demo" and self.pick_list_type != "Customer Demo - Asset Conversion":
 			frappe.throw(_("Pick Lists linked to a Customer Demo request must use Customer Demo - Asset Conversion"))
+		if self.pick_list_type == "Asset Conversion":
+			self.validate_asset_conversion_workflow()
+			return
 		if self.pick_list_type != "Customer Demo - Asset Conversion":
 			return
 		if self.purpose != "Material Transfer" or not self.material_request:
@@ -135,8 +152,6 @@ class PickList(TransactionBase):
 			frappe.throw(_("Select a submitted Customer Demo request for the same Company"))
 		if not self.locations:
 			frappe.throw(_("Add the Stock Items needed to fulfill the Customer Demo request"))
-		from erpnext.assets.doctype.material_request.material_request import get_in_transit_asset_movement_qty
-
 		picked_by_request_item = defaultdict(float)
 		for location in self.locations:
 			request_item = frappe.db.get_value(
@@ -153,8 +168,48 @@ class PickList(TransactionBase):
 			available_qty = (
 				flt(request_item.qty)
 				- flt(request_item.fulfilled_qty)
-				- get_in_transit_asset_movement_qty(location.material_request_item, "Transfer")
 			)
+			if picked_by_request_item[location.material_request_item] > max(available_qty, 0):
+				frappe.throw(_("Pick List row {0}: Picked Qty exceeds the unfulfilled request quantity").format(location.idx))
+
+	def validate_asset_conversion_workflow(self):
+		if self.purpose != "Material Transfer":
+			frappe.throw(_("Asset Conversion Pick List requires Material Transfer"))
+		if not self.locations:
+			frappe.throw(_("Add the Stock Items to convert"))
+
+		request = None
+		if self.material_request:
+			request = frappe.db.get_value(
+				"Material Request", self.material_request,
+				["docstatus", "company", "material_request_type"], as_dict=True,
+			)
+			if not request or request.docstatus != 1 or request.company != self.company:
+				frappe.throw(_("Select a submitted Material Request for the same Company"))
+			if request.material_request_type == "Customer Demo":
+				frappe.throw(_("Customer Demo requests must use Customer Demo - Asset Conversion"))
+
+		picked_by_request_item = defaultdict(float)
+		for location in self.locations:
+			if not frappe.db.get_value("Item", location.item_code, "is_stock_item"):
+				frappe.throw(_("Pick List row {0} must be a Stock Item").format(location.idx))
+			if not request:
+				if location.material_request_item:
+					frappe.throw(_("Pick List row {0} has a Material Request Item but no linked request").format(location.idx))
+				continue
+			request_item = frappe.db.get_value(
+				"Material Request Item", location.material_request_item,
+				["parent", "item_code", "item_type", "from_warehouse", "qty", "stock_qty", "fulfilled_qty"],
+				as_dict=True,
+			)
+			if (
+				not request_item or request_item.parent != self.material_request
+				or request_item.item_type != "Stock Item" or request_item.item_code != location.item_code
+				or request_item.from_warehouse != location.warehouse
+			):
+				frappe.throw(_("Pick List row {0} must match a Stock Item and Source Warehouse on the linked request").format(location.idx))
+			picked_by_request_item[location.material_request_item] += flt(location.picked_qty or location.stock_qty)
+			available_qty = flt(request_item.stock_qty or request_item.qty) - flt(request_item.fulfilled_qty)
 			if picked_by_request_item[location.material_request_item] > max(available_qty, 0):
 				frappe.throw(_("Pick List row {0}: Picked Qty exceeds the unfulfilled request quantity").format(location.idx))
 
@@ -175,7 +230,14 @@ class PickList(TransactionBase):
 				continue
 
 			if row.batch_no and row.picked_qty:
-				batch_qty = get_batch_qty(row.batch_no, row.warehouse, row.item_code)
+				batch_qty = get_batch_qty(
+					row.batch_no,
+					row.warehouse,
+					row.item_code,
+					inventory_dimensions_dict={"storage_location": row.storage_location}
+					if row.storage_location
+					else None,
+				)
 
 				if row.picked_qty > batch_qty:
 					frappe.throw(
@@ -194,11 +256,19 @@ class PickList(TransactionBase):
 
 				continue
 
-			bin_qty = flt(
-				frappe.db.get_value(
-					"Bin",
-					{"item_code": row.item_code, "warehouse": row.warehouse},
-					"actual_qty",
+			bin_qty = (
+				get_stock_balance(
+					row.item_code,
+					row.warehouse,
+					inventory_dimensions_dict={"storage_location": row.storage_location},
+				)
+				if row.storage_location
+				else flt(
+					frappe.db.get_value(
+						"Bin",
+						{"item_code": row.item_code, "warehouse": row.warehouse},
+						"actual_qty",
+					)
 				)
 			)
 
@@ -235,19 +305,58 @@ class PickList(TransactionBase):
 					exc=IncorrectWarehouseValidationError,
 				)
 
+			if location.storage_location:
+				from erpnext.stock.doctype.storage_location.storage_location import (
+					validate_storage_location_warehouse,
+				)
+
+				validate_storage_location_warehouse(location.storage_location, location.warehouse)
+
 	def check_serial_no_status(self):
 		from erpnext.stock.doctype.serial_no.serial_no import get_serial_nos
 
 		for row in self.get("locations"):
+			if row.storage_location and row.serial_and_batch_bundle:
+				bundle_storage_locations = frappe.get_all(
+					"Serial and Batch Entry",
+					filters={"parent": row.serial_and_batch_bundle},
+					pluck="storage_location",
+				)
+				if any(storage_location != row.storage_location for storage_location in bundle_storage_locations):
+					frappe.throw(
+						_("Serial and Batch Bundle at Row #{0} does not match Storage Location {1}.").format(
+							row.idx, frappe.bold(row.storage_location)
+						)
+					)
+
 			if not row.serial_no:
 				continue
 
 			picked_serial_nos = get_serial_nos(row.serial_no)
-			validated_serial_nos = frappe.get_all(
-				"Serial No",
-				filters={"name": ("in", picked_serial_nos), "warehouse": row.warehouse},
-				pluck="name",
-			)
+			if row.storage_location:
+				available_serial_nos = get_available_serial_nos(
+					frappe._dict(
+						{
+							"item_code": row.item_code,
+							"warehouse": row.warehouse,
+							"company": self.company,
+							"based_on": frappe.get_single_value(
+								"Stock Settings", "pick_serial_and_batch_based_on"
+							),
+							"posting_datetime": now_datetime(),
+							"inventory_dimensions_dict": {
+								"storage_location": row.storage_location
+							},
+						}
+					)
+				)
+				validated_serial_nos = [serial.serial_no for serial in available_serial_nos]
+			else:
+				validated_serial_nos = frappe.get_all(
+					"Serial No",
+					filters={"name": ("in", picked_serial_nos), "warehouse": row.warehouse},
+					pluck="name",
+				)
 
 			incorrect_serial_nos = set(picked_serial_nos) - set(validated_serial_nos)
 			if incorrect_serial_nos:
@@ -284,6 +393,17 @@ class PickList(TransactionBase):
 	def before_submit(self):
 		self.validate_sales_order()
 		self.validate_picked_items()
+		if self.get("custody_loan"):
+			self.validate_stock_qty()
+			from erpnext.loan.doctype.custody_loan.custody_loan_core import validate_custody_loan_pick_list
+
+			validate_custody_loan_pick_list(self, require_picked_qty=True)
+
+	def before_cancel(self):
+		if self.get("custody_loan"):
+			from erpnext.loan.doctype.custody_loan.custody_loan_core import validate_custody_loan_pick_list
+
+			validate_custody_loan_pick_list(self, cancelling=True)
 
 	def validate_sales_order(self):
 		"""Raises an exception if the `Sales Order` has reserved stock."""
@@ -326,39 +446,56 @@ class PickList(TransactionBase):
 		self.update_reference_qty()
 		self.update_sales_order_picking_status()
 		self.update_prevdoc_status()
+		if self.get("custody_loan"):
+			from erpnext.loan.doctype.custody_loan.custody_loan_core import (
+				update_custody_loan_pick_list_status,
+			)
+
+			update_custody_loan_pick_list_status(self)
 
 	@frappe.whitelist()
 	def make_stock_to_asset_conversion(self):
 		self.check_permission("read")
-		if self.docstatus != 1 or self.purpose != "Material Transfer" or self.pick_list_type != "Customer Demo - Asset Conversion" or not self.material_request:
-			frappe.throw(_("Submit the Customer Demo Pick List before creating a Stock to Asset Conversion"))
-		request = frappe.get_doc("Material Request", self.material_request)
-		if request.docstatus != 1 or request.material_request_type != "Customer Demo" or request.company != self.company:
-			frappe.throw(_("Pick List must be linked to a submitted Customer Demo request for the same Company"))
+		if (
+			self.docstatus != 1 or self.purpose != "Material Transfer"
+			or self.pick_list_type not in ("Customer Demo - Asset Conversion", "Asset Conversion")
+		):
+			frappe.throw(_("Submit an Asset Conversion Pick List before creating a Stock to Asset Conversion"))
+		if self.pick_list_type == "Customer Demo - Asset Conversion" and not self.material_request:
+			frappe.throw(_("Customer Demo Pick List must be linked to a Material Request"))
+		request = frappe.get_doc("Material Request", self.material_request) if self.material_request else None
+		if request and (request.docstatus != 1 or request.company != self.company):
+			frappe.throw(_("Pick List must be linked to a submitted Material Request for the same Company"))
+		if request and self.pick_list_type == "Customer Demo - Asset Conversion" and request.material_request_type != "Customer Demo":
+			frappe.throw(_("Customer Demo Pick List must use a Customer Demo request"))
 		existing = frappe.db.get_value("Stock to Asset Conversion", {"pick_list": self.name, "docstatus": ["<", 2]}, "name")
 		if existing:
 			return frappe.get_doc("Stock to Asset Conversion", existing).as_dict()
 		conversion = frappe.new_doc("Stock to Asset Conversion")
 		conversion.company = self.company
-		conversion.material_request = request.name
+		conversion.material_request = request.name if request else None
 		conversion.pick_list = self.name
 		for location in self.locations:
-			request_item = frappe.db.get_value(
-				"Material Request Item", location.material_request_item,
-				["parent", "item_code", "item_type", "from_warehouse", "qty", "fulfilled_qty"], as_dict=True,
-			)
-			if (
-				not request_item or request_item.parent != request.name
-				or request_item.item_type != "Stock Item" or request_item.item_code != location.item_code
-				or request_item.from_warehouse != location.warehouse
-			):
-				frappe.throw(_("Pick List row {0} does not match a Stock Item row on the linked request").format(location.idx))
-			if flt(location.picked_qty) <= 0 or flt(location.picked_qty) > flt(request_item.qty) - flt(request_item.fulfilled_qty):
-				frappe.throw(_("Pick List row {0}: Picked Qty exceeds the unfulfilled request quantity").format(location.idx))
+			if request:
+				request_item = frappe.db.get_value(
+					"Material Request Item", location.material_request_item,
+					["parent", "item_code", "item_type", "from_warehouse", "qty", "stock_qty", "fulfilled_qty"], as_dict=True,
+				)
+				if (
+					not request_item or request_item.parent != request.name
+					or request_item.item_type != "Stock Item" or request_item.item_code != location.item_code
+					or request_item.from_warehouse != location.warehouse
+				):
+					frappe.throw(_("Pick List row {0} does not match a Stock Item row on the linked request").format(location.idx))
+				available_qty = flt(request_item.stock_qty or request_item.qty) - flt(request_item.fulfilled_qty)
+				if flt(location.picked_qty) <= 0 or flt(location.picked_qty) > available_qty:
+					frappe.throw(_("Pick List row {0}: Picked Qty exceeds the unfulfilled request quantity").format(location.idx))
+			elif flt(location.picked_qty) <= 0:
+				frappe.throw(_("Pick List row {0}: Picked Qty must be greater than zero").format(location.idx))
 			conversion.append("stock_items", {
 				"item_code": location.item_code, "qty": location.picked_qty,
 				"warehouse": location.warehouse,
-				"material_request_item": location.material_request_item,
+				"material_request_item": location.material_request_item if request else None,
 			})
 		if not conversion.stock_items:
 			frappe.throw(_("Add picked Stock Items before creating the conversion"))
@@ -430,11 +567,11 @@ class PickList(TransactionBase):
 			frappe.throw(msg)
 
 	def on_cancel(self):
-		self.ignore_linked_doctypes = [
+		self.ignore_linked_doctypes = tuple(set(self.get("ignore_linked_doctypes") or ()) | {
 			"Serial and Batch Bundle",
 			"Stock Reservation Entry",
 			"Delivery Note",
-		]
+		})
 
 		self.update_status()
 		self.update_bundle_picked_qty()
@@ -442,6 +579,12 @@ class PickList(TransactionBase):
 		self.update_sales_order_picking_status()
 		self.delink_serial_and_batch_bundle()
 		self.update_prevdoc_status()
+		if self.get("custody_loan"):
+			from erpnext.loan.doctype.custody_loan.custody_loan_core import (
+				update_custody_loan_pick_list_status,
+			)
+
+			update_custody_loan_pick_list_status(self)
 
 	def delink_serial_and_batch_bundle(self):
 		for row in self.locations:
@@ -681,28 +824,41 @@ class PickList(TransactionBase):
 		len_idx = len(self.get("locations")) or 0
 		for item_doc in items:
 			item_code = item_doc.item_code
+			storage_location = item_doc.get("storage_location")
+			availability_key = (item_code, storage_location or "")
 			priority_warehouses = []
 
-			if self.work_order and item_warehouse_dict.get(item_code):
-				source_warehouse = item_warehouse_dict.get(item_code)
+			source_warehouse = item_doc.get("warehouse") or item_warehouse_dict.get(item_code)
+			if self.work_order and source_warehouse:
 				priority_warehouses = [source_warehouse]
 				priority_warehouses.extend(get_descendants_of("Warehouse", source_warehouse))
 				from_warehouses = list(dict.fromkeys(priority_warehouses + from_warehouses))
 
-			self.item_location_map.setdefault(
-				item_code,
-				get_available_item_locations(
+			if storage_location:
+				storage_location_warehouse = frappe.get_cached_value(
+					"Storage Location", storage_location, "warehouse"
+				)
+				available_warehouses = [storage_location_warehouse]
+			else:
+				available_warehouses = from_warehouses
+
+			if availability_key not in self.item_location_map:
+				self.item_location_map[availability_key] = get_available_item_locations(
 					item_code,
-					from_warehouses,
-					self.item_count_map.get(item_code),
+					available_warehouses,
+					self.item_count_map.get(availability_key),
 					self.company,
 					picked_item_details=picked_items_details.get(item_code),
 					consider_rejected_warehouses=self.consider_rejected_warehouses,
 					priority_warehouses=priority_warehouses,
-				),
-			)
+					inventory_dimensions_dict={"storage_location": storage_location}
+					if storage_location
+					else None,
+				)
 
-			locations = get_items_with_location_and_quantity(item_doc, self.item_location_map, self.docstatus)
+			locations = get_items_with_location_and_quantity(
+				item_doc, self.item_location_map, self.docstatus, availability_key
+			)
 
 			item_doc.idx = None
 			item_doc.name = None
@@ -713,6 +869,7 @@ class PickList(TransactionBase):
 				key = (
 					location.item_code,
 					location.warehouse,
+					location.storage_location,
 					location.uom,
 					location.batch_no,
 					location.serial_no,
@@ -772,7 +929,7 @@ class PickList(TransactionBase):
 				continue
 			item_code = item.item_code
 			reference = item.sales_order_item or item.material_request_item
-			key = (item_code, item.uom, item.warehouse, item.batch_no, reference)
+			key = (item_code, item.uom, item.warehouse, item.storage_location, item.batch_no, reference)
 
 			item.idx = None
 			item.name = None
@@ -784,8 +941,9 @@ class PickList(TransactionBase):
 				item_map[key] = item
 
 			# maintain count of each item (useful to limit get query)
-			self.item_count_map.setdefault(item_code, 0)
-			self.item_count_map[item_code] += flt(item.stock_qty, item.precision("stock_qty"))
+			availability_key = (item_code, item.storage_location or "")
+			self.item_count_map.setdefault(availability_key, 0)
+			self.item_count_map[availability_key] += flt(item.stock_qty, item.precision("stock_qty"))
 		return item_map.values()
 
 	def validate_for_qty(self):
@@ -803,16 +961,18 @@ class PickList(TransactionBase):
 		group_picked_qty = defaultdict(float)
 
 		for item in self.locations:
-			group_item_qty[(item.item_code, item.warehouse)] += item.qty
-			group_picked_qty[(item.item_code, item.warehouse)] += item.picked_qty
+			key = (item.item_code, item.warehouse, item.storage_location)
+			group_item_qty[key] += item.qty
+			group_picked_qty[key] += item.picked_qty
 
 		duplicate_list = []
 		for item in self.locations:
-			if (item.item_code, item.warehouse) in group_item_qty:
-				item.qty = group_item_qty[(item.item_code, item.warehouse)]
-				item.picked_qty = group_picked_qty[(item.item_code, item.warehouse)]
-				item.stock_qty = group_item_qty[(item.item_code, item.warehouse)]
-				del group_item_qty[(item.item_code, item.warehouse)]
+			key = (item.item_code, item.warehouse, item.storage_location)
+			if key in group_item_qty:
+				item.qty = group_item_qty[key]
+				item.picked_qty = group_picked_qty[key]
+				item.stock_qty = group_item_qty[key]
+				del group_item_qty[key]
 			else:
 				duplicate_list.append(item)
 
@@ -846,7 +1006,9 @@ class PickList(TransactionBase):
 		items_data = self._get_pick_list_items(items)
 
 		for item_data in items_data:
-			key = (item_data.warehouse, item_data.batch_no) if item_data.batch_no else item_data.warehouse
+			key = get_picked_items_key(
+				item_data.warehouse, item_data.storage_location, item_data.batch_no
+			)
 			serial_no = [x for x in item_data.serial_no.split("\n") if x] if item_data.serial_no else None
 
 			if item_data.serial_and_batch_bundle:
@@ -858,11 +1020,15 @@ class PickList(TransactionBase):
 					for batch_no, batch_qty in bundle_batches.items():
 						batch_qty = abs(batch_qty)
 
-						key = (item_data.warehouse, batch_no)
+						key = get_picked_items_key(
+							item_data.warehouse, item_data.storage_location, batch_no
+						)
 						if item_data.item_code not in picked_items:
 							picked_items[item_data.item_code] = {key: {"picked_qty": batch_qty}}
 						else:
-							picked_items[item_data.item_code][key]["picked_qty"] += batch_qty
+							picked_items[item_data.item_code].setdefault(
+								key, frappe._dict({"picked_qty": 0})
+							)["picked_qty"] += batch_qty
 
 					continue
 
@@ -876,6 +1042,7 @@ class PickList(TransactionBase):
 						"serial_no": [],
 						"batch_no": item_data.batch_no or "",
 						"warehouse": item_data.warehouse,
+						"storage_location": item_data.storage_location,
 					}
 				)
 
@@ -889,7 +1056,7 @@ class PickList(TransactionBase):
 	def update_picked_item_from_current_pick_list(self, picked_items):
 		for row in self.locations:
 			if flt(row.picked_qty) > 0:
-				key = (row.warehouse, row.batch_no) if row.batch_no else row.warehouse
+				key = get_picked_items_key(row.warehouse, row.storage_location, row.batch_no)
 				serial_no = [x for x in row.serial_no.split("\n") if x] if row.serial_no else None
 				if row.item_code not in picked_items:
 					picked_items[row.item_code] = {}
@@ -901,6 +1068,7 @@ class PickList(TransactionBase):
 							"serial_no": [],
 							"batch_no": row.batch_no or "",
 							"warehouse": row.warehouse,
+							"storage_location": row.storage_location,
 						}
 					)
 
@@ -918,6 +1086,7 @@ class PickList(TransactionBase):
 			.select(
 				pi_item.item_code,
 				pi_item.warehouse,
+				pi_item.storage_location,
 				pi_item.batch_no,
 				pi_item.serial_and_batch_bundle,
 				pi_item.serial_no,
@@ -1053,8 +1222,14 @@ def validate_item_locations(pick_list):
 		frappe.throw(_("Add items in the Item Locations table"))
 
 
-def get_items_with_location_and_quantity(item_doc, item_location_map, docstatus):
-	available_locations = item_location_map.get(item_doc.item_code)
+def get_picked_items_key(warehouse, storage_location=None, batch_no=None):
+	if storage_location:
+		return (warehouse, storage_location, batch_no) if batch_no else (warehouse, storage_location)
+	return (warehouse, batch_no) if batch_no else warehouse
+
+
+def get_items_with_location_and_quantity(item_doc, item_location_map, docstatus, availability_key):
+	available_locations = item_location_map.get(availability_key)
 	locations = []
 
 	# if stock qty is zero on submitted entry, show positive remaining qty to recalculate in case of restock.
@@ -1085,6 +1260,7 @@ def get_items_with_location_and_quantity(item_doc, item_location_map, docstatus)
 					"qty": qty,
 					"stock_qty": stock_qty,
 					"warehouse": item_location.warehouse,
+					"storage_location": item_location.get("storage_location"),
 					"serial_no": serial_nos,
 					"batch_no": item_location.batch_no,
 					"use_serial_batch_fields": 1,
@@ -1103,8 +1279,8 @@ def get_items_with_location_and_quantity(item_doc, item_location_map, docstatus)
 				item_location.serial_no = item_location.serial_no[-int(qty_diff) :]
 			available_locations = [item_location, *available_locations]
 
-	# update available locations for the item
-	item_location_map[item_doc.item_code] = available_locations
+	# update available locations for the item and its selected inventory dimensions
+	item_location_map[availability_key] = available_locations
 	return locations
 
 
@@ -1117,6 +1293,7 @@ def get_available_item_locations(
 	picked_item_details=None,
 	consider_rejected_warehouses=False,
 	priority_warehouses=None,
+	inventory_dimensions_dict=None,
 ):
 	locations = []
 
@@ -1130,6 +1307,7 @@ def get_available_item_locations(
 			required_qty,
 			company,
 			consider_rejected_warehouses=consider_rejected_warehouses,
+			inventory_dimensions_dict=inventory_dimensions_dict,
 		)
 	elif has_serial_no:
 		locations = get_available_item_locations_for_serialized_item(
@@ -1137,6 +1315,7 @@ def get_available_item_locations(
 			from_warehouses,
 			company,
 			consider_rejected_warehouses=consider_rejected_warehouses,
+			inventory_dimensions_dict=inventory_dimensions_dict,
 		)
 	elif has_batch_no:
 		locations = get_available_item_locations_for_batched_item(
@@ -1144,6 +1323,7 @@ def get_available_item_locations(
 			from_warehouses,
 			company,
 			consider_rejected_warehouses=consider_rejected_warehouses,
+			inventory_dimensions_dict=inventory_dimensions_dict,
 		)
 	else:
 		locations = get_available_item_locations_for_other_item(
@@ -1151,6 +1331,7 @@ def get_available_item_locations(
 			from_warehouses,
 			company,
 			consider_rejected_warehouses=consider_rejected_warehouses,
+			inventory_dimensions_dict=inventory_dimensions_dict,
 		)
 
 	if picked_item_details:
@@ -1214,9 +1395,7 @@ def filter_locations_by_picked_materials(locations, picked_item_details) -> list
 	filterd_locations = []
 	precision = frappe.get_precision("Pick List Item", "qty")
 	for row in locations:
-		key = row.warehouse
-		if row.batch_no:
-			key = (row.warehouse, row.batch_no)
+		key = get_picked_items_key(row.warehouse, row.get("storage_location"), row.get("batch_no"))
 
 		picked_qty = picked_item_details.get(key, {}).get("picked_qty", 0)
 		if not picked_qty:
@@ -1243,6 +1422,7 @@ def get_available_item_locations_for_serial_and_batched_item(
 	required_qty,
 	company,
 	consider_rejected_warehouses=False,
+	inventory_dimensions_dict=None,
 ):
 	# Get batch nos by FIFO
 	locations = get_available_item_locations_for_batched_item(
@@ -1250,6 +1430,7 @@ def get_available_item_locations_for_serial_and_batched_item(
 		from_warehouses,
 		company,
 		consider_rejected_warehouses=consider_rejected_warehouses,
+		inventory_dimensions_dict=inventory_dimensions_dict,
 	)
 
 	if locations:
@@ -1261,16 +1442,41 @@ def get_available_item_locations_for_serial_and_batched_item(
 				required_qty if location.qty > required_qty else location.qty
 			)  # if extra qty in batch
 
-			serial_nos = (
-				frappe.qb.from_(sn)
-				.select(sn.name)
-				.where(
-					(conditions) & (sn.batch_no == location.batch_no) & (sn.warehouse == location.warehouse)
+			if inventory_dimensions_dict:
+				serial_nos = get_available_serial_nos(
+					frappe._dict(
+						{
+							"item_code": item_code,
+							"warehouse": location.warehouse,
+							"company": company,
+							"batches": [location.batch_no],
+							"has_batch_no": True,
+							"based_on": frappe.get_single_value(
+								"Stock Settings", "pick_serial_and_batch_based_on"
+							),
+							"posting_datetime": now_datetime(),
+							"inventory_dimensions_dict": inventory_dimensions_dict,
+						}
+					)
 				)
-				.orderby(sn.creation)
-			).run(as_dict=True)
+				serial_nos = [
+					row.serial_no
+					for row in serial_nos
+					if row.warehouse == location.warehouse and row.batch_no == location.batch_no
+				]
+			else:
+				serial_nos = (
+					frappe.qb.from_(sn)
+					.select(sn.name)
+					.where(
+						(conditions)
+						& (sn.batch_no == location.batch_no)
+						& (sn.warehouse == location.warehouse)
+					)
+					.orderby(sn.creation)
+				).run(as_dict=True)
 
-			serial_nos = [sn.name for sn in serial_nos]
+				serial_nos = [sn.name for sn in serial_nos]
 			location.serial_nos = serial_nos
 			location.qty = len(serial_nos)
 
@@ -1282,7 +1488,50 @@ def get_available_item_locations_for_serialized_item(
 	from_warehouses,
 	company,
 	consider_rejected_warehouses=False,
+	inventory_dimensions_dict=None,
 ):
+	if inventory_dimensions_dict:
+		serial_nos = get_available_serial_nos(
+			frappe._dict(
+				{
+					"item_code": item_code,
+					"warehouse": from_warehouses,
+					"company": company,
+					"based_on": frappe.get_single_value("Stock Settings", "pick_serial_and_batch_based_on"),
+					"posting_datetime": now_datetime(),
+					"inventory_dimensions_dict": inventory_dimensions_dict,
+				}
+			)
+		)
+		available_serial_nos = [row.serial_no for row in serial_nos]
+		serial_rows = frappe.get_all(
+			"Serial No",
+			filters={"name": ["in", available_serial_nos], "company": company},
+			fields=["name", "warehouse"],
+			order_by="creation",
+		)
+		serial_no_warehouses = {row.name: row.warehouse for row in serial_rows}
+		rejected_warehouses = set() if consider_rejected_warehouses else set(get_rejected_warehouses())
+		warehouse_serial_nos_map = frappe._dict()
+		for serial_no in serial_nos:
+			warehouse = serial_no_warehouses.get(serial_no.serial_no)
+			if not warehouse or warehouse in rejected_warehouses:
+				continue
+			warehouse_serial_nos_map.setdefault(warehouse, []).append(serial_no.serial_no)
+
+		return [
+			frappe._dict(
+				{
+					"qty": len(serial_numbers),
+					"warehouse": warehouse,
+					"storage_location": inventory_dimensions_dict.get("storage_location"),
+					"item_code": item_code,
+					"serial_nos": serial_numbers,
+				}
+			)
+			for warehouse, serial_numbers in warehouse_serial_nos_map.items()
+		]
+
 	sn = frappe.qb.DocType("Serial No")
 	query = (
 		frappe.qb.from_(sn)
@@ -1331,6 +1580,7 @@ def get_available_item_locations_for_batched_item(
 	from_warehouses,
 	company,
 	consider_rejected_warehouses=False,
+	inventory_dimensions_dict=None,
 ):
 	locations = []
 	data = get_auto_batch_nos(
@@ -1340,6 +1590,7 @@ def get_available_item_locations_for_batched_item(
 				"warehouse": from_warehouses,
 				"company": company,
 				"based_on": frappe.get_single_value("Stock Settings", "pick_serial_and_batch_based_on"),
+				"inventory_dimensions_dict": inventory_dimensions_dict or {},
 			}
 		)
 	)
@@ -1363,6 +1614,7 @@ def get_available_item_locations_for_batched_item(
 					{
 						"qty": qty,
 						"warehouse": warehouse,
+						"storage_location": (inventory_dimensions_dict or {}).get("storage_location"),
 						"item_code": item_code,
 						"batch_no": batch_no,
 					}
@@ -1377,7 +1629,34 @@ def get_available_item_locations_for_other_item(
 	from_warehouses,
 	company,
 	consider_rejected_warehouses=False,
+	inventory_dimensions_dict=None,
 ):
+	if inventory_dimensions_dict:
+		warehouses = from_warehouses or frappe.get_all(
+			"Warehouse", filters={"company": company, "is_group": 0}, pluck="name"
+		)
+		locations = []
+		for warehouse in warehouses:
+			if not consider_rejected_warehouses and warehouse in get_rejected_warehouses():
+				continue
+
+			qty = get_stock_balance(
+				item_code, warehouse, inventory_dimensions_dict=inventory_dimensions_dict
+			)
+			if qty > 0:
+				locations.append(
+					frappe._dict(
+						{
+							"warehouse": warehouse,
+							"storage_location": inventory_dimensions_dict.get("storage_location"),
+							"item_code": item_code,
+							"qty": qty,
+						}
+					)
+				)
+
+		return locations
+
 	bin = frappe.qb.DocType("Bin")
 	query = (
 		frappe.qb.from_(bin)
@@ -1669,7 +1948,7 @@ def add_product_bundles_to_target(pick_list, target_doc, item_mapper, sales_orde
 def create_stock_entry(pick_list: str | dict):
 	pick_list = frappe.get_doc(frappe.parse_json(pick_list))
 	pick_list.check_permission("read")
-	if pick_list.get("pick_list_type") == "Customer Demo - Asset Conversion":
+	if pick_list.get("pick_list_type") in ("Customer Demo - Asset Conversion", "Asset Conversion"):
 		frappe.throw(_("Create a Stock to Asset Conversion from this Pick List. It will consume the picked stock and create the Assets."))
 	validate_item_locations(pick_list)
 
@@ -1724,7 +2003,7 @@ def get_pending_work_orders(doctype, txt, searchfield, start, page_length, filte
 
 
 @frappe.whitelist()
-def get_item_details(item_code, uom=None, warehouse=None, company=None):
+def get_item_details(item_code, uom=None, warehouse=None, company=None, storage_location=None):
 	frappe.has_permission("Pick List", throw=True)
 	details = frappe.db.get_value("Item", item_code, "stock_uom", as_dict=1)
 	details.uom = uom or details.stock_uom
@@ -1732,7 +2011,15 @@ def get_item_details(item_code, uom=None, warehouse=None, company=None):
 		details.update(get_conversion_factor(item_code, uom))
 
 	if warehouse:
-		details.actual_qty = flt(get_actual_qty(item_code, warehouse))
+		details.actual_qty = flt(
+			get_stock_balance(
+				item_code,
+				warehouse,
+				inventory_dimensions_dict={"storage_location": storage_location},
+			)
+			if storage_location
+			else get_actual_qty(item_code, warehouse)
+		)
 
 	if company:
 		details.company_total_stock = get_company_total_stock(item_code, company)
@@ -1782,6 +2069,7 @@ def update_stock_entry_based_on_job_card(pick_list, stock_entry, job_card):
 			"for_quantity",
 			"transferred_qty",
 			"wip_warehouse",
+			"wip_storage_location",
 			"project",
 		],
 		as_dict=True,
@@ -1804,6 +2092,7 @@ def update_stock_entry_based_on_job_card(pick_list, stock_entry, job_card):
 		item = frappe._dict()
 		update_common_item_properties(item, location)
 		item.t_warehouse = job_card.wip_warehouse
+		item.to_storage_location = job_card.wip_storage_location
 		item.job_card_item = job_card_items.get(location.material_request_item)
 		stock_entry.append("items", item)
 
@@ -1855,6 +2144,9 @@ def update_stock_entry_based_on_work_order(pick_list, stock_entry):
 		item = frappe._dict()
 		update_common_item_properties(item, location)
 		item.t_warehouse = wip_warehouse
+		item.to_storage_location = (
+			work_order.wip_storage_location if wip_warehouse == work_order.wip_warehouse else None
+		)
 
 		stock_entry.append("items", item)
 
@@ -1866,13 +2158,21 @@ def update_stock_entry_based_on_material_request(pick_list, stock_entry):
 		if get_pending_transfer_stock_qty(location) <= 0:
 			continue
 		target_warehouse = None
+		target_storage_location = None
 		if location.material_request_item:
-			target_warehouse = frappe.get_value(
-				"Material Request Item", location.material_request_item, "warehouse"
+			request_item = frappe.get_value(
+				"Material Request Item",
+				location.material_request_item,
+				["warehouse", "storage_location"],
+				as_dict=True,
 			)
+			if request_item:
+				target_warehouse = request_item.warehouse
+				target_storage_location = request_item.storage_location
 		item = frappe._dict()
 		update_common_item_properties(item, location)
 		item.t_warehouse = target_warehouse
+		item.to_storage_location = target_storage_location
 		stock_entry.append("items", item)
 
 	return stock_entry
@@ -1900,6 +2200,7 @@ def update_common_item_properties(item, location):
 	item.item_code = location.item_code
 	item.item_name = location.item_name
 	item.s_warehouse = location.warehouse
+	item.storage_location = location.storage_location
 	item.transfer_qty = pending_stock_qty
 	item.qty = flt(pending_stock_qty / (location.conversion_factor or 1), location.precision("qty"))
 	item.uom = location.uom

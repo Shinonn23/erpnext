@@ -19,6 +19,7 @@ class ProductionPlanMaterialRequestWarehouse(Document):
 		parentfield: DF.Data
 		parenttype: DF.Data
 		warehouse: DF.Link | None
+		storage_location: DF.Link | None
 	# end: auto-generated types
 
 	pass

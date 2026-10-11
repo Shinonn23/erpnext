@@ -1,4 +1,5 @@
 [pre_model_sync]
+erpnext.patches.v16_0.migrate_material_request_recipient_address
 erpnext.patches.v16_0.rename_customer_use_request_doctypes
 erpnext.patches.v12_0.update_is_cancelled_field
 erpnext.patches.v11_0.rename_production_order_to_work_order
@@ -261,6 +262,7 @@ erpnext.patches.v15_0.rename_subcontracting_fields
 erpnext.patches.v15_0.unset_incorrect_additional_discount_percentage
 
 [post_model_sync]
+erpnext.patches.v16_0.remove_legacy_material_request_address_fields
 erpnext.patches.v16_0.migrate_asset_movement_customer_use_reference
 erpnext.patches.v16_0.use_transfer_for_customer_asset_movements
 erpnext.patches.v16_0.remove_custody_loan_from_stock_sidebar
@@ -517,5 +519,7 @@ erpnext.patches.v16_0.add_voucher_index_to_repost_item_valuation
 erpnext.patches.v16_0.mirror_select_perms_to_custom_docperm
 erpnext.patches.v16_0.recalculate_subcontracting_order_service_cost
 erpnext.patches.v16_0.expose_inventory_dimensions_in_stock_tables
+erpnext.patches.v16_0.migrate_inventory_dimension_layout_anchors
+erpnext.patches.v16_0.migrate_inventory_dimension_doctypes
 erpnext.patches.v16_0.remove_cost_center_doctypes
 erpnext.patches.v16_0.purge_cost_center_data

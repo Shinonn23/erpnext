@@ -6,6 +6,7 @@ import json
 import math
 
 import frappe
+from frappe.contacts.address_and_contact import load_address_and_contact
 from frappe.utils import flt
 from frappe.utils.nestedset import NestedSet, update_nsm
 
@@ -24,7 +25,6 @@ class Location(NestedSet):
 		area: DF.Float
 		area_uom: DF.Link | None
 		is_container: DF.Check
-		is_in_transit_location: DF.Check
 		is_group: DF.Check
 		latitude: DF.Float
 		lft: DF.Int
@@ -36,6 +36,9 @@ class Location(NestedSet):
 	# end: auto-generated types
 
 	nsm_parent_field = "parent_location"
+
+	def onload(self):
+		load_address_and_contact(self)
 
 	def validate(self):
 		self.calculate_location_area()

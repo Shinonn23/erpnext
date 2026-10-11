@@ -537,6 +537,9 @@ def get_batches_from_stock_ledger_entries(searchfields, txt, filters, start=0, p
 	if filters.get("warehouse"):
 		query = query.where(stock_ledger_entry.warehouse == filters.get("warehouse"))
 
+	if filters.get("storage_location"):
+		query = query.where(stock_ledger_entry.storage_location == filters.get("storage_location"))
+
 	for field in searchfields:
 		query = query.select(batch_table[field])
 
@@ -598,6 +601,9 @@ def get_batches_from_serial_and_batch_bundle(searchfields, txt, filters, start=0
 
 	if filters.get("warehouse"):
 		bundle_query = bundle_query.where(stock_ledger_entry.warehouse == filters.get("warehouse"))
+
+	if filters.get("storage_location"):
+		bundle_query = bundle_query.where(stock_ledger_entry.storage_location == filters.get("storage_location"))
 
 	for field in searchfields:
 		bundle_query = bundle_query.select(batch_table[field])

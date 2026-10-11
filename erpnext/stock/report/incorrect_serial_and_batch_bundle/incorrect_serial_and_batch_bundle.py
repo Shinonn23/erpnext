@@ -4,6 +4,8 @@
 import frappe
 from frappe import _
 
+from erpnext.stock.report.storage_location_utils import add_location_column, show_location_wise_stock
+
 
 def execute(filters: dict | None = None):
 	"""Return columns and data for the report.
@@ -13,6 +15,16 @@ def execute(filters: dict | None = None):
 	every time the report is refreshed or a filter is updated.
 	"""
 	columns = get_columns()
+	columns.append(
+		{
+			"label": _("Warehouse"),
+			"fieldname": "warehouse",
+			"fieldtype": "Link",
+			"options": "Warehouse",
+			"width": 150,
+		}
+	)
+	add_location_column(columns, filters)
 	unlinked_bundles = get_unlinked_serial_batch_bundles(filters) or []
 	linked_cancelled_bundles = get_linked_cancelled_sabb(filters) or []
 
@@ -84,6 +96,7 @@ def get_unlinked_serial_batch_bundles(filters) -> list[list]:
 			SABB.voucher_no,
 			SABB.voucher_detail_no,
 			SABB.is_cancelled,
+			SABB.warehouse,
 		)
 		.where(
 			(SLE.serial_and_batch_bundle.isnull())
@@ -93,11 +106,26 @@ def get_unlinked_serial_batch_bundles(filters) -> list[list]:
 		)
 	)
 
-	for field in filters:
-		query = query.where(SABB[field] == filters[field])
+	for field in ("company", "item_code", "voucher_type", "voucher_no"):
+		if filters.get(field):
+			query = query.where(SABB[field] == filters[field])
 
 	data = query.run(as_dict=1)
-
+	if show_location_wise_stock(filters):
+		locations = (
+			{
+				row.parent: row.storage_location
+				for row in frappe.get_all(
+					"Serial and Batch Entry",
+					fields=["parent", "storage_location"],
+					filters={"parent": ["in", [row.name for row in data]]},
+				)
+			}
+			if data
+			else {}
+		)
+		for row in data:
+			row.storage_location = locations.get(row.name)
 	return data
 
 
@@ -117,6 +145,7 @@ def get_linked_cancelled_sabb(filters):
 			SABB.voucher_no,
 			SABB.voucher_detail_no,
 			SABB.is_cancelled,
+			SABB.warehouse,
 		)
 		.where(
 			(SLE.serial_and_batch_bundle.isnotnull())
@@ -126,9 +155,12 @@ def get_linked_cancelled_sabb(filters):
 		)
 	)
 
-	for field in filters:
-		query = query.where(SABB[field] == filters[field])
+	for field in ("company", "item_code", "voucher_type", "voucher_no"):
+		if filters.get(field):
+			query = query.where(SABB[field] == filters[field])
 
+	if show_location_wise_stock(filters):
+		query = query.select(SLE.storage_location)
 	data = query.run(as_dict=1)
 	return data
 

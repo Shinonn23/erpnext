@@ -7,7 +7,9 @@
  "field_order": [
   "item_code",
   "from_warehouse",
+  "from_storage_location",
   "warehouse",
+  "storage_location",
   "material_request_type",
   "column_break_4",
   "item_name",
@@ -262,6 +264,18 @@
   {
    "fieldname": "column_break_scnz",
    "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "from_storage_location",
+   "fieldtype": "Link",
+   "label": "Source Storage Location",
+   "options": "Storage Location"
+  },
+  {
+   "fieldname": "storage_location",
+   "fieldtype": "Link",
+   "label": "Target Storage Location",
+   "options": "Storage Location"
   }
  ],
  "grid_page_length": 50,

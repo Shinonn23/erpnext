@@ -14,6 +14,7 @@
   "do_not_explode",
   "bom_no",
   "source_warehouse",
+  "source_storage_location",
   "allow_alternative_item",
   "is_stock_item",
   "section_break_5",
@@ -322,6 +323,12 @@
    "fieldtype": "Check",
    "label": "Is Phantom Item",
    "read_only": 1
+  },
+  {
+   "fieldname": "source_storage_location",
+   "fieldtype": "Link",
+   "label": "Source Storage Location",
+   "options": "Storage Location"
   }
  ],
  "idx": 1,

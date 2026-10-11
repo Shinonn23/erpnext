@@ -5,9 +5,15 @@
 import frappe
 from frappe import _
 
+from erpnext.stock.report.storage_location_utils import (
+	add_location_column,
+	show_location_wise_stock,
+	split_bin_rows,
+)
+
 
 def execute(filters=None):
-	columns = get_columns()
+	columns = add_location_column(get_columns(), filters)
 	data = get_data(filters)
 
 	if not data:
@@ -55,7 +61,8 @@ def get_data(filters):
 	if filters.get("company"):
 		query = query.where(wh.company == filters.get("company"))
 
-	return query.run(as_dict=True)
+	rows = split_bin_rows(query.run(as_dict=True), filters)
+	return [row for row in rows if row.projected_qty < 0]
 
 
 def get_chart_data(data):

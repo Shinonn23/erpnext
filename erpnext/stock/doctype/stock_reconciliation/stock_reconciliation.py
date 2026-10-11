@@ -1021,6 +1021,14 @@ class StockReconciliation(StockController):
 			data.incoming_rate = flt(row.valuation_rate)
 
 		self.update_inventory_dimensions(row, data)
+		# Warehouse-wide reconciliation can reduce stock by resetting the balance
+		# while leaving actual_qty at zero. Validate its real quantity change too.
+		if self.docstatus == 1 and flt(row.qty) < flt(row.current_qty) and not self.is_adjustment_row(row):
+			from erpnext.stock.doctype.storage_location.storage_location import validate_storage_location
+
+			location_check = frappe._dict(data)
+			location_check.actual_qty = flt(row.qty) - flt(row.current_qty)
+			validate_storage_location(location_check)
 
 		return data
 

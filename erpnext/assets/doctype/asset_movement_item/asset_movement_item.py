@@ -17,14 +17,17 @@ class AssetMovementItem(Document):
 
 		asset: DF.Link
 		asset_name: DF.Data | None
+		change_custodian: DF.Check
+		change_department: DF.Check
 		company: DF.Link | None
 		from_employee: DF.Link | None
 		parent: DF.Data
 		parentfield: DF.Data
 		parenttype: DF.Data
+		source_department: DF.Link | None
 		source_location: DF.Link | None
-		shipment_destination_location: DF.Link | None
 		target_location: DF.Link | None
+		target_department: DF.Link | None
 		to_employee: DF.Link | None
 	# end: auto-generated types
 

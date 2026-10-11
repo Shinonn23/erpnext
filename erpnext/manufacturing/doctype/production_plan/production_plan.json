@@ -16,6 +16,7 @@
   "item_code",
   "customer",
   "warehouse",
+  "warehouse_storage_location",
   "project",
   "sales_order_status",
   "column_break2",
@@ -37,6 +38,7 @@
   "prod_plan_references",
   "section_break_24",
   "sub_assembly_warehouse",
+  "sub_assembly_storage_location",
   "column_break_igxl",
   "skip_available_sub_assembly_item",
   "combine_sub_items",
@@ -53,6 +55,7 @@
   "ignore_existing_ordered_qty",
   "column_break_25",
   "for_warehouse",
+  "for_storage_location",
   "get_items_for_mr",
   "transfer_materials",
   "section_break_27",
@@ -129,6 +132,13 @@
    "fieldtype": "Link",
    "label": "Warehouse",
    "options": "Warehouse"
+  },
+  {
+   "depends_on": "eval: doc.get_items_from == \"Material Request\"",
+   "fieldname": "warehouse_storage_location",
+   "fieldtype": "Link",
+   "label": "Storage Location",
+   "options": "Storage Location"
   },
   {
    "depends_on": "eval: doc.get_items_from == \"Sales Order\"",
@@ -319,6 +329,12 @@
    "options": "Warehouse"
   },
   {
+   "fieldname": "for_storage_location",
+   "fieldtype": "Link",
+   "label": "For Storage Location",
+   "options": "Storage Location"
+  },
+  {
    "fieldname": "warehouses",
    "fieldtype": "Table MultiSelect",
    "hidden": 1,
@@ -426,6 +442,13 @@
    "fieldtype": "Link",
    "label": "Sub Assembly Warehouse",
    "options": "Warehouse"
+  },
+  {
+   "depends_on": "eval:doc.sub_assembly_warehouse",
+   "fieldname": "sub_assembly_storage_location",
+   "fieldtype": "Link",
+   "label": "Sub Assembly Storage Location",
+   "options": "Storage Location"
   },
   {
    "default": "0",

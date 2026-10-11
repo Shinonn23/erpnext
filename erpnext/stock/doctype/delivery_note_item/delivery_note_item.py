@@ -33,6 +33,7 @@ class DeliveryNoteItem(Document):
 		brand: DF.Link | None
 		company_total_stock: DF.Float
 		conversion_factor: DF.Float
+		custody_loan_item: DF.Link | None
 		customer_item_code: DF.Data | None
 		description: DF.TextEditor | None
 		discount_amount: DF.Currency
@@ -81,7 +82,9 @@ class DeliveryNoteItem(Document):
 		stock_qty: DF.Float
 		stock_uom: DF.Link
 		stock_uom_rate: DF.Currency
+		storage_location: DF.Link | None
 		target_warehouse: DF.Link | None
+		to_storage_location: DF.Link | None
 		total_weight: DF.Float
 		uom: DF.Link
 		use_serial_batch_fields: DF.Check

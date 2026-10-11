@@ -318,7 +318,7 @@
    "depends_on": "eval:doc.is_stock_item",
    "fieldname": "demo_asset_item_code",
    "fieldtype": "Link",
-   "label": "Demo Asset Item Code",
+   "label": "Asset Item Code",
    "options": "Item"
   },
   {

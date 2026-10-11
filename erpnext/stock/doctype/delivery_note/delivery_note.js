@@ -14,6 +14,58 @@ erpnext.accounts.taxes.setup_tax_validations("Delivery Note");
 erpnext.sales_common.setup_selling_controller();
 
 frappe.ui.form.on("Delivery Note", {
+	refresh(frm) {
+		if (frm.doc.is_custody_loan_transaction) {
+			frm.remove_custom_button(__("Shipment"), __("Create"));
+			if (frm.doc.requires_shipment && frm.doc.custody_loan_shipment && frappe.model.can_read("Shipment")) {
+				frm.add_custom_button(__("Open Loan Shipment"), () =>
+					frappe.set_route("Form", "Shipment", frm.doc.custody_loan_shipment)
+				);
+			} else if (
+				frm.doc.requires_shipment &&
+				!frm.doc.custody_loan_shipment &&
+				frm.doc.docstatus === 0 &&
+				frappe.model.can_create("Shipment")
+			) {
+				frm.add_custom_button(__("Create Loan Shipment"), () => {
+					frappe.call({
+						method: "erpnext.stock.doctype.shipment.shipment.make_shipment_from_document",
+						args: { source_doctype: "Delivery Note", source_name: frm.doc.name },
+					}).then((r) => {
+						if (!r.message?.doctype || !r.message?.name) return;
+						frappe.model.sync(r.message);
+						frappe.set_route("Form", r.message.doctype, r.message.name);
+					});
+				});
+			}
+		}
+		if (
+			frm.doc.docstatus !== 0 ||
+			!frm.doc.is_return ||
+			!frm.doc.is_custody_loan_transaction ||
+			frm.doc.custody_loan_source_doctype !== "Custody Loan Return" ||
+			!frm.has_perm("write")
+		) {
+			return;
+		}
+		frm.add_custom_button(__("Inspect Loan Return Items"), () => {
+			frappe.call({
+				method: "erpnext.loan.doctype.custody_loan.custody_loan_core.make_custody_loan_return_quality_inspections",
+				args: { delivery_note_name: frm.doc.name },
+			}).then((r) => {
+				const names = r.message || [];
+				frm.reload_doc();
+				if (names.length) {
+					frappe.msgprint({
+						title: __("Loan Return Quality Inspections"),
+						message: names
+							.map((name) => frappe.utils.get_form_link("Quality Inspection", name, true))
+							.join("<br>"),
+					});
+				}
+			});
+		});
+	},
 	setup: function (frm) {
 		(frm.custom_make_buttons = {
 			"Packing Slip": "Packing Slip",
@@ -68,6 +120,8 @@ frappe.ui.form.on("Delivery Note", {
 	},
 
 	refresh: function (frm) {
+		if (frm.doc.is_custody_loan_transaction) return;
+
 		if (
 			frm.doc.docstatus === 1 &&
 			frm.doc.is_return === 1 &&

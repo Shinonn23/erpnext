@@ -4,6 +4,12 @@
 frappe.query_reports["Serial No and Batch Traceability"] = {
 	filters: [
 		{
+			fieldname: "show_location_wise_stock",
+			label: __("Show Storage Location Wise Stock"),
+			fieldtype: "Check",
+			default: 1,
+		},
+		{
 			fieldname: "item_code",
 			label: __("Item Code"),
 			options: "Item",

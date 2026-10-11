@@ -18,20 +18,26 @@ class MaterialRequestItem(Document):
 		from frappe.types import DF
 
 		actual_qty: DF.Float
-		asset_transfer_asset: DF.Link | None
-		asset_transfer_source_location: DF.Link | None
-		asset_transfer_target_location: DF.Link | None
 		amount: DF.Currency
+		asset: DF.Link | None
+		asset_movement: DF.Link | None
+		asset_name: DF.Data | None
+		asset_serial_number: DF.Data | None
 		bom_no: DF.Link | None
 		brand: DF.Link | None
 		conversion_factor: DF.Float
+		custody_loan: DF.Link | None
+		delivery_note: DF.Link | None
 		description: DF.TextEditor | None
 		expense_account: DF.Link | None
 		from_warehouse: DF.Link | None
+		from_storage_location: DF.Link | None
+		fulfilled_qty: DF.Float
 		image: DF.AttachImage | None
 		item_code: DF.Link
 		item_group: DF.Link | None
 		item_name: DF.Data | None
+		item_type: DF.Literal["Stock Item", "Fixed Asset"]
 		job_card_item: DF.Data | None
 		lead_time_date: DF.Date | None
 		manufacturer: DF.Link | None
@@ -39,6 +45,7 @@ class MaterialRequestItem(Document):
 		material_request_plan_item: DF.Data | None
 		min_order_qty: DF.Float
 		ordered_qty: DF.Float
+		outstanding_qty: DF.Float
 		packed_item: DF.Data | None
 		page_break: DF.Check
 		parent: DF.Data
@@ -55,11 +62,17 @@ class MaterialRequestItem(Document):
 		received_qty: DF.Float
 		reorder_level: DF.Float
 		reorder_qty: DF.Float
+		returned_qty: DF.Float
 		sales_order: DF.Link | None
 		sales_order_item: DF.Data | None
 		schedule_date: DF.Date
+		storage_location: DF.Link | None
+		source_location: DF.Link | None
+		status: DF.Data | None
+		stock_entry: DF.Link | None
 		stock_qty: DF.Float
 		stock_uom: DF.Link
+		target_location: DF.Link | None
 		uom: DF.Link
 		warehouse: DF.Link | None
 		wip_composite_asset: DF.Link | None

@@ -11,12 +11,17 @@ from erpnext.stock.report.stock_ledger.stock_ledger import (
 	get_opening_balance,
 	get_stock_ledger_entries,
 )
+from erpnext.stock.report.storage_location_utils import (
+	add_location_column,
+	set_location_ledger_balances,
+	show_location_wise_stock,
+)
 from erpnext.stock.utils import is_reposting_item_valuation_in_progress
 
 
 def execute(filters=None):
 	is_reposting_item_valuation_in_progress()
-	columns = get_columns(filters)
+	columns = add_location_column(get_columns(filters), filters)
 	items = get_items(filters)
 	sl_entries = get_stock_ledger_entries(filters, items)
 
@@ -26,11 +31,12 @@ def execute(filters=None):
 	item_details = get_item_details(items, sl_entries, False)
 	opening_row = get_opening_balance(filters, columns, sl_entries)
 	precision = cint(frappe.db.get_single_value("System Settings", "float_precision"))
-	data = process_stock_ledger_entries(sl_entries, item_details, opening_row, precision)
+	data = process_stock_ledger_entries(sl_entries, item_details, opening_row, precision, filters)
+	set_location_ledger_balances(data, filters)
 	return columns, data
 
 
-def process_stock_ledger_entries(sl_entries, item_details, opening_row, precision):
+def process_stock_ledger_entries(sl_entries, item_details, opening_row, precision, filters=None):
 	data = []
 
 	if opening_row:
@@ -45,7 +51,7 @@ def process_stock_ledger_entries(sl_entries, item_details, opening_row, precisio
 
 	for sle in sl_entries:
 		update_stock_ledger_entry(sle, item_details, precision)
-		update_available_serial_nos(available_serial_nos, sle)
+		update_available_serial_nos(available_serial_nos, sle, filters)
 		data.append(sle)
 
 	return data
@@ -63,13 +69,15 @@ def update_stock_ledger_entry(sle, item_details, precision):
 		sle["in_out_rate"] = sle.valuation_rate
 
 
-def update_available_serial_nos(available_serial_nos, sle):
+def update_available_serial_nos(available_serial_nos, sle, filters=None):
 	serial_nos = (
 		get_serial_nos(sle.serial_no)
 		if sle.serial_no
 		else available_serial_nos.get(sle.serial_and_batch_bundle)
 	)
 	key = (sle.item_code, sle.warehouse)
+	if show_location_wise_stock(filters):
+		key += (sle.get("storage_location") or "",)
 	sle.serial_no = "\n".join(serial_nos) if serial_nos else ""
 	if key not in available_serial_nos:
 		available_serial_nos.setdefault(key, serial_nos)

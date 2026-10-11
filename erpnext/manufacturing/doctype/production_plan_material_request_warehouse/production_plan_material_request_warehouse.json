@@ -5,7 +5,8 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-  "warehouse"
+  "warehouse",
+  "storage_location"
  ],
  "fields": [
   {
@@ -14,6 +15,12 @@
    "in_list_view": 1,
    "label": "Warehouse",
    "options": "Warehouse"
+  },
+  {
+   "fieldname": "storage_location",
+   "fieldtype": "Link",
+   "label": "Storage Location",
+   "options": "Storage Location"
   }
  ],
  "index_web_pages_for_search": 1,

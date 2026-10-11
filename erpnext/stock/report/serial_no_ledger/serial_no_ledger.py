@@ -7,6 +7,7 @@ import frappe
 from frappe import _
 
 from erpnext.stock.doctype.serial_no.serial_no import get_serial_nos as get_serial_nos_from_sle
+from erpnext.stock.report.storage_location_utils import add_location_column
 from erpnext.stock.serial_batch_bundle import get_serial_no_status
 from erpnext.stock.stock_ledger import get_stock_ledger_entries
 
@@ -15,7 +16,7 @@ SELLING_VOUCHER_TYPES = ["Sales Invoice", "Delivery Note"]
 
 
 def execute(filters=None):
-	columns = get_columns(filters)
+	columns = add_location_column(get_columns(filters), filters)
 	data = get_data(filters)
 	return columns, data
 
@@ -115,6 +116,7 @@ def get_data(filters):
 				"status": get_serial_no_status(row),
 				"company": row.company,
 				"warehouse": row.warehouse,
+				"storage_location": row.get("storage_location"),
 				"qty": 1 if row.actual_qty > 0 else -1,
 			}
 		)
@@ -159,6 +161,8 @@ def get_data(filters):
 						"serial_no": bundle_data.get("serial_no"),
 						"valuation_rate": bundle_data.get("valuation_rate"),
 						"qty": args.qty,
+						"warehouse": args.warehouse,
+						"storage_location": args.storage_location,
 					}
 				)
 

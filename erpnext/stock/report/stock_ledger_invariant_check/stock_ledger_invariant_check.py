@@ -7,9 +7,11 @@ import frappe
 from frappe import _
 from frappe.utils import cint, flt, get_link_to_form, parse_json
 
+from erpnext.stock.report.storage_location_utils import add_location_column
 from erpnext.stock.utils import get_valuation_method
 
 SLE_FIELDS = (
+	"storage_location",
 	"name",
 	"posting_date",
 	"posting_time",
@@ -32,7 +34,7 @@ SLE_FIELDS = (
 
 
 def execute(filters=None):
-	columns = get_columns()
+	columns = add_location_column(get_columns(), filters)
 	data = get_data(filters)
 	return columns, data
 

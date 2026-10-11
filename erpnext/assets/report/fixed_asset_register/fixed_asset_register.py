@@ -76,8 +76,11 @@ def get_data(filters):
 		"available_for_use_date",
 		"purchase_invoice",
 		"opening_accumulated_depreciation",
+		"stock_to_asset_accounting_treatment",
+		"stock_to_asset_depreciation_journal_entry",
 	]
 	assets_record = frappe.db.get_all("Asset", filters=conditions, fields=fields)
+	active_immediate_entries = get_active_immediate_depreciation_entries(assets_record)
 
 	for asset in assets_record:
 		if assets_linked_to_fb and asset.calculate_depreciation and asset.asset_id not in assets_linked_to_fb:
@@ -85,12 +88,18 @@ def get_data(filters):
 
 		depreciation_amount = depreciation_amount_map.get(asset.asset_id) or 0.0
 		revaluation_amount = revaluation_amount_map.get(asset.asset_id, 0.0)
+		immediate_depreciation_active = (
+			asset.stock_to_asset_accounting_treatment == "Immediate Depreciation"
+			and asset.stock_to_asset_depreciation_journal_entry in active_immediate_entries
+		)
 		asset_value = (
 			asset.net_purchase_amount
 			- asset.opening_accumulated_depreciation
 			- depreciation_amount
 			+ revaluation_amount
 		)
+		if asset.stock_to_asset_accounting_treatment == "Expense" or immediate_depreciation_active:
+			asset_value = 0
 
 		row = {
 			"asset_id": asset.asset_id,
@@ -107,6 +116,10 @@ def get_data(filters):
 			"asset_category": asset.asset_category,
 			"purchase_date": asset.purchase_date,
 			"asset_value": asset_value,
+			"expensed_amount": asset.net_purchase_amount
+			if asset.stock_to_asset_accounting_treatment == "Expense"
+			else 0,
+			"accounting_treatment": asset.stock_to_asset_accounting_treatment,
 			"company": asset.company,
 		}
 		data.append(row)
@@ -351,8 +364,11 @@ def get_group_by_data(
 		"net_purchase_amount",
 		"opening_accumulated_depreciation",
 		"calculate_depreciation",
+		"stock_to_asset_accounting_treatment",
+		"stock_to_asset_depreciation_journal_entry",
 	]
 	assets = frappe.db.get_all("Asset", filters=conditions, fields=fields)
+	active_immediate_entries = get_active_immediate_depreciation_entries(assets)
 
 	data = []
 
@@ -362,11 +378,20 @@ def get_group_by_data(
 
 		a["depreciated_amount"] = depreciation_amount_map.get(a["name"], 0.0)
 		a["revaluation_amount"] = revaluation_amount_map.get(a["name"], 0.0)
+		immediate_depreciation_active = (
+			a.stock_to_asset_accounting_treatment == "Immediate Depreciation"
+			and a.stock_to_asset_depreciation_journal_entry in active_immediate_entries
+		)
 		a["asset_value"] = (
 			a["net_purchase_amount"]
 			- a["opening_accumulated_depreciation"]
 			- a["depreciated_amount"]
 			+ a["revaluation_amount"]
+		)
+		if a.stock_to_asset_accounting_treatment == "Expense" or immediate_depreciation_active:
+			a["asset_value"] = 0
+		a["expensed_amount"] = (
+			a.net_purchase_amount if a.stock_to_asset_accounting_treatment == "Expense" else 0
 		)
 
 		del a["name"]
@@ -381,10 +406,28 @@ def get_group_by_data(
 				"opening_accumulated_depreciation",
 				"depreciated_amount",
 				"asset_value",
+				"expensed_amount",
 			):
 				data[idx][field] = data[idx][field] + a[field]
 
 	return data
+
+
+def get_active_immediate_depreciation_entries(assets):
+	journal_entries = [
+		asset.stock_to_asset_depreciation_journal_entry
+		for asset in assets
+		if asset.get("stock_to_asset_depreciation_journal_entry")
+	]
+	if not journal_entries:
+		return set()
+	return set(
+		frappe.get_all(
+			"Journal Entry",
+			filters={"name": ["in", journal_entries], "docstatus": 1},
+			pluck="name",
+		)
+	)
 
 
 def get_purchase_receipt_supplier_map():
@@ -456,6 +499,13 @@ def get_columns(filters):
 				"width": 250,
 			},
 			{
+				"label": _("Expensed Amount"),
+				"fieldname": "expensed_amount",
+				"fieldtype": "Currency",
+				"options": "Company:company:default_currency",
+				"width": 160,
+			},
+			{
 				"label": _("Company"),
 				"fieldname": "company",
 				"fieldtype": "Link",
@@ -501,6 +551,19 @@ def get_columns(filters):
 			"fieldtype": "Currency",
 			"options": "Company:company:default_currency",
 			"width": 100,
+		},
+		{
+			"label": _("Expensed Amount"),
+			"fieldname": "expensed_amount",
+			"fieldtype": "Currency",
+			"options": "Company:company:default_currency",
+			"width": 110,
+		},
+		{
+			"label": _("Accounting Treatment"),
+			"fieldname": "accounting_treatment",
+			"fieldtype": "Data",
+			"width": 150,
 		},
 		{
 			"label": _("Opening Accumulated Depreciation"),

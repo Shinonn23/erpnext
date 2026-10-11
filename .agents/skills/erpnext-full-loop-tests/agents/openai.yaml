@@ -1,0 +1,4 @@
+interface:
+  display_name: "ERPNext Full Loop Tests"
+  short_description: "Native lifecycle tests across ERPNext modules"
+  default_prompt: "Use $erpnext-full-loop-tests to add full loop tests for the specified ERPNext feature on the clean test site I provide."

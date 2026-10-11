@@ -20,8 +20,11 @@ class TestAssetMovementRequestReference(unittest.TestCase):
 
 	def movement(self, reference_doctype="Material Request", reference_name="CUR-001"):
 		movement = AssetMovement.__new__(AssetMovement)
+		movement.doctype = "Asset Movement"
+		movement.meta = frappe._dict(_table_doctypes=[])
 		movement.reference_doctype = reference_doctype
 		movement.reference_name = reference_name
+		movement._action = "save"
 		movement.assets = []
 		return movement
 
@@ -38,7 +41,7 @@ class TestAssetMovementRequestReference(unittest.TestCase):
 			with self.assertRaises(ValueError):
 				self.movement(reference_name=None).validate_material_request()
 
-	def test_request_items_cannot_use_purchase_reference(self):
+	def test_material_request_items_cannot_use_purchase_reference(self):
 		movement = self.movement("Purchase Invoice")
 		movement.assets = [frappe._dict(request_item="CUR-ITEM-001")]
 		with patch("frappe.throw", side_effect=ValueError):
@@ -49,6 +52,16 @@ class TestAssetMovementRequestReference(unittest.TestCase):
 		request = Mock(material_request_type="Customer Borrow / Loan", request_progress_status="Fulfilled")
 		with patch("frappe.get_doc", return_value=request) as get_doc:
 			self.movement().update_request_progress()
+		get_doc.assert_called_once_with("Material Request", "CUR-001")
+		request.update_progress.assert_called_once_with()
+		request.db_set.assert_called_once_with("request_progress_status", "Fulfilled")
+
+	def test_customer_request_asset_movement_updates_request_progress(self):
+		movement = self.movement()
+		request = Mock(material_request_type="Customer Demo", request_progress_status="Fulfilled")
+		with patch("frappe.get_doc", return_value=request) as get_doc:
+			movement.update_request_progress()
+
 		get_doc.assert_called_once_with("Material Request", "CUR-001")
 		request.update_progress.assert_called_once_with()
 		request.db_set.assert_called_once_with("request_progress_status", "Fulfilled")
@@ -84,22 +97,20 @@ class TestAssetMovementRequestReference(unittest.TestCase):
 		movement.purpose = "Transfer"
 		movement.customer = None
 		movement.expected_return_date = None
-		movement.shipment_source_movement = None
 		movement.get = lambda fieldname: False
 		row = frappe._dict(
 			asset="ASSET-001",
-			request_item="MR-ITEM-001",
+			request_item="MR-ASSET-001",
 			source_location=None,
 			target_location="Target Location",
-			shipment_destination_location=None,
 		)
 		movement.assets = [row]
 		request_item = frappe._dict(
-			name="MR-ITEM-001",
+			name="MR-ASSET-001",
 			parent="MAT-MR-001",
-			asset_transfer_asset="ASSET-001",
-			asset_transfer_source_location="Source Location",
-			asset_transfer_target_location="Target Location",
+			asset="ASSET-001",
+			source_location="Source Location",
+			target_location="Target Location",
 			qty=1,
 			fulfilled_qty=0,
 		)
@@ -116,23 +127,21 @@ class TestAssetMovementRequestReference(unittest.TestCase):
 		movement.purpose = "Transfer"
 		movement.customer = None
 		movement.expected_return_date = None
-		movement.shipment_source_movement = None
 		movement.get = lambda fieldname: False
 		movement.assets = [
 			frappe._dict(
 				asset="ASSET-001",
-				request_item="MR-ITEM-001",
+				request_item="MR-ASSET-001",
 				source_location="Source Location",
 				target_location="Target Location",
-				shipment_destination_location=None,
 			)
 		]
 		request_item = frappe._dict(
-			name="MR-ITEM-001",
+			name="MR-ASSET-001",
 			parent="MAT-MR-001",
-			asset_transfer_asset="ASSET-001",
-			asset_transfer_source_location="Source Location",
-			asset_transfer_target_location="Target Location",
+			asset="ASSET-001",
+			source_location="Source Location",
+			target_location="Target Location",
 			qty=1,
 			fulfilled_qty=0,
 		)
@@ -166,7 +175,6 @@ class TestAssetMovementRequestReference(unittest.TestCase):
 			patch("frappe.get_doc", side_effect=lambda doctype, name: request if doctype == "Material Request" else request_item),
 			patch("frappe.db.get_value", return_value="ITEM-001"),
 			patch("frappe.db.sql") as sql,
-			patch("erpnext.assets.doctype.material_request.material_request.get_in_transit_asset_movement_qty", return_value=0),
 			patch(
 				"erpnext.assets.doctype.material_request.material_request.get_customer_delivery_snapshot",
 				return_value=frappe._dict(),

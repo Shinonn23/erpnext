@@ -9,12 +9,13 @@
   "item_name",
   "batch_no",
   "serial_no",
-  "storage_location",
   "column_break_1",
   "system_qty",
   "counted_qty",
   "difference_qty",
-  "is_counted"
+  "is_counted",
+  "inventory_dimension",
+  "storage_location"
  ],
  "fields": [
   {
@@ -93,6 +94,12 @@
    "fieldtype": "Check",
    "in_list_view": 1,
    "label": "Counted"
+  },
+  {
+   "fieldname": "inventory_dimension",
+   "fieldtype": "Section Break",
+   "label": "Inventory Dimension",
+   "collapsible": 1
   }
  ],
  "istable": 1,

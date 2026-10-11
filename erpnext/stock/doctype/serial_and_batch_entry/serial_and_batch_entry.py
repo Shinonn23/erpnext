@@ -30,6 +30,7 @@ class SerialandBatchEntry(Document):
 		serial_no: DF.Link | None
 		stock_queue: DF.SmallText | None
 		stock_value_difference: DF.Float
+		storage_location: DF.Link | None
 		type_of_transaction: DF.Data | None
 		voucher_detail_no: DF.Data | None
 		voucher_no: DF.Data | None

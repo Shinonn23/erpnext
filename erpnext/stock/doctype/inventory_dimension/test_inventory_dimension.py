@@ -1,6 +1,10 @@
 # Copyright (c) 2022, Frappe Technologies Pvt. Ltd. and Contributors
 # See license.txt
 
+import json
+from pathlib import Path
+from unittest.mock import patch
+
 import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_field
 from frappe.utils import nowdate, nowtime
@@ -14,6 +18,7 @@ from erpnext.stock.doctype.inventory_dimension.inventory_dimension import (
 	DoNotChangeError,
 	delete_dimension,
 	get_inventory_dimensions,
+	get_inventory_documents,
 )
 from erpnext.stock.doctype.item.test_item import create_item, make_item
 from erpnext.stock.doctype.purchase_receipt.test_purchase_receipt import (
@@ -41,6 +46,200 @@ class TestInventoryDimension(ERPNextTestSuite):
 		for dimension in ("Pallet 75", "Pallet Backend"):
 			if frappe.db.exists("Inventory Dimension", dimension):
 				delete_dimension(dimension)
+
+	def test_inventory_dimension_doctypes_come_from_hooks(self):
+		with patch(
+			"erpnext.stock.doctype.inventory_dimension.inventory_dimension.frappe.get_hooks",
+			return_value=["Stock Entry Detail", "Custom Stock Row", "Custom Stock Row"],
+		) as get_hooks:
+			self.assertEqual(
+				get_inventory_documents(txt="custom", start=0, page_len=1), [["Custom Stock Row"]]
+			)
+
+		get_hooks.assert_called_once_with("inventory_dimension_doctypes")
+
+	def test_inventory_dimension_fields_use_schema_anchors(self):
+		dimension = create_inventory_dimension(
+			reference_document="Warehouse",
+			dimension_name="Test Inventory Dimension Layout",
+			apply_to_all_doctypes=0,
+			document_type="Stock Entry Detail",
+			do_not_save=True,
+		)
+		dimension.set_source_and_target_fieldname()
+		fields = dimension.get_dimension_fields()
+		dimension.add_transfer_field("Stock Entry Detail", fields)
+		fields_by_name = {field["fieldname"]: field for field in fields}
+
+		self.assertNotIn("inventory_dimension", fields_by_name)
+		self.assertEqual(fields_by_name[dimension.source_fieldname]["insert_after"], "inventory_dimension")
+		self.assertEqual(fields_by_name[f"to_{dimension.source_fieldname}"]["insert_after"], "inventory_dimension_col_break")
+		self.assertNotIn("inventory_dimension_col_break", fields_by_name)
+
+		dimension.document_type = "Purchase Receipt Item"
+		fields = dimension.get_dimension_fields()
+		dimension.add_transfer_field("Purchase Receipt Item", fields)
+		fields_by_name = {field["fieldname"]: field for field in fields}
+
+		self.assertEqual(fields_by_name[dimension.source_fieldname]["insert_after"], "inventory_dimension_col_break")
+		self.assertEqual(fields_by_name[f"rejected_{dimension.source_fieldname}"]["insert_after"], "inventory_dimension")
+		self.assertEqual(fields_by_name[f"from_{dimension.source_fieldname}"]["insert_after"], "inventory_dimension")
+
+		dimension.document_type = "Packed Item"
+		fields = dimension.get_dimension_fields()
+		dimension.add_transfer_field("Packed Item", fields)
+		fields_by_name = {field["fieldname"]: field for field in fields}
+		self.assertEqual(fields_by_name[dimension.source_fieldname]["insert_after"], "inventory_dimension")
+		self.assertEqual(
+			fields_by_name[dimension.source_fieldname]["label"],
+			f"Source {dimension.dimension_name}",
+		)
+		self.assertEqual(
+			fields_by_name[f"to_{dimension.source_fieldname}"]["insert_after"],
+			"inventory_dimension_col_break",
+		)
+		self.assertEqual(
+			fields_by_name[f"to_{dimension.source_fieldname}"]["depends_on"],
+			"eval:doc.target_warehouse",
+		)
+
+	def test_inventory_dimension_doctypes_have_schema_anchors(self):
+		schema_dir = Path(frappe.get_app_path("erpnext"))
+		doctype_schemas = {}
+		for path in schema_dir.rglob("*.json"):
+			data = json.loads(path.read_text())
+			if isinstance(data, dict) and data.get("doctype") == "DocType":
+				doctype_schemas[data["name"]] = data
+
+		transfer_doctypes = {
+			"Packed Item",
+			"Stock Entry Detail",
+			"Sales Invoice Item",
+			"Delivery Note Item",
+			"Purchase Invoice Item",
+			"Purchase Receipt Item",
+		}
+		expected_dimension_fields = {
+			"Packed Item": [
+				"inventory_dimension",
+				"storage_location",
+				"inventory_dimension_col_break",
+				"to_storage_location",
+			],
+			"Stock Entry Detail": [
+				"inventory_dimension",
+				"storage_location",
+				"inventory_dimension_col_break",
+				"to_storage_location",
+			],
+			"Delivery Note Item": [
+				"inventory_dimension",
+				"storage_location",
+				"inventory_dimension_col_break",
+				"to_storage_location",
+			],
+			"Sales Invoice Item": [
+				"inventory_dimension",
+				"storage_location",
+				"inventory_dimension_col_break",
+				"to_storage_location",
+			],
+			"Purchase Invoice Item": [
+				"inventory_dimension",
+				"rejected_storage_location",
+				"from_storage_location",
+				"inventory_dimension_col_break",
+				"storage_location",
+			],
+			"Purchase Receipt Item": [
+				"inventory_dimension",
+				"rejected_storage_location",
+				"from_storage_location",
+				"inventory_dimension_col_break",
+				"storage_location",
+			],
+		}
+		for doctype in frappe.get_hooks("inventory_dimension_doctypes", app_name="erpnext"):
+			schema = doctype_schemas[doctype]
+			fieldnames = [field["fieldname"] for field in schema["fields"]]
+			self.assertIn("inventory_dimension", fieldnames, doctype)
+			self.assertIn("inventory_dimension", schema["field_order"], doctype)
+			if doctype in transfer_doctypes:
+				self.assertIn("inventory_dimension_col_break", fieldnames, doctype)
+				self.assertIn("inventory_dimension_col_break", schema["field_order"], doctype)
+				expected = expected_dimension_fields[doctype]
+			else:
+				expected = ["inventory_dimension", "storage_location"]
+			field_order = schema["field_order"]
+			section_index = field_order.index("inventory_dimension")
+			if doctype == "Job Card":
+				self.assertEqual(field_order[section_index : section_index + len(expected)], expected, doctype)
+				self.assertLess(section_index, field_order.index("scheduled_time_tab"), doctype)
+			else:
+				self.assertEqual(field_order[section_index:], expected, doctype)
+			self.assertEqual(fieldnames.count("inventory_dimension"), 1, doctype)
+
+		for doctype in ("Stock Ledger Entry", "Stock Closing Balance"):
+			self.assertIn("inventory_dimension", doctype_schemas[doctype]["field_order"], doctype)
+			field_order = doctype_schemas[doctype]["field_order"]
+			section_index = field_order.index("inventory_dimension")
+			self.assertEqual(field_order[section_index:], ["inventory_dimension", "storage_location"], doctype)
+
+		loan_item_doctypes = {
+			"Custody Loan Adjustment Item",
+			"Custody Loan Item",
+			"Custody Loan Return Item",
+		}
+		self.assertTrue(loan_item_doctypes.isdisjoint(frappe.get_hooks("inventory_dimension_doctypes")))
+		for doctype in loan_item_doctypes:
+			fieldnames = [field["fieldname"] for field in doctype_schemas[doctype]["fields"]]
+			self.assertNotIn("inventory_dimension", fieldnames, doctype)
+			self.assertNotIn("storage_location", fieldnames, doctype)
+
+		retired_doctypes = {
+			"Maintenance Visit Purpose",
+			"Packing Slip Item",
+			"Purchase Receipt Item Supplied",
+			"Quality Inspection",
+			"Warranty Claim",
+			"Stock to Asset Conversion Asset",
+		}
+		inventory_dimension_doctypes = frappe.get_hooks("inventory_dimension_doctypes", app_name="erpnext")
+		self.assertTrue(retired_doctypes.isdisjoint(inventory_dimension_doctypes))
+		self.assertIn("Stock to Asset Conversion Item", inventory_dimension_doctypes)
+		for doctype in retired_doctypes:
+			fieldnames = [field["fieldname"] for field in doctype_schemas[doctype]["fields"]]
+			self.assertNotIn("inventory_dimension", fieldnames, doctype)
+			self.assertNotIn("storage_location", fieldnames, doctype)
+
+	def test_inventory_dimension_anchor_migration_deletes_only_anchor_fields(self):
+		from erpnext.patches.v16_0.migrate_inventory_dimension_layout_anchors import execute
+
+		with (
+			patch(
+				"erpnext.patches.v16_0.migrate_inventory_dimension_layout_anchors.frappe.get_hooks",
+				return_value=["Stock Entry Detail"],
+			),
+			patch(
+				"erpnext.patches.v16_0.migrate_inventory_dimension_layout_anchors.frappe.db.exists",
+				side_effect=[True, False, False, True],
+			),
+			patch(
+				"erpnext.patches.v16_0.migrate_inventory_dimension_layout_anchors.frappe.db.get_value",
+				side_effect=[
+					"Stock Entry Detail-inventory_dimension",
+					"Stock Ledger Entry-inventory_dimension_col_break",
+				],
+			),
+			patch("erpnext.patches.v16_0.migrate_inventory_dimension_layout_anchors.frappe.delete_doc") as delete_doc,
+			patch("erpnext.patches.v16_0.migrate_inventory_dimension_layout_anchors.frappe.clear_cache"),
+		):
+			execute()
+
+		self.assertEqual(
+			[call.args[1] for call in delete_doc.call_args_list],
+			["Stock Entry Detail-inventory_dimension", "Stock Ledger Entry-inventory_dimension_col_break"],
+		)
 
 	def test_validate_inventory_dimension(self):
 		# Can not be child doc

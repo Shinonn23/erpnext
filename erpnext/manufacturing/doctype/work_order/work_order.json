@@ -27,10 +27,14 @@
   "disassembled_qty",
   "warehouses",
   "source_warehouse",
+  "source_storage_location",
   "wip_warehouse",
+  "wip_storage_location",
   "column_break_12",
   "fg_warehouse",
+  "fg_storage_location",
   "scrap_warehouse",
+  "scrap_storage_location",
   "operations_section",
   "transfer_material_against",
   "operations",
@@ -731,6 +735,30 @@
    "label": "Secondary Items (as per BOM)",
    "options": "Work Order Additional Item",
    "read_only": 1
+  },
+  {
+   "fieldname": "wip_storage_location",
+   "fieldtype": "Link",
+   "label": "WIP Storage Location",
+   "options": "Storage Location"
+  },
+  {
+   "fieldname": "fg_storage_location",
+   "fieldtype": "Link",
+   "label": "Target Storage Location",
+   "options": "Storage Location"
+  },
+  {
+   "fieldname": "scrap_storage_location",
+   "fieldtype": "Link",
+   "label": "Scrap Storage Location",
+   "options": "Storage Location"
+  },
+  {
+   "fieldname": "source_storage_location",
+   "fieldtype": "Link",
+   "label": "Source Storage Location",
+   "options": "Storage Location"
   }
  ],
  "grid_page_length": 50,

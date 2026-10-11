@@ -74,6 +74,11 @@
   "quality_inspection",
   "rejected_warehouse",
   "rejected_serial_and_batch_bundle",
+  "inventory_dimension",
+  "rejected_storage_location",
+  "from_storage_location",
+  "inventory_dimension_col_break",
+  "storage_location",
   "section_break_rqbe",
   "serial_no",
   "rejected_serial_no",
@@ -997,13 +1002,45 @@
    "label": "Delivered by Supplier",
    "print_hide": 1,
    "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "inventory_dimension",
+   "fieldtype": "Section Break",
+   "label": "Inventory Dimension"
+  },
+  {
+   "fieldname": "inventory_dimension_col_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "rejected_storage_location",
+   "fieldtype": "Link",
+   "label": "Rejected Storage Location",
+   "options": "Storage Location",
+   "search_index": 1
+  },
+  {
+   "depends_on": "eval:parent.is_internal_supplier == 1",
+   "fieldname": "from_storage_location",
+   "fieldtype": "Link",
+   "label": "Source Storage Location",
+   "options": "Storage Location",
+   "search_index": 1
+  },
+  {
+   "fieldname": "storage_location",
+   "fieldtype": "Link",
+   "label": "Target Storage Location",
+   "options": "Storage Location",
+   "search_index": 1
   }
  ],
  "grid_page_length": 50,
  "idx": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-08-07 17:31:31.732720",
+ "modified": "2026-10-10 00:53:06.134634",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Purchase Invoice Item",

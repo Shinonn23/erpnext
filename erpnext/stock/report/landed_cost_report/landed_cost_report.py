@@ -5,11 +5,16 @@ import frappe
 from frappe import _
 
 import erpnext
+from erpnext.stock.report.storage_location_utils import add_location_column, location_key
 
 
 def execute(filters: dict | None = None):
 	columns = get_columns()
 	data = get_data(filters)
+	columns.append({"label": _("Warehouse"), "fieldname": "warehouse", "fieldtype": "Link", "options": "Warehouse", "width": 150})
+	add_location_column(columns, filters)
+	columns.append({"label": _("Allocated Landed Cost"), "fieldname": "allocated_cost", "fieldtype": "Currency", "width": 150})
+	data = add_location_allocations(data, filters)
 
 	return columns, data
 
@@ -160,3 +165,36 @@ def get_vendor_invoices(landed_vouchers):
 		result.setdefault(row.parent, []).append(row.vendor_invoice)
 
 	return result
+
+
+def add_location_allocations(data, filters):
+	names = [row["name"] for row in data if row.get("name")]
+	if not names:
+		return data
+	items = frappe.get_all("Landed Cost Item", filters={"parent": ["in", names]},
+		fields=["parent", "receipt_document_type", "receipt_document", "purchase_receipt_item", "stock_entry_item", "applicable_charges"])
+	groups = {}
+	for item in items:
+		if filters.get("raw_material_voucher_type") and item.receipt_document_type != filters.raw_material_voucher_type:
+			continue
+		if filters.get("raw_material_voucher_no") and item.receipt_document != filters.raw_material_voucher_no:
+			continue
+		warehouse = location = None
+		if item.receipt_document_type == "Stock Entry" and item.stock_entry_item:
+			warehouse, location = frappe.db.get_value("Stock Entry Detail", item.stock_entry_item, ["t_warehouse", "to_storage_location"]) or (None, None)
+		elif item.receipt_document_type in ("Purchase Receipt", "Purchase Invoice", "Subcontracting Receipt") and item.purchase_receipt_item:
+			warehouse, location = frappe.db.get_value(item.receipt_document_type + " Item", item.purchase_receipt_item, ["warehouse", "storage_location"]) or (None, None)
+		key = (item.parent, warehouse or "", location_key({"storage_location": location}, filters), item.receipt_document_type, item.receipt_document)
+		groups[key] = groups.get(key, 0) + item.applicable_charges
+	rows = []
+	for row in data:
+		row = frappe._dict(row)
+		row.indent = 0
+		rows.append(row)
+		if not row.get("name"):
+			continue
+		for (name, warehouse, location, voucher_type, voucher_no), value in groups.items():
+			if name == row.name:
+				rows.append(frappe._dict(warehouse=warehouse or None, storage_location=location or None,
+					voucher_type=voucher_type, voucher_no=voucher_no, allocated_cost=value, currency=row.currency, indent=1))
+	return rows

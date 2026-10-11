@@ -433,16 +433,6 @@ erpnext.buying.PurchaseOrderController = class PurchaseOrderController extends (
 						);
 					}
 
-					if (flt(doc.per_billed) < 100 && frappe.boot.user.in_create.includes("Payment Request")) {
-						this.frm.add_custom_button(
-							__("Payment Request"),
-							function () {
-								me.make_payment_request_with_schedule();
-							},
-							__("Create")
-						);
-					}
-
 					if (doc.docstatus === 1 && !doc.inter_company_order_reference) {
 						let me = this;
 						let internal = me.frm.doc.is_internal_supplier;

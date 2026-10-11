@@ -8,7 +8,10 @@ from frappe import _
 from frappe.utils import flt
 from frappe.utils.nestedset import get_descendants_of
 
+from erpnext.stock.report.storage_location_utils import add_location_column
+
 SLE_FIELDS = (
+	"storage_location",
 	"name",
 	"item_code",
 	"warehouse",
@@ -27,7 +30,7 @@ SLE_FIELDS = (
 
 
 def execute(filters=None):
-	columns = get_columns()
+	columns = add_location_column(get_columns(), filters)
 	data = get_data(filters)
 	return columns, data
 

@@ -2,7 +2,7 @@
 # For license information, please see license.txt
 
 import datetime
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 
 import frappe
 from frappe import _
@@ -10,6 +10,7 @@ from frappe.utils import date_diff
 
 from erpnext.accounts.report.general_ledger.general_ledger import get_gl_entries
 from erpnext.accounts.report.utils import validate_mandatory_date_range
+from erpnext.stock.report.storage_location_utils import add_location_column, location_key
 
 Filters = frappe._dict
 Row = frappe._dict
@@ -25,6 +26,16 @@ def execute(filters: Filters) -> tuple[Columns, Data]:
 	update_filters_with_account(filters)
 	validate_filters(filters)
 	columns = get_columns()
+	columns.append(
+		{
+			"label": _("Warehouse"),
+			"fieldname": "warehouse",
+			"fieldtype": "Link",
+			"options": "Warehouse",
+			"width": 150,
+		}
+	)
+	add_location_column(columns, filters)
 	data = get_data(filters)
 	return columns, data
 
@@ -48,19 +59,28 @@ def get_columns() -> Columns:
 def get_data(filters: Filters) -> Data:
 	filtered_entries = get_filtered_entries(filters)
 	svd_list = get_stock_value_difference_list(filtered_entries)
-	leveled_dict = get_leveled_dict()
-
-	assign_self_values(leveled_dict, svd_list)
-	assign_agg_values(leveled_dict)
-
 	data = []
-	for item in leveled_dict.items():
-		i = item[1]
-		if i["agg_value"] == 0:
-			continue
-		data.append(get_row(i["name"], i["agg_value"], i["is_group"], i["level"]))
-		if i["self_value"] < i["agg_value"] and i["self_value"] > 0:
-			data.append(get_row(i["name"], i["self_value"], 0, i["level"] + 1))
+	groups = defaultdict(list)
+	for entry in svd_list:
+		groups[(entry.warehouse, location_key(entry, filters))].append(entry)
+	for (warehouse, location), entries in groups.items():
+		leveled_dict = get_leveled_dict()
+
+		assign_self_values(leveled_dict, entries)
+		assign_agg_values(leveled_dict)
+
+		for item in leveled_dict.items():
+			i = item[1]
+			if i["agg_value"] == 0:
+				continue
+			row = get_row(i["name"], i["agg_value"], i["is_group"], i["level"])
+			row.update(warehouse=warehouse, storage_location=location or None)
+			data.append(row)
+			if i["self_value"] < i["agg_value"] and i["self_value"] > 0:
+				row = get_row(i["name"], i["self_value"], 0, i["level"] + 1)
+				row.update(warehouse=warehouse, storage_location=location or None)
+				data.append(row)
+
 	return data
 
 
@@ -80,7 +100,7 @@ def get_stock_value_difference_list(filtered_entries: FilteredEntries) -> SVDLis
 	voucher_nos = [fe.get("voucher_no") for fe in filtered_entries]
 	svd_list = frappe.get_list(
 		"Stock Ledger Entry",
-		fields=["item_code", "stock_value_difference"],
+		fields=["item_code", "warehouse", "storage_location", "stock_value_difference"],
 		filters=[("voucher_no", "in", voucher_nos), ("is_cancelled", "=", 0)],
 	)
 	assign_item_groups_to_svd_list(svd_list)

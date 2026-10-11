@@ -42,8 +42,9 @@ from erpnext.stock.doctype.batch.batch import make_batch
 from erpnext.stock.doctype.item.item import get_item_defaults, validate_end_of_life
 from erpnext.stock.doctype.serial_no.serial_no import get_available_serial_nos, get_serial_nos
 from erpnext.stock.doctype.stock_reservation_entry.stock_reservation_entry import StockReservation
+from erpnext.stock.doctype.storage_location.storage_location import validate_storage_location_warehouse
 from erpnext.stock.stock_balance import get_planned_qty, update_bin_qty
-from erpnext.stock.utils import get_bin, get_latest_stock_qty, validate_warehouse_company
+from erpnext.stock.utils import get_bin, get_latest_stock_qty, get_stock_balance, validate_warehouse_company
 from erpnext.utilities.transaction_base import validate_uom_is_integer
 
 CONSUMPTION_PURPOSES = ("Manufacture", "Material Consumption for Manufacture")
@@ -103,6 +104,7 @@ class WorkOrder(Document):
 		disassembled_qty: DF.Float
 		expected_delivery_date: DF.Date | None
 		fg_warehouse: DF.Link | None
+		fg_storage_location: DF.Link | None
 		from_wip_warehouse: DF.Check
 		has_batch_no: DF.Check
 		has_serial_no: DF.Check
@@ -134,9 +136,11 @@ class WorkOrder(Document):
 		sales_order: DF.Link | None
 		sales_order_item: DF.Data | None
 		scrap_warehouse: DF.Link | None
+		scrap_storage_location: DF.Link | None
 		secondary_items: DF.Table[WorkOrderAdditionalItem]
 		skip_transfer: DF.Check
 		source_warehouse: DF.Link | None
+		source_storage_location: DF.Link | None
 		status: DF.Literal[
 			"",
 			"Draft",
@@ -159,6 +163,7 @@ class WorkOrder(Document):
 		update_consumed_material_cost_in_project: DF.Check
 		use_multi_level_bom: DF.Check
 		wip_warehouse: DF.Link | None
+		wip_storage_location: DF.Link | None
 	# end: auto-generated types
 
 	def onload(self):
@@ -298,6 +303,7 @@ class WorkOrder(Document):
 			"Manufacturing Settings", "allow_editing_of_items_and_quantities_in_work_order"
 		):
 			self.set_required_items(reset_only_qty=len(self.get("required_items")))
+		self.validate_storage_locations()
 
 		self.enable_auto_reserve_stock()
 		self.validate_operations_sequence()
@@ -498,6 +504,12 @@ class WorkOrder(Document):
 		for row in self.required_items:
 			if not row.source_warehouse:
 				row.source_warehouse = self.source_warehouse
+			if (
+				not row.source_storage_location
+				and self.source_storage_location
+				and row.source_warehouse == self.source_warehouse
+			):
+				row.source_storage_location = self.source_storage_location
 
 	def reset_use_multi_level_bom(self):
 		if self.is_new():
@@ -607,6 +619,41 @@ class WorkOrder(Document):
 				frappe.throw(_("Sales Order {0} is not valid").format(self.sales_order))
 
 	def set_default_warehouse(self):
+		if self.bom_no:
+			bom_defaults = frappe.get_cached_value(
+				"BOM",
+				self.bom_no,
+				[
+					"default_source_storage_location",
+					"default_target_warehouse",
+					"default_target_storage_location",
+				],
+				as_dict=True,
+			)
+			if (
+				self.source_warehouse
+				and not self.source_storage_location
+				and bom_defaults.default_source_storage_location
+				and frappe.get_cached_value(
+					"Storage Location", bom_defaults.default_source_storage_location, "warehouse"
+				)
+				== self.source_warehouse
+			):
+				self.source_storage_location = bom_defaults.default_source_storage_location
+
+			if not self.fg_warehouse and bom_defaults.default_target_warehouse:
+				self.fg_warehouse = bom_defaults.default_target_warehouse
+
+			if (
+				not self.fg_storage_location
+				and bom_defaults.default_target_storage_location
+				and frappe.get_cached_value(
+					"Storage Location", bom_defaults.default_target_storage_location, "warehouse"
+				)
+				== self.fg_warehouse
+			):
+				self.fg_storage_location = bom_defaults.default_target_storage_location
+
 		if not self.wip_warehouse and not self.skip_transfer:
 			self.wip_warehouse = frappe.get_cached_value("Company", self.company, "default_wip_warehouse")
 		if not self.fg_warehouse:
@@ -614,6 +661,26 @@ class WorkOrder(Document):
 				frappe.get_cached_value("Company", self.company, "default_fg_warehouse")
 				or self.get_production_item_warehouse()
 			)
+
+	def validate_storage_locations(self):
+		for location_field, warehouse_field in (
+			("source_storage_location", "source_warehouse"),
+			("wip_storage_location", "wip_warehouse"),
+			("fg_storage_location", "fg_warehouse"),
+			("scrap_storage_location", "scrap_warehouse"),
+		):
+			validate_storage_location_warehouse(self.get(location_field), self.get(warehouse_field))
+
+		for row in self.required_items:
+			validate_storage_location_warehouse(row.source_storage_location, row.source_warehouse)
+
+		for row in self.operations:
+			for location_field, warehouse_field in (
+				("source_storage_location", "source_warehouse"),
+				("wip_storage_location", "wip_warehouse"),
+				("fg_storage_location", "fg_warehouse"),
+			):
+				validate_storage_location_warehouse(row.get(location_field), row.get(warehouse_field))
 
 	def get_production_item_warehouse(self):
 		if not self.production_item:
@@ -628,10 +695,15 @@ class WorkOrder(Document):
 			self.wip_warehouse = None
 
 	def validate_warehouse_belongs_to_company(self):
-		warehouses = [self.fg_warehouse, self.wip_warehouse]
+		warehouses = [self.source_warehouse, self.fg_warehouse, self.wip_warehouse, self.scrap_warehouse]
 		for d in self.get("required_items"):
 			if d.source_warehouse not in warehouses:
 				warehouses.append(d.source_warehouse)
+		for operation in self.operations:
+			for fieldname in ("source_warehouse", "wip_warehouse", "fg_warehouse"):
+				warehouse = operation.get(fieldname)
+				if warehouse and warehouse not in warehouses:
+					warehouses.append(warehouse)
 
 		for wh in warehouses:
 			validate_warehouse_company(wh, self.company)
@@ -1487,8 +1559,11 @@ class WorkOrder(Document):
 					"finished_good",
 					"is_subcontracted",
 					"wip_warehouse",
+					"wip_storage_location",
 					"source_warehouse",
+					"source_storage_location",
 					"fg_warehouse",
+					"fg_storage_location",
 					"workstation_type",
 					"base_hour_rate as hour_rate",
 					"time_in_mins",
@@ -1557,12 +1632,21 @@ class WorkOrder(Document):
 		for idx, op in enumerate(operations):
 			if not op.source_warehouse:
 				op.source_warehouse = self.source_warehouse
+			if not op.source_storage_location and op.source_warehouse == self.source_warehouse:
+				op.source_storage_location = self.source_storage_location
 
 			if not op.fg_warehouse:
 				op.fg_warehouse = self.fg_warehouse if idx == last_idx else self.source_warehouse
+			if not op.fg_storage_location:
+				if op.fg_warehouse == self.fg_warehouse:
+					op.fg_storage_location = self.fg_storage_location
+				elif op.fg_warehouse == self.source_warehouse:
+					op.fg_storage_location = self.source_storage_location
 
 			if not op.wip_warehouse:
 				op.wip_warehouse = self.wip_warehouse
+			if not op.wip_storage_location and op.wip_warehouse == self.wip_warehouse:
+				op.wip_storage_location = self.wip_storage_location
 
 	def calculate_time(self):
 		for d in self.get("operations"):
@@ -1737,10 +1821,46 @@ class WorkOrder(Document):
 	def set_available_qty(self):
 		for d in self.get("required_items"):
 			if d.source_warehouse:
-				d.available_qty_at_source_warehouse = get_latest_stock_qty(d.item_code, d.source_warehouse)
+				d.available_qty_at_source_warehouse = (
+					get_stock_balance(
+						d.item_code,
+						d.source_warehouse,
+						inventory_dimensions_dict={"storage_location": d.source_storage_location},
+					)
+					if d.source_storage_location
+					else get_latest_stock_qty(d.item_code, d.source_warehouse)
+				)
 
-			if self.wip_warehouse:
-				d.available_qty_at_wip_warehouse = get_latest_stock_qty(d.item_code, self.wip_warehouse)
+			operation = self.get_operation_for_required_item(d)
+			wip_warehouse = (operation.wip_warehouse if operation else None) or self.wip_warehouse
+			wip_storage_location = (
+				operation.wip_storage_location
+				if operation and operation.wip_warehouse == wip_warehouse
+				else self.wip_storage_location
+				if wip_warehouse == self.wip_warehouse
+				else None
+			)
+			if wip_warehouse:
+				d.available_qty_at_wip_warehouse = (
+					get_stock_balance(
+						d.item_code,
+						wip_warehouse,
+						inventory_dimensions_dict={"storage_location": wip_storage_location},
+					)
+					if wip_storage_location
+					else get_latest_stock_qty(d.item_code, wip_warehouse)
+				)
+
+	def get_operation_for_required_item(self, item):
+		return next(
+			(
+				row
+				for row in self.operations
+				if item.operation_row_id
+				and (row.idx == item.operation_row_id or row.name == item.operation_row_id)
+			),
+			None,
+		)
 
 	def set_required_items(self, reset_only_qty=False, reset_source_warehouse=False):
 		"""set required_items for production to keep track of reserved qty"""
@@ -1758,13 +1878,43 @@ class WorkOrder(Document):
 
 			if reset_only_qty:
 				for d in self.get("required_items"):
-					if item_dict.get(d.item_code):
-						d.required_qty = item_dict.get(d.item_code).get("qty")
+					matching_items = [
+						item
+						for item in item_dict.values()
+						if item.item_code == d.item_code
+						and item.get("source_warehouse") == d.source_warehouse
+						and item.get("source_storage_location") == d.source_storage_location
+						and (
+							(item.get("operation_row_id") and item.operation_row_id == d.operation_row_id)
+							or (
+								not item.get("operation_row_id")
+								and item.get("operation") == d.operation
+							)
+						)
+					]
+					if matching_items:
+						d.required_qty = sum(flt(item.qty) for item in matching_items)
 
 					if not d.operation:
 						d.operation = operation
 			else:
 				for item in sorted(item_dict.values(), key=lambda d: d["idx"] or float("inf")):
+					source_warehouse = self.source_warehouse or item.source_warehouse
+					if not source_warehouse and item.source_storage_location:
+						source_warehouse = frappe.get_cached_value(
+							"Storage Location", item.source_storage_location, "warehouse"
+						)
+					if not source_warehouse:
+						source_warehouse = item.default_warehouse or get_item_group_defaults(
+							item.item_code, self.company
+						).get("default_warehouse")
+					if reset_source_warehouse:
+						source_warehouse = self.source_warehouse
+
+					source_storage_location = item.source_storage_location
+					if not source_storage_location and source_warehouse == self.source_warehouse:
+						source_storage_location = self.source_storage_location
+
 					self.append(
 						"required_items",
 						{
@@ -1777,16 +1927,8 @@ class WorkOrder(Document):
 							"description": item.description,
 							"allow_alternative_item": item.allow_alternative_item,
 							"required_qty": item.qty,
-							"source_warehouse": (
-								self.source_warehouse
-								or item.source_warehouse
-								or item.default_warehouse
-								or get_item_group_defaults(item.item_code, self.company).get(
-									"default_warehouse"
-								)
-							)
-							if not reset_source_warehouse
-							else self.source_warehouse,
+							"source_warehouse": source_warehouse,
+							"source_storage_location": source_storage_location,
 							"include_item_in_manufacturing": item.include_item_in_manufacturing,
 							"operation_row_id": item.operation_row_id,
 						},
@@ -1813,7 +1955,9 @@ class WorkOrder(Document):
 			row_wise_serial_batch = get_row_wise_serial_batch(self.name)
 
 		for row in self.required_items:
-			transferred_qty = transferred_items.get(row.item_code) or 0.0
+			transferred_qty = transferred_items.get(
+				(row.item_code, row.source_warehouse, row.source_storage_location)
+			) or 0.0
 			row.db_set("transferred_qty", transferred_qty, update_modified=False)
 			if self.reserve_stock:
 				self.update_qty_in_stock_reservation(row, transferred_qty, row_wise_serial_batch)
@@ -1833,6 +1977,8 @@ class WorkOrder(Document):
 	def _material_transfer_qty_by_item(self, is_return):
 		ste = frappe.qb.DocType("Stock Entry")
 		ste_child = frappe.qb.DocType("Stock Entry Detail")
+		warehouse_field = ste_child.t_warehouse if is_return else ste_child.s_warehouse
+		storage_location_field = ste_child.to_storage_location if is_return else ste_child.storage_location
 
 		query = (
 			frappe.qb.from_(ste)
@@ -1841,6 +1987,8 @@ class WorkOrder(Document):
 			.select(
 				ste_child.item_code,
 				ste_child.original_item,
+				warehouse_field.as_("warehouse"),
+				storage_location_field.as_("storage_location"),
 				fn.Sum(ste_child.transfer_qty).as_("qty"),
 			)
 			.where(
@@ -1849,14 +1997,18 @@ class WorkOrder(Document):
 				& (ste.purpose == "Material Transfer for Manufacture")
 				& (ste.is_return == is_return)
 			)
-			.groupby(ste_child.item_code, ste_child.original_item)
+			.groupby(ste_child.item_code, ste_child.original_item, warehouse_field, storage_location_field)
 		)
 
 		data = query.run(as_dict=1) or []
 		# An item's own transfer and its substitutes both key to the original item, so sum them.
 		transferred_items = frappe._dict()
 		for d in data:
-			key = d.original_item or d.item_code
+			key = (
+				d.original_item or d.item_code,
+				d.warehouse,
+				d.storage_location,
+			)
 			transferred_items[key] = flt(transferred_items.get(key)) + flt(d.qty)
 		return transferred_items
 
@@ -1887,7 +2039,12 @@ class WorkOrder(Document):
 			return
 
 		min_fraction = min(
-			flt(transferred_items.get(item_code) or 0) / required_qty
+			sum(
+				flt(qty)
+				for (transferred_item_code, _warehouse, _storage_location), qty in transferred_items.items()
+				if transferred_item_code == item_code
+			)
+			/ required_qty
 			for item_code, required_qty in required_by_item.items()
 		)
 		min_fraction = min(min_fraction, 1.0)
@@ -1895,17 +2052,20 @@ class WorkOrder(Document):
 		self.db_set("material_transferred_for_manufacturing", material_transferred)
 
 	def update_qty_in_stock_reservation(self, row, transferred_qty, row_wise_serial_batch):
-		if names := frappe.get_all(
-			"Stock Reservation Entry",
-			filters={
-				"voucher_no": self.name,
-				"item_code": row.item_code,
-				"voucher_detail_no": row.name,
-				"warehouse": row.source_warehouse,
-				"status": ("not in", ["Closed", "Cancelled", "Completed"]),
-			},
-			pluck="name",
-		):
+		sre = frappe.qb.DocType("Stock Reservation Entry")
+		query = (
+			frappe.qb.from_(sre)
+			.select(sre.name)
+			.where(
+				(sre.voucher_no == self.name)
+				& (sre.item_code == row.item_code)
+				& (sre.voucher_detail_no == row.name)
+				& (sre.warehouse == row.source_warehouse)
+				& (sre.status.notin(["Closed", "Cancelled", "Completed"]))
+			)
+		)
+		query = _filter_stock_reservations_by_location(query, sre, row.source_storage_location)
+		if names := query.run(pluck=True):
 			for name in names:
 				doc = frappe.get_doc("Stock Reservation Entry", name)
 				qty_to_update = 0.0
@@ -1938,7 +2098,10 @@ class WorkOrder(Document):
 		returned_dict = self._material_transfer_qty_by_item(is_return=1)
 
 		for row in self.required_items:
-			row.db_set("returned_qty", (returned_dict.get(row.item_code) or 0.0), update_modified=False)
+			returned_qty = returned_dict.get(
+				(row.item_code, row.source_warehouse, row.source_storage_location), 0.0
+			)
+			row.db_set("returned_qty", returned_qty, update_modified=False)
 
 	def update_consumed_qty_for_required_items(self):
 		"""
@@ -1949,33 +2112,67 @@ class WorkOrder(Document):
 		if self.skip_transfer and not self.from_wip_warehouse:
 			wip_warehouse = None
 
+		consumption_groups = {}
 		for item in self.required_items:
-			consumed_qty = get_consumed_qty(self.name, item.item_code) + item.returned_qty
-			item.db_set("consumed_qty", flt(consumed_qty), update_modified=False)
+			operation = self.get_operation_for_required_item(item)
+			if self.skip_transfer and not self.from_wip_warehouse:
+				warehouse, storage_location = item.source_warehouse, item.source_storage_location
+			else:
+				warehouse = (operation.wip_warehouse if operation else None) or wip_warehouse
+				storage_location = (
+					operation.wip_storage_location
+					if operation and operation.wip_warehouse == warehouse
+					else self.wip_storage_location
+					if warehouse == self.wip_warehouse
+					else None
+				)
+			key = (item.item_code, warehouse, storage_location)
+			consumption_groups.setdefault(key, []).append(item)
 
-			if not self.reserve_stock:
-				continue
+		for (item_code, warehouse, storage_location), items in consumption_groups.items():
+			consumed_for_group = get_consumed_qty(
+				self.name, item_code, warehouse, storage_location
+			)
+			required_qty_for_group = sum(flt(item.required_qty) for item in items)
+			for item in items:
+				consumed_qty = (
+					consumed_for_group * flt(item.required_qty) / required_qty_for_group
+					if required_qty_for_group
+					else 0
+				) + flt(item.returned_qty)
+				item.db_set("consumed_qty", flt(consumed_qty), update_modified=False)
 
-			warehouse = wip_warehouse or item.source_warehouse
-			self.update_consumed_qty_in_stock_reservation(item, consumed_qty, warehouse)
+				if self.reserve_stock:
+					reservation_warehouse = warehouse or item.source_warehouse
+					self.update_consumed_qty_in_stock_reservation(
+						item, consumed_qty, reservation_warehouse, storage_location
+					)
 
-	def update_consumed_qty_in_stock_reservation(self, item, consumed_qty, wip_warehouse):
-		filters = {
-			"voucher_no": self.name,
-			"item_code": item.item_code,
-			"voucher_detail_no": item.name,
-			"warehouse": wip_warehouse,
-			"docstatus": 1,
-		}
+	def update_consumed_qty_in_stock_reservation(
+		self, item, consumed_qty, warehouse, storage_location=None
+	):
+		sre = frappe.qb.DocType("Stock Reservation Entry")
+		query = (
+			frappe.qb.from_(sre)
+			.select(sre.name)
+			.where(
+				(sre.voucher_no == self.name)
+				& (sre.item_code == item.item_code)
+				& (sre.voucher_detail_no == item.name)
+				& (sre.warehouse == warehouse)
+				& (sre.docstatus == 1)
+			)
+		)
 
 		if not self.skip_transfer:
-			filters["from_voucher_no"] = ("is", "set")
+			query = query.where(sre.from_voucher_no.isnotnull())
+
+		query = _filter_stock_reservations_by_location(query, sre, storage_location)
 
 		row_wise_serial_batch = get_row_wise_serial_batch(self.name, CONSUMPTION_PURPOSES)
 
-		if names := frappe.get_all(
-			"Stock Reservation Entry", filters=filters, pluck="name", order_by="creation"
-		):
+		query = query.orderby(sre.creation)
+		if names := query.run(pluck=True):
 			for name in names:
 				if consumed_qty < 0:
 					consumed_qty = 0
@@ -2009,7 +2206,7 @@ class WorkOrder(Document):
 	@frappe.whitelist()
 	def make_bom(self):
 		data = frappe.db.sql(
-			""" select sed.item_code, sed.qty, sed.s_warehouse
+			""" select sed.item_code, sed.qty, sed.s_warehouse, sed.storage_location
 			from `tabStock Entry Detail` sed, `tabStock Entry` se
 			where se.name = sed.parent and se.purpose = 'Manufacture'
 			and (sed.t_warehouse is null or sed.t_warehouse = '') and se.docstatus = 1
@@ -2023,7 +2220,15 @@ class WorkOrder(Document):
 		bom.conversion_rate = 1
 
 		for d in data:
-			bom.append("items", {"item_code": d.item_code, "qty": d.qty, "source_warehouse": d.s_warehouse})
+			bom.append(
+				"items",
+				{
+					"item_code": d.item_code,
+					"qty": d.qty,
+					"source_warehouse": d.s_warehouse,
+					"source_storage_location": d.storage_location,
+				},
+			)
 
 		if self.operations:
 			bom.set("operations", self.operations)
@@ -2057,17 +2262,34 @@ class WorkOrder(Document):
 
 	def get_list_of_materials_for_reservation(self, stock_entry):
 		items = frappe._dict()
-		voucher_detail_no = {d.item_code: d.name for d in self.required_items}
 
 		for row in stock_entry.items:
-			if row.item_code not in items:
-				items[row.item_code] = frappe._dict(
+			original_item = row.original_item or row.item_code
+			required_item = None
+			for item in self.required_items:
+				if (
+					item.item_code == original_item
+					and item.source_warehouse == row.s_warehouse
+					and item.source_storage_location == row.storage_location
+				):
+					required_item = item
+					break
+			if not required_item:
+				required_item = next(
+					(item for item in self.required_items if item.item_code == original_item), None
+				)
+			voucher_detail_no = required_item.name if required_item else None
+			key = (row.item_code, row.t_warehouse, row.to_storage_location, voucher_detail_no)
+
+			if key not in items:
+				items[key] = frappe._dict(
 					{
 						"voucher_no": self.name,
 						"voucher_type": self.doctype,
-						"voucher_detail_no": voucher_detail_no.get(row.item_code),
+						"voucher_detail_no": voucher_detail_no,
 						"item_code": row.item_code,
 						"warehouse": row.t_warehouse,
+						"storage_location": row.to_storage_location,
 						"stock_qty": row.transfer_qty,
 						"from_voucher_no": stock_entry.name,
 						"from_voucher_type": stock_entry.doctype,
@@ -2076,9 +2298,9 @@ class WorkOrder(Document):
 					}
 				)
 			else:
-				items[row.item_code]["stock_qty"] += row.transfer_qty
+				items[key]["stock_qty"] += row.transfer_qty
 				if row.serial_and_batch_bundle:
-					items[row.item_code]["serial_and_batch_bundles"].append(row.serial_and_batch_bundle)
+					items[key]["serial_and_batch_bundles"].append(row.serial_and_batch_bundle)
 
 		return items
 
@@ -2120,6 +2342,10 @@ class WorkOrder(Document):
 					or not row.is_finished_item
 					or row.t_warehouse != warehouse
 					or row.item_code != item.item_code
+					or (
+						item.get("storage_location")
+						and row.to_storage_location != item.storage_location
+					)
 				):
 					continue
 
@@ -2130,14 +2356,16 @@ class WorkOrder(Document):
 				else:
 					qty_to_reserve = 0
 
-				if row.item_code not in items:
-					items[row.item_code] = frappe._dict(
+				key = (row.item_code, row.t_warehouse, row.to_storage_location, item.name)
+				if key not in items:
+					items[key] = frappe._dict(
 						{
 							"voucher_no": item.voucher_no,
 							"voucher_type": item.voucher_type,
 							"voucher_detail_no": item.name,
 							"item_code": row.item_code,
 							"warehouse": row.t_warehouse,
+							"storage_location": row.to_storage_location,
 							"stock_qty": reserved_qty,
 							"from_voucher_no": stock_entry.name,
 							"from_voucher_type": stock_entry.doctype,
@@ -2146,7 +2374,7 @@ class WorkOrder(Document):
 						}
 					)
 				else:
-					items[row.item_code]["stock_qty"] += reserved_qty
+					items[key]["stock_qty"] += reserved_qty
 
 		return items
 
@@ -2160,18 +2388,23 @@ class WorkOrder(Document):
 					"name",
 				)
 
-				sres = frappe.get_all(
-					"Stock Reservation Entry",
-					fields=["reserved_qty"],
-					filters={
-						"voucher_no": self.name,
-						"item_code": finished_good,
-						"voucher_detail_no": name,
-						"warehouse": row.t_warehouse,
-						"docstatus": 1,
-						"status": "Reserved",
-					},
+				sre = frappe.qb.DocType("Stock Reservation Entry")
+				query = (
+					frappe.qb.from_(sre)
+					.select(sre.reserved_qty)
+					.where(
+						(sre.voucher_no == self.name)
+						& (sre.item_code == finished_good)
+						& (sre.voucher_detail_no == name)
+						& (sre.warehouse == row.t_warehouse)
+						& (sre.docstatus == 1)
+						& (sre.status == "Reserved")
+					)
 				)
+				query = _filter_stock_reservations_by_location(
+					query, sre, row.to_storage_location
+				)
+				sres = query.run(as_dict=True)
 
 				pending_qty = row.qty
 				for d in sres:
@@ -2185,6 +2418,7 @@ class WorkOrder(Document):
 								"stock_qty": pending_qty,
 								"stock_reserved_qty": 0,
 								"warehouse": row.t_warehouse,
+								"storage_location": row.to_storage_location,
 								"voucher_no": stock_entry.work_order,
 								"voucher_type": "Work Order",
 								"name": name,
@@ -2211,6 +2445,7 @@ class WorkOrder(Document):
 				child_doctype.transferred_qty.as_("delivered_qty"),
 				child_doctype.stock_reserved_qty,
 				child_doctype.source_warehouse.as_("warehouse"),
+				child_doctype.source_storage_location.as_("storage_location"),
 				doctype.wip_warehouse,
 				doctype.skip_transfer,
 				doctype.from_wip_warehouse,
@@ -2326,7 +2561,7 @@ class WorkOrder(Document):
 		entries = frappe.get_all(
 			"Stock Reservation Entry",
 			filters={"voucher_no": self.name, "voucher_type": "Work Order", "docstatus": 1},
-			fields=["name", "item_code", "warehouse", "reservation_based_on"],
+			fields=["name", "item_code", "warehouse", "storage_location", "reservation_based_on"],
 			order_by="creation",
 		)
 
@@ -2334,7 +2569,7 @@ class WorkOrder(Document):
 			if entry.reservation_based_on == "Serial and Batch":
 				continue
 
-			key = (entry.item_code, entry.warehouse)
+			key = (entry.item_code, entry.warehouse, entry.storage_location)
 			sre = frappe.get_doc("Stock Reservation Entry", entry.name)
 
 			# Cap at what is still reservable (qty not already delivered/consumed). Always set the
@@ -2353,7 +2588,7 @@ class WorkOrder(Document):
 			sre.update_reserved_stock_in_bin()
 
 	def _subcontract_transferred_qty_by_item(self):
-		"""Qty sent to subcontractors for this Work Order, keyed by (item_code, source warehouse).
+		"""Qty sent to subcontractors for this Work Order by item, source warehouse and location.
 
 		The transfer Stock Entries are linked to the Work Order through its subcontracted Job Cards
 		(Job Card -> Subcontracting Order / Purchase Order -> Send to Subcontractor entry), since the
@@ -2389,16 +2624,23 @@ class WorkOrder(Document):
 			frappe.qb.from_(ste)
 			.inner_join(ste_child)
 			.on(ste_child.parent == ste.name)
-			.select(ste_child.item_code, ste_child.s_warehouse, fn.Sum(ste_child.transfer_qty).as_("qty"))
+			.select(
+				ste_child.item_code,
+				ste_child.s_warehouse,
+				ste_child.storage_location,
+				fn.Sum(ste_child.transfer_qty).as_("qty"),
+			)
 			.where(
 				(ste.docstatus == 1)
 				& (ste.purpose == "Send to Subcontractor")
 				& (ste_child.s_warehouse.isnotnull())
 				& link
 			)
-			.groupby(ste_child.item_code, ste_child.s_warehouse)
+			.groupby(ste_child.item_code, ste_child.s_warehouse, ste_child.storage_location)
 		).run(as_dict=1)
-		return {(d.item_code, d.s_warehouse): flt(d.qty) for d in rows}
+		return {
+			(d.item_code, d.s_warehouse, d.storage_location): flt(d.qty) for d in rows
+		}
 
 	def remove_additional_items(self, stock_entry):
 		for row in stock_entry.items:
@@ -2427,6 +2669,7 @@ class WorkOrder(Document):
 					{
 						"item_code": item_code,
 						"source_warehouse": row.s_warehouse,
+						"source_storage_location": row.storage_location,
 						"item_name": row.item_name,
 						"required_qty": row.transfer_qty,
 						"stock_uom": row.stock_uom,
@@ -2539,7 +2782,7 @@ def get_sre_details(work_order):
 	return sre_details
 
 
-def get_consumed_qty(work_order, item_code):
+def get_consumed_qty(work_order, item_code, warehouse=None, storage_location=None):
 	stock_entry = frappe.qb.DocType("Stock Entry")
 	stock_entry_detail = frappe.qb.DocType("Stock Entry Detail")
 
@@ -2556,6 +2799,12 @@ def get_consumed_qty(work_order, item_code):
 			& ((stock_entry_detail.item_code == item_code) | (stock_entry_detail.original_item == item_code))
 		)
 	)
+	if warehouse:
+		query = query.where(stock_entry_detail.s_warehouse == warehouse)
+	if storage_location:
+		query = query.where(stock_entry_detail.storage_location == storage_location)
+	else:
+		query = query.where(stock_entry_detail.storage_location.isnull())
 
 	result = query.run()
 
@@ -2915,8 +3164,11 @@ def get_operation_details(name, work_order, parent_bom):
 				"workstation": row.workstation,
 				"workstation_type": row.workstation_type,
 				"source_warehouse": row.source_warehouse,
+				"source_storage_location": row.source_storage_location,
 				"fg_warehouse": row.fg_warehouse,
+				"fg_storage_location": row.fg_storage_location,
 				"wip_warehouse": row.wip_warehouse,
+				"wip_storage_location": row.wip_storage_location,
 				"finished_good": row.finished_good,
 				"bom_no": row.get("bom_no") or parent_bom,
 				"is_subcontracted": row.get("is_subcontracted"),
@@ -3020,6 +3272,12 @@ def validate_operation_data(row):
 def create_job_card(work_order, row, enable_capacity_planning=False, auto_create=False):
 	doc = frappe.new_doc("Job Card")
 	qty = row.job_card_qty or work_order.get("qty", 0)
+	source_warehouse = row.get("source_warehouse") or work_order.source_warehouse
+	target_warehouse = row.get("fg_warehouse") or work_order.fg_warehouse
+	if not work_order.skip_transfer or work_order.from_wip_warehouse:
+		wip_warehouse = row.get("wip_warehouse") or work_order.wip_warehouse
+	else:
+		wip_warehouse = source_warehouse
 	doc.update(
 		{
 			"work_order": work_order.name,
@@ -3037,11 +3295,27 @@ def create_job_card(work_order, row, enable_capacity_planning=False, auto_create
 			"hour_rate": row.get("hour_rate"),
 			"serial_no": row.get("serial_no"),
 			"time_required": (row.get("time_in_mins", 0) / work_order.qty) * qty,
-			"source_warehouse": row.get("source_warehouse") or work_order.get("source_warehouse"),
-			"target_warehouse": row.get("fg_warehouse") or work_order.get("fg_warehouse"),
-			"wip_warehouse": work_order.wip_warehouse or row.get("wip_warehouse")
-			if not work_order.skip_transfer or work_order.from_wip_warehouse
-			else work_order.source_warehouse or row.get("source_warehouse"),
+			"source_warehouse": source_warehouse,
+			"source_storage_location": row.get("source_storage_location")
+			or (
+				work_order.source_storage_location
+				if source_warehouse == work_order.source_warehouse
+				else None
+			),
+			"target_warehouse": target_warehouse,
+			"target_storage_location": row.get("fg_storage_location")
+			or (work_order.fg_storage_location if target_warehouse == work_order.fg_warehouse else None),
+			"wip_warehouse": wip_warehouse,
+			"wip_storage_location": row.get("wip_storage_location")
+			or (
+				work_order.wip_storage_location
+				if wip_warehouse == work_order.wip_warehouse
+				else work_order.source_storage_location
+				if wip_warehouse == work_order.source_warehouse
+				else None
+			),
+			"scrap_warehouse": work_order.scrap_warehouse,
+			"scrap_storage_location": work_order.scrap_storage_location,
 			"skip_material_transfer": row.get("skip_material_transfer"),
 			"backflush_from_wip_warehouse": row.get("backflush_from_wip_warehouse"),
 			"finished_good": row.get("finished_good"),
@@ -3097,6 +3371,7 @@ def create_pick_list(source_name: str, target_doc: str | dict | None = None, for
 		if qty:
 			target.qty = qty
 			target.stock_qty = qty
+			target.storage_location = source.source_storage_location
 			target.uom = frappe.get_value("Item", source.item_code, "stock_uom")
 			target.stock_uom = target.uom
 			target.conversion_factor = 1
@@ -3205,7 +3480,17 @@ def _material_request_mapping():
 
 
 def _set_material_request_item(source, target, source_parent):
-	target.warehouse = source_parent.wip_warehouse
+	operation = source_parent.get_operation_for_required_item(source)
+	target.from_warehouse = source.source_warehouse
+	target.from_storage_location = source.source_storage_location
+	target.warehouse = (operation.wip_warehouse if operation else None) or source_parent.wip_warehouse
+	target.storage_location = (
+		operation.wip_storage_location
+		if operation and operation.wip_warehouse == target.warehouse
+		else source_parent.wip_storage_location
+		if target.warehouse == source_parent.wip_warehouse
+		else None
+	)
 	target.qty = flt(source.required_qty) - flt(source.transferred_qty)
 	target.schedule_date = nowdate()
 
@@ -3230,6 +3515,13 @@ def make_stock_return_entry(work_order):
 	stock_entry.set_stock_entry_type()
 
 	return stock_entry
+
+
+def _filter_stock_reservations_by_location(query, sre, storage_location):
+	if storage_location:
+		return query.where((sre.storage_location == storage_location) | sre.storage_location.isnull())
+
+	return query.where(sre.storage_location.isnull())
 
 
 def get_row_wise_serial_batch(work_order, purpose=None):

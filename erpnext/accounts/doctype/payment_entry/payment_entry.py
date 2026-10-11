@@ -205,9 +205,6 @@ class PaymentEntry(AccountsController):
 		self.set_status()
 		self.set_total_in_words()
 
-	def before_save(self):
-		self.set_matched_unset_payment_requests_to_response()
-
 	def on_submit(self):
 		if self.difference_amount:
 			frappe.throw(_("Difference Amount must be zero"))
@@ -2009,8 +2006,6 @@ class PaymentEntry(AccountsController):
 					allocated_negative_outstanding,
 				)
 
-			allocate_open_payment_requests_to_references(self.references, self.precision("paid_amount"))
-
 		else:
 			payment_request_outstanding_amounts = (
 				get_payment_request_outstanding_set_in_references(self.references) or {}
@@ -3047,10 +3042,6 @@ def get_payment_entry(
 
 		pe.set_exchange_rate()
 		pe.set_amounts()
-
-	# If PE is created from PR directly, then no need to find open PRs for the references
-	if not created_from_payment_request:
-		allocate_open_payment_requests_to_references(pe.references, pe.precision("paid_amount"))
 
 	return pe
 

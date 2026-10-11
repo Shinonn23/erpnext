@@ -35,6 +35,7 @@ class WorkOrderItem(Document):
 		required_qty: DF.Float
 		returned_qty: DF.Float
 		source_warehouse: DF.Link | None
+		source_storage_location: DF.Link | None
 		stock_reserved_qty: DF.Float
 		stock_uom: DF.Link | None
 		transferred_qty: DF.Float

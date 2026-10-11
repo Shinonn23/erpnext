@@ -29,6 +29,7 @@ class StockClosingBalance(Document):
 		stock_uom: DF.Link | None
 		stock_value: DF.Currency
 		stock_value_difference: DF.Currency
+		storage_location: DF.Link | None
 		valuation_rate: DF.Currency
 		warehouse: DF.Link | None
 	# end: auto-generated types

@@ -34,6 +34,7 @@ class PutawayRule(Document):
 		priority: DF.Int
 		stock_capacity: DF.Float
 		stock_uom: DF.Link | None
+		storage_location: DF.Link | None
 		uom: DF.Link | None
 		warehouse: DF.Link
 	# end: auto-generated types

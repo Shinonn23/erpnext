@@ -3,6 +3,7 @@
 
 frappe.query_reports["Itemwise Recommended Reorder Level"] = {
 	filters: [
+		{fieldname: "show_location_wise_stock", label: __("Show Storage Location Wise Stock"), fieldtype: "Check", default: 1},
 		{
 			fieldname: "from_date",
 			label: __("From Date"),

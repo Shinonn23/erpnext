@@ -76,6 +76,7 @@
    "read_only": 1
   },
   {
+   "default": "Payment Entry",
    "fieldname": "payment_order_type",
    "fieldtype": "Select",
    "label": "Payment Order Type",

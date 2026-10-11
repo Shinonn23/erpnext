@@ -3,6 +3,7 @@
 
 frappe.query_reports["Incorrect Balance Qty After Transaction"] = {
 	filters: [
+		{fieldname: "show_location_wise_stock", label: __("Show Storage Location Wise Stock"), fieldtype: "Check", default: 1},
 		{
 			label: __("Company"),
 			fieldtype: "Link",

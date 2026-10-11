@@ -486,6 +486,15 @@ class WorkstationDashboard {
 						columns: 1,
 					},
 					{
+						label: __("Storage Location"),
+						fieldname: "storage_location",
+						fieldtype: "Link",
+						options: "Storage Location",
+						in_list_view: 1,
+						read_only: 1,
+						columns: 2,
+					},
+					{
 						label: __("Reqired Qty"),
 						fieldname: "required_qty",
 						fieldtype: "Float",

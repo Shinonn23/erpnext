@@ -382,7 +382,11 @@ def _get_incoming_rate(args: dict | str, raise_error_if_no_rate: bool = True, fa
 			else:
 				args[fieldname] = value
 				extra_conditions.append(f" and {fieldname} = %({fieldname})s")
-		previous_sle = get_previous_sle(args, extra_cond="".join(extra_conditions))
+		# mysqlclient encodes every parameter, including unused ones. The dimension
+		# mapping is query configuration; only its scalar values belong in SQL args.
+		sle_args = args.copy()
+		sle_args.pop("inventory_dimensions_dict", None)
+		previous_sle = get_previous_sle(sle_args, extra_cond="".join(extra_conditions))
 		if valuation_method in ("FIFO", "LIFO"):
 			if previous_sle:
 				previous_stock_queue = json.loads(previous_sle.get("stock_queue", "[]") or "[]")

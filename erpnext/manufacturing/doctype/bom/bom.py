@@ -19,6 +19,7 @@ import erpnext
 from erpnext.setup.utils import get_exchange_rate
 from erpnext.stock.doctype.item.item import _get_item_details
 from erpnext.stock.get_item_details import ItemDetailsCtx, get_conversion_factor, get_price_list_rate
+from erpnext.stock.doctype.storage_location.storage_location import validate_storage_location_warehouse
 
 form_grid_templates = {"items": "templates/form_grid/item_grid.html"}
 
@@ -131,7 +132,9 @@ class BOM(WebsiteGenerator):
 		cost_allocation_per: DF.Percent
 		currency: DF.Link
 		default_source_warehouse: DF.Link | None
+		default_source_storage_location: DF.Link | None
 		default_target_warehouse: DF.Link | None
+		default_target_storage_location: DF.Link | None
 		description: DF.SmallText | None
 		exploded_items: DF.Table[BOMExplosionItem]
 		fg_based_operating_cost: DF.Check
@@ -304,9 +307,30 @@ class BOM(WebsiteGenerator):
 		self.validate_secondary_items()
 		self.validate_secondary_items_cost()
 		self.validate_total_cost_allocation()
+		self.validate_storage_locations()
 
 		if self.docstatus == 1:
 			self.validate_raw_materials_of_operation()
+
+	def validate_storage_locations(self):
+		validate_storage_location_warehouse(
+			self.default_source_storage_location, self.default_source_warehouse
+		)
+		validate_storage_location_warehouse(
+			self.default_target_storage_location, self.default_target_warehouse
+		)
+
+		for row in self.items:
+			validate_storage_location_warehouse(
+				row.source_storage_location, row.source_warehouse or self.default_source_warehouse
+			)
+
+		for row in self.operations:
+			validate_storage_location_warehouse(
+				row.source_storage_location, row.source_warehouse or self.default_source_warehouse
+			)
+			validate_storage_location_warehouse(row.wip_storage_location, row.wip_warehouse)
+			validate_storage_location_warehouse(row.fg_storage_location, row.fg_warehouse)
 
 	def set_operation_finished_goods(self):
 		"""Fill each operation's FG item where it is unambiguous: the final operation produces
@@ -1205,6 +1229,8 @@ class BOM(WebsiteGenerator):
 							"operation": d.operation,
 							"is_sub_assembly_item": d.is_sub_assembly_item,
 							"source_warehouse": d.source_warehouse,
+							"source_storage_location": d.source_storage_location
+							or self.default_source_storage_location,
 							"description": d.description,
 							"image": d.image,
 							"stock_uom": d.stock_uom,
@@ -1220,9 +1246,12 @@ class BOM(WebsiteGenerator):
 		return erpnext.get_company_currency(self.company)
 
 	def add_to_cur_exploded_items(self, args):
-		key = args.item_code
-		if args.operation:
-			key = (args.item_code, args.operation)
+		key = (
+			args.item_code,
+			args.operation,
+			args.source_warehouse,
+			args.source_storage_location,
+		)
 
 		if self.cur_exploded_items.get(key):
 			self.cur_exploded_items[key]["stock_qty"] += args.stock_qty
@@ -1239,6 +1268,7 @@ class BOM(WebsiteGenerator):
 				bom_item.item_name,
 				bom_item.description,
 				bom_item.source_warehouse,
+				bom_item.source_storage_location,
 				bom_item.operation,
 				bom_item.is_sub_assembly_item,
 				bom_item.stock_uom,
@@ -1264,6 +1294,7 @@ class BOM(WebsiteGenerator):
 						"item_code": d["item_code"],
 						"item_name": d["item_name"],
 						"source_warehouse": d["source_warehouse"],
+						"source_storage_location": d["source_storage_location"],
 						"operation": d["operation"] or operation,
 						"description": d["description"],
 						"stock_uom": d["stock_uom"],
@@ -1493,10 +1524,10 @@ def get_bom_items_as_dict(
 
 	item_dict = {}
 
-	group_by_cond = "group by item_code, stock_uom, operation"
+	group_by_cond = "group by item_code, stock_uom, operation, source_warehouse, source_storage_location"
 	if frappe.get_cached_value("BOM", bom, "track_semi_finished_goods"):
 		fetch_exploded = 0
-		group_by_cond = "group by item_code, operation_row_id, stock_uom"
+		group_by_cond = "group by item_code, operation_row_id, stock_uom, source_warehouse, source_storage_location"
 
 	if fetch_secondary_items:
 		fetch_exploded = 0
@@ -1539,7 +1570,7 @@ def get_bom_items_as_dict(
 			is_stock_item=is_stock_item,
 			qty_field="stock_qty",
 			group_by_cond=group_by_cond,
-			select_columns=""", bom_item.source_warehouse, bom_item.operation,
+			select_columns=""", bom_item.source_warehouse, bom_item.source_storage_location, bom_item.operation,
 				bom_item.include_item_in_manufacturing, bom_item.description, bom_item.rate, bom_item.sourced_by_supplier,
 				sum(bom_item.stock_qty/ifnull(bom.quantity, 1)) * bom_item.rate * %(qty)s as amount,
 				(Select idx from `tabBOM Item` where item_code = bom_item.item_code and parent = %(parent)s limit 1) as idx""",
@@ -1566,6 +1597,7 @@ def get_bom_items_as_dict(
 			is_stock_item=is_stock_item,
 			qty_field="stock_qty" if fetch_qty_in_stock_uom else "qty",
 			select_columns=""", bom_item.rate, bom_item.uom, bom_item.conversion_factor, bom_item.source_warehouse,
+				ifnull(bom_item.source_storage_location, bom.default_source_storage_location) as source_storage_location,
 				bom_item.operation, bom_item.include_item_in_manufacturing, bom_item.sourced_by_supplier,
 				sum(bom_item.stock_qty/ifnull(bom.quantity, 1)) * bom_item.rate * %(qty)s as amount,
 				bom_item.description, bom_item.base_rate as rate, bom_item.operation_row_id, bom_item.is_phantom_item , bom_item.bom_no """,
@@ -1573,16 +1605,46 @@ def get_bom_items_as_dict(
 		)
 		items = frappe.db.sql(query, {"qty": qty, "bom": bom, "company": company}, as_dict=True)
 
-	for item in items:
-		key = item.item_code
+	def get_base_key(item):
 		if fetch_secondary_items:
-			key = (item.item_code, item.secondary_item_type or "")
+			return (item.item_code, item.secondary_item_type or "")
 
 		if item.operation_row_id:
-			key = (item.item_code, item.operation_row_id)
+			return (item.item_code, item.operation_row_id)
 
 		if item.operation:
-			key = (item.item_code, item.operation)
+			return (item.item_code, item.operation)
+
+		return item.item_code
+
+	def add_item(item):
+		base_key = get_base_key(item)
+		matching_key = next(
+			(
+				key
+				for key, existing in item_dict.items()
+				if get_base_key(existing) == base_key
+				and existing.get("source_warehouse") == item.get("source_warehouse")
+				and existing.get("source_storage_location") == item.get("source_storage_location")
+			),
+			None,
+		)
+		if matching_key is not None:
+			item_dict[matching_key]["qty"] += flt(item.qty)
+			return
+
+		conflicting_keys = [key for key, existing in item_dict.items() if get_base_key(existing) == base_key]
+		if not conflicting_keys:
+			item_dict[base_key] = item
+			return
+
+		for key in conflicting_keys:
+			existing = item_dict.pop(key)
+			item_dict[("warehouse_dimension", base_key, existing.get("source_warehouse") or "", existing.get("source_storage_location") or "")] = existing
+
+		item_dict[("warehouse_dimension", base_key, item.get("source_warehouse") or "", item.get("source_storage_location") or "")] = item
+
+	for item in items:
 
 		stock_qty = item.pop("stock_qty")
 		if item.get("is_phantom_item"):
@@ -1597,16 +1659,11 @@ def get_bom_items_as_dict(
 				ignore_permissions=ignore_permissions,
 			)
 
-			for k, v in data.items():
-				if item_dict.get(k):
-					item_dict[k]["qty"] += flt(v.qty)
-				else:
-					item_dict[k] = v
+			for v in data.values():
+				add_item(v)
 
-		elif key in item_dict:
-			item_dict[key]["qty"] += flt(item.qty)
 		else:
-			item_dict[key] = item
+			add_item(item)
 
 	for item, item_details in item_dict.items():
 		for d in [

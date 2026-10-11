@@ -16,7 +16,8 @@
   "column_break_mvbx",
   "floor_name",
   "company",
-  "warehouse"
+  "warehouse",
+  "storage_location"
  ],
  "fields": [
   {
@@ -69,6 +70,12 @@
    "label": "Company",
    "options": "Company",
    "set_only_once": 1
+  },
+  {
+   "fieldname": "storage_location",
+   "fieldtype": "Link",
+   "label": "Storage Location",
+   "options": "Storage Location"
   }
  ],
  "hide_toolbar": 1,

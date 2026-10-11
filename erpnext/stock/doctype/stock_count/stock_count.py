@@ -34,7 +34,6 @@ class StockCount(Document):
 		quarantine_warehouse: DF.Link | None
 		scan_barcode: DF.Data | None
 		snapshot_datetime: DF.Datetime | None
-		storage_location: DF.Link | None
 		status: DF.Literal["", "Draft", "In Progress", "Completed"]
 		stock_entry: DF.Link | None
 		stock_reconciliation: DF.Link | None
@@ -51,7 +50,7 @@ class StockCount(Document):
 				frappe.throw(_("Warehouse must belong to Company {0}.").format(self.company))
 			if warehouse.is_group or warehouse.disabled:
 				frappe.throw(_("Select an enabled, non-group Warehouse."))
-			self.validate_storage_locations()
+			self.validate_quarantine_storage_location()
 			self.validate_dimensions()
 
 		if self.docstatus == 0 and not self.snapshot_datetime and self.items:
@@ -83,30 +82,23 @@ class StockCount(Document):
 		)
 		if not warehouse or warehouse.company != self.company or warehouse.is_group or warehouse.disabled:
 			frappe.throw(_("Select an enabled, non-group Quarantine Warehouse in the same Company."))
-		self.validate_storage_locations()
+		self.validate_quarantine_storage_location()
 
-	def validate_storage_locations(self):
-		for fieldname, warehouse_field in (
-			("storage_location", "warehouse"),
-			("quarantine_storage_location", "quarantine_warehouse"),
+	def validate_quarantine_storage_location(self):
+		location = self.quarantine_storage_location
+		if not location:
+			return
+		if not frappe.db.exists("DocType", "Storage Location"):
+			frappe.throw(_("Storage Location is not configured on this site."))
+		location_data = frappe.db.get_value(
+			"Storage Location", location, ["warehouse", "disabled"], as_dict=True
+		)
+		if (
+			not location_data
+			or location_data.disabled
+			or location_data.warehouse != self.quarantine_warehouse
 		):
-			location = self.get(fieldname)
-			if not location:
-				continue
-			if not frappe.db.exists("DocType", "Storage Location"):
-				frappe.throw(_("Storage Location is not configured on this site."))
-			location_data = frappe.db.get_value(
-				"Storage Location", location, ["warehouse", "disabled"], as_dict=True
-			)
-			if not location_data or location_data.disabled:
-				frappe.throw(_("Select an active Storage Location."))
-			if location_data.warehouse != self.get(warehouse_field):
-				frappe.throw(
-					_("{0} must belong to {1}.").format(
-						frappe.get_meta(self.doctype).get_label(fieldname),
-						frappe.get_meta(self.doctype).get_label(warehouse_field),
-					)
-				)
+			frappe.throw(_("Quarantine Storage Location must belong to the Quarantine Warehouse."))
 
 	def get_countable_dimensions(self):
 		child_meta = frappe.get_meta("Stock Count Item")
@@ -127,12 +119,6 @@ class StockCount(Document):
 		dimensions = self.get_countable_dimensions()
 		by_name = {dimension.dimension_name: dimension for dimension in dimensions}
 		filters = {}
-		if self.storage_location:
-			location_dimension = by_name.get("Storage Location")
-			if not location_dimension:
-				frappe.throw(_("Storage Location must be configured as an Inventory Dimension."))
-			filters[location_dimension.fieldname] = self.storage_location
-
 		seen = set()
 		for row in self.dimensions:
 			if row.inventory_dimension in seen:
@@ -147,16 +133,36 @@ class StockCount(Document):
 						"Inventory Dimension {0} is not available on Stock Count and Stock Reconciliation."
 					).format(row.inventory_dimension)
 				)
-			if dimension.dimension_name == "Storage Location" and self.storage_location:
-				frappe.throw(
-					_("Set Storage Location either in the dedicated field or in Inventory Dimensions.")
-				)
 			filters[dimension.fieldname] = row.dimension_value
 		return dimensions, filters
 
 	def validate_dimensions(self):
 		if self.warehouse:
-			self.get_dimension_filters()
+			dimensions, _ = self.get_dimension_filters()
+			storage_location_dimension = next(
+				(dimension for dimension in dimensions if dimension.dimension_name == "Storage Location"),
+				None,
+			)
+			if not storage_location_dimension:
+				return
+			selected_location = next(
+				(
+					row.dimension_value
+					for row in self.dimensions
+					if row.inventory_dimension == storage_location_dimension.dimension_name
+				),
+				None,
+			)
+			if selected_location:
+				location = frappe.db.get_value(
+					"Storage Location", selected_location, ["warehouse", "disabled"], as_dict=True
+				)
+				if (
+					not location
+					or location.disabled
+					or location.warehouse != self.warehouse
+				):
+					frappe.throw(_("Storage Location must be active and belong to the selected Warehouse."))
 
 	def validate_count_lines(self):
 		seen = set()
@@ -353,7 +359,6 @@ class StockCount(Document):
 			base_row = {
 				"item_code": item_code,
 				"batch_no": group.batch_no,
-				"storage_location": group.get("storage_location"),
 				"system_qty": flt(group.qty),
 				"counted_qty": 0,
 				**row_values,

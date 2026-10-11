@@ -125,6 +125,7 @@ class SerialBatchBundle:
 				voucher_no=self.sle.voucher_no,
 				serial_and_batch_bundle=bundle,
 				warehouse=self.sle.warehouse,
+				storage_location=self.sle.storage_location,
 				type_of_transaction="Inward" if self.sle.actual_qty > 0 else "Outward",
 				do_not_submit=0,
 			)
@@ -1191,6 +1192,9 @@ class SerialBatchCreation:
 
 		new_package.docstatus = 0
 		new_package.warehouse = self.warehouse
+		if "storage_location" in self.__dict__:
+			for entry in new_package.entries:
+				entry.storage_location = self.storage_location
 		new_package.voucher_no = ""
 		new_package.posting_datetime = self.posting_datetime if hasattr(self, "posting_datetime") else now()
 		new_package.type_of_transaction = self.type_of_transaction
@@ -1332,6 +1336,8 @@ class SerialBatchCreation:
 
 		if self.get("ignore_serial_nos"):
 			kwargs["ignore_serial_nos"] = self.ignore_serial_nos
+		if "storage_location" in self.__dict__:
+			kwargs["inventory_dimensions_dict"] = {"storage_location": self.storage_location}
 
 		if (
 			self.has_serial_no
@@ -1434,30 +1440,30 @@ class SerialBatchCreation:
 				if self.get("serial_nos_valuation"):
 					incoming_rate = self.get("serial_nos_valuation").get(serial_no)
 
-				doc.append(
-					"entries",
-					{
-						"serial_no": serial_no,
-						"qty": qty,
-						"batch_no": serial_no_wise_batch.get(serial_no) or self.get("batch_no"),
-						"incoming_rate": incoming_rate,
-					},
-				)
+				entry = {
+					"serial_no": serial_no,
+					"qty": qty,
+					"batch_no": serial_no_wise_batch.get(serial_no) or self.get("batch_no"),
+					"incoming_rate": incoming_rate,
+				}
+				if "storage_location" in self.__dict__:
+					entry["storage_location"] = self.storage_location
+				doc.append("entries", entry)
 
 		elif self.get("batches"):
 			for batch_no, batch_qty in self.batches.items():
 				if self.get("batches_valuation"):
 					incoming_rate = self.get("batches_valuation").get(batch_no)
 
-				doc.append(
-					"entries",
-					{
-						"batch_no": batch_no,
-						"qty": flt(batch_qty, precision)
-						* (-1 if self.type_of_transaction == "Outward" else 1),
-						"incoming_rate": incoming_rate,
-					},
-				)
+				entry = {
+					"batch_no": batch_no,
+					"qty": flt(batch_qty, precision)
+					* (-1 if self.type_of_transaction == "Outward" else 1),
+					"incoming_rate": incoming_rate,
+				}
+				if "storage_location" in self.__dict__:
+					entry["storage_location"] = self.storage_location
+				doc.append("entries", entry)
 
 	def create_batch(self):
 		from erpnext.stock.doctype.batch.batch import make_batch

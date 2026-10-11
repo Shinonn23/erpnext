@@ -7,8 +7,9 @@
  "field_order": [
   "item_code",
   "item_name",
-  "column_break_3",
   "warehouse",
+  "inventory_dimension",
+  "storage_location",
   "section_break_6",
   "purchase_receipt_item",
   "stock_qty",
@@ -24,15 +25,9 @@
   "section_break_bfqc",
   "serial_no",
   "column_break_mbuv",
-  "batch_no",
-  "accounting_dimensions_section",
-  "dimension_col_break"
+  "batch_no"
  ],
  "fields": [
-  {
-   "fieldname": "column_break_3",
-   "fieldtype": "Column Break"
-  },
   {
    "fieldname": "warehouse",
    "fieldtype": "Link",
@@ -134,16 +129,6 @@
    "read_only": 1
   },
   {
-   "collapsible": 1,
-   "fieldname": "accounting_dimensions_section",
-   "fieldtype": "Section Break",
-   "label": "Accounting Dimensions"
-  },
-  {
-   "fieldname": "dimension_col_break",
-   "fieldtype": "Column Break"
-  },
-  {
    "depends_on": "eval:doc.use_serial_batch_fields === 0 || doc.docstatus === 1",
    "fieldname": "serial_and_batch_bundle",
    "fieldtype": "Link",
@@ -172,13 +157,26 @@
    "fieldtype": "Data",
    "hidden": 1,
    "label": "Purchase Receipt Item"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "inventory_dimension",
+   "fieldtype": "Section Break",
+   "label": "Inventory Dimension"
+  },
+  {
+   "fieldname": "storage_location",
+   "fieldtype": "Link",
+   "label": "Storage Location",
+   "options": "Storage Location",
+   "search_index": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2025-03-05 12:46:01.074742",
+ "modified": "2026-10-10 00:16:44.267977",
  "modified_by": "Administrator",
  "module": "Assets",
  "name": "Asset Capitalization Stock Item",

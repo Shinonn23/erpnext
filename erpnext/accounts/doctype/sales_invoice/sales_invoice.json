@@ -233,6 +233,11 @@
   "is_internal_customer",
   "represents_company",
   "inter_company_invoice_reference",
+  "custody_loan",
+  "is_system_generated",
+  "is_custody_loan_transaction",
+  "custody_loan_source_doctype",
+  "custody_loan_source_name",
   "is_discounted",
   "connections_tab"
  ],
@@ -1592,6 +1597,44 @@
    "options": "Purchase Invoice",
    "read_only": 1,
    "search_index": 1
+  },
+  {
+   "fieldname": "custody_loan",
+   "fieldtype": "Link",
+   "label": "Custody Loan",
+   "options": "Custody Loan",
+   "read_only": 1,
+   "hidden": 1
+  },
+  {
+   "fieldname": "is_system_generated",
+   "fieldtype": "Check",
+   "label": "Is System Generated",
+   "read_only": 1,
+   "hidden": 1
+  },
+  {
+   "fieldname": "is_custody_loan_transaction",
+   "fieldtype": "Check",
+   "label": "Is Custody Loan Transaction",
+   "read_only": 1,
+   "hidden": 1
+  },
+  {
+   "fieldname": "custody_loan_source_doctype",
+   "fieldtype": "Link",
+   "label": "Custody Loan Source Type",
+   "options": "DocType",
+   "read_only": 1,
+   "hidden": 1
+  },
+  {
+   "fieldname": "custody_loan_source_name",
+   "fieldtype": "Dynamic Link",
+   "label": "Custody Loan Source",
+   "options": "custody_loan_source_doctype",
+   "read_only": 1,
+   "hidden": 1
   },
   {
    "fieldname": "customer_group",

@@ -19,6 +19,8 @@
   "stock_value_difference",
   "is_outward",
   "stock_queue",
+  "inventory_dimension",
+  "storage_location",
   "section_break_gmim",
   "reference_for_reservation",
   "voucher_type",
@@ -197,12 +199,25 @@
    "no_copy": 1,
    "options": "Item",
    "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "inventory_dimension",
+   "fieldtype": "Section Break",
+   "label": "Inventory Dimension"
+  },
+  {
+   "fieldname": "storage_location",
+   "fieldtype": "Link",
+   "label": "Storage Location",
+   "options": "Storage Location",
+   "search_index": 1
   }
  ],
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-01-11 11:05:10.789054",
+ "modified": "2026-10-10 00:57:39.436954",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Serial and Batch Entry",

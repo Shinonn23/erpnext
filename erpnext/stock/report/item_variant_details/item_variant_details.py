@@ -5,10 +5,22 @@
 import frappe
 from frappe import _
 
+from erpnext.stock.report.storage_location_utils import add_location_column, split_bin_rows
+
 
 def execute(filters=None):
 	columns = get_columns(filters.item)
-	data = get_data(filters.item)
+	data = split_variant_stock(get_data(filters.item), filters)
+	columns.append(
+		{
+			"label": _("Warehouse"),
+			"fieldname": "warehouse",
+			"fieldtype": "Link",
+			"options": "Warehouse",
+			"width": 150,
+		}
+	)
+	add_location_column(columns, filters)
 	return columns, data
 
 
@@ -215,3 +227,34 @@ def get_attribute_values_map(variant_list):
 		attr_val_map[name][row.get("attribute")] = row.get("attribute_value")
 
 	return attr_val_map
+
+
+def split_variant_stock(data, filters):
+	if not data:
+		return []
+	bins = frappe.get_all(
+		"Bin",
+		fields=["item_code", "warehouse", "actual_qty", "planned_qty"],
+		filters={"item_code": ["in", [row["variant_name"] for row in data]]},
+	)
+	by_item = {}
+	for row in split_bin_rows(bins, filters):
+		by_item.setdefault(row.item_code, []).append(row)
+	rows = []
+	for variant in data:
+		stock = by_item.get(variant["variant_name"], [])
+		for balance in stock:
+			row = variant.copy()
+			row.update(
+				warehouse=balance.warehouse,
+				storage_location=balance.get("storage_location"),
+				current_stock=balance.actual_qty,
+				in_production=balance.planned_qty,
+				open_orders=0,
+			)
+			rows.append(row)
+		if variant.get("open_orders") or not stock:
+			row = variant.copy()
+			row.update(warehouse=None, storage_location=None, current_stock=0, in_production=0)
+			rows.append(row)
+	return rows

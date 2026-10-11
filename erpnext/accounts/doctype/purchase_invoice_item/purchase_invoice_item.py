@@ -37,6 +37,7 @@ class PurchaseInvoiceItem(Document):
 		distributed_discount_amount: DF.Currency
 		enable_deferred_expense: DF.Check
 		expense_account: DF.Link | None
+		from_storage_location: DF.Link | None
 		from_warehouse: DF.Link | None
 		image: DF.Attach | None
 		include_exploded_items: DF.Check
@@ -78,6 +79,7 @@ class PurchaseInvoiceItem(Document):
 		rejected_qty: DF.Float
 		rejected_serial_and_batch_bundle: DF.Link | None
 		rejected_serial_no: DF.Text | None
+		rejected_storage_location: DF.Link | None
 		rejected_warehouse: DF.Link | None
 		rm_supp_cost: DF.Currency
 		sales_incoming_rate: DF.Currency
@@ -90,6 +92,7 @@ class PurchaseInvoiceItem(Document):
 		stock_qty: DF.Float
 		stock_uom: DF.Link | None
 		stock_uom_rate: DF.Currency
+		storage_location: DF.Link | None
 		tax_withholding_category: DF.Link | None
 		total_weight: DF.Float
 		uom: DF.Link

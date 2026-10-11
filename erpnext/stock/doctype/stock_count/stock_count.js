@@ -10,12 +10,6 @@ frappe.ui.form.on("Stock Count", {
 				disabled: 0,
 			},
 		}));
-		frm.set_query("storage_location", () => ({
-			filters: {
-				warehouse: frm.doc.warehouse,
-				disabled: 0,
-			},
-		}));
 		frm.set_query("quarantine_warehouse", () => ({
 			filters: {
 				company: frm.doc.company,
@@ -41,7 +35,6 @@ frappe.ui.form.on("Stock Count", {
 		frm.toggle_display("quarantine_warehouse", frm.doc.count_type === "Monthly");
 		frm.toggle_display("scan_barcode", frm.doc.status === "In Progress" && !frm.doc.docstatus);
 		frm.set_df_property("dimensions", "read_only", frm.doc.status !== "Draft");
-		frm.set_df_property("storage_location", "read_only", frm.doc.status !== "Draft");
 		frm.set_df_property("warehouse", "read_only", frm.doc.status !== "Draft");
 		frm.set_df_property("count_type", "read_only", frm.doc.status !== "Draft");
 		frm.set_df_property("item_count", "read_only", frm.doc.status !== "Draft");

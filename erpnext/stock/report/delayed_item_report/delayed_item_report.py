@@ -6,6 +6,8 @@ import frappe
 from frappe import _
 from frappe.utils import date_diff
 
+from erpnext.stock.report.storage_location_utils import add_location_column, location_key
+
 
 def execute(filters=None, consolidated=False):
 	data, columns = DelayedItemReport(filters).run()
@@ -18,7 +20,9 @@ class DelayedItemReport:
 		self.filters = frappe._dict(filters or {})
 
 	def run(self):
-		return self.get_columns(), self.get_data() or []
+		columns = self.get_columns()
+		columns.append({"label": _("Warehouse"), "fieldname": "warehouse", "fieldtype": "Link", "options": "Warehouse", "width": 150})
+		return add_location_column(columns, self.filters), self.get_data() or []
 
 	def get_data(self, consolidated=False):
 		doctype = self.filters.get("based_on")
@@ -32,6 +36,8 @@ class DelayedItemReport:
 			.from_(parent)
 			.select(
 				child.item_code,
+				child.warehouse,
+				child.storage_location,
 				child.item_name,
 				child.item_group,
 				child.qty,

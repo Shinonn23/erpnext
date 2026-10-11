@@ -139,6 +139,12 @@ frappe.query_reports["Stock Balance"] = {
 			default: 1,
 		},
 		{
+			fieldname: "show_location_wise_stock",
+			label: __("Show Storage Location Wise Stock"),
+			fieldtype: "Check",
+			default: 1,
+		},
+		{
 			fieldname: "show_dimension_wise_stock",
 			label: __("Show Dimension Wise Stock"),
 			fieldtype: "Check",

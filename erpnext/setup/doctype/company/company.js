@@ -61,10 +61,6 @@ frappe.ui.form.on("Company", {
 			};
 		});
 
-		frm.set_query("default_in_transit_location", function () {
-			return { filters: { is_group: 0, is_in_transit_location: 1 } };
-		});
-
 		frm.set_query("default_warehouse_for_sales_return", function () {
 			return {
 				filters: {

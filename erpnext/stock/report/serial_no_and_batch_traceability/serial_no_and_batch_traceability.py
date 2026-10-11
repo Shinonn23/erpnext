@@ -4,6 +4,9 @@
 import frappe
 from frappe import _
 from frappe.query_builder import Case
+from frappe.query_builder.functions import Coalesce
+
+from erpnext.stock.report.storage_location_utils import add_location_column
 
 
 def execute(filters: dict | None = None):
@@ -11,7 +14,7 @@ def execute(filters: dict | None = None):
 	report.validate_filters()
 	data = report.get_data()
 	has_serial_no, has_batch_no = check_has_serial_no_in_data(data)
-	columns = report.get_columns(has_serial_no, has_batch_no)
+	columns = add_location_column(report.get_columns(has_serial_no, has_batch_no), filters)
 
 	return columns, data
 
@@ -81,6 +84,7 @@ class ReportData:
 				"batch_no": sabb.batch_no,
 				"serial_no": sabb.serial_no,
 				"warehouse": sabb.warehouse,
+				"storage_location": sabb.get("storage_location"),
 				"qty": sabb.qty,
 				"reference_doctype": sabb.reference_doctype,
 				"reference_name": sabb.reference_name,
@@ -147,14 +151,18 @@ class ReportData:
 	def get_data_from_sabb(self, row):
 		sabb = frappe.qb.DocType("Serial and Batch Bundle")
 		sabb_entry = frappe.qb.DocType("Serial and Batch Entry")
+		sle = frappe.qb.DocType("Stock Ledger Entry")
 
 		query = (
 			frappe.qb.from_(sabb)
 			.inner_join(sabb_entry)
 			.on(sabb.name == sabb_entry.parent)
+			.left_join(sle)
+			.on((sle.serial_and_batch_bundle == sabb.name) & (sle.is_cancelled == 0))
 			.select(
 				sabb_entry.qty,
 				sabb_entry.warehouse,
+				Coalesce(sle.storage_location, sabb_entry.storage_location).as_("storage_location"),
 				sabb_entry.posting_datetime,
 			)
 			.where(
@@ -209,6 +217,7 @@ class ReportData:
 							"item_name": material.item_name,
 							"qty": material.qty or material.quantity,
 							"warehouse": material.warehouse,
+							"storage_location": material.get("storage_location"),
 						}
 					)
 
@@ -292,6 +301,7 @@ class ReportData:
 			)
 			.select(
 				stock_entry_detail.s_warehouse.as_("warehouse"),
+				stock_entry_detail.storage_location,
 				stock_entry_detail.item_code,
 				stock_entry_detail.name,
 				stock_entry_detail.item_name,
@@ -341,11 +351,14 @@ class ReportData:
 
 		SABB = frappe.qb.DocType("Serial and Batch Bundle")
 		SABE = frappe.qb.DocType("Serial and Batch Entry")
+		SLE = frappe.qb.DocType("Stock Ledger Entry")
 
 		query = (
 			frappe.qb.from_(SABB)
 			.inner_join(SABE)
 			.on(SABB.name == SABE.parent)
+			.left_join(SLE)
+			.on((SLE.serial_and_batch_bundle == SABB.name) & (SLE.is_cancelled == 0))
 			.select(
 				SABB.voucher_type.as_("reference_doctype"),
 				SABB.voucher_no.as_("reference_name"),
@@ -356,6 +369,7 @@ class ReportData:
 				SABB.item_name,
 				SABB.posting_datetime,
 				SABB.warehouse,
+				Coalesce(SLE.storage_location, SABE.storage_location).as_("storage_location"),
 			)
 			.where(
 				(SABB.is_cancelled == 0)
@@ -389,6 +403,7 @@ class ReportData:
 						"batch_no": batch_no,
 						"indent": 0,
 						"warehouse": fg_item.warehouse,
+						"storage_location": fg_item.get("storage_location"),
 						"raw_materials": frappe._dict(
 							{(row.item_code, row.reference_name, row.serial_no, row.batch_no): row}
 						),
@@ -412,6 +427,7 @@ class ReportData:
 				"parenttype as reference_doctype",
 				"parent as reference_name",
 				"t_warehouse as warehouse",
+				"to_storage_location as storage_location",
 			],
 			as_dict=True,
 		)

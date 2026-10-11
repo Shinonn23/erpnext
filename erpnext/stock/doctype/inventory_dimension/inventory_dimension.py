@@ -5,6 +5,7 @@ import frappe
 from frappe import _, bold, scrub
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 from frappe.model.document import Document
+from frappe.utils import cint
 from frappe.utils.caching import request_cache
 
 
@@ -57,7 +58,34 @@ class InventoryDimension(Document):
 		)
 
 	def validate(self):
+		if (
+			self.dimension_name == "Storage Location"
+			or self.source_fieldname == "storage_location"
+			or self.target_fieldname == "storage_location"
+		) and not self.flags.get("setup_storage_location_dimension"):
+			frappe.throw(
+				_("Storage Location is managed directly and cannot be configured as an Inventory Dimension.")
+			)
+
+		self.validate_builtin_storage_location()
 		self.validate_reference_document()
+
+	def validate_builtin_storage_location(self):
+		if self.is_new() or self.name != "Storage Location":
+			return
+
+		# Negative stock validation is a site-level setting. The built-in dimension's identity and
+		# applicability must stay fixed so it cannot silently disappear from stock transactions.
+		for field in frappe.get_meta("Inventory Dimension").fields:
+			if field.fieldname == "validate_negative_stock":
+				continue
+
+			if self.get(field.fieldname) != frappe.db.get_value(
+				"Inventory Dimension", self.name, field.fieldname
+			):
+				frappe.throw(
+					_("Storage Location is a built-in Inventory Dimension and cannot be reconfigured.")
+				)
 
 	def before_save(self):
 		self.do_not_update_document()
@@ -91,6 +119,8 @@ class InventoryDimension(Document):
 				frappe.throw(_(msg), DoNotChangeError)
 
 	def on_trash(self):
+		if self.dimension_name == "Storage Location":
+			frappe.throw(_("Storage Location is a built-in Inventory Dimension and cannot be deleted."))
 		self.delete_custom_fields()
 
 	def delete_custom_fields(self):
@@ -128,7 +158,10 @@ class InventoryDimension(Document):
 			msg = f"The reference document {self.reference_document} can not be child table."
 			frappe.throw(_(msg), CanNotBeChildDoc)
 
-		if self.reference_document in ["Batch", "Serial No", "Warehouse", "Item"]:
+		if self.reference_document in ["Batch", "Serial No", "Warehouse", "Item"] or (
+			self.reference_document == "Storage Location"
+			and not self.flags.get("setup_storage_location_dimension")
+		):
 			msg = f"The reference document {self.reference_document} can not be an Inventory Dimension."
 			frappe.throw(_(msg), CanNotBeDefaultDimension)
 
@@ -142,16 +175,6 @@ class InventoryDimension(Document):
 	def on_update(self):
 		self.add_custom_fields()
 
-	@staticmethod
-	def get_insert_after_fieldname(doctype):
-		return frappe.get_all(
-			"DocField",
-			fields=["fieldname"],
-			filters={"parent": doctype},
-			order_by="idx desc",
-			limit=1,
-		)[0].fieldname
-
 	def get_dimension_fields(self, doctype=None):
 		if not doctype:
 			doctype = self.document_type
@@ -159,7 +182,13 @@ class InventoryDimension(Document):
 		label_start_with = ""
 		if doctype in ["Purchase Invoice Item", "Purchase Receipt Item"]:
 			label_start_with = "Target"
-		elif doctype in ["Sales Invoice Item", "Delivery Note Item", "Stock Entry Detail"]:
+		elif doctype in [
+			"Sales Invoice Item",
+			"Delivery Note Item",
+			"Packed Item",
+			"Stock Entry Detail",
+			"Stock to Asset Conversion Item",
+		]:
 			label_start_with = "Source"
 
 		label = self.dimension_name
@@ -170,18 +199,16 @@ class InventoryDimension(Document):
 		# happens on the server side via StockController.validate_inventory_dimension_mandatory()
 		# so that it can be gated (e.g. skip service rows) and never blocks documents that are
 		# being cancelled.
+
+		insert_after = "inventory_dimension"
+		if doctype in ["Purchase Invoice Item", "Purchase Receipt Item"]:
+			insert_after = "inventory_dimension_col_break"
+
 		dimension_fields = [
-			dict(
-				fieldname="inventory_dimension",
-				fieldtype="Section Break",
-				insert_after=self.get_insert_after_fieldname(doctype),
-				label=_("Inventory Dimension"),
-				collapsible=1,
-			),
 			dict(
 				fieldname=self.source_fieldname,
 				fieldtype="Link",
-				insert_after="inventory_dimension",
+				insert_after=insert_after,
 				options=self.reference_document,
 				label=_(label),
 				depends_on="eval:doc.s_warehouse" if doctype == "Stock Entry Detail" else "",
@@ -194,7 +221,7 @@ class InventoryDimension(Document):
 				dict(
 					fieldname="rejected_" + self.source_fieldname,
 					fieldtype="Link",
-					insert_after=self.source_fieldname,
+					insert_after="inventory_dimension",
 					options=self.reference_document,
 					label=_("Rejected " + self.dimension_name),
 					search_index=1,
@@ -208,10 +235,10 @@ class InventoryDimension(Document):
 
 		dimension_fields = []
 		if self.apply_to_all_doctypes:
-			for doctype in get_inventory_documents():
-				dimension_fields = self.get_dimension_fields(doctype[0])
-				self.add_transfer_field(doctype[0], dimension_fields)
-				custom_fields.setdefault(doctype[0], dimension_fields)
+			for (doctype,) in get_inventory_documents():
+				dimension_fields = self.get_dimension_fields(doctype)
+				self.add_transfer_field(doctype, dimension_fields)
+				custom_fields.setdefault(doctype, dimension_fields)
 		else:
 			dimension_fields = self.get_dimension_fields()
 
@@ -219,37 +246,28 @@ class InventoryDimension(Document):
 			custom_fields.setdefault(self.document_type, dimension_fields)
 
 		for dt in ["Stock Ledger Entry", "Stock Closing Balance"]:
-			if (
-				dimension_fields
-				and not frappe.db.get_value("Custom Field", {"dt": dt, "fieldname": self.target_fieldname})
-				and not field_exists(dt, self.target_fieldname)
-			):
-				dimension_field = dimension_fields[1].copy()
-				dimension_field["fieldname"] = self.target_fieldname
-				custom_fields[dt] = dimension_field
+			if dimension_fields:
+				ledger_fields = self.get_dimension_fields(dt)
+				ledger_dimension_field = ledger_fields[0].copy()
+				ledger_dimension_field["fieldname"] = self.target_fieldname
+				custom_fields[dt] = [ledger_fields[0], ledger_dimension_field]
 
 		filter_custom_fields = {}
-		ignore_doctypes = [
-			"Serial and Batch Bundle",
-			"Serial and Batch Entry",
-			"Pick List Item",
-			"Maintenance Visit Purpose",
-		]
-
 		if custom_fields:
 			for doctype, fields in custom_fields.items():
-				if doctype in ignore_doctypes:
-					continue
-
 				if isinstance(fields, dict):
 					fields = [fields]
 
 				for field in fields:
-					if doctype in (
-						"Stock Count Item",
-						"Stock Entry Detail",
-						"Stock Reconciliation Item",
-					) and field.get("fieldtype") == "Link":
+					if field.get("fieldtype") == "Link" and (
+						doctype
+						in (
+							"Stock Count Item",
+							"Stock Entry Detail",
+							"Stock Reconciliation Item",
+							"Pick List Item",
+						)
+					):
 						field["in_list_view"] = 1
 						custom_field = frappe.db.get_value(
 							"Custom Field", {"dt": doctype, "fieldname": field["fieldname"]}, "name"
@@ -270,6 +288,7 @@ class InventoryDimension(Document):
 			"Stock Entry Detail",
 			"Sales Invoice Item",
 			"Delivery Note Item",
+			"Packed Item",
 			"Purchase Invoice Item",
 			"Purchase Receipt Item",
 		]:
@@ -283,6 +302,8 @@ class InventoryDimension(Document):
 			fieldname_start_with = "from"
 			label_start_with = "Source"
 			display_depends_on = "eval:parent.is_internal_supplier == 1"
+		elif doctype == "Packed Item":
+			display_depends_on = "eval:doc.target_warehouse"
 		elif doctype != "Stock Entry Detail":
 			display_depends_on = "eval:parent.is_internal_customer == 1"
 		elif doctype == "Stock Entry Detail":
@@ -290,26 +311,22 @@ class InventoryDimension(Document):
 
 		fieldname = f"{fieldname_start_with}_{self.source_fieldname}"
 		label = f"{label_start_with} {self.dimension_name}"
-
 		if field_exists(doctype, fieldname):
 			return
 
-		dimension_fields.extend(
-			[
-				dict(
-					fieldname="inventory_dimension_col_break",
-					fieldtype="Column Break",
-					insert_after=self.source_fieldname,
-				),
-				dict(
-					fieldname=fieldname,
-					fieldtype="Link",
-					insert_after="inventory_dimension_col_break",
-					options=self.reference_document,
-					label=label,
-					depends_on=display_depends_on,
-				),
-			]
+		insert_after = "inventory_dimension_col_break"
+		if doctype in ["Purchase Invoice Item", "Purchase Receipt Item"]:
+			insert_after = "inventory_dimension"
+
+		dimension_fields.append(
+			dict(
+				fieldname=fieldname,
+				fieldtype="Link",
+				insert_after=insert_after,
+				options=self.reference_document,
+				label=label,
+				depends_on=display_depends_on,
+			)
 		)
 
 
@@ -321,25 +338,13 @@ def field_exists(doctype, fieldname) -> str | None:
 def get_inventory_documents(
 	doctype=None, txt=None, searchfield=None, start=None, page_len=None, filters=None
 ):
-	and_filters = [["DocField", "parent", "not in", ["Batch", "Serial No", "Item Price"]]]
-	or_filters = [
-		["DocField", "options", "in", ["Batch", "Serial No"]],
-		["DocField", "parent", "in", ["Putaway Rule"]],
-	]
-
+	doctypes = list(dict.fromkeys(frappe.get_hooks("inventory_dimension_doctypes")))
 	if txt:
-		and_filters.append(["DocField", "parent", "like", f"%{txt}%"])
+		doctypes = [name for name in doctypes if txt.casefold() in name.casefold()]
 
-	return frappe.get_all(
-		"DocField",
-		fields=["parent"],
-		filters=and_filters,
-		or_filters=or_filters,
-		start=start,
-		page_length=page_len,
-		as_list=1,
-		distinct=True,
-	)
+	start = cint(start)
+	page_len = cint(page_len) or len(doctypes)
+	return [[name] for name in doctypes[start : start + page_len]]
 
 
 def get_evaluated_inventory_dimension(doc, sl_dict, parent_doc=None):

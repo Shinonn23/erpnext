@@ -10,7 +10,6 @@
   "count_type",
   "column_break_1",
   "warehouse",
-  "storage_location",
   "dimensions_section",
   "dimensions",
   "count_setup_section",
@@ -60,13 +59,6 @@
    "label": "Warehouse",
    "options": "Warehouse",
    "reqd": 1
-  },
-  {
-   "fieldname": "storage_location",
-   "fieldtype": "Link",
-   "label": "Storage Location",
-   "options": "Storage Location",
-   "description": "Optionally limit the count to one storage location within the selected Warehouse."
   },
   {
    "fieldname": "dimensions_section",

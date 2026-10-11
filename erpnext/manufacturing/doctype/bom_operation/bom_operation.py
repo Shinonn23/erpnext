@@ -23,6 +23,7 @@ class BOMOperation(Document):
 		cost_per_unit: DF.Float
 		description: DF.TextEditor | None
 		fg_warehouse: DF.Link | None
+		fg_storage_location: DF.Link | None
 		finished_good: DF.Link | None
 		finished_good_qty: DF.Float
 		fixed_time: DF.Check
@@ -40,8 +41,10 @@ class BOMOperation(Document):
 		set_cost_based_on_bom_qty: DF.Check
 		skip_material_transfer: DF.Check
 		source_warehouse: DF.Link | None
+		source_storage_location: DF.Link | None
 		time_in_mins: DF.Float
 		wip_warehouse: DF.Link | None
+		wip_storage_location: DF.Link | None
 		workstation: DF.Link | None
 		workstation_type: DF.Link | None
 	# end: auto-generated types

@@ -7,11 +7,12 @@ import frappe
 from frappe import _
 
 from erpnext.stock.doctype.serial_no.serial_no import get_serial_nos
+from erpnext.stock.report.storage_location_utils import add_location_column
 
 
 def execute(filters=None):
 	columns, data = [], []
-	columns = get_columns()
+	columns = add_location_column(get_columns(), filters)
 	data = get_data(filters)
 	return columns, data
 
@@ -115,6 +116,7 @@ def get_stock_ledger_entries(report_filters):
 		"posting_time",
 		"company",
 		"warehouse",
+		"storage_location",
 		{"DIV": ["stock_value_difference", "actual_qty"], "as": "valuation_rate"},
 	]
 

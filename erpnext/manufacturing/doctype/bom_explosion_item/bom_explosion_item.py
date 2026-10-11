@@ -28,6 +28,7 @@ class BOMExplosionItem(Document):
 		qty_consumed_per_unit: DF.Float
 		rate: DF.Currency
 		source_warehouse: DF.Link | None
+		source_storage_location: DF.Link | None
 		sourced_by_supplier: DF.Check
 		stock_qty: DF.Float
 		stock_uom: DF.Link | None

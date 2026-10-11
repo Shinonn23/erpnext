@@ -11,6 +11,9 @@ import frappe.defaults
 from frappe.model.document import Document
 from frappe.utils import flt
 
+from erpnext.stock.doctype.inventory_dimension.inventory_dimension import (
+	get_document_wise_inventory_dimensions,
+)
 from erpnext.stock.get_item_details import ItemDetailsCtx, get_item_details, get_price_list_rate
 
 
@@ -48,7 +51,9 @@ class PackedItem(Document):
 		requested_qty: DF.Float
 		serial_and_batch_bundle: DF.Link | None
 		serial_no: DF.Text | None
+		storage_location: DF.Link | None
 		target_warehouse: DF.Link | None
+		to_storage_location: DF.Link | None
 		uom: DF.Link | None
 		use_serial_batch_fields: DF.Check
 		warehouse: DF.Link | None
@@ -252,10 +257,33 @@ def update_packed_item_stock_data(main_item_row, pi_row, packing_item, item_data
 	if not pi_row.target_warehouse:
 		pi_row.target_warehouse = main_item_row.get("target_warehouse")
 
+	update_packed_item_inventory_dimensions(main_item_row, pi_row)
+
 	bin = get_packed_item_bin_qty(packing_item.item_code, pi_row.warehouse)
 	pi_row.actual_qty = flt(bin.get("actual_qty"))
 	pi_row.projected_qty = flt(bin.get("projected_qty"))
 	pi_row.use_serial_batch_fields = frappe.get_single_value("Stock Settings", "use_serial_batch_fields")
+
+
+def update_packed_item_inventory_dimensions(main_item_row, pi_row):
+	"""Default packed-row dimensions from the main item when they use the same warehouse."""
+	packed_item_meta = frappe.get_meta("Packed Item")
+	for dimension in get_document_wise_inventory_dimensions("Packed Item"):
+		source_fieldname = dimension.source_fieldname
+		if (
+			packed_item_meta.has_field(source_fieldname)
+			and pi_row.warehouse == main_item_row.get("warehouse")
+			and not pi_row.get(source_fieldname)
+		):
+			pi_row.set(source_fieldname, main_item_row.get(source_fieldname))
+
+		target_fieldname = f"to_{source_fieldname}"
+		if (
+			packed_item_meta.has_field(target_fieldname)
+			and pi_row.target_warehouse == main_item_row.get("target_warehouse")
+			and not pi_row.get(target_fieldname)
+		):
+			pi_row.set(target_fieldname, main_item_row.get(target_fieldname))
 
 
 def update_packed_item_with_pick_list_info(main_item_row, pi_row):

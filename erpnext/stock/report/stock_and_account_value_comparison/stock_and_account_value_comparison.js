@@ -3,6 +3,7 @@
 
 frappe.query_reports["Stock and Account Value Comparison"] = {
 	filters: [
+		{fieldname: "show_location_wise_stock", label: __("Show Storage Location Wise Stock"), fieldtype: "Check", default: 1},
 		{
 			label: __("Company"),
 			fieldname: "company",
@@ -97,7 +98,7 @@ frappe.query_reports["Stock and Account Value Comparison"] = {
 
 function get_selected_rows(label) {
 	let indexes = frappe.query_report.datatable.rowmanager.getCheckedRows();
-	let selected_rows = indexes.map((i) => frappe.query_report.data[i]);
+	let selected_rows = indexes.map((i) => frappe.query_report.data[i]).filter((row) => !row.is_stock_breakdown);
 
 	if (!selected_rows.length) {
 		frappe.throw(__("Please select rows to create {0}", [label]));

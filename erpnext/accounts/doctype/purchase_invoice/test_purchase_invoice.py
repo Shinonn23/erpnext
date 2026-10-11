@@ -2,7 +2,10 @@
 # License: GNU General Public License v3. See license.txt
 
 
+from unittest.mock import patch
+
 import frappe
+from frappe import _
 from frappe.utils import add_days, cint, flt, getdate, nowdate, today
 
 import erpnext
@@ -809,7 +812,7 @@ class TestPurchaseInvoice(ERPNextTestSuite, StockTestMixin):
 			where project = '{project.name}'
 			and docstatus=1"""
 		)
-		existing_purchase_cost = existing_purchase_cost and existing_purchase_cost[0][0] or 0
+		existing_purchase_cost = (existing_purchase_cost and existing_purchase_cost[0][0]) or 0
 
 		pi = make_purchase_invoice(currency="USD", conversion_rate=60, project=project.name)
 		self.assertEqual(
@@ -3393,9 +3396,47 @@ def make_purchase_invoice(**args):
 			pi.append("taxes", tax)
 
 	if not args.do_not_save:
-		pi.insert()
-		if not args.do_not_submit:
-			pi.submit()
+		workflow_name = "ERPNext Purchase & Payment - Purchase Invoice"
+		if args.do_not_submit or not frappe.db.exists("Workflow", {"name": workflow_name, "is_active": 1}):
+			pi.insert()
+			if not args.do_not_submit:
+				pi.submit()
+		else:
+			from frappe.model.workflow import apply_workflow, get_transitions
+
+			if pi.meta.has_field("supplier_tax_document_verified"):
+				pi.supplier_tax_document_verified = 1
+			pi.owner = frappe.session.user
+			with (
+				patch("frappe.get_roles", return_value=["Accounts Payable Accountant", "Accounts Manager"]),
+				patch("frappe.model.workflow.has_approval_access", return_value=True),
+			):
+				pi.insert()
+				for _attempt in range(5):
+					pi.reload()
+					if pi.docstatus == 1:
+						break
+					actions = {
+						"Purchase Invoice Draft": "Send to AP",
+						"Purchase Invoice Pending AP Verification": (
+							"Request Exception Review - No Executive"
+							if pi.get("p2p_exception_required")
+							else "Approve without Executive Review"
+						),
+						"Purchase Invoice Pending Accounts Manager Exception Approval - No Executive": "Approve Exception",
+						"Purchase Invoice Verified": "Submit Invoice as Accounts Payable Accountant",
+					}
+					action = actions.get(pi.workflow_state)
+					available_actions = [transition.action for transition in get_transitions(pi)]
+					if not action or action not in available_actions:
+						frappe.throw(
+							_("Test Purchase Invoice cannot advance from workflow state {0}: {1}").format(
+								pi.workflow_state, available_actions
+							)
+						)
+					apply_workflow(pi.as_dict(), action)
+				else:
+					frappe.throw(_("Test Purchase Invoice workflow did not reach submission."))
 	return pi
 
 

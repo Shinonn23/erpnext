@@ -1,9 +1,10 @@
 import json
+from unittest.mock import patch
 
 import frappe
 from frappe.query_builder.functions import Timestamp
 
-from erpnext.stock.utils import scan_barcode
+from erpnext.stock.utils import _get_incoming_rate, scan_barcode
 from erpnext.tests.utils import ERPNextTestSuite
 
 
@@ -71,6 +72,29 @@ class StockTestMixin:
 
 
 class TestStockUtilities(ERPNextTestSuite, StockTestMixin):
+	def test_incoming_rate_does_not_bind_inventory_dimension_mapping(self):
+		# Exercise the real ledger query and mysqlclient parameter encoding, even
+		# when the caller supplies an empty mapping (ordinary stock conversion).
+		for dimensions in ({}, {"warehouse": "_Missing Valuation Warehouse"}):
+			with (
+				self.subTest(dimensions=dimensions),
+				patch("frappe.get_cached_value", return_value=frappe._dict()),
+				patch("frappe.get_single_value", return_value=0),
+				patch("erpnext.stock.utils.get_valuation_method", return_value="Moving Average"),
+				patch("erpnext.stock.stock_ledger.get_valuation_rate", return_value=25),
+				patch("erpnext.get_company_currency", return_value="USD"),
+			):
+				args = frappe._dict(
+					item_code="_Missing Valuation Item",
+					warehouse="_Missing Valuation Warehouse",
+					posting_date="2026-10-11",
+					posting_time="11:49:00",
+					qty=-5,
+					inventory_dimensions_dict=dimensions,
+				)
+				self.assertEqual(_get_incoming_rate(args), 25)
+				self.assertEqual(args.inventory_dimensions_dict, dimensions)
+
 	def test_barcode_scanning(self):
 		simple_item = self.make_item(properties={"barcodes": [{"barcode": "12399"}]})
 		self.assertEqual(scan_barcode("12399")["item_code"], simple_item.name)

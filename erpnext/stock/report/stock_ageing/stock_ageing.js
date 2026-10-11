@@ -4,6 +4,12 @@
 frappe.query_reports["Stock Ageing"] = {
 	filters: [
 		{
+			fieldname: "show_location_wise_stock",
+			label: __("Show Storage Location Wise Stock"),
+			fieldtype: "Check",
+			default: 1,
+		},
+		{
 			fieldname: "company",
 			label: __("Company"),
 			fieldtype: "Link",
@@ -59,11 +65,6 @@ frappe.query_reports["Stock Ageing"] = {
 			fieldtype: "Data",
 			default: "30, 60, 90",
 		},
-		{
-			fieldname: "show_warehouse_wise_stock",
-			label: __("Show Warehouse-wise Stock"),
-			fieldtype: "Check",
-			default: 0,
-		},
+
 	],
 };

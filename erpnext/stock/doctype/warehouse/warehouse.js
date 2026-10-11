@@ -3,6 +3,9 @@
 
 frappe.ui.form.on("Warehouse", {
 	setup: function (frm) {
+		frm.set_query("default_storage_location", () => ({
+			filters: { warehouse: frm.doc.name, disabled: 0 },
+		}));
 		frm.set_query("default_in_transit_warehouse", function (doc) {
 			return {
 				filters: {

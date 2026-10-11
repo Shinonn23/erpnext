@@ -17,6 +17,29 @@ frappe.ui.form.on("Work Order", {
 		frm.events.set_company_filters(frm, "fg_warehouse");
 		frm.events.set_company_filters(frm, "scrap_warehouse");
 
+		for (const [location_field, warehouse_field] of [
+			["source_storage_location", "source_warehouse"],
+			["wip_storage_location", "wip_warehouse"],
+			["fg_storage_location", "fg_warehouse"],
+			["scrap_storage_location", "scrap_warehouse"],
+		]) {
+			frm.set_query(location_field, () => ({
+				filters: { warehouse: frm.doc[warehouse_field] || "", disabled: 0 },
+			}));
+		}
+		frm.set_query("source_storage_location", "required_items", (doc, cdt, cdn) => ({
+			filters: { warehouse: locals[cdt][cdn].source_warehouse || "", disabled: 0 },
+		}));
+		for (const [location_field, warehouse_field] of [
+			["source_storage_location", "source_warehouse"],
+			["wip_storage_location", "wip_warehouse"],
+			["fg_storage_location", "fg_warehouse"],
+		]) {
+			frm.set_query(location_field, "operations", (doc, cdt, cdn) => ({
+				filters: { warehouse: locals[cdt][cdn][warehouse_field] || "", disabled: 0 },
+			}));
+		}
+
 		frm.set_query("source_warehouse", "required_items", function () {
 			return {
 				filters: {
@@ -144,12 +167,22 @@ frappe.ui.form.on("Work Order", {
 	},
 
 	source_warehouse: function (frm) {
+		frm.set_value("source_storage_location", "");
 		let transaction_controller = new erpnext.TransactionController();
 		transaction_controller.autofill_warehouse(
 			frm.doc.required_items,
 			"source_warehouse",
 			frm.doc.source_warehouse
 		);
+	},
+	wip_warehouse(frm) {
+		frm.set_value("wip_storage_location", "");
+	},
+	fg_warehouse(frm) {
+		frm.set_value("fg_storage_location", "");
+	},
+	scrap_warehouse(frm) {
+		frm.set_value("scrap_storage_location", "");
 	},
 
 	allow_alternative_item: function (frm) {
@@ -680,25 +713,11 @@ frappe.ui.form.on("Work Order Item", {
 	},
 	source_warehouse: function (frm, cdt, cdn) {
 		var row = locals[cdt][cdn];
-		if (!row.item_code) {
-			frappe.throw(__("Please set the Item Code first"));
-		} else if (row.source_warehouse) {
-			frappe.call({
-				method: "erpnext.stock.utils.get_latest_stock_qty",
-				args: {
-					item_code: row.item_code,
-					warehouse: row.source_warehouse,
-				},
-				callback: function (r) {
-					frappe.model.set_value(
-						row.doctype,
-						row.name,
-						"available_qty_at_source_warehouse",
-						r.message
-					);
-				},
-			});
-		}
+		frappe.model.set_value(cdt, cdn, "source_storage_location", "");
+		update_source_available_qty(frm, row);
+	},
+	source_storage_location(frm, cdt, cdn) {
+		update_source_available_qty(frm, locals[cdt][cdn]);
 	},
 
 	item_code: function (frm, cdt, cdn) {
@@ -732,7 +751,43 @@ frappe.ui.form.on("Work Order Item", {
 	},
 });
 
+function update_source_available_qty(frm, row) {
+	if (!row.item_code || !row.source_warehouse) return;
+
+	frappe.call({
+		method: row.source_storage_location
+			? "erpnext.stock.utils.get_stock_balance"
+			: "erpnext.stock.utils.get_latest_stock_qty",
+		args: {
+			item_code: row.item_code,
+			warehouse: row.source_warehouse,
+			inventory_dimensions_dict: row.source_storage_location
+				? { storage_location: row.source_storage_location }
+				: undefined,
+		},
+		callback(r) {
+			if (r.message !== undefined) {
+				frappe.model.set_value(
+					row.doctype,
+					row.name,
+					"available_qty_at_source_warehouse",
+					r.message
+				);
+			}
+		},
+	});
+}
+
 frappe.ui.form.on("Work Order Operation", {
+	source_warehouse(frm, cdt, cdn) {
+		frappe.model.set_value(cdt, cdn, "source_storage_location", "");
+	},
+	wip_warehouse(frm, cdt, cdn) {
+		frappe.model.set_value(cdt, cdn, "wip_storage_location", "");
+	},
+	fg_warehouse(frm, cdt, cdn) {
+		frappe.model.set_value(cdt, cdn, "fg_storage_location", "");
+	},
 	workstation: function (frm, cdt, cdn) {
 		var d = locals[cdt][cdn];
 		if (d.workstation) {

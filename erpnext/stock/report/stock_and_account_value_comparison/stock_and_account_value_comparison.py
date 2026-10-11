@@ -6,13 +6,14 @@ from datetime import date
 
 import frappe
 from frappe import _
-from frappe.query_builder.functions import Min
+from frappe.query_builder.functions import Min, Sum
 from frappe.utils import create_batch, get_datetime, get_link_to_form, getdate, parse_json
 
 import erpnext
 from erpnext.accounts.utils import get_currency_precision, get_stock_accounts
 from erpnext.stock.doctype.stock_reposting_settings.stock_reposting_settings import get_stock_ledgers
 from erpnext.stock.doctype.warehouse.warehouse import get_warehouses_based_on_account
+from erpnext.stock.report.storage_location_utils import add_location_column, apply_location_query
 
 
 def execute(filters=None):
@@ -23,6 +24,25 @@ def execute(filters=None):
 
 	data = get_data(filters)
 	columns = get_columns(filters)
+	columns.append(
+		{
+			"label": _("Warehouse"),
+			"fieldname": "warehouse",
+			"fieldtype": "Link",
+			"options": "Warehouse",
+			"width": 150,
+		}
+	)
+	add_location_column(columns, filters)
+	columns.append(
+		{
+			"label": _("Stock Value Breakdown"),
+			"fieldname": "location_stock_value",
+			"fieldtype": "Currency",
+			"width": 150,
+		}
+	)
+	data = add_stock_location_breakdown(data, filters)
 
 	return columns, data
 
@@ -492,3 +512,39 @@ def get_pending_gl_reposting_vouchers(transactions) -> set[tuple[str, str]]:
 		pending_vouchers.update((d.voucher_type, d.voucher_no) for d in entries)
 
 	return pending_vouchers
+
+
+def add_stock_location_breakdown(data, filters):
+	"""GL has voucher totals; show stock allocations below, keeping comparisons on the totals."""
+	vouchers = [row.voucher_no for row in data if row.get("ledger_type") == "Stock Ledger Entry"]
+	if not vouchers:
+		return data
+	sle = frappe.qb.DocType("Stock Ledger Entry")
+	query = (
+		frappe.qb.from_(sle)
+		.select(
+			sle.voucher_type,
+			sle.voucher_no,
+			sle.warehouse,
+			Sum(sle.stock_value_difference).as_("location_stock_value"),
+		)
+		.where((sle.is_cancelled == 0) & (sle.company == filters.company) & sle.voucher_no.isin(vouchers))
+		.groupby(sle.voucher_type, sle.voucher_no, sle.warehouse)
+	)
+	query = apply_location_query(query, sle, filters, group_by=True)
+	if filters.get("account"):
+		query = query.where(
+			sle.warehouse.isin(get_warehouses_based_on_account(filters.account, filters.company))
+		)
+	groups = {}
+	for row in query.run(as_dict=True):
+		row.indent = 1
+		row.is_stock_breakdown = 1
+		groups.setdefault((row.voucher_type, row.voucher_no), []).append(row)
+	rows = []
+	for row in data:
+		row = frappe._dict(row)
+		row.indent = 0
+		rows.append(row)
+		rows.extend(groups.get((row.voucher_type, row.voucher_no), []))
+	return rows

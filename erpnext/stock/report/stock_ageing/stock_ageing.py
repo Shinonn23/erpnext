@@ -12,6 +12,11 @@ from frappe.utils import cint, date_diff, flt, get_datetime
 
 from erpnext.stock.doctype.serial_no.serial_no import get_serial_nos
 from erpnext.stock.doctype.warehouse.warehouse import apply_warehouse_filter
+from erpnext.stock.report.storage_location_utils import (
+	add_location_column,
+	get_reconciliation_quantity_deltas,
+	show_location_wise_stock,
+)
 from erpnext.stock.valuation import round_off_if_near_zero
 
 Filters = frappe._dict
@@ -33,9 +38,11 @@ MAX_CHART_ITEMS = 10
 
 
 def execute(filters: Filters = None) -> tuple:
+	filters.setdefault("show_location_wise_stock", 1)
+	filters.show_warehouse_wise_stock = 1
 	to_date = filters["to_date"]
 	filters.ranges = get_age_ranges(filters.range)
-	columns = get_columns(filters)
+	columns = add_location_column(get_columns(filters), filters)
 
 	item_details = FIFOSlots(filters).generate()
 	data = format_report_data(filters, item_details, to_date)
@@ -114,6 +121,8 @@ def get_report_row(filters: Filters, item_dict: dict, fifo_queue: list, to_date:
 		]
 	)
 
+	if show_location_wise_stock(filters):
+		row.append(details.get("storage_location"))
 	return row
 
 
@@ -306,6 +315,11 @@ class FIFOSlots:
 
 		# prepare single sle voucher detail lookup
 		self.prepare_stock_reco_voucher_wise_count()
+		self.reconciliation_deltas = (
+			get_reconciliation_quantity_deltas(self.filters)
+			if cint(self.filters.get("show_location_wise_stock"))
+			else {}
+		)
 		self.float_precision = get_float_precision()
 
 		if stock_ledger_entries is None:
@@ -404,6 +418,12 @@ class FIFOSlots:
 	) -> None:
 		if row.voucher_type != "Stock Reconciliation":
 			return
+		if cint(self.filters.get("show_location_wise_stock")):
+			if row.get("storage_location"):
+				return
+			if row.voucher_detail_no in self.reconciliation_deltas:
+				row.actual_qty = self.reconciliation_deltas[row.voucher_detail_no]
+				return
 
 		if row.has_serial_no and (not row.batch_no or row.serial_no or row.serial_and_batch_bundle):
 			if row.voucher_detail_no in self.stock_reco_voucher_wise_count:
@@ -580,6 +600,8 @@ class FIFOSlots:
 		"Initialise keys and FIFO Queue."
 
 		key = (row.name, row.warehouse)
+		if cint(self.filters.get("show_location_wise_stock")):
+			key += (row.get("storage_location") or "",)
 		self.item_details.setdefault(key, {"details": row, "fifo_queue": []})
 		fifo_queue = self.item_details[key]["fifo_queue"]
 
@@ -1045,6 +1067,7 @@ class FIFOSlots:
 				sle.qty_after_transaction,
 				sle.serial_and_batch_bundle,
 				sle.warehouse,
+				sle.storage_location,
 			)
 			.where(
 				(sle.item_code == item.name)

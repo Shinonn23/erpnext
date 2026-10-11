@@ -34,6 +34,17 @@ frappe.ui.form.on("Customer", {
 				}),
 			"Pricing Rule": () => frm.trigger("make_pricing_rule"),
 			"Bank Account": () => erpnext.utils.make_bank_account(frm.doc.doctype, frm.doc.name),
+			Location: () => {
+				frappe.dynamic_link = {
+					doctype: frm.doc.doctype,
+					doc: frm.doc,
+					fieldname: "name",
+				};
+				frappe.model.with_doctype("Location", () => {
+					const location = frappe.model.get_new_doc("Location");
+					frappe.set_route("Form", "Location", location.name);
+				});
+			},
 		};
 
 		frm.add_fetch("lead_name", "company_name", "customer_name");
@@ -190,6 +201,7 @@ frappe.ui.form.on("Customer", {
 			);
 
 			for (const doctype in frm.make_methods) {
+				if (doctype === "Location" && !frappe.model.can_create("Location")) continue;
 				frm.add_custom_button(__(doctype), frm.make_methods[doctype], __("Create"));
 			}
 

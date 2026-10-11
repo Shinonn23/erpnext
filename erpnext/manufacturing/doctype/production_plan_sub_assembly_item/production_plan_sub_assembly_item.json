@@ -8,6 +8,7 @@
   "production_item",
   "item_name",
   "fg_warehouse",
+  "fg_storage_location",
   "parent_item_code",
   "column_break_3",
   "bom_no",
@@ -262,6 +263,12 @@
    "label": "Sales Order Item",
    "no_copy": 1,
    "print_hide": 1
+  },
+  {
+   "fieldname": "fg_storage_location",
+   "fieldtype": "Link",
+   "label": "Target Storage Location",
+   "options": "Storage Location"
   }
  ],
  "grid_page_length": 50,

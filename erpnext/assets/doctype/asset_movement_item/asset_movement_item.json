@@ -12,11 +12,14 @@
   "demo_loan_status",
   "source_location",
   "from_employee",
+  "change_custodian",
+  "source_department",
+  "change_department",
   "column_break_2",
   "asset_name",
   "target_location",
-  "shipment_destination_location",
   "to_employee",
+  "target_department",
   "request_item",
   "custody_loan_item",
   "asset_item_code",
@@ -50,7 +53,6 @@
    "fetch_from": "asset.is_demo_asset",
    "fieldname": "is_demo_asset",
    "fieldtype": "Check",
-   "in_list_view": 1,
    "label": "Is Demo Asset",
    "read_only": 1
   },
@@ -58,7 +60,6 @@
    "fetch_from": "asset.demo_loan_status",
    "fieldname": "demo_loan_status",
    "fieldtype": "Data",
-   "in_list_view": 1,
    "label": "Demo / Loan Status",
    "read_only": 1
   },
@@ -77,15 +78,6 @@
    "options": "Location"
   },
   {
-   "fieldname": "shipment_destination_location",
-   "fieldtype": "Link",
-   "label": "Final Target Location",
-   "options": "Location",
-   "depends_on": "eval:parent.requires_shipment",
-   "mandatory_depends_on": "eval:parent.requires_shipment",
-   "in_list_view": 1
-  },
-  {
    "fieldname": "from_employee",
    "fieldtype": "Link",
    "ignore_user_permissions": 1,
@@ -94,12 +86,45 @@
    "options": "Employee"
   },
   {
+   "depends_on": "eval:parent.purpose != \"Reassignment\" || doc.change_custodian",
    "fieldname": "to_employee",
    "fieldtype": "Link",
    "ignore_user_permissions": 1,
    "in_list_view": 1,
    "label": "To Employee",
    "options": "Employee"
+  },
+  {
+   "default": "0",
+   "description": "Select this to change the current Custodian. Leave To Employee empty to unassign it.",
+   "fieldname": "change_custodian",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Change Custodian"
+  },
+  {
+   "fieldname": "source_department",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Source Department",
+   "options": "Department",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "Select this to change the current Department. Leave Target Department empty to unassign it.",
+   "fieldname": "change_department",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Change Department"
+  },
+  {
+   "depends_on": "eval:parent.purpose == \"Reassignment\" && doc.change_department",
+   "fieldname": "target_department",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Target Department",
+   "options": "Department"
   },
   {
    "fieldname": "column_break_2",
@@ -116,9 +141,11 @@
   {
    "fieldname": "request_item",
    "fieldtype": "Link",
+   "hidden": 1,
    "label": "Material Request Item",
    "options": "Material Request Item",
-   "no_copy": 1
+   "no_copy": 1,
+   "read_only": 1
   },
   {
    "fieldname": "custody_loan_item",

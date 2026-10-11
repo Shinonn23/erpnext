@@ -469,9 +469,9 @@
   {
    "fieldname": "shipment_documents",
    "fieldtype": "Table",
-   "label": "Stock / Asset Transactions",
+   "label": "Stock Transactions",
    "options": "Shipment Document",
-   "description": "Link submitted stock and asset movement documents carried by this shipment.",
+   "description": "Link submitted stock transactions carried by this shipment.",
    "allow_on_submit": 1
   },
   {

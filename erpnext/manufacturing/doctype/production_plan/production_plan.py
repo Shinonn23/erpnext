@@ -37,9 +37,13 @@ from erpnext.manufacturing.doctype.production_plan.work_order_quantities import 
 from erpnext.manufacturing.doctype.work_order.work_order import get_item_details
 from erpnext.setup.doctype.item_group.item_group import get_item_group_defaults
 from erpnext.stock.doctype.item.item import get_uom_conv_factor
-from erpnext.stock.doctype.stock_reservation_entry.stock_reservation_entry import StockReservation
+from erpnext.stock.doctype.storage_location.storage_location import validate_storage_location_warehouse
+from erpnext.stock.doctype.stock_reservation_entry.stock_reservation_entry import (
+	StockReservation,
+	get_available_qty_to_reserve,
+)
 from erpnext.stock.get_item_details import get_conversion_factor
-from erpnext.stock.utils import get_or_make_bin
+from erpnext.stock.utils import get_or_make_bin, get_stock_balance
 from erpnext.utilities.transaction_base import validate_uom_is_integer
 
 
@@ -79,6 +83,7 @@ class ProductionPlan(Document):
 		consider_minimum_order_qty: DF.Check
 		customer: DF.Link | None
 		for_warehouse: DF.Link | None
+		for_storage_location: DF.Link | None
 		from_date: DF.Date | None
 		from_delivery_date: DF.Date | None
 		get_items_from: DF.Literal["", "Sales Order", "Material Request"]
@@ -111,11 +116,13 @@ class ProductionPlan(Document):
 		]
 		sub_assembly_items: DF.Table[ProductionPlanSubAssemblyItem]
 		sub_assembly_warehouse: DF.Link | None
+		sub_assembly_storage_location: DF.Link | None
 		to_date: DF.Date | None
 		to_delivery_date: DF.Date | None
 		total_planned_qty: DF.Float
 		total_produced_qty: DF.Float
 		warehouse: DF.Link | None
+		warehouse_storage_location: DF.Link | None
 		warehouses: DF.TableMultiSelect[ProductionPlanMaterialRequestWarehouse]
 	# end: auto-generated types
 
@@ -135,6 +142,7 @@ class ProductionPlan(Document):
 		self.db_set("status", "Cancelled")
 
 	def validate(self):
+		self.validate_storage_locations()
 		self.set_pending_qty_in_row_without_reference()
 		self.calculate_total_planned_qty()
 		self.set_status()
@@ -144,14 +152,36 @@ class ProductionPlan(Document):
 		self.validate_material_request_type()
 		self.enable_auto_reserve_stock()
 
+	def validate_storage_locations(self):
+		for location_field, warehouse_field in (
+			("warehouse_storage_location", "warehouse"),
+			("for_storage_location", "for_warehouse"),
+			("sub_assembly_storage_location", "sub_assembly_warehouse"),
+		):
+			validate_storage_location_warehouse(self.get(location_field), self.get(warehouse_field))
+
+		for row in self.po_items:
+			validate_storage_location_warehouse(row.storage_location, row.warehouse)
+
+		for row in self.sub_assembly_items:
+			validate_storage_location_warehouse(row.fg_storage_location, row.fg_warehouse)
+
+		for row in self.mr_items:
+			validate_storage_location_warehouse(row.from_storage_location, row.from_warehouse)
+			validate_storage_location_warehouse(row.storage_location, row.warehouse)
+
+		for row in self.warehouses:
+			validate_storage_location_warehouse(row.storage_location, row.warehouse)
+
 	def enable_auto_reserve_stock(self):
 		if self.is_new() and frappe.db.get_single_value("Stock Settings", "auto_reserve_stock"):
 			self.reserve_stock = 1
 
 	def validate_material_request_type(self):
 		for row in self.get("mr_items"):
-			if row.from_warehouse and row.material_request_type != "Material Transfer":
+			if row.material_request_type != "Material Transfer":
 				row.from_warehouse = ""
+				row.from_storage_location = ""
 
 	@frappe.whitelist()
 	def validate_sales_orders(self, sales_order=None):
@@ -281,6 +311,10 @@ class ProductionPlan(Document):
 
 		if self.warehouse:
 			pending_mr_query = pending_mr_query.where(mr_item.warehouse == self.warehouse)
+		if self.warehouse_storage_location:
+			pending_mr_query = pending_mr_query.where(
+				mr_item.storage_location == self.warehouse_storage_location
+			)
 
 		if self.item_code:
 			pending_mr_query = pending_mr_query.where(mr_item.item_code == self.item_code)
@@ -764,7 +798,11 @@ class ProductionPlan(Document):
 				"stock_uom": d.stock_uom,
 				"company": self.company,
 				"source_warehouse": frappe.get_value("BOM", d.bom_no, "default_source_warehouse"),
+				"source_storage_location": frappe.get_value(
+					"BOM", d.bom_no, "default_source_storage_location"
+				),
 				"fg_warehouse": d.warehouse,
+				"fg_storage_location": d.storage_location,
 				"production_plan": self.name,
 				"production_plan_item": d.name,
 				"product_bundle_item": d.product_bundle_item,
@@ -826,8 +864,12 @@ class ProductionPlan(Document):
 
 			work_order_data = {
 				"source_warehouse": frappe.get_value("BOM", row.bom_no, "default_source_warehouse"),
+				"source_storage_location": frappe.get_value(
+					"BOM", row.bom_no, "default_source_storage_location"
+				),
 				"wip_warehouse": default_warehouses.get("wip_warehouse"),
 				"fg_warehouse": default_warehouses.get("fg_warehouse"),
+				"fg_storage_location": row.fg_storage_location,
 				"scrap_warehouse": default_warehouses.get("scrap_warehouse"),
 				"company": self.get("company"),
 			}
@@ -848,6 +890,7 @@ class ProductionPlan(Document):
 			"production_item",
 			"item_name",
 			"fg_warehouse",
+			"fg_storage_location",
 			"description",
 			"bom_no",
 			"stock_uom",
@@ -1015,10 +1058,14 @@ class ProductionPlan(Document):
 					"from_warehouse": item.from_warehouse
 					if material_request_type == "Material Transfer"
 					else None,
+					"from_storage_location": item.from_storage_location
+					if material_request_type == "Material Transfer"
+					else None,
 					"qty": qty_to_request,
 					"uom": item.uom,
 					"schedule_date": schedule_date,
 					"warehouse": item.warehouse,
+					"storage_location": item.storage_location,
 					"sales_order": item.sales_order,
 					"production_plan": self.name,
 					"material_request_plan_item": item.name,
@@ -1089,6 +1136,7 @@ class ProductionPlan(Document):
 				row.planned_qty,
 				self.company,
 				warehouse=self.sub_assembly_warehouse,
+				storage_location=self.sub_assembly_storage_location,
 				skip_available_sub_assembly_item=self.skip_available_sub_assembly_item,
 			)
 			self.set_sub_assembly_items_based_on_level(row, bom_data, manufacturing_type)
@@ -1135,6 +1183,7 @@ class ProductionPlan(Document):
 
 			if not is_group_warehouse:
 				data.fg_warehouse = self.sub_assembly_warehouse
+				data.fg_storage_location = self.sub_assembly_storage_location
 
 			if not self.combine_sub_items:
 				data.sales_order = row.sales_order
@@ -1320,6 +1369,7 @@ def get_exploded_items(item_details, company, bom_no, include_non_stock_items, p
 			bei.stock_uom,
 			item.min_order_qty,
 			bei.source_warehouse,
+			bei.source_storage_location,
 			item.default_material_request_type,
 			item.min_order_qty,
 			item_default.default_warehouse,
@@ -1335,15 +1385,23 @@ def get_exploded_items(item_details, company, bom_no, include_non_stock_items, p
 			& (bom.name == bom_no)
 			& (item.is_stock_item.isin([0, 1]) if include_non_stock_items else item.is_stock_item == 1)
 		)
-		.groupby(bei.item_code, bei.stock_uom)
+		.groupby(bei.item_code, bei.stock_uom, bei.source_warehouse, bei.source_storage_location)
 	).run(as_dict=True)
 
 	for d in data:
 		if not d.conversion_factor and d.purchase_uom:
 			d.conversion_factor = get_uom_conversion_factor(d.item_code, d.purchase_uom)
-		item_details.setdefault(d.get("item_code"), d)
+		item_details.setdefault(_get_material_detail_key(d), d)
 
 	return item_details
+
+
+def _get_material_detail_key(row):
+	return (
+		row.get("item_code"),
+		row.get("source_warehouse") or "",
+		row.get("source_storage_location") or "",
+	)
 
 
 def get_uom_conversion_factor(item_code, uom):
@@ -1395,6 +1453,9 @@ def get_subitems(
 			),
 			item.is_sub_contracted_item.as_("is_sub_contracted"),
 			bom_item.source_warehouse,
+			IfNull(bom_item.source_storage_location, bom.default_source_storage_location).as_(
+				"source_storage_location"
+			),
 			item.default_bom.as_("default_bom"),
 			bom_item.description.as_("description"),
 			bom_item.stock_uom.as_("stock_uom"),
@@ -1416,19 +1477,25 @@ def get_subitems(
 				| (bom_item.is_phantom_item == 1)
 			)
 		)
-		.groupby(bom_item.item_code)
+		.groupby(
+			bom_item.item_code,
+			bom_item.source_warehouse,
+			bom_item.source_storage_location,
+			bom.default_source_storage_location,
+		)
 		.orderby(bom_item.idx)
 	).run(as_dict=True)
 
 	for d in items:
 		if not data.get("include_exploded_items") or not d.default_bom:
-			if d.item_code in item_details:
-				item_details[d.item_code].qty = item_details[d.item_code].qty + d.qty
+			key = _get_material_detail_key(d)
+			if key in item_details:
+				item_details[key].qty = item_details[key].qty + d.qty
 			else:
 				if not d.conversion_factor and d.purchase_uom:
 					d.conversion_factor = get_uom_conversion_factor(d.item_code, d.purchase_uom)
 
-				item_details[d.item_code] = d
+				item_details[key] = d
 
 		if d.is_phantom_item or (data.get("include_exploded_items") and d.default_bom):
 			if (
@@ -1458,11 +1525,18 @@ def get_material_request_items(
 	ignore_existing_ordered_qty,
 	include_safety_stock,
 	warehouse,
+	storage_location,
 	bin_dict,
 	consumed_qty,
 ):
 	required_qty = _required_qty_for_mr(
-		row, ignore_existing_ordered_qty, warehouse, bin_dict, consumed_qty, include_safety_stock
+		row,
+		ignore_existing_ordered_qty,
+		warehouse,
+		bin_dict,
+		consumed_qty,
+		include_safety_stock,
+		storage_location,
 	)
 
 	item_group_defaults = get_item_group_defaults(row.item_code, company)
@@ -1483,6 +1557,17 @@ def get_material_request_items(
 		)
 
 	min_order_qty = flt(row.get("min_order_qty")) if doc.get("consider_minimum_order_qty") else 0
+	item_warehouse = (
+		warehouse
+		or row.get("source_warehouse")
+		or row.get("default_warehouse")
+		or item_group_defaults.get("default_warehouse")
+	)
+	if storage_location and frappe.get_cached_value(
+		"Storage Location", storage_location, "warehouse"
+	) != item_warehouse:
+		storage_location = None
+
 	return {
 		"item_code": row.item_code,
 		"item_name": row.item_name,
@@ -1490,10 +1575,8 @@ def get_material_request_items(
 		"conversion_factor": conversion_factor,
 		"required_bom_qty": row.get("qty"),
 		"stock_uom": row.get("stock_uom"),
-		"warehouse": warehouse
-		or row.get("source_warehouse")
-		or row.get("default_warehouse")
-		or item_group_defaults.get("default_warehouse"),
+		"warehouse": item_warehouse,
+		"storage_location": storage_location,
 		"safety_stock": row.safety_stock,
 		"actual_qty": bin_dict.get("actual_qty", 0),
 		"projected_qty": bin_dict.get("projected_qty", 0),
@@ -1665,13 +1748,19 @@ def get_sales_orders(self):
 
 
 def _required_qty_for_mr(
-	row, ignore_existing_ordered_qty, warehouse, bin_dict, consumed_qty, include_safety_stock
+	row,
+	ignore_existing_ordered_qty,
+	warehouse,
+	bin_dict,
+	consumed_qty,
+	include_safety_stock,
+	storage_location=None,
 ):
 	safety_stock = flt(row["safety_stock"]) if include_safety_stock else 0
 	qty = flt(row.get("qty"))
 	projected_qty = max(0, flt(bin_dict.get("projected_qty"))) if ignore_existing_ordered_qty else 0
 
-	key = (row.get("item_code"), warehouse)
+	key = (row.get("item_code"), warehouse, storage_location)
 	available_qty = projected_qty - consumed_qty[key]
 	required_qty = max(0, qty - (available_qty - safety_stock))
 	consumed_qty[key] += qty - required_qty
@@ -1696,7 +1785,7 @@ def _adjust_required_qty_for_uom(row, required_qty):
 
 
 @frappe.whitelist()
-def get_bin_details(row, company, for_warehouse=None, all_warehouse=False):
+def get_bin_details(row, company, for_warehouse=None, all_warehouse=False, storage_location=None):
 	if isinstance(row, str):
 		row = frappe._dict(json.loads(row))
 
@@ -1708,6 +1797,41 @@ def get_bin_details(row, company, for_warehouse=None, all_warehouse=False):
 	warehouse = ""
 	if not all_warehouse:
 		warehouse = for_warehouse or row.get("source_warehouse") or row.get("default_warehouse")
+
+	if storage_location:
+		location_warehouse = frappe.get_cached_value("Storage Location", storage_location, "warehouse")
+		if warehouse and warehouse != location_warehouse:
+			warehouse_bounds = frappe.db.get_value("Warehouse", warehouse, ["lft", "rgt"])
+			location_bounds = frappe.db.get_value("Warehouse", location_warehouse, ["lft", "rgt"])
+			if not (
+				warehouse_bounds
+				and location_bounds
+				and location_bounds[0] >= warehouse_bounds[0]
+				and location_bounds[1] <= warehouse_bounds[1]
+			):
+				return []
+
+		item_code = row.get("item_code")
+		actual_qty = get_stock_balance(
+			item_code,
+			location_warehouse,
+			inventory_dimensions_dict={"storage_location": storage_location},
+		)
+		available_qty = get_available_qty_to_reserve(
+			item_code, location_warehouse, storage_location=storage_location
+		)
+		return [
+			frappe._dict(
+				{
+					"warehouse": location_warehouse,
+					"actual_qty": actual_qty,
+					"projected_qty": available_qty,
+					"ordered_qty": 0,
+					"reserved_qty_for_production": 0,
+					"planned_qty": 0,
+				}
+			)
+		]
 
 	if warehouse:
 		lft, rgt = frappe.db.get_value("Warehouse", warehouse, ["lft", "rgt"])
@@ -1766,10 +1890,49 @@ def _authorize_mr_request(doc, warehouses=None):
 	# Values arrive through frappe.parse_json, so container elements are untyped: a dict reaches
 	# frappe.db.get_value() in its *name* position and becomes a filter.
 	for row in _iter_mr_rows(doc):
-		for fieldname in ("item_code", "warehouse", "bom_no", "sales_order", "uom", "purchase_uom"):
+		for fieldname in (
+			"item_code",
+			"warehouse",
+			"storage_location",
+			"from_warehouse",
+			"from_storage_location",
+			"bom_no",
+			"sales_order",
+			"uom",
+			"purchase_uom",
+		):
 			value = row.get(fieldname)
 			if value is not None and not isinstance(value, str):
 				frappe.throw(_("Invalid {0}").format(fieldname), frappe.PermissionError)
+		for fieldname in ("warehouse", "source_warehouse", "from_warehouse", "fg_warehouse"):
+			if row.get(fieldname):
+				frappe.has_permission("Warehouse", doc=row[fieldname], throw=True)
+		for fieldname in ("storage_location", "source_storage_location", "from_storage_location"):
+			if row.get(fieldname):
+				frappe.has_permission("Storage Location", doc=row[fieldname], throw=True)
+
+	for fieldname in ("warehouse", "for_warehouse", "sub_assembly_warehouse"):
+		if doc.get(fieldname):
+			frappe.has_permission("Warehouse", doc=doc[fieldname], throw=True)
+	for fieldname in ("warehouse_storage_location", "for_storage_location", "sub_assembly_storage_location"):
+		if doc.get(fieldname):
+			frappe.has_permission("Storage Location", doc=doc[fieldname], throw=True)
+
+	if warehouses:
+		warehouse_rows = json.loads(warehouses) if isinstance(warehouses, str) else warehouses
+		if not isinstance(warehouse_rows, list):
+			frappe.throw(_("Invalid warehouses"), frappe.PermissionError)
+		for row in warehouse_rows:
+			if not isinstance(row, dict):
+				frappe.throw(_("Invalid warehouse row"), frappe.PermissionError)
+			for fieldname in ("warehouse", "storage_location"):
+				value = row.get(fieldname)
+				if value is not None and not isinstance(value, str):
+					frappe.throw(_("Invalid {0}").format(fieldname), frappe.PermissionError)
+			if row.get("warehouse"):
+				frappe.has_permission("Warehouse", doc=row["warehouse"], throw=True)
+			if row.get("storage_location"):
+				frappe.has_permission("Storage Location", doc=row["storage_location"], throw=True)
 
 
 def _iter_mr_rows(doc):
@@ -1788,8 +1951,10 @@ def get_items_for_material_requests(
 	doc = frappe._dict(json.loads(doc) if isinstance(doc, str) else doc)
 	_authorize_mr_request(doc, warehouses)
 
+	transfer_warehouse_options = []
 	if warehouses:
-		warehouses = list(set(get_warehouse_list(warehouses)))
+		transfer_warehouse_options = _get_transfer_warehouse_options(warehouses, doc.get("company"))
+		warehouses = list({row.warehouse for row in transfer_warehouse_options})
 
 		if (
 			doc.get("for_warehouse")
@@ -1797,6 +1962,9 @@ def get_items_for_material_requests(
 			and doc.get("for_warehouse") in warehouses
 		):
 			warehouses.remove(doc.get("for_warehouse"))
+			transfer_warehouse_options = [
+				row for row in transfer_warehouse_options if row.warehouse != doc.get("for_warehouse")
+			]
 
 	doc["mr_items"] = []
 
@@ -1844,8 +2012,6 @@ def get_items_for_material_requests(
 
 		planned_qty = data.get("required_qty") or data.get("planned_qty")
 		ignore_existing_ordered_qty = data.get("ignore_existing_ordered_qty") or ignore_existing_ordered_qty
-		warehouse = doc.get("for_warehouse")
-
 		item_details = {}
 		if data.get("bom") or data.get("bom_no"):
 			if data.get("required_qty"):
@@ -1874,6 +2040,7 @@ def get_items_for_material_requests(
 						include_non_stock_items,
 						sub_assembly_items,
 						planned_qty=planned_qty,
+						doc=doc,
 					)
 				elif data.get("include_exploded_items") and include_subcontracted_items:
 					# fetch exploded items from BOM
@@ -1904,12 +2071,15 @@ def get_items_for_material_requests(
 				get_uom_conversion_factor(item_master.name, purchase_uom) if item_master.purchase_uom else 1.0
 			)
 
-			item_details[item_master.item_code] = frappe._dict(
+			item_details[
+				(item_master.item_code, item_master.default_warehouse or "", "")
+			] = frappe._dict(
 				{
 					"item_name": item_master.item_name,
 					"default_bom": doc.bom,
 					"purchase_uom": purchase_uom,
 					"default_warehouse": item_master.default_warehouse,
+					"source_warehouse": item_master.default_warehouse,
 					"min_order_qty": item_master.min_order_qty,
 					"default_material_request_type": item_master.default_material_request_type,
 					"qty": planned_qty or 1,
@@ -1941,8 +2111,24 @@ def get_items_for_material_requests(
 	for sales_order in so_item_details:
 		item_dict = so_item_details[sales_order]
 		for details in item_dict.values():
-			warehouse = warehouse or details.get("source_warehouse") or details.get("default_warehouse")
-			bin_dict = get_bin_details(details, doc.company, warehouse)
+			warehouse = doc.get("for_warehouse") or details.get("source_warehouse")
+			storage_location = (
+				doc.get("for_storage_location")
+				if doc.get("for_warehouse")
+				else details.get("source_storage_location")
+			)
+			warehouse = (
+				warehouse
+				or (
+					frappe.get_cached_value("Storage Location", storage_location, "warehouse")
+					if storage_location
+					else None
+				)
+				or details.get("default_warehouse")
+			)
+			bin_dict = get_bin_details(
+				details, doc.company, warehouse, storage_location=storage_location
+			)
 			bin_dict = bin_dict[0] if bin_dict else {}
 
 			if details.qty > 0:
@@ -1954,6 +2140,7 @@ def get_items_for_material_requests(
 					ignore_existing_ordered_qty,
 					include_safety_stock,
 					warehouse,
+					storage_location,
 					bin_dict,
 					consumed_qty,
 				)
@@ -1962,7 +2149,7 @@ def get_items_for_material_requests(
 
 	if (ignore_existing_ordered_qty or get_parent_warehouse_data) and warehouses:
 		new_mr_items = []
-		locations_by_item = _get_transfer_locations(mr_items, warehouses, company)
+		locations_by_item = _get_transfer_locations(mr_items, transfer_warehouse_options, company)
 		for item in mr_items:
 			get_materials_from_other_locations(
 				item,
@@ -1970,7 +2157,9 @@ def get_items_for_material_requests(
 				new_mr_items,
 				company,
 				consider_minimum_order_qty=doc.get("consider_minimum_order_qty"),
-				locations=locations_by_item[item.get("item_code")],
+				locations=locations_by_item[
+					(item.get("item_code"), item.get("warehouse"), item.get("storage_location"))
+				],
 			)
 
 		mr_items = new_mr_items
@@ -2002,7 +2191,8 @@ def get_materials_from_other_locations(
 	purchase_uom = frappe.db.get_value("Item", item.get("item_code"), "purchase_uom")
 
 	if locations is None:
-		locations = _get_transfer_locations([item], warehouses, company)[item.get("item_code")]
+		key = (item.get("item_code"), item.get("warehouse"), item.get("storage_location"))
+		locations = _get_transfer_locations([item], warehouses, company)[key]
 
 	required_qty = item.get("quantity")
 	if item.get("conversion_factor") and item.get("purchase_uom") != item.get("stock_uom"):
@@ -2027,27 +2217,101 @@ def get_materials_from_other_locations(
 
 
 def _get_transfer_locations(mr_items, warehouses, company):
-	from erpnext.stock.doctype.pick_list.pick_list import get_available_item_locations
+	from erpnext.stock.doctype.pick_list.pick_list import (
+		get_available_item_locations,
+		get_locations_based_on_required_qty,
+		get_rejected_warehouses,
+	)
 
 	required_qty_by_item = defaultdict(float)
 	for item in mr_items:
-		required_qty_by_item[item.get("item_code")] += max(
+		key = (item.get("item_code"), item.get("warehouse"), item.get("storage_location"))
+		required_qty_by_item[key] += max(
 			0, flt(item.get("quantity")) * flt(item.get("conversion_factor"))
 		)
 
-	return {
-		item_code: get_available_item_locations(
-			item_code, warehouses, required_qty, company, ignore_validation=True
+	warehouse_options = _get_transfer_warehouse_options(warehouses, company)
+	warehouse_wide_options = [row for row in warehouse_options if not row.storage_location]
+	location_specific_options = [row for row in warehouse_options if row.storage_location]
+	rejected_warehouses = set(get_rejected_warehouses())
+	locations_by_item = {}
+
+	for key, required_qty in required_qty_by_item.items():
+		item_code = key[0]
+		if required_qty <= 0:
+			locations_by_item[key] = []
+			continue
+
+		location_specific_warehouses = {row.warehouse for row in location_specific_options}
+		item_warehouse_wide_options = [
+			row for row in warehouse_wide_options if row.warehouse not in location_specific_warehouses
+		]
+		locations = (
+			get_available_item_locations(
+				item_code,
+				[row.warehouse for row in item_warehouse_wide_options],
+				required_qty,
+				company,
+				ignore_validation=True,
+			)
+			if item_warehouse_wide_options
+			else []
 		)
-		if required_qty > 0
-		else []
-		for item_code, required_qty in required_qty_by_item.items()
-	}
+		for option in location_specific_options:
+			if option.warehouse in rejected_warehouses:
+				continue
+			bin_details = get_bin_details(
+				{"item_code": item_code},
+				company,
+				for_warehouse=option.warehouse,
+				storage_location=option.storage_location,
+			)
+			if bin_details and flt(bin_details[0].projected_qty) > 0:
+				locations.append(
+					frappe._dict(
+						{
+							"warehouse": option.warehouse,
+							"storage_location": option.storage_location,
+							"qty": flt(bin_details[0].projected_qty),
+						}
+					)
+				)
+
+		locations_by_item[key] = get_locations_based_on_required_qty(locations, required_qty, None)
+
+	return locations_by_item
+
+
+def _get_transfer_warehouse_options(warehouses, company):
+	if isinstance(warehouses, str):
+		warehouses = json.loads(warehouses)
+
+	options = []
+	for row in warehouses or []:
+		warehouse = row.get("warehouse")
+		storage_location = row.get("storage_location")
+		if not warehouse:
+			continue
+
+		if storage_location:
+			validate_storage_location_warehouse(storage_location, warehouse)
+			if frappe.get_cached_value("Warehouse", warehouse, "company") != company:
+				continue
+			options.append(frappe._dict({"warehouse": warehouse, "storage_location": storage_location}))
+			continue
+
+		child_warehouses = frappe.db.get_descendants("Warehouse", warehouse)
+		for child_warehouse in child_warehouses or [warehouse]:
+			if frappe.get_cached_value("Warehouse", child_warehouse, "company") == company:
+				frappe.has_permission("Warehouse", doc=child_warehouse, throw=True)
+				options.append(frappe._dict({"warehouse": child_warehouse, "storage_location": None}))
+
+	return list({(row.warehouse, row.storage_location): row for row in options}.values())
 
 
 def _transfer_from_locations(item, locations, new_mr_items, required_qty):
 	precision = frappe.get_precision("Material Request Plan Item", "quantity")
-	transfers_by_warehouse = {}
+	transfers_by_location = {}
 	for d in locations:
 		if flt(required_qty, precision) <= 0:
 			return required_qty
@@ -2059,8 +2323,10 @@ def _transfer_from_locations(item, locations, new_mr_items, required_qty):
 		required_qty -= quantity
 
 		warehouse = d.get("warehouse")
-		if warehouse in transfers_by_warehouse:
-			transfer = transfers_by_warehouse[warehouse]
+		storage_location = d.get("storage_location")
+		key = (warehouse, storage_location)
+		if key in transfers_by_location:
+			transfer = transfers_by_location[key]
 			transfer["quantity"] = flt(transfer["quantity"] + quantity, precision)
 			continue
 
@@ -2071,10 +2337,11 @@ def _transfer_from_locations(item, locations, new_mr_items, required_qty):
 				"material_request_type": "Material Transfer",
 				"uom": new_dict.get("stock_uom"),  # internal transfer should be in stock UOM
 				"from_warehouse": warehouse,
+				"from_storage_location": storage_location,
 				"conversion_factor": 1.0,
 			}
 		)
-		transfers_by_warehouse[warehouse] = new_dict
+		transfers_by_location[key] = new_dict
 		new_mr_items.append(new_dict)
 	return required_qty
 
@@ -2100,6 +2367,7 @@ def get_sub_assembly_items(
 	warehouse=None,
 	indent=0,
 	skip_available_sub_assembly_item=False,
+	storage_location=None,
 ):
 	data = get_bom_children(parent=bom_no)
 	precision = frappe.get_precision("Production Plan Sub Assembly Item", "qty")
@@ -2110,7 +2378,15 @@ def get_sub_assembly_items(
 			required_qty = stock_qty
 
 			if skip_available_sub_assembly_item and d.item_code not in sub_assembly_items:
-				bin_details.setdefault(d.item_code, get_bin_details(d, company, for_warehouse=warehouse))
+				bin_details.setdefault(
+					d.item_code,
+					get_bin_details(
+						d,
+						company,
+						for_warehouse=warehouse,
+						storage_location=storage_location,
+					),
+				)
 
 				for _bin_dict in bin_details[d.item_code]:
 					_bin_dict.original_projected_qty = _bin_dict.projected_qty
@@ -2123,7 +2399,15 @@ def get_sub_assembly_items(
 							stock_qty = stock_qty - _bin_dict.original_projected_qty
 							sub_assembly_items.append(d.item_code)
 			elif warehouse:
-				bin_details.setdefault(d.item_code, get_bin_details(d, company, for_warehouse=warehouse))
+				bin_details.setdefault(
+					d.item_code,
+					get_bin_details(
+						d,
+						company,
+						for_warehouse=warehouse,
+						storage_location=storage_location,
+					),
+				)
 
 			if not d.is_phantom_item:
 				bom_data.append(
@@ -2163,6 +2447,7 @@ def get_sub_assembly_items(
 					warehouse,
 					indent=indent + 1,
 					skip_available_sub_assembly_item=skip_available_sub_assembly_item,
+					storage_location=storage_location,
 				)
 
 
@@ -2276,6 +2561,7 @@ def get_raw_materials_of_sub_assembly_items(
 	include_non_stock_items,
 	sub_assembly_items,
 	planned_qty=1,
+	doc=None,
 ):
 	bei = frappe.qb.DocType("BOM Item")
 	bom = frappe.qb.DocType("BOM")
@@ -2303,6 +2589,9 @@ def get_raw_materials_of_sub_assembly_items(
 			bei.bom_no,
 			item.min_order_qty,
 			bei.source_warehouse,
+			IfNull(bei.source_storage_location, bom.default_source_storage_location).as_(
+				"source_storage_location"
+			),
 			item.default_material_request_type,
 			item.min_order_qty,
 			item_default.default_warehouse,
@@ -2321,7 +2610,13 @@ def get_raw_materials_of_sub_assembly_items(
 				| (bei.is_phantom_item == 1)
 			)
 		)
-		.groupby(bei.item_code, bei.stock_uom)
+		.groupby(
+			bei.item_code,
+			bei.stock_uom,
+			bei.source_warehouse,
+			bei.source_storage_location,
+			bom.default_source_storage_location,
+		)
 	)
 
 	for item in query.run(as_dict=True):
@@ -2341,9 +2636,10 @@ def get_raw_materials_of_sub_assembly_items(
 				item_details,
 				company,
 				item.bom_no,
-				include_non_stock_items,
-				sub_assembly_items,
-				planned_qty=recursion_qty,
+					include_non_stock_items,
+					sub_assembly_items,
+					planned_qty=recursion_qty,
+					doc=doc,
 			)
 			if not item.is_phantom_item:
 				existing_sub_assembly_items.add(existing_key)
@@ -2351,10 +2647,16 @@ def get_raw_materials_of_sub_assembly_items(
 			if not item.conversion_factor and item.purchase_uom:
 				item.conversion_factor = get_uom_conversion_factor(item.item_code, item.purchase_uom)
 
-			if details := item_details.get((item.get("item_code"), item.get("main_bom"))):
+			details_key = (
+				item.get("item_code"),
+				item.get("main_bom"),
+				item.get("source_warehouse") or "",
+				item.get("source_storage_location") or "",
+			)
+			if details := item_details.get(details_key):
 				details.qty += item.get("qty")
 			else:
-				item_details.setdefault((item.get("item_code"), item.get("main_bom")), item)
+				item_details.setdefault(details_key, item)
 
 	return item_details
 

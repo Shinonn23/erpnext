@@ -88,22 +88,8 @@ class ManufactureEntry:
 		self.stock_entry.set_stock_entry_type()
 		self.stock_entry.work_order = self.work_order
 
-		self.prepare_source_warehouse()
 		self.add_raw_materials()
 		self.add_finished_good()
-
-	def prepare_source_warehouse(self):
-		self.source_wh = {}
-		if self.skip_material_transfer:
-			if not self.backflush_from_wip_warehouse:
-				self.source_wh = frappe._dict(
-					frappe.get_all(
-						"Job Card Item",
-						filters={"parent": self.job_card},
-						fields=["item_code", "source_warehouse"],
-						as_list=1,
-					)
-				)
 
 	def add_raw_materials(self):
 		from erpnext.stock.doctype.stock_entry.stock_entry import set_previous_operation_serial_batch
@@ -127,31 +113,35 @@ class ManufactureEntry:
 
 			production_share = self.get_production_share()
 			items_to_remove = []
-			for item_code, _dict in item_dict.items():
-				_dict.from_warehouse = self.source_wh.get(item_code) or self.wip_warehouse
-				_dict.to_warehouse = ""
+			for item_key, item in item_dict.items():
+				from_source_warehouse = self.skip_material_transfer and not self.backflush_from_wip_warehouse
+				item.from_warehouse = item.source_warehouse if from_source_warehouse else self.wip_warehouse
+				item.storage_location = (
+					item.source_storage_location if from_source_warehouse else self.wip_storage_location
+				)
+				item.to_warehouse = ""
 
 				if backflush_based_on != "BOM" and not self.skip_material_transfer:
-					calculated_qty = flt(_dict.transferred_qty) - flt(_dict.consumed_qty)
+					calculated_qty = flt(item.transferred_qty) - flt(item.consumed_qty)
 					if calculated_qty < 0:
 						frappe.throw(
-							_("Consumed quantity of item {0} exceeds transferred quantity.").format(item_code)
+							_("Consumed quantity of item {0} exceeds transferred quantity.").format(item.item_code)
 						)
 
-					_dict.qty = calculated_qty
-					self.update_available_serial_batches(_dict, available_serial_batches)
+					item.qty = calculated_qty
+					self.update_available_serial_batches(item, available_serial_batches)
 				else:
-					remaining_qty = max(flt(_dict.qty) - flt(_dict.consumed_qty), 0)
-					_dict.qty = min(flt(_dict.qty) * production_share, remaining_qty)
-					if not _dict.qty:
-						items_to_remove.append(item_code)
+					remaining_qty = max(flt(item.qty) - flt(item.consumed_qty), 0)
+					item.qty = min(flt(item.qty) * production_share, remaining_qty)
+					if not item.qty:
+						items_to_remove.append(item_key)
 						continue
 
 					if self.skip_material_transfer:
-						set_previous_operation_serial_batch(self.stock_entry, _dict)
+						set_previous_operation_serial_batch(self.stock_entry, item)
 
-			for item_code in items_to_remove:
-				item_dict.pop(item_code)
+			for item_key in items_to_remove:
+				item_dict.pop(item_key)
 
 			self.stock_entry.add_to_stock_entry_detail(item_dict)
 
@@ -168,7 +158,7 @@ class ManufactureEntry:
 		return min(flt(self.for_quantity) / qty_to_produce, 1)
 
 	def parse_available_serial_batches(self, item_dict, available_serial_batches):
-		key = (item_dict.item_code, item_dict.from_warehouse)
+		key = (item_dict.item_code, item_dict.from_warehouse, item_dict.storage_location)
 		if key not in available_serial_batches:
 			return [], {}
 
@@ -210,6 +200,7 @@ class ManufactureEntry:
 				{
 					"item_code": item_dict.item_code,
 					"warehouse": item_dict.from_warehouse,
+					"storage_location": item_dict.storage_location,
 					"posting_datetime": get_combine_datetime(
 						self.stock_entry.posting_date, self.stock_entry.posting_time
 					),
@@ -239,6 +230,8 @@ class ManufactureEntry:
 				stock_entry_detail.serial_and_batch_bundle,
 				stock_entry_detail.s_warehouse,
 				stock_entry_detail.t_warehouse,
+				stock_entry_detail.storage_location,
+				stock_entry_detail.to_storage_location,
 				stock_entry.purpose,
 			)
 			.where(
@@ -256,10 +249,10 @@ class ManufactureEntry:
 		stock_entry_data = self.get_stock_entry_data()
 
 		for row in stock_entry_data:
-			warehouse = (
-				row.t_warehouse if row.purpose == "Material Transfer for Manufacture" else row.s_warehouse
-			)
-			key = (row.item_code, warehouse)
+			is_transfer = row.purpose == "Material Transfer for Manufacture"
+			warehouse = row.t_warehouse if is_transfer else row.s_warehouse
+			storage_location = row.to_storage_location if is_transfer else row.storage_location
+			key = (row.item_code, warehouse, storage_location)
 			if key not in available_serial_batches:
 				available_serial_batches[key] = frappe._dict(
 					{
@@ -296,6 +289,7 @@ class ManufactureEntry:
 				"name as job_card_item",
 				"item_code",
 				"source_warehouse",
+				"source_storage_location",
 				"required_qty as qty",
 				"transferred_qty",
 				"consumed_qty",
@@ -309,12 +303,7 @@ class ManufactureEntry:
 		)
 
 		for item in items:
-			key = item.item_code
-
-			if key in item_dict:
-				item_dict[key]["qty"] += flt(item.qty)
-			else:
-				item_dict[key] = item
+			item_dict[item.job_card_item] = item
 
 		for item, item_details in item_dict.items():
 			for d in [
@@ -336,6 +325,7 @@ class ManufactureEntry:
 
 		args = {
 			"to_warehouse": self.fg_warehouse,
+			"to_storage_location": self.fg_storage_location,
 			"from_warehouse": "",
 			"qty": self.for_quantity - self.process_loss_qty,
 			"item_name": item.item_name,

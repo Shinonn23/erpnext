@@ -291,9 +291,14 @@ def create_material_request(material_requests):
 
 				schedule_dates = [d.schedule_date for d in mr.items]
 				mr.schedule_date = max(schedule_dates or [nowdate()])
-				mr.flags.ignore_mandatory = True
-				mr.insert()
-				mr.submit()
+				previous_reorder_flag = frappe.flags.get("in_auto_reorder_material_request")
+				frappe.flags.in_auto_reorder_material_request = True
+				try:
+					mr.flags.ignore_mandatory = True
+					mr.insert()
+					mr.submit()
+				finally:
+					frappe.flags.in_auto_reorder_material_request = previous_reorder_flag
 				mr_list.append(mr)
 
 				company_wise_mr.setdefault(company, []).append(mr)

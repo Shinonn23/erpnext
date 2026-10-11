@@ -27,6 +27,7 @@ class AssetCapitalizationStockItem(Document):
 		serial_no: DF.Text | None
 		stock_qty: DF.Float
 		stock_uom: DF.Link
+		storage_location: DF.Link | None
 		use_serial_batch_fields: DF.Check
 		valuation_rate: DF.Currency
 		warehouse: DF.Link

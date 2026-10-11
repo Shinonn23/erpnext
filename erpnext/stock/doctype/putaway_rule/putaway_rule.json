@@ -17,7 +17,9 @@
   "uom",
   "conversion_factor",
   "stock_uom",
-  "stock_capacity"
+  "stock_capacity",
+  "inventory_dimension",
+  "storage_location"
  ],
  "fields": [
   {
@@ -108,15 +110,27 @@
    "no_copy": 1,
    "precision": "9",
    "read_only": 1
+  },
+  {
+   "fieldname": "inventory_dimension",
+   "fieldtype": "Section Break",
+   "label": "Inventory Dimension"
+  },
+  {
+   "fieldname": "storage_location",
+   "fieldtype": "Link",
+   "label": "Storage Location",
+   "options": "Storage Location",
+   "search_index": 1
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-07 17:31:31.732720",
+ "modified": "2026-10-10 00:55:04.855036",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Putaway Rule",
- "naming_rule": "Expression (old style)",
+ "naming_rule": "Expression",
  "owner": "Administrator",
  "permissions": [
   {
@@ -149,6 +163,7 @@
    "write": 1
   }
  ],
+ "row_format": "Dynamic",
  "sort_field": "creation",
  "sort_order": "DESC",
  "states": [],

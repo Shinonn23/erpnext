@@ -34,6 +34,7 @@ class Warehouse(NestedSet):
 		company: DF.Link
 		customer: DF.Link | None
 		default_in_transit_warehouse: DF.Link | None
+		default_storage_location: DF.Link | None
 		disabled: DF.Check
 		email_id: DF.Data | None
 		is_group: DF.Check
@@ -71,6 +72,15 @@ class Warehouse(NestedSet):
 		self.set_onload("stock_exists", self.check_if_sle_exists(non_cancelled_only=True))
 
 	def validate(self):
+		if self.default_storage_location:
+			from erpnext.stock.doctype.storage_location.storage_location import (
+				validate_storage_location_warehouse,
+			)
+
+			if self.is_group:
+				frappe.throw(_("A group Warehouse cannot have a Default Storage Location."))
+			validate_storage_location_warehouse(self.default_storage_location, self.name)
+
 		self.validate_warehouse_account()
 		self.validate_inventory_account()
 		self.warn_about_multiple_warehouse_account()

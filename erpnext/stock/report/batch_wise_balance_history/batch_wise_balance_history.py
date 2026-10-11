@@ -11,6 +11,12 @@ from erpnext.accounts.report.utils import validate_mandatory_date_range
 from erpnext.deprecation_dumpster import deprecated
 from erpnext.stock.doctype.stock_closing_entry.stock_closing_entry import StockClosing
 from erpnext.stock.doctype.warehouse.warehouse import apply_warehouse_filter
+from erpnext.stock.report.storage_location_utils import (
+	add_location_column,
+	apply_location_query,
+	location_key,
+	show_location_wise_stock,
+)
 
 SLE_COUNT_LIMIT = 100_000
 
@@ -43,8 +49,9 @@ def execute(filters=None):
 	for item in sorted(iwb_map):
 		if not filters.get("item") or filters.get("item") == item:
 			for wh in sorted(iwb_map[item]):
-				for batch in sorted(iwb_map[item][wh]):
-					qty_dict = iwb_map[item][wh][batch]
+				for batch_key in sorted(iwb_map[item][wh]):
+					batch, location = batch_key
+					qty_dict = iwb_map[item][wh][batch_key]
 					if qty_dict.opening_qty or qty_dict.in_qty or qty_dict.out_qty or qty_dict.bal_qty:
 						data.append(
 							[
@@ -65,6 +72,8 @@ def execute(filters=None):
 								item_map[item]["stock_uom"],
 							]
 						)
+						if show_location_wise_stock(filters):
+							data[-1].append(location or None)
 
 	return columns, data
 
@@ -87,14 +96,18 @@ def get_columns(filters):
 		_("UOM") + "::90",
 	]
 
-	return columns
+	return add_location_column(columns, filters)
 
 
 def get_stock_ledger_entries(filters):
 	entries = []
 
 	stk_cl_obj = StockClosing(filters.company, filters.from_date, filters.from_date)
-	if stk_cl_obj.last_closing_balance:
+	if (
+		stk_cl_obj.last_closing_balance
+		and not show_location_wise_stock(filters)
+		and not filters.get("storage_location")
+	):
 		entries += get_stock_closing_balance(stk_cl_obj, filters)
 		filters.start_from = stk_cl_obj.last_closing_balance.to_date
 
@@ -150,6 +163,7 @@ def get_stock_ledger_entries_for_batch_no(filters):
 		.groupby(sle.voucher_no, sle.batch_no, sle.item_code, sle.warehouse)
 	)
 
+	query = apply_location_query(query, sle, filters, group_by=True)
 	query = apply_warehouse_filter(query, sle, filters)
 	if filters.warehouse_type and not filters.warehouse:
 		warehouses = frappe.get_all(
@@ -163,7 +177,8 @@ def get_stock_ledger_entries_for_batch_no(filters):
 
 	for field in ["item_code", "batch_no", "company"]:
 		if filters.get(field):
-			query = query.where(sle[field] == filters.get(field))
+			value = filters.get(field)
+			query = query.where(sle[field].isin(value) if isinstance(value, list) else sle[field] == value)
 
 	if filters.start_from:
 		query = query.where(sle.posting_datetime > get_datetime(filters.start_from))
@@ -198,6 +213,7 @@ def get_stock_ledger_entries_for_batch_bundle(filters):
 		.groupby(sle.voucher_no, batch_package.batch_no, batch_package.warehouse)
 	)
 
+	query = apply_location_query(query, sle, filters, group_by=True)
 	query = apply_warehouse_filter(query, sle, filters)
 	if filters.warehouse_type and not filters.warehouse:
 		warehouses = frappe.get_all(
@@ -214,7 +230,8 @@ def get_stock_ledger_entries_for_batch_bundle(filters):
 			if field == "batch_no":
 				query = query.where(batch_package[field] == filters.get(field))
 			else:
-				query = query.where(sle[field] == filters.get(field))
+				value = filters.get(field)
+			query = query.where(sle[field].isin(value) if isinstance(value, list) else sle[field] == value)
 
 	if filters.start_from:
 		query = query.where(sle.posting_date > getdate(filters.start_from))
@@ -231,12 +248,12 @@ def get_item_warehouse_batch_map(filters, float_precision):
 
 	for d in sle:
 		iwb_map.setdefault(d.item_code, {}).setdefault(d.warehouse, {}).setdefault(
-			d.batch_no,
+			(d.batch_no, location_key(d, filters)),
 			frappe._dict(
 				{"opening_qty": 0.0, "in_qty": 0.0, "out_qty": 0.0, "bal_qty": 0.0, "bal_value": 0.0}
 			),
 		)
-		qty_dict = iwb_map[d.item_code][d.warehouse][d.batch_no]
+		qty_dict = iwb_map[d.item_code][d.warehouse][(d.batch_no, location_key(d, filters))]
 		if d.posting_date < from_date:
 			qty_dict.opening_qty = flt(qty_dict.opening_qty, float_precision) + flt(
 				d.actual_qty, float_precision

@@ -6,6 +6,7 @@ from frappe import _
 from frappe.utils import add_to_date, flt, today
 
 from erpnext.stock.report.stock_ledger.stock_ledger import execute as stock_ledger_execute
+from erpnext.stock.report.storage_location_utils import add_location_column, location_key
 
 
 def execute(filters: dict | None = None):
@@ -15,7 +16,7 @@ def execute(filters: dict | None = None):
 	dictionary and should return columns and data. It is called by the framework
 	every time the report is refreshed or a filter is updated.
 	"""
-	columns = get_columns()
+	columns = add_location_column(get_columns(), filters)
 	data = get_data(filters)
 
 	return columns, data
@@ -98,6 +99,7 @@ def get_data(filters) -> list[dict]:
 				_c, data = stock_ledger_execute(
 					frappe._dict(
 						{
+							"show_location_wise_stock": (filters or {}).get("show_location_wise_stock", 1),
 							"company": company,
 							"batch_no": batch,
 							"from_date": add_to_date(today(), years=-12),
@@ -109,9 +111,9 @@ def get_data(filters) -> list[dict]:
 					)
 				)
 
-				previous_qty = 0
+				previous_quantities = {}
 				for row in data:
-					key = (row.get("warehouse"), batch)
+					key = (row.get("warehouse"), batch, location_key(row, filters))
 					if key in distinct_batches:
 						continue
 
@@ -125,7 +127,8 @@ def get_data(filters) -> list[dict]:
 								"warehouse": row.get("warehouse"),
 								"actual_qty": row.get("actual_qty"),
 								"qty_after_transaction": row.get("qty_after_transaction"),
-								"previous_qty": previous_qty,
+								"previous_qty": previous_quantities.get(key, 0),
+								"storage_location": row.get("storage_location"),
 								"voucher_type": row.get("voucher_type"),
 								"voucher_no": row.get("voucher_no"),
 							}
@@ -133,7 +136,7 @@ def get_data(filters) -> list[dict]:
 
 						distinct_batches.add(key)
 
-					previous_qty = row.get("qty_after_transaction")
+					previous_quantities[key] = row.get("qty_after_transaction")
 
 	return batch_negative_data
 

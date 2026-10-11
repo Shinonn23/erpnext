@@ -2368,52 +2368,6 @@ class TestSalesOrder(ERPNextTestSuite):
 		self.assertEqual(so.per_billed, 50)
 		self.assertEqual(so.per_delivered, 50)
 
-	def test_so_back_updated_from_wo_via_mr(self):
-		"SO -> MR (Manufacture) -> WO. Test if WO Qty is updated in SO."
-		from erpnext.manufacturing.doctype.work_order.work_order import (
-			make_stock_entry as make_se_from_wo,
-		)
-		from erpnext.stock.doctype.material_request.material_request import raise_work_orders
-
-		so = make_sales_order(item_list=[{"item_code": "_Test FG Item", "qty": 2, "rate": 100}])
-
-		mr = make_material_request(so.name)
-		mr.material_request_type = "Manufacture"
-		mr.schedule_date = today()
-		mr.submit()
-
-		# WO from MR
-		wo_name = raise_work_orders(mr.name, mr.company)[0]
-		wo = frappe.get_doc("Work Order", wo_name)
-		wo.wip_warehouse = "Work In Progress - _TC"
-		wo.skip_transfer = True
-
-		self.assertEqual(wo.sales_order, so.name)
-		self.assertEqual(wo.sales_order_item, so.items[0].name)
-
-		wo.submit()
-		make_stock_entry(
-			item_code="_Test Item",
-			target="_Test Warehouse - _TC",
-			qty=4,
-			basic_rate=100,  # Stock RM
-		)
-		make_stock_entry(
-			item_code="_Test Item Home Desktop 100",  # Stock RM
-			target="_Test Warehouse - _TC",
-			qty=4,
-			basic_rate=100,
-		)
-
-		se = frappe.get_doc(make_se_from_wo(wo.name, "Manufacture", 2))
-		se.submit()  # Finish WO
-
-		mr.reload()
-		wo.reload()
-		so.reload()
-		self.assertEqual(so.items[0].work_order_qty, wo.produced_qty)
-		self.assertEqual(mr.status, "Ordered")
-
 	def test_sales_order_with_shipping_rule(self):
 		from erpnext.accounts.doctype.shipping_rule.test_shipping_rule import create_shipping_rule
 

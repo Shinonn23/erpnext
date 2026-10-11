@@ -3,6 +3,7 @@
 
 frappe.query_reports["Stock Qty vs Batch Qty"] = {
 	filters: [
+		{fieldname: "show_location_wise_stock", label: __("Show Storage Location Wise Stock"), fieldtype: "Check", default: 1},
 		{
 			fieldname: "item",
 			label: __("Item"),
@@ -33,7 +34,7 @@ frappe.query_reports["Stock Qty vs Batch Qty"] = {
 				let indexes = frappe.query_report.datatable.rowmanager.getCheckedRows();
 				let selected_rows = indexes
 					.map((i) => frappe.query_report.data[i])
-					.filter((row) => row.difference != 0);
+					.filter((row) => row.difference != null && row.difference != 0);
 
 				if (selected_rows.length) {
 					frappe.call({

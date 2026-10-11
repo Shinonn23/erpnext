@@ -662,6 +662,11 @@ class SalesInvoice(SellingController):
 			"Serial and Batch Bundle",
 			"Tax Withholding Entry",
 		)
+		if self.get("is_custody_loan_transaction") and self.flags.get("custody_loan_cancellation"):
+			# The Loan cancellation hook has checked these source backlinks.
+			self.ignore_linked_doctypes += (
+				"Custody Loan", "Custody Loan Return", "Custody Loan Adjustment", "Material Request"
+			)
 
 		self.delete_auto_created_batches()
 

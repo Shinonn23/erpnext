@@ -36,7 +36,9 @@
   "batch_no",
   "accounting_details_section",
   "expense_account",
-  "accounting_dimensions_section"
+  "accounting_dimensions_section",
+  "inventory_dimension",
+  "storage_location"
  ],
  "fields": [
   {
@@ -251,6 +253,19 @@
    "fieldname": "accounting_dimensions_section",
    "fieldtype": "Section Break",
    "label": "Accounting Dimensions"
+  },
+  {
+   "fieldname": "inventory_dimension",
+   "fieldtype": "Section Break",
+   "label": "Inventory Dimension",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "storage_location",
+   "fieldtype": "Link",
+   "label": "Storage Location",
+   "options": "Storage Location",
+   "search_index": 1
   }
  ],
  "idx": 1,

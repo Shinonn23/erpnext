@@ -199,21 +199,6 @@ frappe.ui.form.on("Payment Entry", {
 			};
 		});
 
-		frm.set_query("payment_request", "references", function (doc, cdt, cdn) {
-			const row = frappe.get_doc(cdt, cdn);
-			return {
-				query: "erpnext.accounts.doctype.payment_request.payment_request.get_open_payment_requests_query",
-				filters: {
-					reference_doctype: row.reference_doctype,
-					reference_name: row.reference_name,
-					company: doc.company,
-					status: ["!=", "Paid"],
-					outstanding_amount: [">", 0], // for compatibility with old data
-					docstatus: 1,
-				},
-			};
-		});
-
 		frm.set_query("sales_taxes_and_charges_template", function () {
 			return {
 				filters: {
@@ -232,12 +217,6 @@ frappe.ui.form.on("Payment Entry", {
 			};
 		});
 
-		frm.add_fetch(
-			"payment_request",
-			"outstanding_amount",
-			"payment_request_outstanding",
-			"Payment Entry Reference"
-		);
 	},
 
 	refresh: function (frm) {
@@ -1725,31 +1704,6 @@ frappe.ui.form.on("Payment Entry", {
 		}
 
 		return current_tax_amount;
-	},
-
-	after_save: function (frm) {
-		const { matched_payment_requests } = frappe.last_response;
-		if (!matched_payment_requests) return;
-
-		const COLUMN_LABEL = [
-			[__("Reference DocType"), __("Reference Name"), __("Allocated Amount"), __("Payment Request")],
-		];
-
-		frappe.msgprint({
-			title: __("Unset Matched Payment Request"),
-			message: COLUMN_LABEL.concat(matched_payment_requests),
-			as_table: true,
-			wide: true,
-			primary_action: {
-				label: __("Allocate Payment Request"),
-				action() {
-					frappe.hide_msgprint();
-					frm.call("set_matched_payment_requests", { matched_payment_requests }, () => {
-						frm.dirty();
-					});
-				},
-			},
-		});
 	},
 
 	before_cancel: function (frm) {

@@ -39,8 +39,9 @@
   "work_order",
   "customer_name",
   "column_break_feoy",
-  "material_request",
-  "amended_from",
+"material_request",
+"custody_loan",
+"amended_from",
   "connections_tab"
  ],
  "fields": [
@@ -118,8 +119,8 @@
    "fieldname": "pick_list_type",
    "fieldtype": "Select",
    "label": "Picking Workflow",
-   "options": "Standard\nCustomer Demo - Asset Conversion",
-   "description": "Choose Customer Demo - Asset Conversion when picked stock will be converted into Fixed Assets for a customer."
+   "options": "Standard\nAsset Conversion\nCustomer Demo - Asset Conversion",
+   "description": "Choose Asset Conversion when picked stock will be converted into Fixed Assets. Customer Demo requests must use Customer Demo - Asset Conversion."
   },
   {
    "depends_on": "eval:['Material Transfer', 'Material Issue'].includes(doc.purpose)",
@@ -127,6 +128,15 @@
    "fieldtype": "Link",
    "label": "Material Request",
    "options": "Material Request"
+  },
+  {
+   "fieldname": "custody_loan",
+   "fieldtype": "Link",
+   "label": "Custody Loan",
+   "options": "Custody Loan",
+   "hidden": 1,
+   "read_only": 1,
+   "no_copy": 1
   },
   {
    "depends_on": "eval:doc.docstatus===0",

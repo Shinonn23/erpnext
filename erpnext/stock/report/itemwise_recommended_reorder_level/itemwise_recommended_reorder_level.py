@@ -6,6 +6,13 @@ from frappe import _
 from frappe.query_builder.functions import Abs, Sum
 from frappe.utils import flt, getdate
 
+from erpnext.stock.report.storage_location_utils import (
+	add_location_column,
+	apply_location_query,
+	location_key,
+	show_location_wise_stock,
+)
+
 
 def execute(filters=None):
 	if not filters:
@@ -18,32 +25,39 @@ def execute(filters=None):
 		frappe.throw(_("'From Date' must be after 'To Date'"))
 
 	columns = get_columns()
+	columns.append(_("Warehouse") + ":Link/Warehouse:150")
+	add_location_column(columns, filters)
 	items = get_item_info(filters)
 	consumed_item_map = get_consumed_items(filters)
 	delivered_item_map = get_delivered_items(filters)
 
 	data = []
+	keys = consumed_item_map.keys() | delivered_item_map.keys()
 	for item in items:
-		total_outgoing = flt(consumed_item_map.get(item.name, 0)) + flt(delivered_item_map.get(item.name, 0))
-		avg_daily_outgoing = flt(total_outgoing / diff, float_precision)
-		reorder_level = (avg_daily_outgoing * flt(item.lead_time_days)) + flt(item.safety_stock)
+		for key in sorted((key for key in keys if key[0] == item.name), key=str) or [(item.name, None, "")]:
+			total_outgoing = flt(consumed_item_map.get(key, 0)) + flt(delivered_item_map.get(key, 0))
+			avg_daily_outgoing = flt(total_outgoing / diff, float_precision)
+			reorder_level = (avg_daily_outgoing * flt(item.lead_time_days)) + flt(item.safety_stock)
 
-		data.append(
-			[
-				item.name,
-				item.item_name,
-				item.item_group,
-				item.brand,
-				item.description,
-				item.safety_stock,
-				item.lead_time_days,
-				consumed_item_map.get(item.name, 0),
-				delivered_item_map.get(item.name, 0),
-				total_outgoing,
-				avg_daily_outgoing,
-				reorder_level,
-			]
-		)
+			data.append(
+				[
+					item.name,
+					item.item_name,
+					item.item_group,
+					item.brand,
+					item.description,
+					item.safety_stock,
+					item.lead_time_days,
+					consumed_item_map.get(key, 0),
+					delivered_item_map.get(key, 0),
+					total_outgoing,
+					avg_daily_outgoing,
+					reorder_level,
+				]
+			)
+			data[-1].append(key[1])
+			if show_location_wise_stock(filters):
+				data[-1].append(key[2] or None)
 
 	return columns, data
 
@@ -105,20 +119,24 @@ def get_consumed_items(filters):
 		frappe.qb.from_(sle)
 		.left_join(se)
 		.on(sle.voucher_no == se.name)
-		.select(sle.item_code, Abs(Sum(sle.actual_qty)).as_("consumed_qty"))
+		.select(sle.item_code, sle.warehouse, Abs(Sum(sle.actual_qty)).as_("consumed_qty"))
 		.where(
 			(sle.actual_qty < 0)
 			& (sle.is_cancelled == 0)
 			& (sle.voucher_type.notin(["Delivery Note", "Sales Invoice"]))
 			& ((se.purpose.isnull()) | (se.purpose.notin(purpose_to_exclude)))
 		)
-		.groupby(sle.item_code)
+		.groupby(sle.item_code, sle.warehouse)
 	)
+	query = apply_location_query(query, sle, filters, group_by=True)
 	query = get_filtered_query(filters, sle, query)
 
 	consumed_items = query.run(as_dict=True)
 
-	consumed_items_map = {item.item_code: item.consumed_qty for item in consumed_items}
+	consumed_items_map = {
+		(item.item_code, item.warehouse, location_key(item, filters)): item.consumed_qty
+		for item in consumed_items
+	}
 	return consumed_items_map
 
 
@@ -128,10 +146,11 @@ def get_delivered_items(filters):
 	query = (
 		frappe.qb.from_(parent)
 		.from_(child)
-		.select(child.item_code, Sum(child.stock_qty).as_("dn_qty"))
+		.select(child.item_code, child.warehouse, Sum(child.stock_qty).as_("dn_qty"))
 		.where((parent.name == child.parent) & (parent.docstatus == 1))
-		.groupby(child.item_code)
+		.groupby(child.item_code, child.warehouse)
 	)
+	query = apply_location_query(query, child, filters, group_by=True)
 	query = get_filtered_query(filters, parent, query)
 
 	dn_items = query.run(as_dict=True)
@@ -141,20 +160,23 @@ def get_delivered_items(filters):
 	query = (
 		frappe.qb.from_(parent)
 		.from_(child)
-		.select(child.item_code, Sum(child.stock_qty).as_("si_qty"))
+		.select(child.item_code, child.warehouse, Sum(child.stock_qty).as_("si_qty"))
 		.where((parent.name == child.parent) & (parent.docstatus == 1) & (parent.update_stock == 1))
-		.groupby(child.item_code)
+		.groupby(child.item_code, child.warehouse)
 	)
+	query = apply_location_query(query, child, filters, group_by=True)
 	query = get_filtered_query(filters, parent, query)
 
 	si_items = query.run(as_dict=True)
 
 	dn_item_map = {}
 	for item in dn_items:
-		dn_item_map.setdefault(item.item_code, item.dn_qty)
+		key = (item.item_code, item.warehouse, location_key(item, filters))
+		dn_item_map[key] = dn_item_map.get(key, 0) + item.dn_qty
 
 	for item in si_items:
-		dn_item_map.setdefault(item.item_code, item.si_qty)
+		key = (item.item_code, item.warehouse, location_key(item, filters))
+		dn_item_map[key] = dn_item_map.get(key, 0) + item.si_qty
 
 	return dn_item_map
 

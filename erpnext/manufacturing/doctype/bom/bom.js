@@ -70,6 +70,31 @@ frappe.ui.form.on("BOM", {
 			};
 		});
 
+		frm.set_query("default_source_storage_location", () => ({
+			filters: { warehouse: frm.doc.default_source_warehouse || "", disabled: 0 },
+		}));
+		frm.set_query("default_target_storage_location", () => ({
+			filters: { warehouse: frm.doc.default_target_warehouse || "", disabled: 0 },
+		}));
+		frm.set_query("source_storage_location", "items", (doc, cdt, cdn) => {
+			const row = locals[cdt][cdn];
+			return {
+				filters: {
+					warehouse: row.source_warehouse || frm.doc.default_source_warehouse || "",
+					disabled: 0,
+				},
+			};
+		});
+		for (const [location_field, warehouse_field] of [
+			["source_storage_location", "source_warehouse"],
+			["wip_storage_location", "wip_warehouse"],
+			["fg_storage_location", "fg_warehouse"],
+		]) {
+			frm.set_query(location_field, "operations", (doc, cdt, cdn) => ({
+				filters: { warehouse: locals[cdt][cdn][warehouse_field] || "", disabled: 0 },
+			}));
+		}
+
 		frm.phantom_bom_filters = {
 			query: "erpnext.manufacturing.doctype.bom.bom.item_query",
 			filters: {
@@ -189,8 +214,12 @@ frappe.ui.form.on("BOM", {
 	},
 
 	default_source_warehouse(frm) {
+		frm.set_value("default_source_storage_location", "");
 		if (frm.doc.default_source_warehouse) {
 			frm.doc.operations.forEach((d) => {
+				if (d.source_warehouse !== frm.doc.default_source_warehouse) {
+					frappe.model.set_value(d.doctype, d.name, "source_storage_location", "");
+				}
 				frappe.model.set_value(
 					d.doctype,
 					d.name,
@@ -202,8 +231,12 @@ frappe.ui.form.on("BOM", {
 	},
 
 	default_target_warehouse(frm) {
+		frm.set_value("default_target_storage_location", "");
 		if (frm.doc.default_source_warehouse) {
 			frm.doc.operations.forEach((d) => {
+				if (d.fg_warehouse !== frm.doc.default_target_warehouse) {
+					frappe.model.set_value(d.doctype, d.name, "fg_storage_location", "");
+				}
 				frappe.model.set_value(d.doctype, d.name, "fg_warehouse", frm.doc.default_target_warehouse);
 			});
 		}
@@ -950,7 +983,20 @@ frappe.ui.form.on("BOM Item", {
 		get_bom_material_detail(frm.doc, cdt, cdn, false);
 	},
 	source_warehouse: function (frm, cdt, cdn) {
+		frappe.model.set_value(cdt, cdn, "source_storage_location", "");
 		get_bom_material_detail(frm.doc, cdt, cdn, false);
+	},
+});
+
+frappe.ui.form.on("BOM Operation", {
+	source_warehouse(frm, cdt, cdn) {
+		frappe.model.set_value(cdt, cdn, "source_storage_location", "");
+	},
+	wip_warehouse(frm, cdt, cdn) {
+		frappe.model.set_value(cdt, cdn, "wip_storage_location", "");
+	},
+	fg_warehouse(frm, cdt, cdn) {
+		frappe.model.set_value(cdt, cdn, "fg_storage_location", "");
 	},
 });
 

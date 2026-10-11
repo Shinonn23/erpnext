@@ -18,6 +18,7 @@ from erpnext.stock.report.stock_analytics.stock_analytics import (
 	get_stock_ledger_entries,
 )
 from erpnext.stock.report.stock_balance.stock_balance import filter_items_with_no_transactions
+from erpnext.stock.report.storage_location_utils import add_location_column, show_location_wise_stock
 from erpnext.stock.utils import is_reposting_item_valuation_in_progress
 
 
@@ -27,6 +28,8 @@ def execute(filters=None):
 		filters = {}
 
 	validate_filters(filters)
+	if show_location_wise_stock(filters):
+		return get_location_data(filters)
 
 	columns = get_columns(filters)
 
@@ -207,3 +210,41 @@ def get_item_warehouse_map(filters, sle):
 
 def get_group_by_key(row) -> tuple:
 	return (row.company, row.item_code, row.warehouse)
+
+
+def get_location_data(filters):
+	from erpnext.stock.report.stock_balance.stock_balance import execute as stock_balance
+
+	report_filters = frappe._dict(filters.copy())
+	report_filters.update(show_location_wise_stock=1, show_stock_ageing_data=0)
+	if isinstance(report_filters.get("item_code"), str):
+		report_filters.item_code = [report_filters.item_code]
+	_balance_columns, balances = stock_balance(report_filters)
+	age_filters = frappe._dict(filters.copy())
+	age_filters.update(show_warehouse_wise_stock=1, show_location_wise_stock=1)
+	ages = FIFOSlots(age_filters).generate()
+	columns = get_columns(filters)
+	columns += [_("Warehouse") + ":Link/Warehouse:150", _("Quantity") + ":Float:120"]
+	add_location_column(columns, filters)
+	data = []
+	for balance in balances:
+		if filters.get("filter_total_zero_qty") and not balance.bal_qty:
+			continue
+		details = frappe.get_cached_value("Item", balance.item_code, ["brand"], as_dict=True)
+		queue = ages.get(
+			(balance.item_code, balance.warehouse, balance.get("storage_location") or ""), {}
+		).get("fifo_queue", [])
+		data.append(
+			[
+				balance.item_code,
+				balance.item_name,
+				balance.item_group,
+				details.brand,
+				balance.bal_val,
+				get_average_age(queue, filters["to_date"]) if queue else 0,
+				balance.warehouse,
+				balance.bal_qty,
+				balance.get("storage_location"),
+			]
+		)
+	return columns, data

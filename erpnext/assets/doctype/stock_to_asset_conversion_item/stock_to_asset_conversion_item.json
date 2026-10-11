@@ -14,7 +14,9 @@
   "bundle_summary",
   "asset_item_code",
   "valuation_rate",
-  "amount"
+  "amount",
+  "inventory_dimension",
+  "storage_location"
  ],
  "fields": [
   {
@@ -73,7 +75,7 @@
    "fieldtype": "Link",
    "label": "Serial and Batch Bundle",
    "options": "Serial and Batch Bundle",
-   "read_only": 1
+   "read_only": 0
   },
   {
    "fieldname": "bundle_summary",
@@ -84,10 +86,10 @@
   {
    "fieldname": "asset_item_code",
    "fieldtype": "Link",
+   "hidden": 1,
    "label": "Target Asset Item",
    "options": "Item",
-   "read_only": 1,
-   "reqd": 1
+   "read_only": 1
   },
   {
    "fieldname": "valuation_rate",
@@ -102,6 +104,19 @@
    "label": "Amount",
    "options": "Company:company:default_currency",
    "read_only": 1
+  },
+  {
+   "fieldname": "inventory_dimension",
+   "fieldtype": "Section Break",
+   "label": "Inventory Dimension",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "storage_location",
+   "fieldtype": "Link",
+   "label": "Source Storage Location",
+   "options": "Storage Location",
+   "search_index": 1
   }
  ],
  "istable": 1,

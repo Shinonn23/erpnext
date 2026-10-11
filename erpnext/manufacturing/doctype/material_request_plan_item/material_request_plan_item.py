@@ -19,6 +19,7 @@ class MaterialRequestPlanItem(Document):
 		description: DF.TextEditor | None
 		from_bom: DF.Link | None
 		from_warehouse: DF.Link | None
+		from_storage_location: DF.Link | None
 		item_code: DF.Link
 		item_name: DF.Data | None
 		main_item_code: DF.Link | None
@@ -45,6 +46,7 @@ class MaterialRequestPlanItem(Document):
 		sales_order: DF.Link | None
 		schedule_date: DF.Date | None
 		stock_reserved_qty: DF.Float
+		storage_location: DF.Link | None
 		sub_assembly_item_reference: DF.Data | None
 		uom: DF.Link | None
 		warehouse: DF.Link

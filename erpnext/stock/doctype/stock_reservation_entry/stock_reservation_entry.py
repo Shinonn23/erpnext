@@ -11,6 +11,7 @@ from frappe.query_builder import Case
 from frappe.query_builder.functions import Sum
 from frappe.utils import cint, flt, nowdate, nowtime, parse_json
 
+from erpnext.stock.doctype.storage_location.storage_location import validate_storage_location_warehouse
 from erpnext.stock.utils import get_or_make_bin, get_stock_balance
 
 
@@ -59,6 +60,7 @@ class StockReservationEntry(Document):
 			"Closed",
 		]
 		stock_uom: DF.Link | None
+		storage_location: DF.Link | None
 		transferred_qty: DF.Float
 		voucher_detail_no: DF.Data | None
 		voucher_no: DF.DynamicLink | None
@@ -82,6 +84,7 @@ class StockReservationEntry(Document):
 		self.validate_group_warehouse()
 		validate_disabled_warehouse(self.warehouse)
 		validate_warehouse_company(self.warehouse, self.company)
+		validate_storage_location_warehouse(self.storage_location, self.warehouse)
 		self.validate_uom_is_integer()
 
 	def before_submit(self) -> None:
@@ -354,7 +357,11 @@ class StockReservationEntry(Document):
 			available_serial_nos = []
 			if self.has_serial_no:
 				available_serial_nos = get_available_serial_nos_to_reserve(
-					self.item_code, self.warehouse, self.has_batch_no, ignore_sre=self.name
+					self.item_code,
+					self.warehouse,
+					self.has_batch_no,
+					ignore_sre=self.name,
+					storage_location=self.storage_location,
 				)
 
 				if not available_serial_nos:
@@ -408,7 +415,11 @@ class StockReservationEntry(Document):
 						frappe.throw(msg)
 
 					available_qty_to_reserve = get_available_qty_to_reserve(
-						self.item_code, self.warehouse, entry.batch_no, ignore_sre=self.name
+						self.item_code,
+						self.warehouse,
+						entry.batch_no,
+						ignore_sre=self.name,
+						storage_location=self.storage_location,
 					)
 
 					if available_qty_to_reserve <= 0:
@@ -578,7 +589,12 @@ class StockReservationEntry(Document):
 
 		self.db_set(
 			"available_qty",
-			get_available_qty_to_reserve(self.item_code, self.warehouse, ignore_sre=self.name),
+			get_available_qty_to_reserve(
+				self.item_code,
+				self.warehouse,
+				ignore_sre=self.name,
+				storage_location=self.storage_location,
+			),
 		)
 
 		total_reserved_qty = self.get_total_reserved_qty()
@@ -606,7 +622,13 @@ class StockReservationEntry(Document):
 				frappe.throw(msg)
 
 		if qty_to_be_reserved > allowed_qty:
-			actual_qty = get_stock_balance(self.item_code, self.warehouse)
+			actual_qty = get_stock_balance(
+				self.item_code,
+				self.warehouse,
+				inventory_dimensions_dict={"storage_location": self.storage_location}
+				if self.storage_location
+				else None,
+			)
 			msg = """
 				Cannot reserve more than Allowed Qty {} {} for Item {} against {} {}.<br /><br />
 				The <b>Allowed Qty</b> is calculated as follows:<br />
@@ -656,6 +678,7 @@ class StockReservationEntry(Document):
 			ignore_sre=self.name,
 			warehouse=self.warehouse,
 			from_voucher_detail_no=from_voucher_detail_no,
+			storage_location=self.storage_location,
 		)
 
 	def get_row_reserved_qty(self) -> float:
@@ -717,7 +740,11 @@ def validate_stock_reservation_settings(voucher: object) -> None:
 
 
 def get_available_qty_to_reserve(
-	item_code: str, warehouse: str, batch_no: str | None = None, ignore_sre=None
+	item_code: str,
+	warehouse: str,
+	batch_no: str | None = None,
+	ignore_sre=None,
+	storage_location: str | None = None,
 ) -> float:
 	"""Returns `Available Qty to Reserve (Actual Qty - Reserved Qty)` for Item, Warehouse and Batch combination."""
 
@@ -725,10 +752,18 @@ def get_available_qty_to_reserve(
 
 	if batch_no:
 		return get_batch_qty(
-			item_code=item_code, warehouse=warehouse, batch_no=batch_no, ignore_voucher_nos=[ignore_sre]
+			item_code=item_code,
+			warehouse=warehouse,
+			batch_no=batch_no,
+			ignore_voucher_nos=[ignore_sre],
+			inventory_dimensions_dict={"storage_location": storage_location} if storage_location else None,
 		)
 
-	available_qty = get_stock_balance(item_code, warehouse)
+	available_qty = get_stock_balance(
+		item_code,
+		warehouse,
+		inventory_dimensions_dict={"storage_location": storage_location} if storage_location else None,
+	)
 
 	if available_qty:
 		sre = frappe.qb.DocType("Stock Reservation Entry")
@@ -747,6 +782,8 @@ def get_available_qty_to_reserve(
 		if ignore_sre:
 			query = query.where(sre.name != ignore_sre)
 
+		query = _filter_reservations_by_storage_location(query, sre, storage_location)
+
 		reserved_qty = query.run()[0][0] or 0.0
 
 		if reserved_qty:
@@ -755,8 +792,20 @@ def get_available_qty_to_reserve(
 	return available_qty
 
 
+def _filter_reservations_by_storage_location(query, sre, storage_location):
+	"""Treat legacy, dimensionless reservations as warehouse-wide when checking one location."""
+	if storage_location:
+		query = query.where((sre.storage_location == storage_location) | sre.storage_location.isnull())
+
+	return query
+
+
 def get_available_serial_nos_to_reserve(
-	item_code: str, warehouse: str, has_batch_no: bool = False, ignore_sre=None
+	item_code: str,
+	warehouse: str,
+	has_batch_no: bool = False,
+	ignore_sre=None,
+	storage_location: str | None = None,
 ) -> list[tuple]:
 	"""Returns Available Serial Nos to Reserve (Available Serial Nos - Reserved Serial Nos)` for Item, Warehouse and Batch combination."""
 
@@ -771,6 +820,9 @@ def get_available_serial_nos_to_reserve(
 				"warehouse": warehouse,
 				"has_batch_no": has_batch_no,
 				"ignore_voucher_nos": [ignore_sre],
+				"inventory_dimensions_dict": {"storage_location": storage_location}
+				if storage_location
+				else {},
 			}
 		)
 	)
@@ -800,6 +852,8 @@ def get_available_serial_nos_to_reserve(
 
 		if ignore_sre:
 			query = query.where(sre.name != ignore_sre)
+
+		query = _filter_reservations_by_storage_location(query, sre, storage_location)
 
 		reserved_serial_nos = query.run()
 
@@ -833,9 +887,10 @@ def get_sre_reserved_qty_for_item_and_warehouse(item_code: str, warehouse: str |
 
 
 def get_sre_reserved_qty_for_items_and_warehouses(
-	item_code_list: list, warehouse_list: list | None = None
+	item_code_list: list, warehouse_list: list | None = None, *, group_by_storage_location: bool = False,
+	storage_locations: list | None = None
 ) -> dict:
-	"""Returns a dict like {("item_code", "warehouse"): "reserved_qty", ... }."""
+	"""Return quantities keyed by item/warehouse, optionally including Storage Location."""
 
 	if not item_code_list:
 		return {}
@@ -862,9 +917,17 @@ def get_sre_reserved_qty_for_items_and_warehouses(
 	if warehouse_list:
 		query = query.where(sre.warehouse.isin(warehouse_list))
 
+	if storage_locations:
+		query = query.where(sre.storage_location.isin(storage_locations))
+
+	if group_by_storage_location:
+		query = query.select(sre.storage_location).groupby(sre.storage_location)
 	data = query.run(as_dict=True)
 
-	return {(d["item_code"], d["warehouse"]): d["reserved_qty"] for d in data} if data else {}
+	return {
+		(d.item_code, d.warehouse, d.storage_location or None) if group_by_storage_location else (d.item_code, d.warehouse): d.reserved_qty
+		for d in data
+	}
 
 
 def get_sre_reserved_qty_details_for_voucher(voucher_type: str, voucher_no: str) -> dict:
@@ -924,6 +987,7 @@ def get_sre_reserved_qty_for_voucher_detail_no(
 	ignore_sre=None,
 	warehouse=None,
 	from_voucher_detail_no=None,
+	storage_location=None,
 ) -> float:
 	"""Returns `Reserved Qty` against the Voucher."""
 
@@ -956,6 +1020,8 @@ def get_sre_reserved_qty_for_voucher_detail_no(
 
 	if from_voucher_detail_no:
 		query = query.where(sre.from_voucher_detail_no == from_voucher_detail_no)
+
+	query = _filter_reservations_by_storage_location(query, sre, storage_location)
 
 	reserved_qty = query.run(as_list=True)
 
@@ -1058,13 +1124,14 @@ def get_sre_details_for_voucher(voucher_type: str, voucher_no: str) -> list[dict
 			sre.name,
 			sre.item_code,
 			sre.warehouse,
-			sre.voucher_type,
-			sre.voucher_no,
-			sre.voucher_detail_no,
-			(sre.reserved_qty - sre.delivered_qty).as_("reserved_qty"),
-			sre.has_serial_no,
-			sre.has_batch_no,
-			sre.reservation_based_on,
+			sre.storage_location,
+				sre.voucher_type,
+				sre.voucher_no,
+				sre.voucher_detail_no,
+				(sre.reserved_qty - sre.delivered_qty).as_("reserved_qty"),
+				sre.has_serial_no,
+				sre.has_batch_no,
+				sre.reservation_based_on,
 		)
 		.where(
 			(sre.docstatus == 1)
@@ -1146,12 +1213,14 @@ class StockReservation:
 		self.table_name = "items"
 		self.qty_field = "stock_qty"
 		self.warehouse_field = "warehouse"
+		self.storage_location_field = "storage_location"
 		self.warehouse = None
 
 		if self.doc.doctype == "Work Order":
 			self.table_name = "required_items"
 			self.qty_field = "required_qty"
 			self.warehouse_field = "source_warehouse"
+			self.storage_location_field = "source_storage_location"
 			if self.doc.skip_transfer and self.doc.from_wip_warehouse:
 				self.warehouse = self.doc.wip_warehouse
 		elif self.doc.doctype == "Subcontracting Order":
@@ -1219,6 +1288,8 @@ class StockReservation:
 			if self.doc.doctype == "Production Plan" and item.get("from_warehouse"):
 				warehouse = item.get("from_warehouse")
 
+			storage_location = self.get_storage_location(item, warehouse)
+
 			if (
 				not warehouse
 				and self.doc.doctype == "Work Order"
@@ -1232,7 +1303,9 @@ class StockReservation:
 			if not qty:
 				continue
 
-			self.available_qty_to_reserve = self.get_available_qty_to_reserve(item_code, warehouse)
+			self.available_qty_to_reserve = self.get_available_qty_to_reserve(
+				item_code, warehouse, storage_location=storage_location
+			)
 			if not self.available_qty_to_reserve:
 				self.throw_stock_not_exists_error(item.get("idx"), item_code, warehouse)
 
@@ -1245,6 +1318,7 @@ class StockReservation:
 
 			sre.item_code = item_code
 			sre.warehouse = warehouse
+			sre.storage_location = storage_location
 			sre.has_serial_no = item_details.has_serial_no
 			sre.has_batch_no = item_details.has_batch_no
 			sre.voucher_type = item.get("voucher_type") or self.doc.doctype
@@ -1273,6 +1347,31 @@ class StockReservation:
 			is_sre_created = True
 
 		return is_sre_created
+
+	def get_storage_location(self, item, warehouse):
+		"""Resolve the source location corresponding to the warehouse being reserved."""
+		if self.doc.doctype == "Work Order":
+			if item.get("storage_location") and item.get("warehouse") == warehouse:
+				return item.storage_location
+			if self.warehouse and warehouse == self.doc.wip_warehouse:
+				voucher_detail_no = item.get("voucher_detail_no") or item.get("name")
+				work_order_items = self.doc.get("required_items", {"name": voucher_detail_no})
+				operation = (
+					self.doc.get_operation_for_required_item(work_order_items[0])
+					if work_order_items
+					else None
+				)
+				if operation and operation.wip_warehouse == warehouse:
+					return operation.wip_storage_location
+				return self.doc.wip_storage_location
+			return item.get(self.storage_location_field)
+
+		if self.doc.doctype == "Production Plan" and item.get("from_warehouse"):
+			return item.get("from_storage_location")
+		if self.doc.doctype == "Production Plan":
+			return item.get("fg_storage_location") or item.get("storage_location")
+
+		return item.get(self.storage_location_field) or item.get("storage_location")
 
 	def get_voucher_qty(self, item, voucher_detail_no):
 		"""Returns the voucher row's full requirement for a direct reservation."""
@@ -1313,8 +1412,12 @@ class StockReservation:
 
 		frappe.msgprint(msg, title=_("Stock Reservation"), indicator="orange")
 
-	def get_available_qty_to_reserve(self, item_code, warehouse, ignore_sre=None):
-		available_qty = get_stock_balance(item_code, warehouse)
+	def get_available_qty_to_reserve(self, item_code, warehouse, ignore_sre=None, storage_location=None):
+		available_qty = get_stock_balance(
+			item_code,
+			warehouse,
+			inventory_dimensions_dict={"storage_location": storage_location} if storage_location else None,
+		)
 
 		if available_qty:
 			sre = frappe.qb.DocType("Stock Reservation Entry")
@@ -1331,6 +1434,8 @@ class StockReservation:
 
 			if ignore_sre:
 				query = query.where(sre.name != ignore_sre)
+
+			query = _filter_reservations_by_storage_location(query, sre, storage_location)
 
 			reserved_qty = query.run()[0][0] or 0.0
 
@@ -1371,14 +1476,22 @@ class StockReservation:
 
 			for entry in items_to_reserve:
 				if not (
-					row.item_code == entry.item_code and row.warehouse == entry.warehouse and entry.qty > 0
+					row.item_code == entry.item_code
+					and row.warehouse == entry.warehouse
+				and (
+					not row.storage_location
+					or not entry.storage_location
+					or row.storage_location == entry.storage_location
+				)
+				and entry.qty > 0
 				):
 					continue
 
 				if available_qty <= 0:
 					continue
 
-				key = (row.item_code, row.warehouse, entry.voucher_detail_no)
+				storage_location = entry.storage_location or row.storage_location
+				key = (row.item_code, row.warehouse, storage_location, entry.voucher_detail_no)
 
 				if key not in entries_to_reserve:
 					entries_to_reserve.setdefault(
@@ -1388,6 +1501,7 @@ class StockReservation:
 								"qty_to_reserve": 0.0,
 								"item_code": row.item_code,
 								"warehouse": row.warehouse,
+								"storage_location": storage_location,
 								"voucher_type": entry.voucher_type or to_doctype,
 								"voucher_no": entry.voucher_no,
 								"voucher_detail_no": entry.voucher_detail_no,
@@ -1425,13 +1539,17 @@ class StockReservation:
 			self.update_delivered_qty(data)
 			self.make_stock_reservation_entry(data)
 
-		extra_items = set((entry.item_code, entry.warehouse) for entry in items_to_reserve) - set(
-			(row.item_code, row.warehouse) for row in reservation_entries
-		)
+		extra_items = set(
+			(entry.item_code, entry.warehouse, entry.storage_location) for entry in items_to_reserve
+		) - set((row.item_code, row.warehouse, row.storage_location) for row in reservation_entries)
 		for entry in [
-			entry for entry in items_to_reserve if (entry.item_code, entry.warehouse) in extra_items
+			entry
+			for entry in items_to_reserve
+			if (entry.item_code, entry.warehouse, entry.storage_location) in extra_items
 		]:
-			available_qty = get_available_qty_to_reserve(entry.item_code, entry.warehouse)
+			available_qty = get_available_qty_to_reserve(
+				entry.item_code, entry.warehouse, storage_location=entry.get("storage_location")
+			)
 			if not available_qty:
 				frappe.msgprint(
 					_("No available quantity to reserve for item {0} in warehouse {1}").format(
@@ -1449,6 +1567,7 @@ class StockReservation:
 			sre.voucher_qty = entry.required_qty
 			sre.item_code = entry.item_code
 			sre.warehouse = entry.warehouse
+			sre.storage_location = entry.get("storage_location")
 			sre.stock_uom = entry.stock_uom
 			sre.reserved_qty = min(sre.available_qty, entry.qty)
 			sre.has_serial_no = frappe.get_value("Item", sre.item_code, "has_serial_no")
@@ -1478,6 +1597,7 @@ class StockReservation:
 		fields = [
 			"item_code",
 			"warehouse",
+			"storage_location",
 			"voucher_type",
 			"voucher_no",
 			"voucher_detail_no",
@@ -1537,6 +1657,7 @@ class StockReservation:
 				sre.name,
 				sre.item_code,
 				sre.warehouse,
+				sre.storage_location,
 				sre.voucher_type,
 				sre.voucher_no,
 				sre.voucher_detail_no,
@@ -1607,6 +1728,8 @@ class StockReservation:
 		if to_doctype == "Work Order":
 			query = query.select(
 				child_doctype.source_warehouse,
+				child_doctype.source_storage_location,
+				child_doctype.operation_row_id,
 				doctype.wip_warehouse,
 				doctype.skip_transfer,
 				doctype.from_wip_warehouse,
@@ -1636,8 +1759,21 @@ class StockReservation:
 			if row.qty > row.stock_reserved_qty:
 				row.qty -= flt(row.stock_reserved_qty)
 				row.warehouse = row.source_warehouse
+				row.storage_location = row.source_storage_location
 				if row.skip_transfer and row.from_wip_warehouse:
 					row.warehouse = row.wip_warehouse
+					if self.doc.doctype == "Work Order":
+						work_order_item = self.doc.get("required_items", {"name": row.voucher_detail_no})
+						operation = (
+							self.doc.get_operation_for_required_item(work_order_item[0])
+							if work_order_item
+							else None
+						)
+						row.storage_location = (
+							operation.wip_storage_location
+							if operation and operation.wip_warehouse == row.wip_warehouse
+							else self.doc.wip_storage_location
+						)
 
 				if to_doctype == "Work Order":
 					row.voucher_type = "Work Order"
@@ -1751,7 +1887,9 @@ def create_stock_reservation_entries_for_so_items(
 
 			continue
 
-		available_qty_to_reserve = get_available_qty_to_reserve(item.item_code, item.warehouse)
+		available_qty_to_reserve = get_available_qty_to_reserve(
+			item.item_code, item.warehouse, storage_location=item.get("storage_location")
+		)
 
 		# No stock available to reserve, notify the user and skip the item.
 		if available_qty_to_reserve <= 0:

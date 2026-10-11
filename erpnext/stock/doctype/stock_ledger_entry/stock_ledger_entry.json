@@ -43,7 +43,9 @@
   "is_cancelled",
   "to_rename",
   "serial_no",
-  "batch_no"
+  "batch_no",
+  "inventory_dimension",
+  "storage_location"
  ],
  "fields": [
   {
@@ -353,6 +355,21 @@
    "fieldname": "posting_datetime",
    "fieldtype": "Datetime",
    "label": "Posting Datetime"
+  },
+  {
+   "fieldname": "inventory_dimension",
+   "fieldtype": "Section Break",
+   "label": "Inventory Dimension",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "storage_location",
+   "fieldtype": "Link",
+   "label": "Storage Location",
+   "options": "Storage Location",
+   "read_only": 1,
+   "in_standard_filter": 1,
+   "search_index": 1
   }
  ],
  "grid_page_length": 50,

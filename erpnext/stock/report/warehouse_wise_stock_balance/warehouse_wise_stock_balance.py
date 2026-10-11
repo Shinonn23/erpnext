@@ -7,6 +7,12 @@ import frappe
 from frappe import _
 from frappe.query_builder.functions import Sum
 
+from erpnext.stock.report.storage_location_utils import (
+	add_location_column,
+	apply_location_query,
+	show_location_wise_stock,
+)
+
 
 class StockBalanceFilter(TypedDict):
 	company: str | None
@@ -56,6 +62,24 @@ def get_warehouses(report_filters: StockBalanceFilter):
 
 
 def get_data(filters: StockBalanceFilter):
+	if show_location_wise_stock(filters):
+		sle = frappe.qb.DocType("Stock Ledger Entry")
+		warehouses = {row.name: row for row in get_warehouses(filters) if not row.is_group}
+		query = (
+			frappe.qb.from_(sle)
+			.select(sle.warehouse.as_("name"), Sum(sle.stock_value_difference).as_("stock_balance"))
+			.where((sle.docstatus < 2) & (sle.is_cancelled == 0))
+			.groupby(sle.warehouse)
+		)
+		query = apply_location_query(query, sle, filters, group_by=True)
+		if filters.get("company"):
+			query = query.where(sle.company == filters.get("company"))
+		rows = query.run(as_dict=True)
+		for row in rows:
+			if row.name in warehouses:
+				row.disabled = warehouses[row.name].disabled
+		return [row for row in rows if row.name in warehouses]
+
 	warehouse_balance = get_warehouse_wise_balance(filters)
 	warehouses = get_warehouses(filters)
 
@@ -117,4 +141,4 @@ def get_columns(filters: StockBalanceFilter) -> list[dict]:
 			}
 		)
 
-	return columns
+	return add_location_column(columns, filters)

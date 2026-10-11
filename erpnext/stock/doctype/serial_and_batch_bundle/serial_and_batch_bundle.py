@@ -1626,6 +1626,9 @@ class SerialandBatchBundle(Document):
 					"warehouse": self.warehouse,
 					"batch_no": batches,
 					"consider_negative_batches": True,
+					"inventory_dimensions_dict": {
+						"storage_location": self.entries[0].storage_location if self.entries else None
+					},
 				}
 			)
 		)
@@ -1762,6 +1765,7 @@ class SerialandBatchBundle(Document):
 
 	def get_available_qty_from_stock_ledger(self):
 		batches = [d.batch_no for d in self.entries if d.batch_no]
+		storage_location = self.entries[0].storage_location if self.entries else None
 
 		sle = frappe.qb.DocType("Stock Ledger Entry")
 
@@ -1784,11 +1788,16 @@ class SerialandBatchBundle(Document):
 			)
 			.for_update()
 		)
+		if storage_location:
+			query = query.where(sle.storage_location == storage_location)
+		else:
+			query = query.where(sle.storage_location.isnull())
 
 		return query.run(as_dict=True)
 
 	def get_available_qty_from_sabb(self):
 		batches = [d.batch_no for d in self.entries if d.batch_no]
+		storage_location = self.entries[0].storage_location if self.entries else None
 
 		sle = frappe.qb.DocType("Stock Ledger Entry")
 		child = frappe.qb.DocType("Serial and Batch Entry")
@@ -1815,6 +1824,10 @@ class SerialandBatchBundle(Document):
 			.for_update()
 		)
 		query = query.where(child.voucher_type != "Pick List")
+		if storage_location:
+			query = query.where(sle.storage_location == storage_location)
+		else:
+			query = query.where(sle.storage_location.isnull())
 
 		return query.run(as_dict=True)
 
@@ -2308,6 +2321,7 @@ def create_serial_batch_no_ledgers(
 			{
 				"qty": (flt(row.qty) or 1.0) * (1 if type_of_transaction == "Inward" else -1),
 				"warehouse": warehouse,
+				"storage_location": child_row.get("storage_location"),
 				"batch_no": row.batch_no or batch_no,
 				"serial_no": row.serial_no,
 			},
@@ -2407,6 +2421,7 @@ def update_serial_batch_no_ledgers(bundle, entries, child_row, parent_doc, wareh
 			{
 				"qty": (flt(d.get("qty")) or 1.0) * (1 if doc.type_of_transaction == "Inward" else -1),
 				"warehouse": warehouse or d.get("warehouse"),
+				"storage_location": child_row.get("storage_location"),
 				"batch_no": d.get("batch_no"),
 				"serial_no": d.get("serial_no"),
 			},
@@ -2486,6 +2501,8 @@ def get_available_serial_nos(kwargs):
 
 	if not kwargs.get("posting_datetime") and kwargs.get("posting_date"):
 		kwargs["posting_datetime"] = combine_datetime(kwargs.get("posting_date"), kwargs.get("posting_time"))
+	elif kwargs.get("inventory_dimensions_dict") and not kwargs.get("posting_datetime"):
+		kwargs["posting_datetime"] = now()
 
 	filters = {"item_code": kwargs.item_code}
 
@@ -2612,6 +2629,12 @@ def get_serial_nos_from_sre(kwargs):
 		)
 		.limit(cint(kwargs.qty) or 10000000)
 	)
+	for field, value in (kwargs.get("inventory_dimensions_dict") or {}).items():
+		if not frappe.db.has_column("Serial and Batch Entry", field):
+			continue
+		column = getattr(child_table, field)
+		query = query.where(column == value if value not in (None, "") else column.isnull())
+
 	if kwargs.based_on == "LIFO":
 		query = query.orderby(child_table.creation, order=frappe.query_builder.Order.desc)
 	else:
@@ -2859,7 +2882,16 @@ def get_reserved_serial_nos_for_sre(kwargs) -> list:
 	)
 
 	if kwargs.warehouse:
-		query = query.where(sre.warehouse == kwargs.warehouse)
+		if isinstance(kwargs.warehouse, list):
+			query = query.where(sre.warehouse.isin(kwargs.warehouse))
+		else:
+			query = query.where(sre.warehouse == kwargs.warehouse)
+
+	for field, value in (kwargs.get("inventory_dimensions_dict") or {}).items():
+		if not frappe.db.has_column("Serial and Batch Entry", field):
+			continue
+		column = getattr(sb_entry, field)
+		query = query.where(column == value if value not in (None, "") else column.isnull())
 
 	if kwargs.ignore_voucher_nos:
 		query = query.where(sre.name.notin(kwargs.ignore_voucher_nos))
@@ -3006,6 +3038,12 @@ def get_reserved_batches_for_sre(kwargs) -> dict:
 		else:
 			query = query.where(sre.warehouse == kwargs.warehouse)
 
+	for field, value in (kwargs.get("inventory_dimensions_dict") or {}).items():
+		if not frappe.db.has_column("Serial and Batch Entry", field):
+			continue
+		column = getattr(sb_entry, field)
+		query = query.where(column == value if value not in (None, "") else column.isnull())
+
 	if kwargs.ignore_voucher_nos:
 		query = query.where(sre.name.notin(kwargs.ignore_voucher_nos))
 
@@ -3104,6 +3142,11 @@ def get_batch_nos_from_sre(kwargs):
 		.groupby(child_table.batch_no, child_table.warehouse)
 		.orderby(child_table.batch_no, order=frappe.query_builder.Order.asc)
 	)
+	for field, value in (kwargs.get("inventory_dimensions_dict") or {}).items():
+		if not frappe.db.has_column("Serial and Batch Entry", field):
+			continue
+		column = getattr(child_table, field)
+		query = query.where(column == value if value not in (None, "") else column.isnull())
 
 	result = query.run(as_dict=True)
 	return get_qty_based_available_batches(result, flt(kwargs.qty)) if flt(kwargs.qty) else result
@@ -3284,6 +3327,8 @@ def get_voucher_wise_serial_batch_from_bundle(**kwargs) -> dict[str, dict]:
 
 	for row in data:
 		key = (row.item_code, row.warehouse, row.voucher_no)
+		if kwargs.get("group_by_voucher_detail"):
+			key = (*key, row.voucher_detail_no)
 		if kwargs.get("get_subcontracted_item"):
 			# get_subcontracted_item = ("doctype", "field_name")
 			doctype, field_name = kwargs.get("get_subcontracted_item")
@@ -3349,6 +3394,12 @@ def get_picked_batches(kwargs) -> dict[str, dict]:
 			query = query.where(table.warehouse.isin(kwargs.warehouse))
 		else:
 			query = query.where(table.warehouse == kwargs.get("warehouse"))
+
+	for field, value in (kwargs.get("inventory_dimensions_dict") or {}).items():
+		if not frappe.db.has_column("Serial and Batch Entry", field):
+			continue
+		column = getattr(child_table, field)
+		query = query.where(column == value if value not in (None, "") else column.isnull())
 
 	data = query.run(as_dict=True)
 	for row in data:

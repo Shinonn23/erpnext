@@ -21,6 +21,7 @@ from frappe.utils import (
 )
 from frappe.utils.data import DateTimeLikeObject
 
+from erpnext.stock.utils import get_stock_balance
 from erpnext.support.doctype.issue.issue import get_holidays
 
 
@@ -334,12 +335,14 @@ def get_raw_materials(job_card: str):
 			"`tabJob Card`.`skip_material_transfer`",
 			"`tabJob Card`.`backflush_from_wip_warehouse`",
 			"`tabJob Card`.`wip_warehouse`",
+			"`tabJob Card`.`wip_storage_location`",
 			"`tabJob Card Item`.`parent`",
 			"`tabJob Card Item`.`item_code`",
 			"`tabJob Card Item`.`item_group`",
 			"`tabJob Card Item`.`uom`",
 			"`tabJob Card Item`.`item_name`",
 			"`tabJob Card Item`.`source_warehouse`",
+			"`tabJob Card Item`.`source_storage_location`",
 			"`tabJob Card Item`.`required_qty`",
 			"`tabJob Card Item`.`transferred_qty`",
 		],
@@ -351,22 +354,26 @@ def get_raw_materials(job_card: str):
 
 	for row in raw_materials:
 		warehouse = row.source_warehouse
+		storage_location = row.source_storage_location
 		if row.skip_material_transfer and row.backflush_from_wip_warehouse:
 			warehouse = row.wip_warehouse
+			storage_location = row.wip_storage_location
 
 		row.stock_qty = (
-			frappe.db.get_value(
-				"Bin",
-				{
-					"item_code": row.item_code,
-					"warehouse": warehouse,
-				},
-				"actual_qty",
+			get_stock_balance(
+				row.item_code,
+				warehouse,
+				inventory_dimensions_dict={"storage_location": storage_location},
+			)
+			if storage_location
+			else frappe.db.get_value(
+				"Bin", {"item_code": row.item_code, "warehouse": warehouse}, "actual_qty"
 			)
 			or 0.0
 		)
 
 		row.warehouse = warehouse
+		row.storage_location = storage_location
 
 		row.material_availability_status = 0
 		if row.skip_material_transfer and row.stock_qty >= row.required_qty:

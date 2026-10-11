@@ -7,6 +7,7 @@ import frappe
 from frappe import _
 
 from erpnext.stock.doctype.batch.batch import get_batch_qty
+from erpnext.stock.report.storage_location_utils import add_location_column
 
 
 def execute(filters=None):
@@ -14,7 +15,20 @@ def execute(filters=None):
 		filters = {}
 
 	columns = get_columns()
-	data = get_data(filters)
+	columns.append(
+		{
+			"label": _("Warehouse"),
+			"fieldname": "warehouse",
+			"fieldtype": "Link",
+			"options": "Warehouse",
+			"width": 150,
+		}
+	)
+	add_location_column(columns, filters)
+	columns.append(
+		{"label": _("Stock Qty Breakdown"), "fieldname": "location_qty", "fieldtype": "Float", "width": 150}
+	)
+	data = add_location_breakdown(get_data(filters), filters)
 
 	return columns, data
 
@@ -124,3 +138,41 @@ def update_batch_qty(selected_batches=None):
 		frappe.db.set_value("Batch", batch_name, "batch_qty", batch_qty)
 
 	frappe.msgprint(_("Batch Qty updated successfully"), alert=True)
+
+
+def add_location_breakdown(data, filters):
+	from frappe.utils import today
+
+	from erpnext.stock.report.available_batch_report.available_batch_report import (
+		get_batchwise_data_from_serial_batch_bundle,
+		get_batchwise_data_from_stock_ledger,
+	)
+
+	report_filters = frappe._dict(filters.copy())
+	report_filters.update(
+		to_date=today(),
+		include_expired_batches=1,
+		item_code=filters.get("item"),
+		batch_no=filters.get("batch"),
+	)
+	balances = get_batchwise_data_from_stock_ledger(report_filters)
+	get_batchwise_data_from_serial_batch_bundle(balances, report_filters)
+	rows = []
+	for row in data:
+		row = frappe._dict(row)
+		row.indent = 0
+		rows.append(row)
+		for balance in balances.values():
+			if balance.batch_no == row.batch:
+				rows.append(
+					frappe._dict(
+						item_code=row.item_code,
+						item_name=row.item_name,
+						batch=row.batch,
+						warehouse=balance.warehouse,
+						storage_location=balance.get("storage_location"),
+						location_qty=balance.balance_qty,
+						indent=1,
+					)
+				)
+	return rows

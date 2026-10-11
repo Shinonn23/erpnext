@@ -18,6 +18,8 @@
   "valuation_rate",
   "amount",
   "allow_zero_valuation_rate",
+  "inventory_dimension",
+  "storage_location",
   "serial_no_and_batch_section",
   "add_serial_batch_bundle",
   "use_serial_batch_fields",
@@ -261,12 +263,26 @@
    "fieldname": "reconcile_all_serial_batch",
    "fieldtype": "Check",
    "label": "Reconcile All Serial Nos / Batches"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "inventory_dimension",
+   "fieldtype": "Section Break",
+   "label": "Inventory Dimension"
+  },
+  {
+   "fieldname": "storage_location",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Storage Location",
+   "options": "Storage Location",
+   "search_index": 1
   }
  ],
  "grid_page_length": 50,
  "istable": 1,
  "links": [],
- "modified": "2025-11-20 15:27:13.868179",
+ "modified": "2026-10-10 01:15:56.015803",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Stock Reconciliation Item",

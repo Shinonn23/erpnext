@@ -18,7 +18,7 @@
  "prepared_report": 0,
  "ref_doctype": "Serial No",
  "report_name": "Serial No Status",
- "report_type": "Report Builder",
+ "report_type": "Script Report",
  "roles": [
   {
    "role": "Item Manager"

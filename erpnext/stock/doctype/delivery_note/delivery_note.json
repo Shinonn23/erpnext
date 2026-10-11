@@ -164,6 +164,13 @@
   "is_internal_customer",
   "represents_company",
   "inter_company_reference",
+  "custody_loan",
+  "is_system_generated",
+  "is_custody_loan_transaction",
+  "custody_loan_source_doctype",
+  "custody_loan_source_name",
+  "requires_shipment",
+  "custody_loan_shipment",
   "customer_group",
   "territory",
   "title",
@@ -1204,6 +1211,60 @@
    "fieldtype": "Link",
    "label": "Inter Company Reference",
    "options": "Purchase Receipt"
+  },
+  {
+   "fieldname": "custody_loan",
+   "fieldtype": "Link",
+   "label": "Custody Loan",
+   "options": "Custody Loan",
+   "read_only": 1,
+   "hidden": 1
+  },
+  {
+   "fieldname": "is_system_generated",
+   "fieldtype": "Check",
+   "label": "Is System Generated",
+   "read_only": 1,
+   "hidden": 1
+  },
+  {
+   "fieldname": "is_custody_loan_transaction",
+   "fieldtype": "Check",
+   "label": "Is Custody Loan Transaction",
+   "read_only": 1,
+   "hidden": 1
+  },
+  {
+   "fieldname": "custody_loan_source_doctype",
+   "fieldtype": "Link",
+   "label": "Custody Loan Source Type",
+   "options": "DocType",
+   "read_only": 1,
+   "hidden": 1
+  },
+  {
+   "fieldname": "custody_loan_source_name",
+   "fieldtype": "Dynamic Link",
+   "label": "Custody Loan Source",
+   "options": "custody_loan_source_doctype",
+   "read_only": 1,
+   "hidden": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "requires_shipment",
+   "fieldtype": "Check",
+   "label": "Ship via Shipment",
+   "read_only": 1,
+   "hidden": 1
+  },
+  {
+   "fieldname": "custody_loan_shipment",
+   "fieldtype": "Link",
+   "label": "Loan Shipment",
+   "options": "Shipment",
+   "read_only": 1,
+   "hidden": 1
   },
   {
    "depends_on": "eval:!doc.__islocal",

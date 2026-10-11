@@ -25,6 +25,7 @@ class WorkOrderOperation(Document):
 		completed_qty: DF.Float
 		description: DF.TextEditor | None
 		fg_warehouse: DF.Link | None
+		fg_storage_location: DF.Link | None
 		finished_good: DF.Link | None
 		hour_rate: DF.Float
 		is_subcontracted: DF.Check
@@ -41,9 +42,11 @@ class WorkOrderOperation(Document):
 		sequence_id: DF.Int
 		skip_material_transfer: DF.Check
 		source_warehouse: DF.Link | None
+		source_storage_location: DF.Link | None
 		status: DF.Literal["Pending", "Work in Progress", "Completed"]
 		time_in_mins: DF.Float
 		wip_warehouse: DF.Link | None
+		wip_storage_location: DF.Link | None
 		workstation: DF.Link | None
 		workstation_type: DF.Link | None
 	# end: auto-generated types

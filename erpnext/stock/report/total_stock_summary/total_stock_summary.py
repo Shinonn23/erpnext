@@ -4,7 +4,9 @@
 
 import frappe
 from frappe import _
-from frappe.query_builder.functions import Sum
+from frappe.utils import flt
+
+from erpnext.stock.report.storage_location_utils import show_location_wise_stock, split_bin_rows
 
 
 def execute(filters=None):
@@ -23,11 +25,13 @@ def get_columns(filters):
 		_("Current Qty") + ":Float:100",
 	]
 
-	if filters.get("group_by") == "Warehouse":
+	if filters.get("group_by") == "Warehouse" or show_location_wise_stock(filters):
 		columns.insert(0, _("Warehouse") + ":Link/Warehouse:150")
 	else:
 		columns.insert(0, _("Company") + ":Link/Company:250")
 
+	if show_location_wise_stock(filters):
+		columns.append(_("Storage Location") + ":Link/Storage Location:150")
 	return columns
 
 
@@ -35,26 +39,24 @@ def get_total_stock(filters):
 	bin = frappe.qb.DocType("Bin")
 	item = frappe.qb.DocType("Item")
 	wh = frappe.qb.DocType("Warehouse")
-
 	query = (
 		frappe.qb.from_(bin)
 		.inner_join(item)
-		.on(bin.item_code == item.item_code)
+		.on(bin.item_code == item.name)
 		.inner_join(wh)
 		.on(wh.name == bin.warehouse)
-		.where(bin.actual_qty != 0)
+		.select(bin.item_code, item.description, bin.warehouse, wh.company, bin.actual_qty)
 	)
-
-	if filters.get("group_by") == "Warehouse":
-		if filters.get("company"):
-			query = query.where(wh.company == filters.get("company"))
-
-		query = query.select(bin.warehouse).groupby(bin.warehouse)
-	else:
-		query = query.select(wh.company).groupby(wh.company)
-
-	query = query.select(item.item_code, item.description, Sum(bin.actual_qty).as_("actual_qty")).groupby(
-		item.item_code
-	)
-
-	return query.run()
+	if filters.get("company"):
+		query = query.where(wh.company == filters.get("company"))
+	location_wise = show_location_wise_stock(filters)
+	warehouse_wise = location_wise or filters.get("group_by") == "Warehouse"
+	totals = {}
+	for row in split_bin_rows(query.run(as_dict=True), filters):
+		key = (row.warehouse if warehouse_wise else row.company, row.item_code, row.description)
+		if location_wise:
+			key += (row.get("storage_location"),)
+		totals[key] = totals.get(key, 0) + flt(row.actual_qty)
+	return [
+		list(key[:3]) + [qty] + (list(key[3:]) if location_wise else []) for key, qty in totals.items() if qty
+	]

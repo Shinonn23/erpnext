@@ -21,6 +21,7 @@ from erpnext.stock.report.stock_ageing.stock_ageing import (
 	get_average_age,
 	normalize_fifo_queue,
 )
+from erpnext.stock.report.storage_location_utils import get_reconciliation_quantity_deltas
 from erpnext.stock.utils import add_additional_uom_columns
 
 
@@ -36,6 +37,7 @@ class StockBalanceFilter(TypedDict):
 	show_stock_ageing_data: bool
 	show_variant_attributes: bool
 	show_alt_uom_balance: bool
+	show_location_wise_stock: bool
 
 
 SLEntry = dict[str, Any]
@@ -48,6 +50,7 @@ def execute(filters: StockBalanceFilter | None = None):
 class StockBalanceReport:
 	def __init__(self, filters: StockBalanceFilter | None) -> None:
 		self.filters = filters
+		self.filters.setdefault("show_location_wise_stock", 1)
 		self.from_date = getdate(filters.get("from_date"))
 		self.to_date = getdate(filters.get("to_date"))
 
@@ -108,11 +111,17 @@ class StockBalanceReport:
 					"val_rate": 0.0,
 				}
 			)
+			for field in self.get_grouping_dimensions():
+				self.item_warehouse_map[key][field] = entry.get(field)
 
 	def get_entries_from_stock_closing_balance(self) -> list:
 		# The SLE query then starts from the very first entry, so loading the closing balance as
 		# opening too would count everything up to the closing date twice.
 		if self.filters.get("ignore_closing_balance"):
+			return []
+		# Older closing snapshots may contain only warehouse totals. Read the ledger
+		# for location views so those totals cannot hide or double count locations.
+		if "storage_location" in self.get_grouping_dimensions() or self.filters.get("storage_location"):
 			return []
 
 		stk_cl_obj = StockClosing(self.filters.company, self.from_date, self.from_date)
@@ -126,7 +135,6 @@ class StockBalanceReport:
 		for field in self.filter_fields():
 			if not self.filters.get(field):
 				continue
-
 			if field in self.inventory_dimensions:
 				dimenion_keys.append(field)
 
@@ -206,6 +214,11 @@ class StockBalanceReport:
 			self.sle_entries = self.sle_query.run(as_dict=True)
 
 		self.prepare_stock_reco_voucher_wise_count()
+		self.reconciliation_deltas = (
+			get_reconciliation_quantity_deltas(self.filters)
+			if "storage_location" in self.get_grouping_dimensions()
+			else {}
+		)
 
 		# HACK: This is required to avoid causing db query in flt
 		_system_settings = frappe.get_cached_doc("System Settings")
@@ -297,6 +310,21 @@ class StockBalanceReport:
 		del self.sle_entries
 
 		sre_details = self.get_sre_reserved_qty_details()
+		if self.get_grouping_dimensions() == ["storage_location"]:
+			for key in sre_details:
+				if key not in self.item_warehouse_map:
+					source = next(
+						(
+							row
+							for row in self.item_warehouse_map.values()
+							if (row.item_code, row.warehouse) == key[:2]
+						),
+						None,
+					)
+					if source:
+						entry = source.copy()
+						entry.storage_location = key[2]
+						self.initialize_data(key, entry)
 
 		variant_values = {}
 		if self.filters.get("show_variant_attributes"):
@@ -310,7 +338,14 @@ class StockBalanceReport:
 				opening_fifo_queue = self.get_opening_fifo_queue(report_data) or []
 
 				fifo_queue = []
-				if fifo_queue := item_wise_fifo_queue.get((report_data.item_code, report_data.warehouse)):
+				if fifo_queue := item_wise_fifo_queue.get(
+					(report_data.item_code, report_data.warehouse)
+					+ (
+						(report_data.get("storage_location") or "",)
+						if "storage_location" in self.get_grouping_dimensions()
+						else ()
+					)
+				):
 					fifo_queue = fifo_queue.get("fifo_queue")
 
 				if fifo_queue:
@@ -324,7 +359,18 @@ class StockBalanceReport:
 				report_data.update(stock_ageing_data)
 
 			report_data.update(
-				{"reserved_stock": sre_details.get((report_data.item_code, report_data.warehouse), 0.0)}
+				{
+					"reserved_stock": sre_details.get(
+						(
+							report_data.item_code,
+							report_data.warehouse,
+							report_data.get("storage_location") or None,
+						)
+						if "storage_location" in self.get_grouping_dimensions()
+						else (report_data.item_code, report_data.warehouse),
+						0.0,
+					)
+				}
 			)
 
 			if (
@@ -332,6 +378,7 @@ class StockBalanceReport:
 				and report_data
 				and report_data.bal_qty == 0
 				and report_data.bal_val == 0
+				and report_data.reserved_stock == 0
 			):
 				continue
 
@@ -347,7 +394,12 @@ class StockBalanceReport:
 			item_code_list.append(d[0])
 			warehouse_list.append(d[1])
 
-		return get_reserved_qty_details(item_code_list, warehouse_list)
+		return get_reserved_qty_details(
+			item_code_list,
+			warehouse_list,
+			group_by_storage_location="storage_location" in self.get_grouping_dimensions(),
+			storage_locations=self.filters.get("storage_location"),
+		)
 
 	def prepare_item_warehouse_map(self, entry, group_by_key):
 		qty_dict = self.item_warehouse_map[group_by_key]
@@ -361,6 +413,7 @@ class StockBalanceReport:
 		if (
 			entry.voucher_type == "Stock Reconciliation"
 			and not entry.is_adjustment_entry
+			and not any(entry.get(field) for field in self.inventory_dimensions)
 			and (not entry.batch_no or entry.serial_no or entry.serial_and_batch_bundle)
 		):
 			if entry.serial_no and entry.voucher_detail_no in self.stock_reco_voucher_wise_count:
@@ -369,8 +422,14 @@ class StockBalanceReport:
 				qty_diff = flt(entry.actual_qty)
 				value_diff = flt(entry.stock_value_difference)
 			else:
-				qty_diff = flt(entry.qty_after_transaction) - flt(qty_dict.bal_qty)
-				value_diff = flt(entry.stock_value) - flt(qty_dict.bal_val)
+				qty_diff = self.reconciliation_deltas.get(
+					entry.voucher_detail_no, flt(entry.qty_after_transaction) - flt(qty_dict.bal_qty)
+				)
+				value_diff = (
+					flt(entry.stock_value_difference)
+					if entry.voucher_detail_no in self.reconciliation_deltas
+					else flt(entry.stock_value) - flt(qty_dict.bal_val)
+				)
 		else:
 			qty_diff = flt(entry.actual_qty)
 			value_diff = flt(entry.stock_value_difference)
@@ -419,17 +478,27 @@ class StockBalanceReport:
 			}
 		)
 
+		for fieldname in self.get_grouping_dimensions():
+			self.item_warehouse_map[group_by_key][fieldname] = entry.get(fieldname)
+
 	def get_group_by_key(self, row) -> tuple:
 		group_by_key = [row.item_code, row.warehouse]
 
-		for fieldname in self.inventory_dimensions:
-			if not row.get(fieldname):
-				continue
-
-			if self.filters.get(fieldname) or self.filters.get("show_dimension_wise_stock"):
-				group_by_key.append(row.get(fieldname))
+		for fieldname in self.get_grouping_dimensions():
+			group_by_key.append(row.get(fieldname) or None)
 
 		return tuple(group_by_key)
+
+	def get_grouping_dimensions(self):
+		return [
+			field
+			for field in self.inventory_dimensions
+			if (
+				cint(self.filters.get("show_location_wise_stock"))
+				if field == "storage_location"
+				else self.filters.get(field) or self.filters.get("show_dimension_wise_stock")
+			)
+		]
 
 	def apply_inventory_dimensions_filters(self, query, sle) -> str:
 		inventory_dimension_fields = self.get_inventory_dimension_fields()
@@ -504,8 +573,8 @@ class StockBalanceReport:
 			},
 		]
 
-		if self.filters.get("show_dimension_wise_stock"):
-			for dimension in get_inventory_dimensions():
+		for dimension in get_inventory_dimensions():
+			if dimension.fieldname in self.get_grouping_dimensions():
 				columns.append(
 					{
 						"label": _(dimension.doctype),

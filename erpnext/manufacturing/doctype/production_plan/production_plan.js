@@ -47,6 +47,15 @@ frappe.ui.form.on("Production Plan", {
 				},
 			};
 		});
+		frm.set_query("warehouse_storage_location", () => ({
+			filters: { warehouse: frm.doc.warehouse || "", disabled: 0 },
+		}));
+		frm.set_query("for_storage_location", () => ({
+			filters: { warehouse: frm.doc.for_warehouse || "", disabled: 0 },
+		}));
+		frm.set_query("sub_assembly_storage_location", () => ({
+			filters: { warehouse: frm.doc.sub_assembly_warehouse || "", disabled: 0 },
+		}));
 
 		frm.set_query("sub_assembly_warehouse", function (doc) {
 			return {
@@ -92,6 +101,12 @@ frappe.ui.form.on("Production Plan", {
 				},
 			};
 		});
+		frm.set_query("storage_location", "mr_items", (doc, cdt, cdn) => ({
+			filters: { warehouse: locals[cdt][cdn].warehouse || "", disabled: 0 },
+		}));
+		frm.set_query("from_storage_location", "mr_items", (doc, cdt, cdn) => ({
+			filters: { warehouse: locals[cdt][cdn].from_warehouse || "", disabled: 0 },
+		}));
 
 		frm.set_query("warehouse", "po_items", (doc) => {
 			return {
@@ -100,6 +115,27 @@ frappe.ui.form.on("Production Plan", {
 				},
 			};
 		});
+		frm.set_query("storage_location", "po_items", (doc, cdt, cdn) => ({
+			filters: { warehouse: locals[cdt][cdn].warehouse || "", disabled: 0 },
+		}));
+		frm.set_query("fg_storage_location", "sub_assembly_items", (doc, cdt, cdn) => ({
+			filters: { warehouse: locals[cdt][cdn].fg_warehouse || "", disabled: 0 },
+		}));
+		frm.set_query("warehouse", "warehouses", (doc) => ({
+			filters: { company: doc.company, is_group: 0, disabled: 0 },
+		}));
+		frm.set_query("storage_location", "warehouses", (doc, cdt, cdn) => ({
+			filters: { warehouse: locals[cdt][cdn].warehouse || "", disabled: 0 },
+		}));
+	},
+	warehouse(frm) {
+		frm.set_value("warehouse_storage_location", "");
+	},
+	for_warehouse(frm) {
+		frm.set_value("for_storage_location", "");
+	},
+	sub_assembly_warehouse(frm) {
+		frm.set_value("sub_assembly_storage_location", "");
 	},
 
 	refresh(frm) {
@@ -522,7 +558,10 @@ frappe.ui.form.on("Production Plan", {
 		const warehouses_data = [];
 
 		if (frm.doc.for_warehouse) {
-			warehouses_data.push({ warehouse: frm.doc.for_warehouse });
+			warehouses_data.push({
+				warehouse: frm.doc.for_warehouse,
+				storage_location: frm.doc.for_storage_location,
+			});
 		}
 
 		const fields = [
@@ -612,36 +651,53 @@ frappe.ui.form.on("Production Plan Item", {
 	},
 });
 
+function update_material_request_plan_item_bin(frm, cdt, cdn) {
+	const row = locals[cdt][cdn];
+	if (!row.warehouse || !row.item_code || !frm.doc.company) return;
+
+	frappe.call({
+		method: "erpnext.manufacturing.doctype.production_plan.production_plan.get_bin_details",
+		args: {
+			row: row,
+			company: frm.doc.company,
+			for_warehouse: row.warehouse,
+			storage_location: row.storage_location,
+		},
+		callback: function (r) {
+			if (r.message?.length) {
+				let { projected_qty, actual_qty } = r.message[0];
+				frappe.model.set_value(cdt, cdn, {
+					projected_qty: projected_qty,
+					actual_qty: actual_qty,
+				});
+			}
+		},
+	});
+}
+
 frappe.ui.form.on("Material Request Plan Item", {
 	warehouse(frm, cdt, cdn) {
-		const row = locals[cdt][cdn];
-		if (row.warehouse && row.item_code && frm.doc.company) {
-			frappe.call({
-				method: "erpnext.manufacturing.doctype.production_plan.production_plan.get_bin_details",
-				args: {
-					row: row,
-					company: frm.doc.company,
-					for_warehouse: row.warehouse,
-				},
-				callback: function (r) {
-					if (r.message) {
-						let { projected_qty, actual_qty } = r.message[0];
-
-						frappe.model.set_value(cdt, cdn, {
-							projected_qty: projected_qty,
-							actual_qty: actual_qty,
-						});
-					}
-				},
-			});
-		}
+		frappe.model.set_value(cdt, cdn, "storage_location", "");
+		update_material_request_plan_item_bin(frm, cdt, cdn);
+	},
+	from_warehouse(frm, cdt, cdn) {
+		frappe.model.set_value(cdt, cdn, "from_storage_location", "");
+	},
+	storage_location(frm, cdt, cdn) {
+		update_material_request_plan_item_bin(frm, cdt, cdn);
 	},
 
 	material_request_type(frm, cdt, cdn) {
 		let row = locals[cdt][cdn];
 
-		if (row.from_warehouse && row.material_request_type !== "Material Transfer") {
-			frappe.model.set_value(cdt, cdn, "from_warehouse", "");
+		if (
+			(row.from_warehouse || row.from_storage_location) &&
+			row.material_request_type !== "Material Transfer"
+		) {
+			frappe.model.set_value(cdt, cdn, {
+				from_warehouse: "",
+				from_storage_location: "",
+			});
 		}
 	},
 });
@@ -680,32 +736,48 @@ frappe.ui.form.on("Production Plan Sales Order", {
 
 frappe.ui.form.on("Production Plan Sub Assembly Item", {
 	fg_warehouse(frm, cdt, cdn) {
+		frappe.model.set_value(cdt, cdn, "fg_storage_location", "");
 		erpnext.utils.copy_value_in_all_rows(frm.doc, cdt, cdn, "sub_assembly_items", "fg_warehouse");
 
-		let row = locals[cdt][cdn];
-		if (row.fg_warehouse && row.production_item) {
-			let child_row = {
-				item_code: row.production_item,
-				warehouse: row.fg_warehouse,
-			};
-
-			frappe.call({
-				method: "erpnext.manufacturing.doctype.production_plan.production_plan.get_bin_details",
-				args: {
-					row: child_row,
-					company: frm.doc.company,
-					for_warehouse: row.fg_warehouse,
-				},
-				callback: function (r) {
-					if (r.message && r.message.length) {
-						frappe.model.set_value(cdt, cdn, "actual_qty", r.message[0].actual_qty);
-						frappe.model.set_value(cdt, cdn, "projected_qty", r.message[0].projected_qty);
-					}
-				},
-			});
-		}
+		update_sub_assembly_item_bin(frm, cdt, cdn);
+	},
+	fg_storage_location(frm, cdt, cdn) {
+		update_sub_assembly_item_bin(frm, cdt, cdn);
 	},
 });
+
+frappe.ui.form.on("Production Plan Item", {
+	warehouse(frm, cdt, cdn) {
+		frappe.model.set_value(cdt, cdn, "storage_location", "");
+	},
+});
+
+frappe.ui.form.on("Production Plan Material Request Warehouse", {
+	warehouse(frm, cdt, cdn) {
+		frappe.model.set_value(cdt, cdn, "storage_location", "");
+	},
+});
+
+function update_sub_assembly_item_bin(frm, cdt, cdn) {
+	const row = locals[cdt][cdn];
+	if (!row.fg_warehouse || !row.production_item) return;
+
+	frappe.call({
+		method: "erpnext.manufacturing.doctype.production_plan.production_plan.get_bin_details",
+		args: {
+			row: { item_code: row.production_item },
+			company: frm.doc.company,
+			for_warehouse: row.fg_warehouse,
+			storage_location: row.fg_storage_location,
+		},
+		callback: function (r) {
+			if (r.message?.length) {
+				frappe.model.set_value(cdt, cdn, "actual_qty", r.message[0].actual_qty);
+				frappe.model.set_value(cdt, cdn, "projected_qty", r.message[0].projected_qty);
+			}
+		},
+	});
+}
 
 frappe.tour["Production Plan"] = [
 	{

@@ -1,0 +1,7 @@
+# Shared ERPNext Codex defaults; machine credentials and permissions stay local.
+model = "gpt-6.1-sol"
+model_reasoning_effort = "medium"
+
+[agents]
+enabled = true
+max_concurrent_threads_per_session = 6

@@ -4,6 +4,12 @@
 frappe.query_reports["Total Stock Summary"] = {
 	filters: [
 		{
+			fieldname: "show_location_wise_stock",
+			label: __("Show Storage Location Wise Stock"),
+			fieldtype: "Check",
+			default: 1,
+		},
+		{
 			fieldname: "group_by",
 			label: __("Group By"),
 			fieldtype: "Select",

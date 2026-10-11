@@ -4,6 +4,12 @@
 frappe.query_reports["Serial No Ledger"] = {
 	filters: [
 		{
+			fieldname: "show_location_wise_stock",
+			label: __("Show Storage Location Wise Stock"),
+			fieldtype: "Check",
+			default: 1,
+		},
+		{
 			label: __("Item Code"),
 			fieldtype: "Link",
 			fieldname: "item_code",

@@ -35,6 +35,7 @@ class ProductionPlanItem(Document):
 		stock_uom: DF.Link
 		temporary_name: DF.Data | None
 		warehouse: DF.Link | None
+		storage_location: DF.Link | None
 	# end: auto-generated types
 
 	pass

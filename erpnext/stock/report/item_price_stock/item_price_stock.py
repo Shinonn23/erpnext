@@ -4,10 +4,16 @@
 import frappe
 from frappe import _
 
+from erpnext.stock.report.storage_location_utils import (
+	add_location_column,
+	show_location_wise_stock,
+	split_bin_rows,
+)
+
 
 def execute(filters=None):
 	columns, data = [], []
-	columns = get_columns()
+	columns = add_location_column(get_columns(), filters)
 	data = get_data(filters, columns)
 	return columns, data
 
@@ -82,7 +88,7 @@ def get_item_price_qty_data(filters):
 	if filters.get("item_code"):
 		query = query.where(item_price.item_code == filters.get("item_code"))
 
-	item_results = query.run(as_dict=True)
+	item_results = split_bin_rows(query.run(as_dict=True), filters)
 
 	price_list_names = list(set(item.price_list_name for item in item_results))
 
@@ -97,6 +103,7 @@ def get_item_price_qty_data(filters):
 				"item_name": item_dict.item_name,
 				"brand": item_dict.brand,
 				"warehouse": item_dict.warehouse,
+				"storage_location": item_dict.get("storage_location"),
 				"stock_available": item_dict.actual_qty or 0,
 				"buying_price_list": "",
 				"buying_rate": 0.0,

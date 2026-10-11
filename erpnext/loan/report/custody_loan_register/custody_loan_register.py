@@ -38,11 +38,15 @@ def execute(filters=None):
 			COUNT(item.name) AS item_count, SUM(item.qty) AS issued_qty,
 			SUM(item.returned_qty) AS returned_qty, SUM(item.adjusted_qty) AS adjusted_qty,
 			SUM(item.outstanding_qty) AS outstanding_qty, loan.status,
-			COALESCE(stock.shipment, movement.shipment) AS shipment, loan.company
+			COALESCE(
+				(SELECT shipment.name FROM `tabShipment` shipment
+				 WHERE shipment.custody_loan = loan.name AND shipment.docstatus < 2
+				 ORDER BY shipment.modified DESC LIMIT 1),
+				delivery_note.custody_loan_shipment
+			) AS shipment, loan.company
 		FROM `tabCustody Loan` loan
 		LEFT JOIN `tabCustody Loan Item` item ON item.parent = loan.name
-		LEFT JOIN `tabStock Entry` stock ON stock.name = loan.stock_entry
-		LEFT JOIN `tabAsset Movement` movement ON movement.name = loan.asset_movement
+		LEFT JOIN `tabDelivery Note` delivery_note ON delivery_note.name = loan.delivery_note
 		WHERE {' AND '.join(conditions)}
 		GROUP BY loan.name
 		ORDER BY loan.expected_return_date, loan.name""",

@@ -40,7 +40,11 @@
   "picked_qty",
   "page_break",
   "prevdoc_doctype",
-  "parent_detail_docname"
+  "parent_detail_docname",
+  "inventory_dimension",
+  "storage_location",
+  "inventory_dimension_col_break",
+  "to_storage_location"
  ],
  "fields": [
   {
@@ -310,6 +314,31 @@
    "non_negative": 1,
    "print_hide": 1,
    "read_only": 1
+  },
+  {
+   "fieldname": "inventory_dimension",
+   "fieldtype": "Section Break",
+   "label": "Inventory Dimension",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "storage_location",
+   "fieldtype": "Link",
+   "label": "Source Storage Location",
+   "options": "Storage Location",
+   "search_index": 1
+  },
+  {
+   "fieldname": "inventory_dimension_col_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:doc.target_warehouse",
+   "fieldname": "to_storage_location",
+   "fieldtype": "Link",
+   "label": "Target Storage Location",
+   "options": "Storage Location",
+   "search_index": 1
   }
  ],
  "idx": 1,

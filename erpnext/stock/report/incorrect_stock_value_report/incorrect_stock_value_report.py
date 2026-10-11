@@ -10,6 +10,7 @@ from frappe.utils import add_days, getdate, today
 
 import erpnext
 from erpnext.accounts.utils import get_stock_and_account_balance
+from erpnext.stock.report.storage_location_utils import add_location_column
 from erpnext.stock.utils import get_stock_value_on
 
 
@@ -20,7 +21,7 @@ def execute(filters=None):
 		)
 
 	data = get_data(filters)
-	columns = get_columns(filters)
+	columns = add_location_column(get_columns(filters), filters)
 
 	return columns, data
 
@@ -66,6 +67,7 @@ def get_data(report_filters):
 			sle.stock_value_difference,
 			sle.stock_value,
 			sle.warehouse,
+			sle.storage_location,
 			sle.item_code,
 		)
 		.where(

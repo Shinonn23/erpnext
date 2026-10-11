@@ -113,6 +113,7 @@ erpnext.SerialBatchPackageSelector = class SerialNoBatchBundleUpdate {
 			fieldname: "warehouse",
 			label: __("Warehouse"),
 			options: "Warehouse",
+			read_only: !!this.item.storage_location,
 			default: this.get_warehouse(),
 			onchange: () => {
 				if (this.item?.is_rejected) {
@@ -567,6 +568,9 @@ erpnext.SerialBatchPackageSelector = class SerialNoBatchBundleUpdate {
 					posting_date: this.frm.doc.posting_date,
 					posting_time: this.frm.doc.posting_time,
 					scio_detail: this.item.scio_detail,
+					inventory_dimensions_dict: this.item.storage_location
+						? { storage_location: this.item.storage_location }
+						: undefined,
 				},
 				callback: (r) => {
 					if (r.message) {

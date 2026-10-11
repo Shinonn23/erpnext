@@ -44,6 +44,7 @@ web_include_icons = [
 doctype_js = {
 	"Address": "public/js/address.js",
 	"Material Request": "assets/doctype/material_request/material_request.js",
+	"Asset Movement": "assets/doctype/asset_movement/asset_movement.js",
 	"Custody Loan": "loan/doctype/custody_loan/custody_loan.js",
 	"Custody Loan Return": "loan/doctype/custody_loan_return/custody_loan_return.js",
 	"Custody Loan Adjustment": "loan/doctype/custody_loan_adjustment/custody_loan_adjustment.js",
@@ -78,6 +79,7 @@ page_js = {"print": "public/js/print.js"}
 extend_doctype_class = {
 	"Address": "erpnext.accounts.custom.address.ERPNextAddress",
 	"Payment Entry": "erpnext.regional.thailand.custom.payment_entry.PaymentEntry",
+	"Quality Inspection": "erpnext.loan.doctype.custody_loan.custody_loan_core.CustodyLoanQualityInspectionMixin",
 }
 
 override_whitelisted_methods = {
@@ -480,17 +482,22 @@ doc_events = {
 		],
 		"on_submit": [
 			"erpnext.stock.doctype.material_request.material_request.update_completed_and_requested_qty",
-			"erpnext.assets.doctype.material_request.material_request.update_stock_entry_request_progress",
 			"erpnext.loan.doctype.custody_loan.custody_loan_core.update_custody_loan_status",
 		],
 		"on_cancel": [
 			"erpnext.stock.doctype.material_request.material_request.update_completed_and_requested_qty",
-			"erpnext.assets.doctype.material_request.material_request.update_stock_entry_request_progress",
 			"erpnext.loan.doctype.custody_loan.custody_loan_core.update_custody_loan_status",
 		],
 	},
 	"Asset Movement": {
 		"validate": "erpnext.loan.doctype.custody_loan.custody_loan_core.validate_generated_transaction",
+		"before_cancel": "erpnext.loan.doctype.custody_loan.custody_loan_core.validate_generated_transaction_cancellation",
+		"on_submit": "erpnext.loan.doctype.custody_loan.custody_loan_core.update_custody_loan_status",
+		"on_cancel": "erpnext.loan.doctype.custody_loan.custody_loan_core.update_custody_loan_status",
+	},
+	"Delivery Note": {
+		"validate": "erpnext.loan.doctype.custody_loan.custody_loan_core.validate_generated_transaction",
+		"before_submit": "erpnext.loan.doctype.custody_loan.custody_loan_core.validate_custody_loan_return_receipt",
 		"before_cancel": "erpnext.loan.doctype.custody_loan.custody_loan_core.validate_generated_transaction_cancellation",
 		"on_submit": "erpnext.loan.doctype.custody_loan.custody_loan_core.update_custody_loan_status",
 		"on_cancel": "erpnext.loan.doctype.custody_loan.custody_loan_core.update_custody_loan_status",
@@ -517,8 +524,16 @@ doc_events = {
 		"on_update": "erpnext.crm.utils.disable_opportunity_creation_on_contact_us_disabled",
 	},
 	"Sales Invoice": {
-		"on_submit": ["erpnext.regional.italy.utils.sales_invoice_on_submit"],
-		"on_cancel": ["erpnext.regional.italy.utils.sales_invoice_on_cancel"],
+		"validate": "erpnext.loan.doctype.custody_loan.custody_loan_core.validate_generated_transaction",
+		"before_cancel": "erpnext.loan.doctype.custody_loan.custody_loan_core.validate_generated_transaction_cancellation",
+		"on_submit": [
+			"erpnext.regional.italy.utils.sales_invoice_on_submit",
+			"erpnext.loan.doctype.custody_loan.custody_loan_core.update_custody_loan_status",
+		],
+		"on_cancel": [
+			"erpnext.regional.italy.utils.sales_invoice_on_cancel",
+			"erpnext.loan.doctype.custody_loan.custody_loan_core.update_custody_loan_status",
+		],
 		"on_trash": "erpnext.regional.check_deletion_permission",
 	},
 	"Purchase Invoice": {
@@ -719,6 +734,29 @@ accounting_dimension_doctypes = [
 	"Advance Taxes and Charges",
 ]
 
+# Each listed DocType owns an `inventory_dimension` section break in its schema.
+# Transfer-capable rows also own `inventory_dimension_col_break` for their from/to fields.
+inventory_dimension_doctypes = [
+	"Asset Capitalization Stock Item",
+	"Delivery Note Item",
+	"Packed Item",
+	"Pick List Item",
+	"POS Invoice Item",
+	"Purchase Invoice Item",
+	"Purchase Receipt Item",
+	"Putaway Rule",
+	"Sales Invoice Item",
+	"Serial and Batch Entry",
+	"Stock Closing Balance",
+	"Stock Count Item",
+	"Stock Entry Detail",
+	"Stock Reconciliation Item",
+	"Stock Reservation Entry",
+	"Stock to Asset Conversion Item",
+	"Subcontracting Receipt Item",
+	"Subcontracting Receipt Supplied Item",
+]
+
 subscription_doctypes = ["Sales Invoice", "Purchase Invoice", "Payment Request", "POS Invoice"]
 
 get_matching_queries = (
@@ -870,3 +908,17 @@ naming_series_variables.update(
 	}
 )
 after_migrate.append("erpnext.regional.thailand.migration.transfer_thailand_module_ownership")
+
+# Resolve defaults on stock vouchers before their controllers calculate balances or costs.
+for _doctype in (
+	"Stock Entry", "Delivery Note", "Purchase Receipt", "Sales Invoice", "POS Invoice",
+	"Purchase Invoice", "Stock Reconciliation", "Asset Capitalization",
+	"Subcontracting Receipt",
+):
+	_events = doc_events.setdefault(_doctype, {})
+	_existing = _events.get("before_validate", [])
+	_existing = _existing if isinstance(_existing, list) else [_existing]
+	_events["before_validate"] = [
+		"erpnext.stock.doctype.storage_location.storage_location.set_default_storage_locations",
+		*_existing,
+	]

@@ -20,6 +20,7 @@ class ProductionPlanSubAssemblyItem(Document):
 		bom_no: DF.Link | None
 		description: DF.SmallText | None
 		fg_warehouse: DF.Link | None
+		fg_storage_location: DF.Link | None
 		indent: DF.Int
 		item_name: DF.Data | None
 		ordered_qty: DF.Float

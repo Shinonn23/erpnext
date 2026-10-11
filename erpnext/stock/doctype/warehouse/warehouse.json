@@ -11,6 +11,7 @@
   "warehouse_detail",
   "disabled",
   "warehouse_name",
+  "default_storage_location",
   "column_break_3",
   "company",
   "is_rejected_warehouse",
@@ -292,6 +293,14 @@
   {
    "fieldname": "column_break_qhdh",
    "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "default_storage_location",
+   "fieldtype": "Link",
+   "label": "Default Storage Location",
+   "options": "Storage Location",
+   "depends_on": "eval:!doc.__islocal && !doc.is_group",
+   "description": "Used for stock transactions when Storage Location is not specified."
   }
  ],
  "grid_page_length": 50,

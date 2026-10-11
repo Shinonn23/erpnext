@@ -21,6 +21,8 @@
   "item_information_section",
   "item_code",
   "warehouse",
+  "inventory_dimension",
+  "storage_location",
   "column_break_elik",
   "stock_uom",
   "has_serial_no",
@@ -75,6 +77,18 @@
    "read_only": 1,
    "search_index": 1,
    "width": "100px"
+  },
+  {
+   "fieldname": "inventory_dimension",
+   "fieldtype": "Section Break",
+   "label": "Inventory Dimension"
+  },
+  {
+   "fieldname": "storage_location",
+   "fieldtype": "Link",
+   "label": "Storage Location",
+   "options": "Storage Location",
+   "read_only": 1
   },
   {
    "fieldname": "voucher_type",

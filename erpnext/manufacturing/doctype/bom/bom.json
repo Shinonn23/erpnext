@@ -50,8 +50,10 @@
   "quality_inspection_template",
   "default_warehouse_section",
   "default_source_warehouse",
+  "default_source_storage_location",
   "column_break_inep",
   "default_target_warehouse",
+  "default_target_storage_location",
   "consume_components_section",
   "backflush_based_on",
   "costing",
@@ -748,12 +750,24 @@
    "label": "Consume Components"
   },
   {
-   "description": "Controls how raw materials are consumed during the \u2018Manufacture\u2019 stock entry.",
+   "description": "Controls how raw materials are consumed during the ‘Manufacture’ stock entry.",
    "fieldname": "backflush_based_on",
    "fieldtype": "Select",
    "label": "Based On",
    "options": "\nBOM\nMaterial Transferred for Manufacture",
    "show_description_on_click": 1
+  },
+  {
+   "fieldname": "default_source_storage_location",
+   "fieldtype": "Link",
+   "label": "Default Source Storage Location",
+   "options": "Storage Location"
+  },
+  {
+   "fieldname": "default_target_storage_location",
+   "fieldtype": "Link",
+   "label": "Default Target Storage Location",
+   "options": "Storage Location"
   }
  ],
  "icon": "fa fa-sitemap",

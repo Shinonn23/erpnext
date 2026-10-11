@@ -138,15 +138,6 @@ erpnext.accounts.SalesInvoiceController = class SalesInvoiceController extends (
 			}
 
 			if (doc.outstanding_amount > 0) {
-				if (frappe.boot.user.in_create.includes("Payment Request")) {
-					this.frm.add_custom_button(
-						__("Payment Request"),
-						function () {
-							me.make_payment_request_with_schedule();
-						},
-						__("Create")
-					);
-				}
 				if (frappe.model.can_create("Invoice Discounting")) {
 					this.frm.add_custom_button(
 						__("Invoice Discounting"),
@@ -858,7 +849,6 @@ frappe.ui.form.on("Sales Invoice", {
 		frm.custom_make_buttons = {
 			"Delivery Note": "Delivery",
 			"Sales Invoice": "Return / Credit Note",
-			"Payment Request": "Payment Request",
 			"Payment Entry": "Payment",
 		};
 

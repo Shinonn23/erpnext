@@ -10,13 +10,14 @@ from frappe.utils import cint, flt
 from erpnext.stock.report.stock_ledger_invariant_check.stock_ledger_invariant_check import (
 	get_data as stock_ledger_invariant_check,
 )
+from erpnext.stock.report.storage_location_utils import add_location_column
 
 
 def execute(filters=None):
 	columns, data = [], []
 
 	filters = frappe._dict(filters or {})
-	columns = get_columns()
+	columns = add_location_column(get_columns(), filters)
 	data = get_data(filters)
 
 	return columns, data

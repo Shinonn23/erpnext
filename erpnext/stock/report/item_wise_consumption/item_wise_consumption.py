@@ -7,6 +7,12 @@ from frappe import _
 from frappe.query_builder.functions import IfNull
 from frappe.utils import flt
 
+from erpnext.stock.report.storage_location_utils import (
+	add_location_column,
+	location_key,
+	show_location_wise_stock,
+)
+
 
 def execute(filters=None):
 	columns = get_columns(filters)
@@ -16,36 +22,36 @@ def execute(filters=None):
 	data = []
 
 	for item_code, suppliers in supplier_details.items():
-		consumed_qty = consumed_amount = delivered_qty = delivered_amount = 0.0
-		total_qty = total_amount = 0.0
-		if consumed_details.get(item_code):
-			for cd in consumed_details.get(item_code):
-				if cd.voucher_no not in material_transfer_vouchers:
-					if cd.voucher_type in ["Delivery Note", "Sales Invoice"]:
-						delivered_qty += abs(flt(cd.actual_qty))
-						delivered_amount += abs(flt(cd.stock_value_difference))
-					elif cd.voucher_type != "Delivery Note":
-						consumed_qty += abs(flt(cd.actual_qty))
-						consumed_amount += abs(flt(cd.stock_value_difference))
-
-			if consumed_qty or consumed_amount or delivered_qty or delivered_amount:
-				total_qty += delivered_qty + consumed_qty
-				total_amount += delivered_amount + consumed_amount
-
-				row = [
-					cd.item_code,
-					cd.item_name,
-					cd.description,
-					cd.stock_uom,
-					consumed_qty,
-					consumed_amount,
-					delivered_qty,
-					delivered_amount,
-					total_qty,
-					total_amount,
-					",".join(list(set(suppliers))),
-				]
-				data.append(row)
+		groups = {}
+		for entry in consumed_details.get(item_code, []):
+			if entry.voucher_no in material_transfer_vouchers:
+				continue
+			key = (entry.warehouse, location_key(entry, filters))
+			row = groups.setdefault(
+				key,
+				[
+					entry.item_code,
+					entry.item_name,
+					entry.description,
+					entry.stock_uom,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					",".join(sorted(set(suppliers))),
+					entry.warehouse,
+				],
+			)
+			index = 6 if entry.voucher_type in ["Delivery Note", "Sales Invoice"] else 4
+			row[index] += abs(flt(entry.actual_qty))
+			row[index + 1] += abs(flt(entry.stock_value_difference))
+		for (_warehouse, location), row in groups.items():
+			row[8], row[9] = row[4] + row[6], row[5] + row[7]
+			if show_location_wise_stock(filters):
+				row.append(location or None)
+			data.append(row)
 
 	return columns, data
 
@@ -67,7 +73,8 @@ def get_columns(filters):
 		_("Supplier(s)") + "::250",
 	]
 
-	return columns
+	columns.append(_("Warehouse") + ":Link/Warehouse:150")
+	return add_location_column(columns, filters)
 
 
 def get_consumed_details(filters):
@@ -79,6 +86,8 @@ def get_consumed_details(filters):
 		.from_(item)
 		.select(
 			sle.item_code,
+			sle.warehouse,
+			sle.storage_location,
 			item.item_name,
 			item.description,
 			item.stock_uom,

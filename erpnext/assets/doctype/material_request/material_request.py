@@ -9,6 +9,14 @@ from erpnext.stock.doctype.material_request.material_request import MaterialRequ
 
 CUSTOMER_REQUEST_TYPES = ("Customer Demo", "Customer Borrow / Loan")
 ASSET_TRANSFER_TYPE = "Asset Transfer"
+MATERIAL_REQUEST_PURPOSES = (
+	"Purchase",
+	"Material Transfer",
+	"Asset Transfer",
+	"Customer Demo",
+	"Customer Borrow / Loan",
+)
+ASSET_STATUSES_NOT_AVAILABLE = ("Draft", "Scrapped", "Sold", "Capitalized")
 
 
 def is_customer_request(request):
@@ -107,64 +115,184 @@ def get_customer_delivery_snapshot(
 	)
 
 class CustomerMaterialRequest(MaterialRequest):
+	def is_auto_created_by_reorder(self):
+		return bool(
+			self.get("auto_created_via_reorder")
+			and frappe.flags.get("in_auto_reorder_material_request")
+		)
+
+	def _validate_selects(self):
+		"""Permit legacy purposes only while trusted ERPNext reorder code creates the request."""
+		purpose = self.material_request_type
+		if self.is_auto_created_by_reorder() and purpose not in MATERIAL_REQUEST_PURPOSES:
+			self.material_request_type = MATERIAL_REQUEST_PURPOSES[0]
+			try:
+				super()._validate_selects()
+			finally:
+				self.material_request_type = purpose
+			return
+		super()._validate_selects()
+
 	def validate_material_request_type(self):
+		if self.material_request_type not in MATERIAL_REQUEST_PURPOSES and not self.is_auto_created_by_reorder():
+			frappe.throw(_("Purpose must be one of: {0}").format(", ".join(MATERIAL_REQUEST_PURPOSES)))
+		if self.is_auto_created_by_reorder():
+			return super().validate_material_request_type()
 		if self.material_request_type == "Customer Demo":
 			if not self.customer:
 				frappe.throw(_("Customer is required for Customer Demo requests"))
 			return
 		if self.material_request_type == "Customer Borrow / Loan":
-			if not self.loan_recipient_type or not self.loan_recipient:
-				frappe.throw(_("Select a Recipient Type and Recipient for the Loan request"))
+			if self.get("borrow_item_type") not in ("Stock Item", "Asset"):
+				frappe.throw(_("Select whether this request borrows Stock Items or Assets"))
 			return
 		if is_asset_transfer_request(self):
 			return
 		super().validate_material_request_type()
 
 	def before_validate(self):
-		if is_asset_transfer_request(self):
-			self.customer = None
-			self.customer_address = None
-			self.customer_address_display = None
-			self.contact_person = None
-			self.customer_contact_display = None
-			self.customer_contact_email = None
-			self.expected_return_date = None
+		purpose = self.material_request_type
+		if self.is_auto_created_by_reorder():
+			self.clear_loan_recipient_details()
 			self.customer_location = None
+			self.expected_return_date = None
 			self.customer_loan_warehouse = None
-			for row in self.items:
-				if row.asset_transfer_asset:
-					row.item_code = frappe.db.get_value("Asset", row.asset_transfer_asset, "item_code")
-		elif self.material_request_type == "Customer Borrow / Loan":
+			self.asset_transfer_status = None
+			self.request_progress_status = None
+			self.request_remarks = None
+			self.asset_source_location = None
+			self.asset_item_filter = None
+			return
+
+		self.reset_amended_workflow_state()
+		if self.get("amended_from") and self.docstatus == 0:
+			if is_customer_request(self) and self.get("request_progress_status") == "Cancelled":
+				self.request_progress_status = "Draft"
+			elif is_asset_transfer_request(self) and self.get("asset_transfer_status") == "Cancelled":
+				self.asset_transfer_status = "Draft"
+
+		asset_rows = purpose in ("Asset Transfer", "Customer Demo") or (
+			purpose == "Customer Borrow / Loan" and self.get("borrow_item_type") == "Asset"
+		)
+		for row in self.items:
+			if asset_rows:
+				if row.asset:
+					row.item_code = row.item_code or frappe.db.get_value("Asset", row.asset, "item_code")
+				row.from_warehouse = None
+				row.warehouse = None
+				row.item_type = "Fixed Asset"
+			else:
+				row.asset = None
+				row.asset_name = None
+				row.asset_serial_number = None
+				row.source_location = None
+				row.target_location = None
+				row.item_type = "Stock Item"
+				if purpose != "Material Transfer":
+					row.from_warehouse = None
+
+		if purpose == "Customer Borrow / Loan":
 			if not self.loan_recipient_type and self.customer:
 				self.loan_recipient_type = "Customer"
 			if self.loan_recipient_type == "Customer":
 				self.loan_recipient = self.loan_recipient or self.customer
 				self.customer = self.loan_recipient
 			else:
-				self.customer = None
-				self.customer_address = None
-				self.customer_address_display = None
-				self.contact_person = None
-				self.customer_contact_display = None
-				self.customer_contact_email = None
+				self.clear_customer_details()
+			if self.get("borrow_item_type") == "Asset":
+				self.customer_loan_warehouse = None
+			else:
+				self.customer_loan_warehouse = frappe.db.get_value(
+					"Company", self.company, "customer_loan_warehouse"
+				)
+				if not self.customer_loan_warehouse:
+					frappe.throw(_("Set Customer Loan Warehouse on Company {0}").format(self.company))
+				for row in self.items:
+					row.warehouse = self.customer_loan_warehouse
+		else:
+			self.clear_loan_recipient_details()
+			if purpose != "Customer Demo":
+				self.clear_customer_details()
+				self.recipient_address = None
+				self.recipient_address_display = None
+				self.customer_location = None
+				self.expected_return_date = None
+			self.customer_loan_warehouse = None
+
+		if purpose != "Asset Transfer":
+			self.asset_transfer_status = None
+			self.asset_source_location = None
+		if purpose not in ("Asset Transfer", "Customer Demo") and not (
+					purpose == "Customer Borrow / Loan" and self.get("borrow_item_type") == "Asset"
+		):
+			self.asset_item_filter = None
+		if purpose not in CUSTOMER_REQUEST_TYPES:
+			self.request_progress_status = None
+			self.request_remarks = None
+
+	def reset_amended_workflow_state(self):
+		"""Start an amended request at the workflow's initial draft state."""
+		if not self.get("amended_from") or self.docstatus != 0:
+			return
+
+		workflow_name = frappe.db.get_value(
+			"Workflow", {"document_type": self.doctype, "is_active": 1}, "name"
+		)
+		if not workflow_name:
+			return
+
+		workflow = frappe.get_cached_doc("Workflow", workflow_name)
+		state_field = workflow.workflow_state_field
+		if not state_field or not self.meta.has_field(state_field):
+			return
+
+		draft_states = [state.state for state in workflow.states if cint(state.doc_status) == 0]
+		initial_state = next(iter(draft_states), None)
+		if initial_state and self.get(state_field) not in draft_states:
+			self.set(state_field, initial_state)
+
+	def clear_customer_details(self):
+		self.customer = None
+		self.contact_person = None
+		self.customer_contact_display = None
+		self.customer_contact_email = None
+
+	def clear_loan_recipient_details(self):
+		self.borrow_item_type = None
+		self.loan_recipient_type = None
+		self.loan_recipient = None
+		self.loan_recipient_location = None
+		self.loan_recipient_contact = None
+		self.loan_recipient_contact_display = None
+		self.loan_recipient_contact_email = None
 
 	def validate(self):
 		super().validate()
-		if is_customer_request(self):
-			self.customer_loan_warehouse = frappe.db.get_value(
-				"Company", self.company, "customer_loan_warehouse"
-			)
+		if self.material_request_type == "Customer Demo":
 			self.validate_dates()
-			if self.material_request_type == "Customer Borrow / Loan":
-				self.validate_loan_recipient()
+			self.validate_customer_contact(required=True)
+			self.set_delivery_snapshots()
+			if not self.recipient_address:
+				frappe.throw(_("Customer Address is required for Customer Demo requests"))
+			if not self.contact_person:
+				frappe.throw(_("Customer Contact is required for Customer Demo requests"))
+			if not self.customer_location:
+				frappe.throw(_("Customer Location is required for Customer Demo requests"))
+			self.validate_asset_items("Customer Demo")
+			self.update_progress()
+		elif self.material_request_type == "Customer Borrow / Loan":
+			self.validate_dates()
+			self.validate_loan_recipient()
+			if self.get("borrow_item_type") == "Stock Item":
+				self.validate_stock_loan_items()
 			else:
-				self.validate_customer_contact()
-				self.set_delivery_snapshots()
-			self.validate_items()
+				self.validate_asset_items("Customer Borrow / Loan")
 			self.update_progress()
 		elif is_asset_transfer_request(self):
-			self.validate_asset_transfer_items()
+			self.validate_asset_items("Asset Transfer")
 			self.update_progress()
+		elif self.material_request_type == "Material Transfer":
+			self.validate_material_transfer_warehouses()
 
 	def validate_loan_recipient(self):
 		if self.loan_recipient_type not in ("Employee", "Customer", "Supplier", "Contact"):
@@ -178,21 +306,14 @@ class CustomerMaterialRequest(MaterialRequest):
 
 		if self.loan_recipient_type == "Customer":
 			self.customer = self.loan_recipient
-			self.customer_address = self.loan_recipient_address or self.customer_address
-			self.contact_person = self.loan_recipient_contact or self.contact_person
 			self.validate_customer_contact()
 			self.set_delivery_snapshots()
-			self.loan_recipient_address = self.customer_address
-			self.loan_recipient_address_display = self.customer_address_display
-			self.loan_recipient_contact = self.contact_person
-			self.loan_recipient_contact_display = self.customer_contact_display
-			self.loan_recipient_contact_email = self.customer_contact_email
 		else:
 			self.customer = None
-			if self.loan_recipient_address:
-				if not frappe.db.exists("Address", self.loan_recipient_address):
+			if self.recipient_address:
+				if not frappe.db.exists("Address", self.recipient_address):
 					frappe.throw(_("Recipient Address does not exist"))
-				self.loan_recipient_address_display = get_address_display(self.loan_recipient_address)
+				self.recipient_address_display = get_address_display(self.recipient_address)
 			if self.loan_recipient_type == "Contact":
 				self.loan_recipient_contact = self.loan_recipient
 			if self.loan_recipient_contact:
@@ -201,67 +322,107 @@ class CustomerMaterialRequest(MaterialRequest):
 				contact = get_customer_contact_snapshot(self.loan_recipient_contact)
 				self.loan_recipient_contact_display = format_contact_display(contact)
 				self.loan_recipient_contact_email = contact.email
-	def validate_asset_transfer_items(self):
-		if self.customer:
-			frappe.throw(_("Asset Transfer requests cannot be linked to a Customer"))
+	def validate_asset_items(self, purpose):
 		if not self.items:
-			frappe.throw(_("Add at least one Asset to transfer"))
+			frappe.throw(_("Add at least one Asset"))
 
-		assets_seen = set()
+		if self._action == "submit":
+			for asset_name in sorted({row.asset for row in self.items if row.asset}):
+				frappe.db.sql("select name from `tabAsset` where name=%s for update", asset_name)
+
+		seen = set()
 		for row in self.items:
-			if not row.asset_transfer_asset:
-				frappe.throw(_("Row {0}: Select an Asset to transfer").format(row.idx))
-			if row.asset_transfer_asset in assets_seen:
-				frappe.throw(_("Row {0}: Asset {1} is listed more than once").format(row.idx, row.asset_transfer_asset))
-			assets_seen.add(row.asset_transfer_asset)
+			if not row.asset:
+				frappe.throw(_("Row {0}: Select an Asset").format(row.idx))
+			if row.asset in seen:
+				frappe.throw(_("Row {0}: Asset {1} is listed more than once").format(row.idx, row.asset))
+			seen.add(row.asset)
 
 			asset = frappe.db.get_value(
-				"Asset",
-				row.asset_transfer_asset,
-				["item_code", "company", "status", "location", "demo_loan_status"],
+				"Asset", row.asset,
+				["item_code", "company", "docstatus", "status", "location", "demo_loan_status"],
 				as_dict=True,
 			)
-			if not asset or asset.company != self.company:
-				frappe.throw(_("Row {0}: Asset must belong to Company {1}").format(row.idx, self.company))
-			if asset.status in ("Draft", "Scrapped", "Sold", "Capitalized"):
-				frappe.throw(_("Row {0}: {1} Asset cannot be transferred").format(row.idx, asset.status))
-			if asset.demo_loan_status in ("With Customer", "In Transit") or is_asset_in_transit(
-				row.asset_transfer_asset
-			):
-				frappe.throw(_("Row {0}: Asset is currently with a Customer or in transit").format(row.idx))
+			if not asset or asset.docstatus != 1 or asset.company != self.company:
+				frappe.throw(_("Row {0}: Asset must be submitted and belong to Company {1}").format(row.idx, self.company))
+			if asset.status in ASSET_STATUSES_NOT_AVAILABLE:
+				frappe.throw(_("Row {0}: {1} Asset cannot be selected").format(row.idx, asset.status))
 			if not asset.location:
-				frappe.throw(_("Row {0}: Asset must have a current Location before it can be transferred").format(row.idx))
-			if not row.asset_transfer_target_location:
-				frappe.throw(_("Row {0}: Select a Target Location").format(row.idx))
-			if row.asset_transfer_target_location == asset.location:
-				frappe.throw(_("Row {0}: Target Location must differ from the current Location").format(row.idx))
-
-			item = frappe.get_cached_value(
-				"Item", asset.item_code, ["is_fixed_asset", "stock_uom"], as_dict=True
-			)
-			if not item.is_fixed_asset:
+				frappe.throw(_("Row {0}: Asset must have a current Location").format(row.idx))
+			if self.get("asset_source_location") and asset.location != self.get("asset_source_location"):
+				frappe.throw(
+					_("Row {0}: Asset is not at Source Location {1}").format(
+						row.idx, self.get("asset_source_location")
+					)
+				)
+			if asset.demo_loan_status == "With Customer":
+				frappe.throw(_("Row {0}: Asset is currently with a Customer").format(row.idx))
+			if purpose in ("Customer Borrow / Loan", "Customer Demo") and asset.custodian:
+				frappe.throw(_("Row {0}: Asset is currently assigned to an Employee").format(row.idx))
+			if not frappe.db.get_value("Item", asset.item_code, "is_fixed_asset"):
 				frappe.throw(_("Row {0}: Asset must reference a Fixed Asset Item").format(row.idx))
+			if self.get("asset_item_filter") and asset.item_code != self.get("asset_item_filter"):
+				frappe.throw(_("Row {0}: Asset does not match the Fixed Asset Item filter").format(row.idx))
+			if self.has_active_asset_request(row.asset):
+				frappe.throw(_("Row {0}: Asset is already reserved by another active Material Request").format(row.idx))
+			if purpose == "Customer Demo" and not frappe.db.get_value("Asset", row.asset, "is_demo_asset"):
+				frappe.throw(_("Row {0}: Customer Demo requires an Asset marked as a Demo Asset").format(row.idx))
+
 			row.item_code = asset.item_code
-			row.item_type = "Fixed Asset"
+			row.asset_name = frappe.db.get_value("Asset", row.asset, "asset_name")
+			row.asset_serial_number = frappe.db.get_value("Asset", row.asset, "asset_serial_number")
+			row.source_location = asset.location
 			row.qty = 1
+			row.item_type = "Fixed Asset"
+			item = frappe.get_cached_value("Item", row.item_code, ["stock_uom"], as_dict=True)
 			row.uom = item.stock_uom
 			row.stock_uom = item.stock_uom
-			row.stock_qty = 1
-			row.asset_transfer_source_location = asset.location
-			row.from_warehouse = None
+			row.conversion_factor = 1
+			row.schedule_date = row.schedule_date or self.schedule_date
+			if purpose == "Asset Transfer":
+				if not row.target_location:
+					frappe.throw(_("Row {0}: Select a Target Location").format(row.idx))
+				if row.target_location == asset.location:
+					frappe.throw(_("Row {0}: Target Location must differ from the Source Location").format(row.idx))
+			elif purpose == "Customer Demo":
+				row.target_location = row.target_location or self.customer_location
+				if not row.target_location:
+					frappe.throw(_("Row {0}: Customer Location is required for this Demo Asset").format(row.idx))
+			else:
+				row.target_location = row.target_location or self.loan_recipient_location
+				if self.loan_recipient_type != "Employee" and not row.target_location:
+					frappe.throw(_("Row {0}: Recipient Location is required for this Asset Loan").format(row.idx))
+				if row.target_location and row.target_location == asset.location:
+					frappe.throw(_("Row {0}: Recipient Location must differ from the Source Location").format(row.idx))
+
+	def has_active_asset_request(self, asset_name):
+		return bool(
+			frappe.db.sql(
+				"""select mr.name from `tabMaterial Request Item` mri
+				join `tabMaterial Request` mr on mr.name=mri.parent
+				where mri.asset=%s and mr.name!=%s and mr.docstatus=1
+				and ((mr.material_request_type='Asset Transfer'
+					and ifnull(mr.asset_transfer_status, '') not in ('Fulfilled', 'Cancelled'))
+				or (mr.material_request_type in ('Customer Demo', 'Customer Borrow / Loan')
+					and (mr.material_request_type='Customer Demo' or mr.borrow_item_type='Asset')
+					and ifnull(mr.request_progress_status, '') not in ('Returned', 'Closed', 'Cancelled')))
+				limit 1""",
+				(asset_name, self.name or ""),
+			)
+		)
 
 	def set_delivery_snapshots(self):
 		if not self.customer:
 			return
 
-		if not self.customer_address:
-			self.customer_address = get_default_customer_address(self.customer)
-		if self.customer_address:
-			if not is_address_linked_to_customer(self.customer_address, self.customer):
+		if not self.recipient_address:
+			self.recipient_address = get_default_customer_address(self.customer)
+		if self.recipient_address:
+			if not is_address_linked_to_customer(self.recipient_address, self.customer):
 				frappe.throw(_("Customer Address must be linked to Customer {0}").format(self.customer))
-			self.customer_address_display = get_address_display(self.customer_address)
+			self.recipient_address_display = get_address_display(self.recipient_address)
 		else:
-			self.customer_address_display = None
+			self.recipient_address_display = None
 
 		if self.contact_person:
 			contact = get_customer_contact_snapshot(self.contact_person)
@@ -271,7 +432,9 @@ class CustomerMaterialRequest(MaterialRequest):
 			self.customer_contact_email = None
 			self.customer_contact_display = None
 
-	def validate_customer_contact(self):
+	def validate_customer_contact(self, required=False):
+		if required and not self.contact_person:
+			frappe.throw(_("Customer Contact is required"))
 		if self.contact_person and not frappe.db.exists(
 			"Dynamic Link",
 			{"parent": self.contact_person, "parenttype": "Contact", "link_doctype": "Customer", "link_name": self.customer},
@@ -288,46 +451,36 @@ class CustomerMaterialRequest(MaterialRequest):
 		if self.transaction_date and getdate(self.expected_return_date) < getdate(self.transaction_date):
 			frappe.throw(_("Expected Return Date cannot be before Request Date"))
 
-	def validate_items(self):
-		super().validate_items()
-		if not is_customer_request(self):
-			return
+	def validate_demo_items(self):
+		"""Keep the old method name for callers while validating the shared MR Items table."""
+		self.validate_asset_items("Customer Demo")
 
+	def validate_stock_loan_items(self):
 		if not self.items:
-			frappe.throw(_("At least one Item is required"))
+			frappe.throw(_("Add at least one Stock Item to borrow"))
+		super().validate_items()
 		for row in self.items:
-			item = frappe.get_cached_value(
-				"Item", row.item_code, ["is_stock_item", "is_fixed_asset", "stock_uom"], as_dict=True
-			)
-			is_stock = bool(item.is_stock_item)
-			is_asset = bool(item.is_fixed_asset and not item.is_stock_item)
-			if not (is_stock or is_asset):
-				frappe.throw(_("Row {0}: Requests support Stock Items and Fixed Asset Items only").format(row.idx))
-			if self.material_request_type == "Customer Demo" and is_stock and not frappe.db.get_value("Item", row.item_code, "demo_asset_item_code"):
-				frappe.throw(_("Row {0}: Set Demo Asset Item Code on {1}").format(row.idx, row.item_code))
+			item = frappe.get_cached_value("Item", row.item_code, ["is_stock_item", "stock_uom"], as_dict=True)
+			if not item or not item.is_stock_item:
+				frappe.throw(_("Row {0}: Stock Loans support Stock Items only").format(row.idx))
+			row.item_type = "Stock Item"
+			row.uom = item.stock_uom
 			if flt(row.qty) <= 0:
 				frappe.throw(_("Row {0}: Qty must be greater than zero").format(row.idx))
-			if (is_asset or (self.material_request_type == "Customer Demo" and is_stock)) and flt(row.qty) % 1:
-				frappe.throw(_("Row {0}: Asset quantity must be a whole number").format(row.idx))
-			row.item_type = "Stock Item" if is_stock else "Fixed Asset"
-			row.uom = item.stock_uom
-			if is_stock and not row.from_warehouse:
-				row.from_warehouse = self.get_default_warehouse(row.item_code)
-			if is_stock and not row.from_warehouse:
-				frappe.throw(_("Row {0}: Select a Source Warehouse").format(row.idx))
-			if row.from_warehouse:
-				warehouse_company = frappe.db.get_value("Warehouse", row.from_warehouse, "company")
-				if warehouse_company != self.company:
-					frappe.throw(_("Row {0}: Source Warehouse must belong to Company {1}").format(row.idx, self.company))
-		if self.material_request_type == "Customer Demo" and not self.customer_location:
-			frappe.throw(_("Customer Location is required for Customer Demo requests"))
-		if (
-			self.material_request_type == "Customer Borrow / Loan"
-			and self.loan_recipient_type != "Employee"
-			and any(row.item_type == "Fixed Asset" for row in self.items)
-			and not (self.loan_recipient_location or self.customer_location)
-		):
-			frappe.throw(_("Recipient Location is required for Asset Loans to Customers, Suppliers or Contacts"))
+			row.warehouse = self.customer_loan_warehouse
+
+	def validate_material_transfer_warehouses(self):
+		for row in self.items:
+			if not row.warehouse:
+				frappe.throw(_("Row {0}: Select a Target Warehouse").format(row.idx))
+			for fieldname, label in (("warehouse", "Target"), ("from_warehouse", "Source")):
+				warehouse = row.get(fieldname)
+				if warehouse and frappe.db.get_value("Warehouse", warehouse, "company") != self.company:
+					frappe.throw(
+						_("Row {0}: {1} Warehouse must belong to Company {2}").format(
+							row.idx, label, self.company
+						)
+					)
 
 	def get_default_warehouse(self, item_code):
 		warehouse = frappe.db.get_value(
@@ -339,12 +492,74 @@ class CustomerMaterialRequest(MaterialRequest):
 			return warehouse
 		return None
 
+	def set_title(self):
+		if self.title:
+			return
+		if self.material_request_type in ("Asset Transfer", "Customer Demo") or (
+			self.material_request_type == "Customer Borrow / Loan" and self.get("borrow_item_type") == "Asset"
+		):
+			items = [row.asset_name or row.item_name or row.asset for row in self.items]
+		else:
+			return super().set_title()
+		self.title = _("{0} Request for {1}").format(
+			_(self.material_request_type), ", ".join(items[:3])
+		)[:100]
+
 	def before_submit(self):
 		super().before_submit()
+		if is_asset_transfer_request(self) or self.material_request_type == "Customer Demo" or (
+			self.material_request_type == "Customer Borrow / Loan" and self.get("borrow_item_type") == "Asset"
+		):
+			self.validate_asset_items(self.material_request_type)
+		elif self.material_request_type == "Customer Borrow / Loan":
+			self.validate_stock_loan_items()
 		if is_customer_request(self):
 			self.request_progress_status = "Pending"
 		elif is_asset_transfer_request(self):
 			self.asset_transfer_status = "Pending"
+
+	def before_cancel(self):
+		super().before_cancel()
+		self.cancel_linked_custody_loans()
+		self.cancel_linked_asset_movements()
+
+	def cancel_linked_custody_loans(self):
+		if not is_customer_request(self):
+			return
+
+		loan_names = frappe.get_all(
+			"Custody Loan",
+			filters={"material_request": self.name, "docstatus": 1},
+			pluck="name",
+			order_by="modified desc",
+		)
+		for loan_name in loan_names:
+			self.cancel_linked_document("Custody Loan", loan_name)
+
+	def cancel_linked_asset_movements(self):
+		if not (is_customer_request(self) or is_asset_transfer_request(self)):
+			return
+
+		movement_names = frappe.get_all(
+			"Asset Movement",
+			filters={
+				"reference_doctype": self.doctype,
+				"reference_name": self.name,
+				"docstatus": 1,
+			},
+			pluck="name",
+			order_by="transaction_date desc, modified desc",
+		)
+		for movement_name in movement_names:
+			self.cancel_linked_document("Asset Movement", movement_name)
+
+	def cancel_linked_document(self, doctype, name):
+		doc = frappe.get_doc(doctype, name)
+		ignore_linked_doctypes = doc.get("ignore_linked_doctypes") or ()
+		if isinstance(ignore_linked_doctypes, str):
+			ignore_linked_doctypes = (ignore_linked_doctypes,)
+		doc.ignore_linked_doctypes = tuple(set(ignore_linked_doctypes) | {self.doctype})
+		doc.cancel()
 
 	def on_submit(self):
 		super().on_submit()
@@ -354,9 +569,11 @@ class CustomerMaterialRequest(MaterialRequest):
 	def on_cancel(self):
 		super().on_cancel()
 		if is_customer_request(self):
-			self.request_progress_status = "Cancelled"
+			self.db_set("request_progress_status", "Cancelled")
 		elif is_asset_transfer_request(self):
-			self.asset_transfer_status = "Cancelled"
+			self.db_set("asset_transfer_status", "Cancelled")
+		if self.meta.has_field("workflow_state"):
+			self.db_set("workflow_state", "")
 
 	def update_request_status(self):
 		status = "Cancelled" if self.docstatus == 2 else "Draft" if self.docstatus == 0 else "Pending"
@@ -372,63 +589,52 @@ class CustomerMaterialRequest(MaterialRequest):
 		return super().update_status(status)
 
 	def update_progress(self):
-		customer_request = is_customer_request(self)
-		asset_transfer = is_asset_transfer_request(self)
-		if not customer_request and not asset_transfer:
+		if not is_customer_request(self) and not is_asset_transfer_request(self):
 			return
 		if self.docstatus != 1:
 			self.update_request_status()
 			return
-		if customer_request and self.material_request_type == "Customer Borrow / Loan":
+		if is_customer_request(self):
 			self.update_custody_loan_progress()
 			return
+
+		is_transfer = is_asset_transfer_request(self)
+		child_doctype = "Material Request Item"
+		child_field = "request_item"
+		rows = self.items
 		fulfilled_total = returned_total = requested_total = 0
-		for row in self.items:
+		for row in rows:
 			requested_total += flt(row.qty)
-			if asset_transfer:
-				entries = frappe.db.sql(
-					"""select am.name, count(ami.name) as qty from `tabAsset Movement Item` ami
-					join `tabAsset Movement` am on am.name=ami.parent
-					where ami.request_item=%s and am.docstatus=1 and am.purpose='Transfer'
-					and am.reference_doctype='Material Request' and am.reference_name=%s
-					and ifnull(am.shipment_transit_leg, 0)=0
-					group by am.name order by am.transaction_date desc, am.modified desc""",
-					(row.name, self.name),
-					as_dict=True,
-				)
-				row.fulfilled_qty = sum(flt(entry.qty) for entry in entries)
-				row.returned_qty = 0
-				row.asset_movement = entries[0].name if entries else None
-			else:
-				entries = frappe.db.sql(
-					"""select am.name, am.purpose, count(*) as qty from `tabAsset Movement Item` ami
-					join `tabAsset Movement` am on am.name=ami.parent
-					where ami.request_item=%s and am.docstatus=1 and am.reference_doctype='Material Request' and am.reference_name=%s
-					and ifnull(am.shipment_transit_leg, 0)=0
-					group by am.name, am.purpose order by am.transaction_date desc, am.modified desc""",
-					(row.name, self.name),
-					as_dict=True,
-				)
-				row.fulfilled_qty = sum(flt(entry.qty) for entry in entries if entry.purpose == "Transfer")
-				row.returned_qty = sum(flt(entry.qty) for entry in entries if entry.purpose == "Receipt")
-				row.asset_movement = entries[0].name if entries else None
+			entries = frappe.db.sql(
+				f"""select am.name, am.purpose, count(ami.name) as qty from `tabAsset Movement Item` ami
+				join `tabAsset Movement` am on am.name=ami.parent
+				where ami.{child_field}=%s and am.docstatus=1
+				and am.reference_doctype='Material Request' and am.reference_name=%s
+				group by am.name, am.purpose order by am.transaction_date desc, am.modified desc""",
+				(row.name, self.name),
+				as_dict=True,
+			)
+			row.fulfilled_qty = sum(flt(entry.qty) for entry in entries if entry.purpose == "Transfer")
+			row.returned_qty = (
+				sum(flt(entry.qty) for entry in entries if entry.purpose == "Receipt") if not is_transfer else 0
+			)
 			row.outstanding_qty = max(flt(row.fulfilled_qty) - flt(row.returned_qty), 0)
+			row.asset_movement = entries[0].name if entries else None
 			fulfilled_total += flt(row.fulfilled_qty)
 			returned_total += flt(row.returned_qty)
 			row.status = self.get_row_status(row)
 			if row.name and self.docstatus == 1:
 				frappe.db.set_value(
-					"Material Request Item", row.name,
+					child_doctype, row.name,
 					{
 						"fulfilled_qty": row.fulfilled_qty,
 						"returned_qty": row.returned_qty,
 						"outstanding_qty": row.outstanding_qty,
 						"status": row.status,
-						"stock_entry": row.get("stock_entry"),
 						"asset_movement": row.get("asset_movement"),
 					},
 				)
-		if customer_request and self.request_progress_status not in ("On Hold", "Closed"):
+		if is_customer_request(self) and self.request_progress_status not in ("On Hold", "Closed"):
 			if not fulfilled_total:
 				self.request_progress_status = "Pending"
 			elif fulfilled_total < requested_total:
@@ -438,55 +644,63 @@ class CustomerMaterialRequest(MaterialRequest):
 					self.request_progress_status = "Returned"
 				else:
 					self.request_progress_status = "Fulfilled"
-		elif asset_transfer:
-			if not fulfilled_total:
-				self.asset_transfer_status = "Pending"
-			elif fulfilled_total < requested_total:
+		elif is_transfer:
+			if fulfilled_total >= requested_total:
+				self.asset_transfer_status = "Fulfilled"
+			elif fulfilled_total:
 				self.asset_transfer_status = "Partially Fulfilled"
 			else:
-				self.asset_transfer_status = "Fulfilled"
+				self.asset_transfer_status = "Pending"
 
 	def update_custody_loan_progress(self):
 		loan_items = frappe.db.sql(
-			"""select cli.name, cli.material_request_item, cli.qty, cli.returned_qty,
-				cli.outstanding_qty, l.status, l.stock_entry, l.asset_movement
-			from `tabCustody Loan Item` cli
+				"""select cli.name, cli.material_request_item, cli.qty, cli.returned_qty,
+				cli.outstanding_qty, l.status, l.delivery_note, l.asset_movement, l.name as custody_loan
+				from `tabCustody Loan Item` cli
 			join `tabCustody Loan` l on l.name = cli.parent
 			where l.material_request = %s and l.docstatus = 1""",
 			self.name,
 			as_dict=True,
 		)
-		by_request_item = {}
+		request_field = "material_request_item"
+		child_doctype = "Material Request Item"
+		rows = self.items
+		by_request_row = {}
 		for loan_item in loan_items:
-			by_request_item.setdefault(loan_item.material_request_item, []).append(loan_item)
+			by_request_row.setdefault(loan_item.get(request_field), []).append(loan_item)
 
 		fulfilled_total = returned_total = requested_total = 0
-		for row in self.items:
-			rows = by_request_item.get(row.name, [])
+		for row in rows:
+			loan_rows = by_request_row.get(row.name, [])
+			from erpnext.loan.doctype.custody_loan.custody_loan_core import transaction_is_received
+
 			issued_rows = [
-				item for item in rows
-				if item.status not in ("Pending Shipment", "In Transit", "Cancelled")
+				item
+				for item in loan_rows
+				if transaction_is_received(item.delivery_note, item.asset_movement)
 			]
 			row.fulfilled_qty = sum(flt(item.qty) for item in issued_rows)
-			row.returned_qty = sum(flt(item.returned_qty) for item in rows)
+			row.returned_qty = sum(flt(item.returned_qty) for item in loan_rows)
 			row.outstanding_qty = sum(flt(item.outstanding_qty) for item in issued_rows)
-			row.stock_entry = next((item.stock_entry for item in rows if item.stock_entry), None)
-			row.asset_movement = next((item.asset_movement for item in rows if item.asset_movement), None)
+			row.delivery_note = next((item.delivery_note for item in loan_rows if item.delivery_note), None)
+			row.asset_movement = next((item.asset_movement for item in loan_rows if item.asset_movement), None)
+			row.custody_loan = next((item.custody_loan for item in loan_rows), None)
 			row.status = self.get_row_status(row)
 			requested_total += flt(row.qty)
 			fulfilled_total += flt(row.fulfilled_qty)
 			returned_total += flt(row.returned_qty)
 			if row.name:
 				frappe.db.set_value(
-					"Material Request Item",
+					child_doctype,
 					row.name,
 					{
 						"fulfilled_qty": row.fulfilled_qty,
 						"returned_qty": row.returned_qty,
 						"outstanding_qty": row.outstanding_qty,
 						"status": row.status,
-						"stock_entry": row.stock_entry,
+						"delivery_note": row.delivery_note,
 						"asset_movement": row.asset_movement,
+						"custody_loan": row.custody_loan,
 					},
 				)
 
@@ -521,109 +735,31 @@ class CustomerMaterialRequest(MaterialRequest):
 		self.reload()
 		self.check_permission("read")
 		actions = frappe._dict(
-			check_asset_availability=False,
 			asset_movement=False,
-			stock_entry_issue=False,
-			stock_entry_return=False,
-			pick_list=False,
-			return_assets=False,
-			hold_for_asset_return=False,
-			release_hold=False,
 			stock_custody_loan=False,
 			asset_custody_loan=False,
 		)
 		if self.docstatus != 1:
 			return actions
 		if is_asset_transfer_request(self):
-			actions.asset_movement = any(
-				flt(row.qty) - flt(row.fulfilled_qty) - get_in_transit_asset_movement_qty(row.name, "Transfer") > 0
-				for row in self.items
-			)
+			actions.asset_movement = any(flt(row.qty) - flt(row.fulfilled_qty) > 0 for row in self.items)
 			return actions
-		if self.material_request_type == "Customer Borrow / Loan":
+		if is_customer_request(self):
 			from erpnext.loan.doctype.custody_loan.custody_loan_core import get_custody_loan_actions
 
 			loan_actions = get_custody_loan_actions(self)
 			actions.stock_custody_loan = loan_actions.stock_loan
 			actions.asset_custody_loan = loan_actions.asset_loan
-			return actions
-		if not is_customer_request(self):
-			return actions
-		if self.request_progress_status == "On Hold":
-			actions.release_hold = True
-			return actions
-
-		is_demo = self.material_request_type == "Customer Demo"
-		actions.check_asset_availability = is_demo or any(row.item_type == "Fixed Asset" for row in self.items)
-		actions.hold_for_asset_return = self.request_progress_status not in ("Returned", "Closed", "Cancelled")
-		available_by_item = {}
-		stock_items = []
-
-		for row in self.items:
-			in_transit_issue = get_in_transit_asset_movement_qty(row.name, "Transfer")
-			in_transit_return = get_in_transit_asset_movement_qty(row.name, "Receipt")
-			asset_issue_qty = max(flt(row.qty) - flt(row.fulfilled_qty) - in_transit_issue, 0)
-			asset_return_qty = max(flt(row.outstanding_qty) - in_transit_return, 0)
-			if row.item_type == "Fixed Asset":
-				actions.asset_movement |= asset_issue_qty > 0
-				actions.return_assets |= asset_return_qty > 0
-			elif is_demo and row.item_type == "Stock Item":
-				stock_items.append(row)
-				if asset_return_qty > 0:
-					actions.return_assets = True
-				asset_item_code = frappe.db.get_value("Item", row.item_code, "demo_asset_item_code")
-				if asset_item_code not in available_by_item:
-					available_by_item[asset_item_code] = (
-						len(get_available_assets(asset_item_code, self.company)) if asset_item_code else 0
-					)
-				available = available_by_item[asset_item_code]
-				use_existing = min(asset_issue_qty, available)
-				available_by_item[asset_item_code] = available - use_existing
-				actions.asset_movement |= use_existing > 0
-				actions.pick_list |= asset_issue_qty > use_existing
-
-		if is_demo and stock_items and frappe.db.exists(
-			"Pick List",
-			{
-				"material_request": self.name,
-				"docstatus": ["<", 2],
-				"status": ["not in", ["Completed", "Cancelled"]],
-			},
-		):
-			actions.pick_list = True
-
 		return actions
 
 	@frappe.whitelist()
 	def make_custody_loan(self, loan_type):
 		self.reload()
-		if self.docstatus != 1 or self.material_request_type != "Customer Borrow / Loan":
-			frappe.throw(_("Submit a Customer Borrow / Loan Material Request first"))
+		if self.docstatus != 1 or self.material_request_type not in ("Customer Demo", "Customer Borrow / Loan"):
+			frappe.throw(_("Submit a Customer Demo or Customer Borrow / Loan Material Request first"))
 		from erpnext.loan.doctype.custody_loan.custody_loan_core import make_custody_loan_from_request
 
 		return make_custody_loan_from_request(self, loan_type)
-
-	@frappe.whitelist()
-	def check_asset_availability(self):
-		self.reload()
-		self.check_permission("read")
-		if not is_customer_request(self):
-			frappe.throw(_("Asset availability is only available for Customer Demo / Loan requests"))
-		results = []
-		for row in self.items:
-			if row.item_type == "Stock Item" and self.material_request_type != "Customer Demo":
-				continue
-			asset_item_code = row.item_code
-			if row.item_type == "Stock Item" and self.material_request_type == "Customer Demo":
-				asset_item_code = frappe.db.get_value("Item", row.item_code, "demo_asset_item_code")
-			if not asset_item_code:
-				continue
-			available = get_available_assets(
-				asset_item_code, self.company, demo_only=self.material_request_type == "Customer Demo"
-			)
-			due_soon = get_assets_due_soon(asset_item_code, self.company) if self.material_request_type == "Customer Demo" else []
-			results.append({"request_item": row.name, "item_code": row.item_code, "asset_item_code": asset_item_code, "available": available, "due_soon": due_soon})
-		return results
 
 	@frappe.whitelist()
 	def make_asset_movement(self):
@@ -633,60 +769,9 @@ class CustomerMaterialRequest(MaterialRequest):
 			frappe.throw(_("Submit the request before creating an Asset Movement"))
 		if is_asset_transfer_request(self):
 			return self.make_asset_transfer_movement()
-		if self.material_request_type == "Customer Borrow / Loan":
+		if self.material_request_type in ("Customer Demo", "Customer Borrow / Loan"):
 			frappe.throw(_("Create Asset Movements from the Custody Loan"))
-		if self.material_request_type != "Customer Demo":
-			frappe.throw(_("Asset Movement is only available for Customer Demo or Asset Transfer requests"))
-		if self.request_progress_status == "On Hold":
-			frappe.throw(_("Release the request hold before creating an Asset Movement"))
-		movement = frappe.new_doc("Asset Movement")
-		movement.company = self.company
-		movement.purpose = "Transfer"
-		movement.customer = self.customer
-		movement.customer_contact = self.contact_person
-		movement.customer_address = self.customer_address
-		movement.customer_address_display = self.customer_address_display
-		movement.customer_contact_display = self.customer_contact_display
-		movement.customer_contact_email = self.customer_contact_email
-		movement.expected_return_date = self.expected_return_date
-		movement.reference_doctype = "Material Request"
-		movement.reference_name = self.name
-		available_by_item = {}
-		for row in self.items:
-			if row.item_type == "Fixed Asset":
-				remaining_qty = max(
-					cint(flt(row.qty) - flt(row.fulfilled_qty) - get_in_transit_asset_movement_qty(row.name, "Transfer")),
-					0,
-				)
-				for _asset_index in range(remaining_qty):
-					movement.append("assets", {
-						"request_item": row.name, "target_location": self.customer_location,
-						"asset_item_code": row.item_code,
-						"demo_asset_required": cint(self.material_request_type == "Customer Demo"),
-					})
-			elif self.material_request_type == "Customer Demo":
-				asset_item_code = frappe.db.get_value("Item", row.item_code, "demo_asset_item_code")
-				if not asset_item_code:
-					continue
-				if asset_item_code not in available_by_item:
-					available_by_item[asset_item_code] = len(get_available_assets(asset_item_code, self.company))
-				remaining_qty = max(
-					cint(flt(row.qty) - flt(row.fulfilled_qty) - get_in_transit_asset_movement_qty(row.name, "Transfer")),
-					0,
-				)
-				asset_qty = min(remaining_qty, available_by_item[asset_item_code])
-				available_by_item[asset_item_code] -= asset_qty
-				for _asset_index in range(asset_qty):
-					movement.append("assets", {
-						"request_item": row.name, "target_location": self.customer_location,
-						"asset_item_code": asset_item_code,
-						"demo_asset_required": 1,
-					})
-		if not movement.assets:
-			if self.material_request_type == "Customer Demo":
-				frappe.throw(_("There are no unfulfilled Demo Assets available for a new Asset Movement"))
-			frappe.throw(_("There are no unfulfilled Fixed Assets on this request"))
-		return movement
+		frappe.throw(_("Asset Movements can only be created from Asset Transfer requests"))
 
 	def make_asset_transfer_movement(self):
 		if self.asset_transfer_status == "Cancelled":
@@ -696,277 +781,153 @@ class CustomerMaterialRequest(MaterialRequest):
 		movement.purpose = "Transfer"
 		movement.reference_doctype = "Material Request"
 		movement.reference_name = self.name
+		transfer_rows = []
 		for row in self.items:
-			if row.asset_transfer_asset and flt(row.fulfilled_qty) < flt(row.qty):
-				if get_in_transit_asset_movement_qty(row.name, "Transfer"):
-					continue
-				movement.append(
-					"assets",
-					{
-						"asset": row.asset_transfer_asset,
-						"request_item": row.name,
-						"asset_item_code": row.item_code,
-						"source_location": row.asset_transfer_source_location,
-						"target_location": row.asset_transfer_target_location,
-					},
-				)
+			if row.asset and flt(row.fulfilled_qty) < flt(row.qty):
+				transfer_rows.append(row)
+
+		asset_names = list({row.asset for row in transfer_rows})
+		asset_details = {
+			asset.name: asset
+			for asset in frappe.get_all(
+				"Asset",
+				filters={"name": ["in", asset_names]},
+				fields=["name", "asset_name", "asset_serial_number", "is_demo_asset", "demo_loan_status"],
+			)
+		} if asset_names else {}
+
+		for row in transfer_rows:
+			asset = asset_details.get(row.asset) or frappe._dict()
+			movement.append(
+				"assets",
+				{
+					"asset": row.asset,
+					"asset_name": asset.asset_name,
+					"asset_serial_number": asset.asset_serial_number,
+					"is_demo_asset": asset.is_demo_asset,
+					"demo_loan_status": asset.demo_loan_status,
+					"request_item": row.name,
+					"asset_item_code": row.item_code,
+					"source_location": row.source_location,
+					"target_location": row.target_location,
+				},
+			)
 		if not movement.assets:
 			frappe.throw(_("There are no unfulfilled Assets on this request"))
 		return movement
 
-	@frappe.whitelist()
-	def make_asset_receipt(self, requires_shipment=False):
-		"""Create the customer return movement for Assets issued on this request."""
-		self.reload()
-		self.check_permission("read")
-		if self.material_request_type == "Customer Borrow / Loan":
-			frappe.throw(_("Create Asset Returns from the Custody Loan"))
-		if self.material_request_type != "Customer Demo":
-			frappe.throw(_("Asset returns are only available for Customer Demo requests"))
-		if self.docstatus != 1:
-			frappe.throw(_("Submit the request before creating an Asset Receipt"))
-		if self.request_progress_status == "On Hold":
-			frappe.throw(_("Release the request hold before creating an Asset Receipt"))
-
-		self.update_progress()
-		movement = frappe.new_doc("Asset Movement")
-		movement.company = self.company
-		movement.purpose = "Receipt"
-		movement.requires_shipment = cint(requires_shipment)
-		movement.customer = self.customer
-		movement.customer_contact = self.contact_person
-		movement.customer_address = self.customer_address
-		movement.customer_address_display = self.customer_address_display
-		movement.customer_contact_display = self.customer_contact_display
-		movement.customer_contact_email = self.customer_contact_email
-		movement.expected_return_date = self.expected_return_date
-		movement.reference_doctype = "Material Request"
-		movement.reference_name = self.name
-
-		for request_item in self.items:
-			if request_item.item_type != "Fixed Asset" and not (
-				self.material_request_type == "Customer Demo" and request_item.item_type == "Stock Item"
-			):
-				continue
-			return_qty = max(
-				flt(request_item.outstanding_qty)
-				- get_in_transit_asset_movement_qty(request_item.name, "Receipt"),
-				0,
-			)
-			if return_qty <= 0:
-				continue
-			assets = frappe.db.sql(
-				"""select a.name, a.item_code, a.location,
-					(select ami0.source_location from `tabAsset Movement Item` ami0
-					 join `tabAsset Movement` am0 on am0.name = ami0.parent
-					 where ami0.asset = a.name and ami0.request_item = %(request_item)s
-					 and am0.reference_doctype = 'Material Request' and am0.reference_name = %(request)s
-					 and am0.purpose = 'Transfer' and am0.docstatus = 1
-					 and (am0.shipment_transit_leg = 1 or ifnull(am0.shipment_source_movement, '') = '')
-					 order by am0.transaction_date asc, am0.modified asc limit 1) as return_location
-					from `tabAsset` a
-					join `tabAsset Movement Item` ami on ami.asset = a.name
-					join `tabAsset Movement` am on am.name = ami.parent
-					where ami.request_item = %(request_item)s
-					and am.reference_doctype = 'Material Request' and am.reference_name = %(request)s
-					and am.purpose = 'Transfer' and am.docstatus = 1
-					and a.docstatus = 1 and a.company = %(company)s
-					and a.demo_loan_status = 'With Customer'
-					group by a.name, a.item_code, a.location
-					order by a.name limit %(qty)s""",
-				{
-					"request_item": request_item.name,
-					"request": self.name,
-					"company": self.company,
-					"qty": cint(return_qty),
-				},
-				as_dict=True,
-			)
-			if len(assets) < cint(return_qty):
-				frappe.throw(
-					_("Request Item {0}: all outstanding Assets must be at the Customer before they can be received.").format(
-						request_item.idx
-					)
-				)
-			for asset in assets:
-				return_location = asset.return_location or frappe.db.get_value(
-					"Warehouse", frappe.db.get_value("Asset", asset.name, "source_warehouse"), "asset_location"
-				)
-				if not return_location:
-					frappe.throw(_("Set a return Location on the source Warehouse for Asset {0}").format(asset.name))
-				movement.append(
-					"assets",
-					{
-						"asset": asset.name,
-						"request_item": request_item.name,
-						"asset_item_code": asset.item_code,
-						"source_location": asset.location,
-						"target_location": return_location,
-						"shipment_destination_location": return_location if requires_shipment else None,
-						"demo_asset_required": cint(self.material_request_type == "Customer Demo"),
-					},
-				)
-
-		if not movement.assets:
-			frappe.throw(_("There are no outstanding Assets to receive for this request"))
-		return movement
-
-	@frappe.whitelist()
-	def make_stock_entry(self, return_stock=False):
-		self.reload()
-		self.check_permission("read")
-		if self.material_request_type != "Customer Borrow / Loan":
-			frappe.throw(_("Stock Entries are only available for Customer Borrow / Loan requests"))
-		frappe.throw(_("Create Stock Entries from the Custody Loan"))
-
-	@frappe.whitelist()
-	def release_hold(self):
-		self.reload()
-		self.check_permission("write")
-		if self.material_request_type != "Customer Demo":
-			frappe.throw(_("Hold actions are only available for Customer Demo requests"))
-		if self.docstatus != 1 or self.request_progress_status != "On Hold":
-			frappe.throw(_("Only a submitted request on hold can be released"))
-		self.db_set("request_progress_status", "Pending")
-		return "Pending"
-
-	@frappe.whitelist()
-	def hold_for_asset_return(self):
-		self.reload()
-		self.check_permission("write")
-		if self.material_request_type != "Customer Demo":
-			frappe.throw(_("Hold actions are only available for Customer Demo requests"))
-		if self.docstatus != 1:
-			frappe.throw(_("Submit the request before putting it on hold"))
-		if self.request_progress_status in ("Returned", "Closed", "Cancelled"):
-			frappe.throw(_("Completed Customer Demo requests cannot be put on hold"))
-		self.db_set("request_progress_status", "On Hold")
-		return self.request_progress_status
-
-	@frappe.whitelist()
-	def make_pick_list(self):
-		self.reload()
-		self.check_permission("read")
-		if self.docstatus != 1:
-			frappe.throw(_("Submit the request before creating a Pick List"))
-		if self.request_progress_status == "On Hold":
-			frappe.throw(_("Release the request hold before creating a Pick List"))
-		if self.material_request_type != "Customer Demo":
-			frappe.throw(_("Pick Lists for Stock to Asset Conversion are only available for Customer Demo requests"))
-		active_pick_list = frappe.db.get_value(
-			"Pick List",
-			{"material_request": self.name, "docstatus": ["<", 2], "status": ["not in", ["Completed", "Cancelled"]]},
-			"name",
-		)
-		if active_pick_list:
-			return frappe.get_doc("Pick List", active_pick_list).as_dict()
-		available_by_item = {}
-		pick_list = frappe.new_doc("Pick List")
-		pick_list.company = self.company
-		pick_list.purpose = "Material Transfer"
-		pick_list.pick_list_type = "Customer Demo - Asset Conversion"
-		pick_list.pick_manually = 1
-		pick_list.material_request = self.name
-		for row in self.items:
-			if row.item_type != "Stock Item":
-				continue
-			asset_item_code = frappe.db.get_value("Item", row.item_code, "demo_asset_item_code")
-			if asset_item_code not in available_by_item:
-				available_by_item[asset_item_code] = (
-					len(get_available_assets(asset_item_code, self.company)) if asset_item_code else 0
-				)
-			available = available_by_item[asset_item_code]
-			remaining = max(
-				flt(row.qty) - flt(row.fulfilled_qty) - get_in_transit_asset_movement_qty(row.name, "Transfer"),
-				0,
-			)
-			use_existing = min(remaining, available)
-			available_by_item[asset_item_code] = available - use_existing
-			shortage = remaining - use_existing
-			if not shortage:
-				continue
-			item = frappe.get_cached_doc("Item", row.item_code)
-			pick_list.append("locations", {
-				"item_code": row.item_code, "warehouse": row.from_warehouse,
-				"qty": shortage, "stock_qty": shortage, "picked_qty": shortage,
-				"stock_uom": item.stock_uom, "uom": item.stock_uom,
-				"conversion_factor": 1, "material_request_item": row.name,
-			})
-		if not pick_list.locations:
-			frappe.throw(_("There are no remaining Demo Stock Items that need conversion"))
-		pick_list.insert()
-		return pick_list.as_dict()
-
-
-def get_available_assets(item_code, company, demo_only=True):
-	demo_filter = "and a.is_demo_asset=1" if demo_only else ""
+def get_available_assets(item_code, company, demo_only=False, location=None, exclude_custodian=True):
+	filters = ["a.company=%s", "a.docstatus=1", "a.status not in ('Draft','Sold','Scrapped','Capitalized')"]
+	values = [company]
+	if item_code:
+		filters.append("a.item_code=%s")
+		values.append(item_code)
+	if location:
+		filters.append("a.location=%s")
+		values.append(location)
+	if demo_only:
+		filters.append("a.is_demo_asset=1")
+	if exclude_custodian:
+		filters.append("ifnull(a.custodian, '') = ''")
 	return frappe.db.sql(
-		f"""select a.name, a.asset_name, a.location from `tabAsset` a
-		where a.item_code=%s and a.company=%s and a.docstatus=1
-		{demo_filter}
-		and a.status not in ('Sold','Scrapped','Capitalized')
+		f"""select a.name, a.asset_name, a.item_code, a.location from `tabAsset` a
+		where {' and '.join(filters)}
+		and exists (select 1 from `tabItem` item where item.name=a.item_code and item.is_fixed_asset=1)
 		and ifnull(a.demo_loan_status, 'Available') = 'Available'
-		and ifnull(a.custodian, '') = ''
 		and not exists (
-			select 1 from `tabAsset Movement Item` ami
-			join `tabAsset Movement` am on am.name=ami.parent
-			join `tabShipment` s on s.name=am.shipment
-			where ami.asset=a.name and am.docstatus=1 and am.shipment_transit_leg=1
-			and ifnull(s.tracking_status, '') != 'Delivered'
+			select 1 from `tabMaterial Request Item` mri
+			join `tabMaterial Request` mr on mr.name=mri.parent
+			where mri.asset=a.name and mr.docstatus=1
+			and ((mr.material_request_type='Asset Transfer'
+				and ifnull(mr.asset_transfer_status, '') not in ('Fulfilled', 'Cancelled'))
+			or (mr.material_request_type='Customer Demo'
+				and ifnull(mr.request_progress_status, '') not in ('Returned', 'Closed', 'Cancelled'))
+			or (mr.material_request_type='Customer Borrow / Loan' and mr.borrow_item_type='Asset'
+				and ifnull(mr.request_progress_status, '') not in ('Returned', 'Closed', 'Cancelled')))
 		)
 		order by name""",
-		(item_code, company), as_dict=True,
+		values, as_dict=True,
 	)
 
 
-def is_asset_in_transit(asset_name):
-	return bool(
-		frappe.db.sql(
-			"""select 1 from `tabAsset Movement Item` ami
-			join `tabAsset Movement` am on am.name=ami.parent
-			join `tabShipment` s on s.name=am.shipment
-			where ami.asset=%s and am.docstatus=1 and am.shipment_transit_leg=1
-			and ifnull(s.tracking_status, '') != 'Delivered' limit 1""",
-			asset_name,
-		)
+@frappe.whitelist()
+def get_assets_for_material_request(company, location, item_code=None):
+	"""Return available Fixed Assets at the selected Source Location."""
+	frappe.has_permission("Asset", "read", throw=True)
+	frappe.has_permission("Company", "read", doc=company, throw=True)
+	if not location or not frappe.db.exists("Location", location):
+		frappe.throw(_("Select a valid Source Location"))
+	if item_code and not frappe.db.get_value("Item", item_code, "is_fixed_asset"):
+		frappe.throw(_("The Item filter must be a Fixed Asset Item"))
+	assets = get_available_assets(item_code, company, location=location, exclude_custodian=False)
+	asset_names = [asset.name for asset in assets]
+	assets = frappe.get_list(
+		"Asset",
+		filters={"name": ["in", asset_names or [""]]},
+		fields=["name", "asset_name", "asset_serial_number", "item_code", "location"],
+		order_by="name asc",
 	)
+	for asset in assets:
+		asset.stock_uom = frappe.get_cached_value("Item", asset.item_code, "stock_uom")
+	return assets
 
 
-def get_in_transit_asset_movement_qty(request_item_name, purpose):
-	return cint(
-		frappe.db.sql(
-			"""select count(*) from `tabAsset Movement Item` ami
-			join `tabAsset Movement` am on am.name=ami.parent
-			join `tabShipment` s on s.name=am.shipment
-			where ami.request_item=%s and am.reference_doctype='Material Request'
-			and am.purpose=%s and am.docstatus=1
-			and am.shipment_transit_leg=1 and ifnull(s.tracking_status, '') != 'Delivered'""",
-			(request_item_name, purpose),
-		)[0][0]
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def asset_query(doctype, txt, searchfield, start, page_len, filters, as_dict=False):
+	"""Search available Fixed Asset records for Material Request asset rows."""
+	frappe.has_permission("Asset", "read", throw=True)
+	filters = frappe._dict(filters or {})
+	if (
+		not filters.company
+		or not frappe.db.exists("Company", filters.company)
+		or filters.material_request_type not in ("Asset Transfer", "Customer Demo", "Customer Borrow / Loan")
+	):
+		return []
+	frappe.has_permission("Company", "read", doc=filters.company, throw=True)
+
+	from erpnext.controllers.queries import get_match_cond
+
+	conditions = [
+		"tabAsset.company=%(company)s",
+		"tabAsset.docstatus=1",
+		"tabAsset.status not in ('Draft', 'Sold', 'Scrapped', 'Capitalized')",
+		"tabItem.is_fixed_asset=1",
+		"ifnull(tabAsset.demo_loan_status, 'Available')='Available'",
+		"not exists (select 1 from `tabMaterial Request Item` mri join `tabMaterial Request` mr on mr.name=mri.parent "
+		"where mri.asset=tabAsset.name and mr.docstatus=1 and ((mr.material_request_type='Asset Transfer' "
+		"and ifnull(mr.asset_transfer_status, '') not in ('Fulfilled', 'Cancelled')) or "
+		"(mr.material_request_type='Customer Demo' "
+		"and ifnull(mr.request_progress_status, '') not in ('Returned', 'Closed', 'Cancelled')) or "
+		"(mr.material_request_type='Customer Borrow / Loan' and mr.borrow_item_type='Asset' "
+		"and ifnull(mr.request_progress_status, '') not in ('Returned', 'Closed', 'Cancelled'))))",
+	]
+	if filters.material_request_type == "Customer Borrow / Loan":
+		conditions.append("ifnull(tabAsset.custodian, '')=''")
+	if filters.material_request_type == "Customer Demo":
+		conditions.append("tabAsset.is_demo_asset=1")
+	values = {"company": filters.company, "txt": f"%{txt}%", "start": start, "page_len": page_len}
+	if filters.item_code:
+		conditions.append("tabAsset.item_code=%(item_code)s")
+		values["item_code"] = filters.item_code
+	if filters.location:
+		conditions.append("tabAsset.location=%(location)s")
+		values["location"] = filters.location
+	conditions.append("(tabAsset.name like %(txt)s or tabAsset.asset_name like %(txt)s or tabAsset.asset_serial_number like %(txt)s)")
+	match_condition = get_match_cond("Asset")
+	result_fields = (
+		"tabAsset.name, tabAsset.asset_serial_number, tabAsset.asset_name, "
+		"tabAsset.item_code, tabAsset.location, tabItem.stock_uom"
+		if as_dict
+		else "tabAsset.name, tabAsset.asset_name, tabAsset.item_code, tabAsset.location"
 	)
-
-
-def get_in_transit_stock_entry_qty(request, request_item, return_stock=False):
-	loan_warehouse = request.customer_loan_warehouse
-	if not loan_warehouse or not request_item.from_warehouse:
-		return 0
-
-	source_warehouse = loan_warehouse if return_stock else request_item.from_warehouse
-	destination_warehouse = request_item.from_warehouse if return_stock else loan_warehouse
-	return flt(
-		frappe.db.sql(
-			"""select sum(greatest(sed.qty - ifnull(receipt_row.qty, 0), 0))
-			from `tabStock Entry Detail` sed
-			join `tabStock Entry` se on se.name=sed.parent
-			left join `tabStock Entry` receipt on receipt.outgoing_stock_entry=se.name and receipt.docstatus=1
-			left join `tabStock Entry Detail` receipt_row
-				on receipt_row.parent=receipt.name and receipt_row.ste_detail=sed.name
-			where sed.material_request_item=%s and sed.s_warehouse=%s
-			and sed.material_request=%s and se.shipment_destination_warehouse=%s and se.add_to_transit=1
-			and se.requires_shipment=1 and se.docstatus=1""",
-			(request_item.name, source_warehouse, request.name, destination_warehouse),
-		)[0][0]
-		or 0
+	return frappe.db.sql(
+		f"""select {result_fields}
+		from `tabAsset` tabAsset inner join `tabItem` tabItem on tabItem.name=tabAsset.item_code
+		where {' and '.join(conditions)} {match_condition}
+		order by tabAsset.name limit %(page_len)s offset %(start)s""",
+		values,
+		as_dict=as_dict,
 	)
 
 
@@ -1009,89 +970,6 @@ def validate_stock_entry_request(doc, method=None):
 	request = frappe.get_doc("Material Request", request_name)
 	if not is_customer_request(request):
 		return
-	if request.docstatus != 1 or request.company != doc.company:
-		frappe.throw(_("Stock Entry must reference a submitted request for the same Company"))
-	if doc.purpose != "Material Transfer":
-		frappe.throw(_("Customer Demo / Loan Stock Entries must use Material Transfer"))
-	if request.material_request_type != "Customer Borrow / Loan":
-		frappe.throw(_("Customer Demo stock must be converted and issued as an Asset"))
-	if not doc.get("is_custody_loan_transaction") or not doc.get("custody_loan"):
-		frappe.throw(_("Create Customer Borrow / Loan Stock Entries from the Custody Loan"))
-	loan = frappe.get_doc("Custody Loan", doc.custody_loan)
-	if loan.material_request != request.name or loan.loan_type != "Stock" or loan.company != request.company:
-		frappe.throw(_("Stock Entry must link to a Stock Custody Loan from this Material Request"))
-	from erpnext.loan.doctype.custody_loan.custody_loan_core import set_stock_entry_recipient_snapshot
-	set_stock_entry_recipient_snapshot(doc, loan)
-	if len(linked_rows) != len(doc.get("items", [])):
-		frappe.throw(_("Link every Stock Entry row to a Material Request Item"))
-	# A Custody Loan is already submitted when it creates its Stock Entry. Its
-	# submitted Loan item must not make the request look fulfilled before this
-	# generated Stock Entry has passed validation and posted.
-	if not doc.flags.get("custody_loan_generated"):
-		request.update_progress()
-	transfer_qty = {}
-	for row in linked_rows:
-		request_row = frappe.get_doc("Material Request Item", row.material_request_item)
-		if request_row.parent != request.name or request_row.item_code != row.item_code or request_row.item_type != "Stock Item":
-			frappe.throw(_("Row {0}: Item does not match the linked request row").format(row.idx))
-		loan_warehouse = request.customer_loan_warehouse
-		target_warehouse = (
-			doc.shipment_destination_warehouse
-			if doc.get("requires_shipment") and doc.shipment_destination_warehouse
-			else row.t_warehouse
-		)
-		if doc.get("outgoing_stock_entry"):
-			outgoing = frappe.get_doc("Stock Entry", doc.outgoing_stock_entry)
-			outgoing_row_name = row.get("ste_detail")
-			outgoing_row = frappe.get_doc("Stock Entry Detail", outgoing_row_name) if outgoing_row_name else None
-			if (
-				not outgoing_row
-				or outgoing_row.material_request != request.name
-				or outgoing_row.material_request_item != request_row.name
-			):
-				frappe.throw(_("Transit receipt row {0} does not match its Material Request transfer").format(row.idx))
-			outgoing_target = outgoing.shipment_destination_warehouse or outgoing_row.t_warehouse
-			if outgoing_target == loan_warehouse and outgoing_row.s_warehouse == request_row.from_warehouse:
-				direction = "issue"
-			elif outgoing_target == request_row.from_warehouse and outgoing_row.s_warehouse == loan_warehouse:
-				direction = "return"
-			else:
-				frappe.throw(_("Row {0}: Transit transfer does not match the requested Source and Loan Warehouses").format(row.idx))
-		elif target_warehouse == loan_warehouse and row.s_warehouse == request_row.from_warehouse:
-			direction = "issue"
-		elif row.s_warehouse == loan_warehouse and target_warehouse == request_row.from_warehouse:
-			direction = "return"
-		else:
-			frappe.throw(_("Row {0}: Transfer must be between the requested Source Warehouse and Company Customer Loan Warehouse").format(row.idx))
-		key = (request_row.name, direction)
-		transfer_qty[key] = (request_row, transfer_qty.get(key, (None, 0))[1] + flt(row.qty))
-	if doc.get("outgoing_stock_entry"):
-		return
-	for (request_item_name, direction), (request_row, qty) in transfer_qty.items():
-		in_transit_qty = get_in_transit_stock_entry_qty(
-			request, request_row, return_stock=direction == "return"
-		)
-		available_qty = (
-			flt(request_row.qty) - flt(request_row.fulfilled_qty) - in_transit_qty
-			if direction == "issue"
-			else flt(request_row.outstanding_qty) - in_transit_qty
-		)
-		if qty > available_qty:
-			frappe.throw(_("Request Item {0}: Transfer Qty exceeds the {1} Qty of {2}").format(request_item_name, direction, available_qty))
-
-
-def update_stock_entry_request_progress(doc, method=None):
-	request_names = {
-		row.material_request
-		or frappe.db.get_value("Material Request Item", row.material_request_item, "parent")
-		for row in doc.get("items", [])
-		if row.get("material_request_item")
-	}
-	for request_name in request_names:
-		if not request_name:
-			continue
-		request = frappe.get_doc("Material Request", request_name)
-		if not is_customer_request(request):
-			continue
-		request.update_progress()
-		request.db_set("request_progress_status", request.request_progress_status)
+	frappe.throw(
+		_("Customer Demo and Borrow stock must use the Loan Delivery Note workflow, not a Stock Entry")
+	)

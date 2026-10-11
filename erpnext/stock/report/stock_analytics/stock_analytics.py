@@ -1,15 +1,22 @@
 # Copyright (c) 2013, Frappe Technologies Pvt. Ltd. and contributors
 # For license information, please see license.txt
 import datetime
+from collections import defaultdict
 
 import frappe
 from frappe import _, scrub
-from frappe.utils import get_datetime, get_first_day_of_week, get_quarter_start, getdate
+from frappe.utils import flt, get_datetime, get_first_day_of_week, get_quarter_start, getdate
 from frappe.utils import get_first_day as get_first_day_of_month
 from frappe.utils.nestedset import get_descendants_of
 
 from erpnext.accounts.utils import get_fiscal_year
 from erpnext.stock.doctype.warehouse.warehouse import apply_warehouse_filter
+from erpnext.stock.report.storage_location_utils import (
+	add_location_column,
+	get_reconciliation_quantity_deltas,
+	location_key,
+	show_location_wise_stock,
+)
 from erpnext.stock.utils import is_reposting_item_valuation_in_progress
 
 
@@ -18,6 +25,17 @@ def execute(filters=None):
 	filters = frappe._dict(filters or {})
 	period_columns = get_period_columns(filters)
 	columns = get_columns(period_columns)
+	columns.insert(
+		5,
+		{
+			"label": _("Warehouse"),
+			"fieldname": "warehouse",
+			"fieldtype": "Link",
+			"options": "Warehouse",
+			"width": 150,
+		},
+	)
+	add_location_column(columns, filters)
 	data = get_data(filters)
 	chart = get_chart_data(period_columns)
 
@@ -103,7 +121,7 @@ def round_down_to_nearest_frequency(date: str, frequency: str) -> datetime.datet
 
 	def _get_first_day_of_fiscal_year(date):
 		fiscal_year = get_fiscal_year(date)
-		return fiscal_year and fiscal_year[1] or date
+		return (fiscal_year and fiscal_year[1]) or date
 
 	round_down_function = {
 		"Monthly": get_first_day_of_month,
@@ -130,7 +148,7 @@ def get_period(posting_date, filters):
 	return period
 
 
-def get_periodic_data(entry, filters):
+def get_periodic_data(entry, filters, reconciliation_deltas=None):
 	"""Structured as:
 	Item 1
 	        - Balance (updated and carried forward):
@@ -178,7 +196,13 @@ def get_periodic_data(entry, filters):
 			):
 				bal_qty = periodic_data[d.item_code]["balance"][d.warehouse]
 
-			qty_diff = d.qty_after_transaction - bal_qty
+			qty_diff = (
+				flt(d.actual_qty)
+				if d.get("storage_location")
+				else (reconciliation_deltas or {}).get(
+					d.get("voucher_detail_no"), d.qty_after_transaction - bal_qty
+				)
+			)
 		else:
 			qty_diff = d.actual_qty
 
@@ -232,29 +256,39 @@ def get_data(filters):
 	items = get_items(filters)
 	sle = get_stock_ledger_entries(filters, items)
 	item_details = get_item_details(items, sle)
-	periodic_data = get_periodic_data(sle, filters)
-	ranges = get_period_date_ranges(filters)
+	reconciliation_deltas = (
+		get_reconciliation_quantity_deltas(filters) if show_location_wise_stock(filters) else {}
+	)
+	groups = defaultdict(list)
+	for entry in sle:
+		groups[(entry.warehouse, location_key(entry, filters))].append(entry)
+	for (warehouse, location), entries in groups.items():
+		periodic_data = get_periodic_data(entries, filters, reconciliation_deltas)
+		ranges = get_period_date_ranges(filters)
 
-	today = getdate()
+		today = getdate()
 
-	for _dummy, item_data in item_details.items():
-		row = {
-			"name": item_data.name,
-			"item_name": item_data.item_name,
-			"item_group": item_data.item_group,
-			"uom": item_data.stock_uom,
-			"brand": item_data.brand,
-		}
-		previous_period_value = 0.0
-		for start_date, end_date in ranges:
-			period = get_period(end_date, filters)
-			period_data = periodic_data.get(item_data.name, {}).get(period)
-			if period_data:
-				row[scrub(period)] = previous_period_value = sum(period_data.values())
-			else:
-				row[scrub(period)] = previous_period_value if today >= start_date else None
+		for item_code in sorted({entry.item_code for entry in entries}):
+			item_data = item_details[item_code]
+			row = {
+				"name": item_data.name,
+				"warehouse": warehouse,
+				"storage_location": location or None,
+				"item_name": item_data.item_name,
+				"item_group": item_data.item_group,
+				"uom": item_data.stock_uom,
+				"brand": item_data.brand,
+			}
+			previous_period_value = 0.0
+			for start_date, end_date in ranges:
+				period = get_period(end_date, filters)
+				period_data = periodic_data.get(item_data.name, {}).get(period)
+				if period_data:
+					row[scrub(period)] = previous_period_value = sum(period_data.values())
+				else:
+					row[scrub(period)] = previous_period_value if today >= start_date else None
 
-		data.append(row)
+			data.append(row)
 
 	return data
 
@@ -290,6 +324,7 @@ def get_stock_ledger_entries(filters, items):
 		.select(
 			sle.item_code,
 			sle.warehouse,
+			sle.storage_location,
 			sle.posting_date,
 			sle.actual_qty,
 			sle.valuation_rate,
@@ -299,6 +334,7 @@ def get_stock_ledger_entries(filters, items):
 			sle.stock_value_difference,
 			sle.item_code.as_("name"),
 			sle.voucher_no,
+			sle.voucher_detail_no,
 			sle.stock_value,
 			sle.batch_no,
 		)

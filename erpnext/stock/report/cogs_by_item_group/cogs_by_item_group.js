@@ -3,6 +3,7 @@
 
 frappe.query_reports["COGS By Item Group"] = {
 	filters: [
+		{fieldname: "show_location_wise_stock", label: __("Show Storage Location Wise Stock"), fieldtype: "Check", default: 1},
 		{
 			label: __("Company"),
 			fieldname: "company",

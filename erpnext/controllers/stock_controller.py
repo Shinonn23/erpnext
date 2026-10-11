@@ -1149,9 +1149,16 @@ class StockController(AccountsController):
 					)
 
 	def make_package_for_transfer(
-		self, serial_and_batch_bundle, warehouse, type_of_transaction=None, do_not_submit=None, qty=0
+		self,
+		serial_and_batch_bundle,
+		warehouse,
+		type_of_transaction=None,
+		do_not_submit=None,
+		qty=0,
+		storage_location=None,
+		set_storage_location=False,
 	):
-		return make_bundle_for_material_transfer(
+		kwargs = dict(
 			is_new=self.is_new(),
 			docstatus=self.docstatus,
 			voucher_type=self.doctype,
@@ -1162,6 +1169,10 @@ class StockController(AccountsController):
 			do_not_submit=do_not_submit,
 			qty=qty,
 		)
+		if set_storage_location:
+			kwargs["storage_location"] = storage_location
+
+		return make_bundle_for_material_transfer(**kwargs)
 
 	def get_sl_entries(self, d, args):
 		sl_dict = frappe._dict(
@@ -2646,6 +2657,8 @@ def make_bundle_for_material_transfer(**kwargs):
 			row.is_outward = 1
 
 		row.warehouse = kwargs.warehouse
+		if "storage_location" in kwargs:
+			row.storage_location = kwargs.storage_location
 		row.posting_datetime = bundle_doc.posting_datetime
 		row.voucher_type = bundle_doc.voucher_type
 		row.voucher_no = bundle_doc.voucher_no

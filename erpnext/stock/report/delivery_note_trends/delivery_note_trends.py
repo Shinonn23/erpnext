@@ -4,17 +4,18 @@
 
 from frappe import _
 
-from erpnext.controllers.trends import get_columns, get_data
+from erpnext.stock.report.storage_location_utils import get_stock_trend_data
 
 
 def execute(filters=None):
 	if not filters:
 		filters = {}
 	data = []
-	conditions = get_columns(filters, "Delivery Note")
-	data = get_data(filters, conditions)
+	conditions, data = get_stock_trend_data(filters, "Delivery Note")
 
-	chart_data = get_chart_data(data, conditions, filters)
+	chart_data = get_chart_data(
+		[row[: conditions["stock_column_count"]] for row in data], conditions, filters
+	)
 
 	return conditions["columns"], data, None, chart_data
 

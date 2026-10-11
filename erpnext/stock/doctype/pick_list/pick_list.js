@@ -61,6 +61,10 @@ frappe.ui.form.on("Pick List", {
 			return erpnext.queries.item({ is_stock_item: 1 });
 		});
 
+		frm.set_query("storage_location", "locations", (doc, cdt, cdn) => {
+			return { filters: { warehouse: locals[cdt][cdn].warehouse } };
+		});
+
 		frm.set_query("batch_no", "locations", (frm, cdt, cdn) => {
 			const row = locals[cdt][cdn];
 			return {
@@ -68,6 +72,7 @@ frappe.ui.form.on("Pick List", {
 				filters: {
 					item_code: row.item_code,
 					warehouse: row.warehouse,
+					storage_location: row.storage_location,
 				},
 			};
 		});
@@ -133,17 +138,23 @@ frappe.ui.form.on("Pick List", {
 				);
 
 				if (frm.doc.purpose === "Delivery") {
-					frm.add_custom_button(
-						__("Delivery Note"),
-						() => frm.events.create_delivery(frm, "Delivery Note"),
-						__("Create")
-					);
-					frm.add_custom_button(
-						__("Sales Invoice"),
-						() => frm.events.create_delivery(frm, "Sales Invoice"),
-						__("Create")
-					);
-				} else if (frm.doc.pick_list_type === "Customer Demo - Asset Conversion") {
+					if (frm.doc.custody_loan) {
+						frm.add_custom_button(__("Custody Loan"), () =>
+							frappe.set_route("Form", "Custody Loan", frm.doc.custody_loan)
+						);
+					} else {
+						frm.add_custom_button(
+							__("Delivery Note"),
+							() => frm.events.create_delivery(frm, "Delivery Note"),
+							__("Create")
+						);
+						frm.add_custom_button(
+							__("Sales Invoice"),
+							() => frm.events.create_delivery(frm, "Sales Invoice"),
+							__("Create")
+						);
+					}
+				} else if (["Customer Demo - Asset Conversion", "Asset Conversion"].includes(frm.doc.pick_list_type)) {
 					frm.add_custom_button(
 						__("Stock to Asset Conversion"),
 						() => frm.call("make_stock_to_asset_conversion").then((r) => {
@@ -361,7 +372,7 @@ frappe.ui.form.on("Pick List Item", {
 	item_code: (frm, cdt, cdn) => {
 		let row = frappe.get_doc(cdt, cdn);
 		if (row.item_code) {
-			get_item_details(row.item_code, row.uom, row.warehouse, frm.doc.company).then((data) => {
+			get_item_details(row.item_code, row.uom, row.warehouse, frm.doc.company, row.storage_location).then((data) => {
 				frappe.model.set_value(cdt, cdn, "uom", data.stock_uom);
 				frappe.model.set_value(cdt, cdn, "stock_uom", data.stock_uom);
 				frappe.model.set_value(cdt, cdn, "conversion_factor", 1);
@@ -383,9 +394,33 @@ frappe.ui.form.on("Pick List Item", {
 	warehouse: (frm, cdt, cdn) => {
 		const row = frappe.get_doc(cdt, cdn);
 		if (!row.item_code || !row.warehouse) return;
-		get_item_details(row.item_code, row.uom, row.warehouse, frm.doc.company).then((data) => {
+		if (row.storage_location) {
+			frappe.db.get_value("Storage Location", row.storage_location, "warehouse").then((r) => {
+				if (r.message?.warehouse !== row.warehouse) {
+					frappe.model.set_value(cdt, cdn, "storage_location", null);
+				}
+			});
+		}
+		get_item_details(row.item_code, row.uom, row.warehouse, frm.doc.company, row.storage_location).then((data) => {
 			frappe.model.set_value(cdt, cdn, "actual_qty", data.actual_qty);
 			frappe.model.set_value(cdt, cdn, "company_total_stock", data.company_total_stock);
+		});
+	},
+
+	storage_location: (frm, cdt, cdn) => {
+		const row = frappe.get_doc(cdt, cdn);
+		if (row.serial_and_batch_bundle) {
+			frappe.model.set_value(cdt, cdn, "serial_and_batch_bundle", null);
+		}
+		if (row.serial_no) {
+			frappe.model.set_value(cdt, cdn, "serial_no", null);
+		}
+		if (row.batch_no) {
+			frappe.model.set_value(cdt, cdn, "batch_no", null);
+		}
+		if (!row.item_code || !row.warehouse) return;
+		get_item_details(row.item_code, row.uom, row.warehouse, frm.doc.company, row.storage_location).then((data) => {
+			frappe.model.set_value(cdt, cdn, "actual_qty", data.actual_qty);
 		});
 	},
 
@@ -430,13 +465,14 @@ frappe.ui.form.on("Pick List Item", {
 	},
 });
 
-function get_item_details(item_code, uom = null, warehouse = null, company = null) {
+function get_item_details(item_code, uom = null, warehouse = null, company = null, storage_location = null) {
 	if (item_code) {
 		return frappe.xcall("erpnext.stock.doctype.pick_list.pick_list.get_item_details", {
 			item_code,
 			uom,
 			warehouse,
 			company,
+			storage_location,
 		});
 	}
 }

@@ -36,49 +36,6 @@ frappe.ui.form.on("Payment Request", "refresh", function (frm) {
 	if (frm.doc.status == "Failed") {
 		frm.set_intro(__("Failure: {0}", [frm.doc.failed_reason]), "red");
 	}
-
-	let sending_email = false;
-
-	if (
-		frm.doc.payment_request_type == "Inward" &&
-		frm.doc.payment_channel !== "Phone" &&
-		!["Initiated", "Paid"].includes(frm.doc.status) &&
-		!frm.doc.__islocal &&
-		frm.doc.docstatus == 1
-	) {
-		frm.add_custom_button(__("Resend Payment Email"), function () {
-			if (sending_email) {
-				frappe.show_alert({ message: __("Sending Email"), indicator: "blue" });
-				return;
-			}
-			sending_email = true;
-			frappe.show_alert({ message: __("Sending Email"), indicator: "blue" });
-			frm.call("resend_payment_email").then((r) => {
-				const msg = !r.exc ? __("Email Sent") : __("Email couldn't be sent.");
-				frappe.show_alert({ message: msg, indicator: !r.exc ? "green" : "red" });
-				sending_email = false;
-			});
-		});
-	}
-
-	if (
-		frm.doc.payment_request_type == "Outward" &&
-		["Initiated", "Partially Paid"].includes(frm.doc.status)
-	) {
-		frm.add_custom_button(__("Create Payment Entry"), function () {
-			frappe.call({
-				method: "erpnext.accounts.doctype.payment_request.payment_request.make_payment_entry",
-				args: { docname: frm.doc.name },
-				freeze: true,
-				callback: function (r) {
-					if (!r.exc) {
-						var doc = frappe.model.sync(r.message);
-						frappe.set_route("Form", r.message.doctype, r.message.name);
-					}
-				},
-			});
-		}).addClass("btn-primary");
-	}
 });
 
 frappe.ui.form.on("Payment Request", "is_a_subscription", function (frm) {

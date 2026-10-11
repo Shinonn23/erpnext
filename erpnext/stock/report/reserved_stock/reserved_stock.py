@@ -5,13 +5,15 @@ import frappe
 from frappe import _
 from frappe.query_builder.functions import Date
 
+from erpnext.stock.report.storage_location_utils import add_location_column, show_location_wise_stock
+
 
 def execute(filters=None):
 	columns, data = [], []
 
 	validate_filters(filters)
 
-	columns = get_columns()
+	columns = add_location_column(get_columns(), filters)
 	data = get_data(filters)
 
 	return columns, data
@@ -78,6 +80,8 @@ def get_data(filters):
 	if value := filters.get("stock_reservation_entry"):
 		query = query.where(sre.name == value)
 
+	if show_location_wise_stock(filters):
+		query = query.select(sre.storage_location)
 	data = query.run(as_list=True)
 
 	return data

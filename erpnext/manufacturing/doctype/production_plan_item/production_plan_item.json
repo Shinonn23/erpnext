@@ -13,6 +13,7 @@
   "planned_qty",
   "stock_uom",
   "warehouse",
+  "storage_location",
   "planned_start_date",
   "section_break_9",
   "pending_qty",
@@ -215,6 +216,12 @@
    "fieldtype": "Data",
    "hidden": 1,
    "label": "temporary name"
+  },
+  {
+   "fieldname": "storage_location",
+   "fieldtype": "Link",
+   "label": "Finished Goods Storage Location",
+   "options": "Storage Location"
   }
  ],
  "idx": 1,

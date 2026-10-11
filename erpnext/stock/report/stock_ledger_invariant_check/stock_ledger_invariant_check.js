@@ -13,6 +13,7 @@ const DIFFERENCE_FIELD_NAMES = [
 
 frappe.query_reports["Stock Ledger Invariant Check"] = {
 	filters: [
+		{fieldname: "show_location_wise_stock", label: __("Show Storage Location Wise Stock"), fieldtype: "Check", default: 1},
 		{
 			fieldname: "item_code",
 			fieldtype: "Link",

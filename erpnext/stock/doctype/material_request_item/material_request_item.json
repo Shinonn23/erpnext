@@ -8,12 +8,18 @@
  "engine": "InnoDB",
  "field_order": [
   "item_code",
-  "asset_transfer_asset",
-  "asset_transfer_source_location",
-  "asset_transfer_target_location",
   "item_name",
   "col_break1",
   "schedule_date",
+  "section_break_jzwe",
+  "asset",
+  "asset_serial_number",
+  "column_break_buxt",
+  "asset_name",
+  "section_break_srre",
+  "source_location",
+  "column_break_mumj",
+  "target_location",
   "section_break_4",
   "description",
   "column_break_12",
@@ -24,7 +30,9 @@
   "qty",
   "stock_uom",
   "from_warehouse",
+  "from_storage_location",
   "warehouse",
+  "storage_location",
   "col_break2",
   "uom",
   "conversion_factor",
@@ -75,6 +83,8 @@
   "returned_qty",
   "outstanding_qty",
   "status",
+  "custody_loan",
+  "delivery_note",
   "stock_entry",
   "asset_movement"
  ],
@@ -94,6 +104,48 @@
    "reqd": 1,
    "search_index": 1,
    "width": "100px"
+  },
+  {
+   "depends_on": "eval:in_list(['Asset Transfer', 'Customer Demo'], parent.material_request_type) || (parent.material_request_type == 'Customer Borrow / Loan' && parent.borrow_item_type == 'Asset')",
+   "fieldname": "asset",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Asset",
+   "mandatory_depends_on": "eval:in_list(['Asset Transfer', 'Customer Demo'], parent.material_request_type) || (parent.material_request_type == 'Customer Borrow / Loan' && parent.borrow_item_type == 'Asset')",
+   "options": "Asset"
+  },
+  {
+   "depends_on": "eval:in_list(['Asset Transfer', 'Customer Demo'], parent.material_request_type) || (parent.material_request_type == 'Customer Borrow / Loan' && parent.borrow_item_type == 'Asset')",
+   "fieldname": "asset_name",
+   "fieldtype": "Data",
+   "label": "Asset Name",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:in_list(['Asset Transfer', 'Customer Demo'], parent.material_request_type) || (parent.material_request_type == 'Customer Borrow / Loan' && parent.borrow_item_type == 'Asset')",
+   "fieldname": "asset_serial_number",
+   "fieldtype": "Data",
+   "label": "Asset Serial Number",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:in_list(['Asset Transfer', 'Customer Demo'], parent.material_request_type)",
+   "fieldname": "source_location",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Source Location",
+   "options": "Location",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:parent.material_request_type == 'Asset Transfer' || parent.material_request_type == 'Customer Demo' || (parent.material_request_type == 'Customer Borrow / Loan' && parent.borrow_item_type == 'Asset')",
+   "fieldname": "target_location",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Target Location",
+   "mandatory_depends_on": "eval:parent.material_request_type == 'Asset Transfer'",
+   "options": "Location",
+   "read_only_depends_on": "eval:parent.material_request_type != 'Asset Transfer'"
   },
   {
    "fieldname": "col_break1",
@@ -160,33 +212,35 @@
    "oldfieldname": "uom",
    "oldfieldtype": "Link",
    "options": "UOM",
+   "mandatory_depends_on": "eval:!in_list(['Asset Transfer', 'Customer Demo'], parent.material_request_type) && !(parent.material_request_type == 'Customer Borrow / Loan' && parent.borrow_item_type == 'Asset')",
    "print_width": "70px",
-   "reqd": 1,
    "width": "70px"
   },
   {
    "fieldname": "conversion_factor",
    "fieldtype": "Float",
    "label": "UOM Conversion Factor",
+   "mandatory_depends_on": "eval:!in_list(['Asset Transfer', 'Customer Demo'], parent.material_request_type) && !(parent.material_request_type == 'Customer Borrow / Loan' && parent.borrow_item_type == 'Asset')",
    "precision": "9",
-   "print_hide": 1,
-   "reqd": 1
+   "print_hide": 1
   },
   {
    "fieldname": "stock_uom",
    "fieldtype": "Link",
    "label": "Stock UOM",
+   "mandatory_depends_on": "eval:!in_list(['Asset Transfer', 'Customer Demo'], parent.material_request_type) && !(parent.material_request_type == 'Customer Borrow / Loan' && parent.borrow_item_type == 'Asset')",
    "options": "UOM",
    "print_hide": 1,
-   "read_only": 1,
-   "reqd": 1
+   "read_only": 1
   },
   {
    "columns": 3,
+   "depends_on": "eval:in_list([\"Purchase\", \"Material Transfer\"], parent.material_request_type)",
    "fieldname": "warehouse",
    "fieldtype": "Link",
    "in_list_view": 1,
    "label": "Target Warehouse",
+   "mandatory_depends_on": "eval:parent.material_request_type == \"Material Transfer\"",
    "oldfieldname": "warehouse",
    "oldfieldtype": "Link",
    "options": "Warehouse",
@@ -432,13 +486,12 @@
    "fieldtype": "Column Break"
   },
   {
-   "depends_on": "eval:parent.material_request_type == \"Material Transfer\" || ((parent.material_request_type == \"Customer Demo\" || parent.material_request_type == \"Customer Borrow / Loan\") && item_type == \"Stock Item\")",
+   "depends_on": "eval:parent.material_request_type == \"Material Transfer\"",
    "fieldname": "from_warehouse",
    "fieldtype": "Link",
-   "in_list_view": 1,
    "ignore_user_permissions": 1,
+   "in_list_view": 1,
    "label": "Source Warehouse",
-   "mandatory_depends_on": "eval:(parent.material_request_type == \"Customer Demo\" || parent.material_request_type == \"Customer Borrow / Loan\") && item_type == \"Stock Item\"",
    "options": "Warehouse"
   },
   {
@@ -548,89 +601,106 @@
   {
    "fieldname": "item_type",
    "fieldtype": "Select",
+   "hidden": 1,
    "label": "Request Item Type",
    "options": "Stock Item\nFixed Asset",
-   "read_only": 1,
-   "hidden": 1
+   "read_only": 1
   },
   {
    "fieldname": "fulfilled_qty",
    "fieldtype": "Float",
+   "hidden": 1,
    "label": "Fulfilled Qty",
-   "read_only": 1,
-   "hidden": 1
+   "read_only": 1
   },
   {
    "fieldname": "returned_qty",
    "fieldtype": "Float",
+   "hidden": 1,
    "label": "Returned Qty",
-   "read_only": 1,
-   "hidden": 1
+   "read_only": 1
   },
   {
    "fieldname": "outstanding_qty",
    "fieldtype": "Float",
+   "hidden": 1,
    "label": "Outstanding Qty",
-   "read_only": 1,
-   "hidden": 1
+   "read_only": 1
   },
   {
    "fieldname": "status",
    "fieldtype": "Data",
+   "hidden": 1,
    "label": "Request Status",
-   "read_only": 1,
-   "hidden": 1
+   "read_only": 1
+  },
+  {
+   "fieldname": "custody_loan",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Custody Loan",
+   "options": "Custody Loan",
+   "read_only": 1
+  },
+  {
+   "fieldname": "delivery_note",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Latest Loan Delivery Note",
+   "options": "Delivery Note",
+   "read_only": 1
   },
   {
    "fieldname": "stock_entry",
    "fieldtype": "Link",
+   "hidden": 1,
    "label": "Latest Custody Stock Entry",
    "options": "Stock Entry",
-   "read_only": 1,
-   "hidden": 1
+   "read_only": 1
   },
   {
    "fieldname": "asset_movement",
    "fieldtype": "Link",
+   "hidden": 1,
    "label": "Latest Custody Asset Movement",
    "options": "Asset Movement",
-   "read_only": 1,
-   "hidden": 1
-  },
-  {
-   "depends_on": "eval:parent.material_request_type == 'Asset Transfer'",
-   "fieldname": "asset_transfer_asset",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Asset",
-   "mandatory_depends_on": "eval:parent.material_request_type == 'Asset Transfer'",
-   "options": "Asset"
-  },
-  {
-   "depends_on": "eval:parent.material_request_type == 'Asset Transfer'",
-   "fieldname": "asset_transfer_target_location",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Target Location",
-   "mandatory_depends_on": "eval:parent.material_request_type == 'Asset Transfer'",
-   "options": "Location"
-  },
-  {
-   "depends_on": "eval:parent.material_request_type == 'Asset Transfer'",
-   "fieldname": "asset_transfer_source_location",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Source Location",
-   "options": "Location",
    "read_only": 1
+  },
+  {
+   "fieldname": "section_break_jzwe",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "column_break_buxt",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "section_break_srre",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "column_break_mumj",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "from_storage_location",
+   "fieldtype": "Link",
+   "label": "Source Storage Location",
+   "options": "Storage Location"
+  },
+  {
+   "fieldname": "storage_location",
+   "fieldtype": "Link",
+   "label": "Target Storage Location",
+   "options": "Storage Location"
   }
  ],
  "idx": 1,
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-08-07 17:31:31.732720",
- "modified_by": "Administrator",
+ "modified": "2026-10-10 01:32:29.000000",
+ "modified_by": "arirat.ba@connectdiagnostics.com",
  "module": "Stock",
  "name": "Material Request Item",
  "naming_rule": "Random",

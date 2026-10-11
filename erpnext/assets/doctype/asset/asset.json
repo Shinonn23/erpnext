@@ -13,6 +13,8 @@
   "item_name",
   "asset_name",
   "location",
+  "custodian",
+  "department",
   "image",
   "column_break_3",
   "company",
@@ -21,13 +23,17 @@
   "maintenance_required",
   "calculate_depreciation",
   "tracking_details_section",
-  "asset_serial_number",
   "source_serial_no",
+  "asset_serial_number",
+  "material_request",
+  "stock_to_asset_conversion",
+  "stock_to_asset_conversion_item",
+  "stock_to_asset_conversion_unit",
+  "column_break_ocrc",
   "source_batch_no",
   "source_warehouse",
-  "is_demo_asset",
   "demo_loan_status",
-  "material_request",
+  "is_demo_asset",
   "purchase_details_section",
   "purchase_receipt",
   "purchase_receipt_item",
@@ -63,8 +69,6 @@
   "depreciation_schedule_sb",
   "depreciation_schedule_view",
   "other_info_tab",
-  "accounting_dimensions_section",
-  "column_break_rjyw",
   "asset_owner_section",
   "asset_owner",
   "column_break_yeds",
@@ -81,8 +85,6 @@
   "comprehensive_insurance",
   "section_break_jtou",
   "status",
-  "custodian",
-  "department",
   "default_finance_book",
   "depr_entry_posting_status",
   "column_break_51",
@@ -90,6 +92,8 @@
   "split_from",
   "amended_from",
   "booked_fixed_asset",
+  "stock_to_asset_accounting_treatment",
+  "stock_to_asset_depreciation_journal_entry",
   "connections_tab"
  ],
  "fields": [
@@ -195,12 +199,14 @@
    "fieldname": "custodian",
    "fieldtype": "Link",
    "ignore_user_permissions": 1,
+   "in_standard_filter": 1,
    "label": "Custodian",
    "options": "Employee"
   },
   {
    "fieldname": "department",
    "fieldtype": "Link",
+   "in_standard_filter": 1,
    "label": "Department",
    "options": "Department"
   },
@@ -248,8 +254,7 @@
   {
    "fieldname": "asset_serial_number",
    "fieldtype": "Data",
-   "label": "Asset Serial Number",
-   "unique": 1
+   "label": "Asset Serial Number"
   },
   {
    "fieldname": "source_serial_no",
@@ -280,12 +285,12 @@
    "label": "Is Demo Asset"
   },
   {
+   "default": "Available",
    "fieldname": "demo_loan_status",
    "fieldtype": "Select",
-   "label": "Demo / Loan Status",
-   "options": "Available\nIn Transit\nWith Customer",
-   "default": "Available",
    "in_list_view": 1,
+   "label": "Demo / Loan Status",
+   "options": "Available\nWith Customer",
    "read_only": 1
   },
   {
@@ -293,6 +298,29 @@
    "fieldtype": "Link",
    "label": "Material Request",
    "options": "Material Request",
+   "read_only": 1
+  },
+  {
+   "fieldname": "stock_to_asset_conversion",
+   "fieldtype": "Link",
+   "label": "Stock to Asset Conversion",
+   "options": "Stock to Asset Conversion",
+   "read_only": 1
+  },
+  {
+   "fieldname": "stock_to_asset_conversion_item",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Conversion Stock Item Row",
+   "options": "Stock to Asset Conversion Item",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "stock_to_asset_conversion_unit",
+   "fieldtype": "Int",
+   "hidden": 1,
+   "label": "Conversion Unit",
    "read_only": 1
   },
   {
@@ -410,6 +438,23 @@
    "label": "Booked Fixed Asset",
    "no_copy": 1,
    "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.stock_to_asset_conversion",
+   "fieldname": "stock_to_asset_accounting_treatment",
+   "fieldtype": "Select",
+   "label": "Stock Conversion Accounting Treatment",
+   "options": "\nExpense\nImmediate Depreciation\nScheduled Depreciation\nHold Value",
+   "read_only_depends_on": "eval:doc.docstatus != 0 || !doc.stock_to_asset_conversion",
+   "no_copy": 1
+  },
+  {
+   "fieldname": "stock_to_asset_depreciation_journal_entry",
+   "fieldtype": "Link",
+   "label": "Immediate Depreciation Entry",
+   "options": "Journal Entry",
+   "read_only": 1,
+   "no_copy": 1
   },
   {
    "fieldname": "column_break_51",
@@ -576,11 +621,6 @@
    "label": "Depreciation"
   },
   {
-   "fieldname": "accounting_dimensions_section",
-   "fieldtype": "Section Break",
-   "label": "Accounting Dimensions"
-  },
-  {
    "fieldname": "section_break_jtou",
    "fieldtype": "Section Break",
    "label": "Additional Info"
@@ -601,10 +641,6 @@
   },
   {
    "fieldname": "column_break_wqzi",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "column_break_rjyw",
    "fieldtype": "Column Break"
   },
   {
@@ -639,6 +675,10 @@
   },
   {
    "fieldname": "column_break_yeds",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "column_break_ocrc",
    "fieldtype": "Column Break"
   }
  ],
@@ -681,9 +721,14 @@
    "group": "Asset Capitalization",
    "link_doctype": "Asset Capitalization",
    "link_fieldname": "target_asset"
+  },
+  {
+   "group": "Stock to Asset Conversion",
+   "link_doctype": "Stock to Asset Conversion",
+   "link_fieldname": "stock_to_asset_conversion"
   }
  ],
- "modified": "2026-09-22 12:00:00.000000",
+ "modified": "2026-10-10 01:29:25.044953",
  "modified_by": "Administrator",
  "module": "Assets",
  "name": "Asset",

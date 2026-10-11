@@ -5,10 +5,12 @@ import frappe
 from frappe import _
 from frappe.utils import flt
 
+from erpnext.stock.report.storage_location_utils import add_location_column
+
 
 def execute(filters=None):
 	columns, data = [], []
-	columns = get_columns()
+	columns = add_location_column(get_columns(), filters)
 	data = get_data(filters)
 	return columns, data
 
@@ -61,6 +63,7 @@ def get_stock_ledger_entries(report_filters):
 		"posting_time",
 		"company",
 		"warehouse",
+		"storage_location",
 		"qty_after_transaction",
 		"batch_no",
 	]

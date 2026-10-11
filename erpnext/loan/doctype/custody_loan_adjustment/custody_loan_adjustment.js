@@ -15,6 +15,12 @@ frappe.ui.form.on("Custody Loan Adjustment", {
 			return { filters: { item_code: row.item_code } };
 		});
 	},
+	refresh(frm) {
+		if (frm.doc.docstatus !== 1 || !frm.doc.stock_entry || !frappe.model.can_read("Stock Entry")) return;
+		frm.add_custom_button(__("Open Stock Entry"), () =>
+			frappe.set_route("Form", "Stock Entry", frm.doc.stock_entry)
+		);
+	},
 });
 
 frappe.ui.form.on("Custody Loan Adjustment Item", {

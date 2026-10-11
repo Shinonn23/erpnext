@@ -9,13 +9,18 @@ from frappe.utils import flt
 from pypika.terms import ExistsCriterion
 
 from erpnext.stock.report.stock_ledger.stock_ledger import get_item_group_condition
+from erpnext.stock.report.storage_location_utils import (
+	add_location_column,
+	location_key,
+	show_location_wise_stock,
+)
 
 
 def execute(filters=None):
 	if not filters:
 		filters = frappe._dict()
 
-	columns = get_columns()
+	columns = add_location_column(get_columns(), filters)
 	item_details, pb_details, parent_items, child_items = get_items(filters)
 	stock_balance = get_stock_balance(filters, child_items)
 
@@ -31,7 +36,8 @@ def execute(filters=None):
 				if flt(sle.qty_after_transaction) > 0:
 					warehouse_company_map[warehouse] = sle.company
 
-		for warehouse, company in warehouse_company_map.items():
+		for warehouse_key, company in warehouse_company_map.items():
+			warehouse, location = warehouse_key
 			parent_row = {
 				"indent": 0,
 				"item_code": parent_item,
@@ -40,6 +46,7 @@ def execute(filters=None):
 				"brand": parent_item_detail.brand,
 				"description": parent_item_detail.description,
 				"warehouse": warehouse,
+				"storage_location": location or None,
 				"uom": parent_item_detail.stock_uom,
 				"company": company,
 			}
@@ -47,7 +54,7 @@ def execute(filters=None):
 			child_rows = []
 			for child_item_detail in required_items:
 				child_item_balance = stock_balance.get(child_item_detail.item_code, frappe._dict()).get(
-					warehouse, frappe._dict()
+					warehouse_key, frappe._dict()
 				)
 				child_row = {
 					"indent": 1,
@@ -58,6 +65,7 @@ def execute(filters=None):
 					"brand": child_item_detail.brand,
 					"description": child_item_detail.description,
 					"warehouse": warehouse,
+					"storage_location": location or None,
 					"uom": child_item_detail.uom,
 					"actual_qty": flt(child_item_balance.qty_after_transaction),
 					"minimum_qty": flt(child_item_detail.qty),
@@ -197,10 +205,24 @@ def get_items(filters):
 
 
 def get_stock_balance(filters, items):
-	sle = get_stock_ledger_entries(filters, items)
+	from frappe.utils import today
+
+	from erpnext.stock.report.stock_balance.stock_balance import execute as stock_balance_report
+
+	report_filters = frappe._dict(filters.copy())
+	report_filters.update(
+		item_code=items,
+		from_date=filters.get("date") or today(),
+		to_date=filters.get("date") or today(),
+		include_zero_stock_items=1,
+	)
+	_, rows = stock_balance_report(report_filters)
 	stock_balance = frappe._dict()
-	for d in sle:
-		stock_balance.setdefault(d.item_code, frappe._dict())[d.warehouse] = d
+	for row in rows:
+		row.qty_after_transaction = row.bal_qty
+		stock_balance.setdefault(row.item_code, frappe._dict())[
+			(row.warehouse, location_key(row, filters))
+		] = row
 	return stock_balance
 
 

@@ -1,4 +1,5 @@
 import frappe
+from frappe.utils import add_days
 
 
 def execute(filters=None):
@@ -13,7 +14,11 @@ def execute(filters=None):
 			values[field] = filters[field]
 	for bound, operator in (("from_date", ">="), ("to_date", "<=")):
 		if filters.get(bound):
-			asset_conditions.append(f"movement.transaction_date {operator} %({bound})s")
+			if bound == "to_date":
+				asset_conditions.append("movement.transaction_date < %(asset_to_date)s")
+				values["asset_to_date"] = add_days(filters[bound], 1)
+			else:
+				asset_conditions.append(f"movement.transaction_date {operator} %({bound})s")
 			stock_conditions.append(f"entry.posting_date {operator} %({bound})s")
 			values[bound] = filters[bound]
 
@@ -56,7 +61,27 @@ def execute(filters=None):
 		values,
 		as_dict=True,
 	)
-	data = asset_rows + stock_rows
+	# Loan issues and receipts use internal-customer Delivery Notes. Stock
+	# Entries remain the source for adjustments and older loan transactions.
+	delivery_rows = frappe.db.sql(
+		f"""SELECT entry.posting_date AS transaction_date, loan.name AS loan,
+			loan.material_request, loan.loan_type, loan.borrower_type, loan.borrower,
+			'Delivery Note' AS source_doctype, entry.name AS source_document,
+			CASE WHEN entry.is_return = 1 THEN 'Return' ELSE 'Issue' END AS action,
+			item.item_code, product.item_name, NULL AS asset, NULL AS asset_serial_number,
+			item.serial_no AS source_serial_no, item.batch_no, ABS(item.stock_qty) AS qty,
+			CASE WHEN entry.is_return = 1 THEN item.target_warehouse ELSE item.warehouse END AS from_location,
+			CASE WHEN entry.is_return = 1 THEN item.warehouse ELSE item.target_warehouse END AS to_location,
+			NULL AS from_employee, NULL AS to_employee, entry.company
+		FROM `tabDelivery Note` entry
+		JOIN `tabCustody Loan` loan ON loan.name = entry.custody_loan
+		JOIN `tabDelivery Note Item` item ON item.parent = entry.name
+		JOIN `tabItem` product ON product.name = item.item_code
+		WHERE {' AND '.join(stock_conditions)}""",
+		values,
+		as_dict=True,
+	)
+	data = asset_rows + stock_rows + delivery_rows
 	data.sort(key=lambda row: (str(row.transaction_date or ""), row.source_document or ""), reverse=True)
 	columns = [
 		{"label": "Date", "fieldname": "transaction_date", "fieldtype": "Datetime", "width": 145},

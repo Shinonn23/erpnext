@@ -50,7 +50,13 @@ class TestStockCount(ERPNextTestSuite):
 				"company": frappe.db.get_value("Warehouse", self.warehouse, "company"),
 				"count_type": "Monthly",
 				"warehouse": self.warehouse,
-				"storage_location": self.locations[0].name,
+				"dimensions": [
+					{
+						"inventory_dimension": "Storage Location",
+						"reference_document": "Storage Location",
+						"dimension_value": self.locations[0].name,
+					}
+				],
 				"item_count": 10,
 				"quarantine_warehouse": self.quarantine_warehouse,
 			}

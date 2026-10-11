@@ -26,8 +26,11 @@
   "backflush_from_wip_warehouse",
   "column_break_vjih",
   "source_warehouse",
+  "source_storage_location",
   "wip_warehouse",
+  "wip_storage_location",
   "fg_warehouse",
+  "fg_storage_location",
   "section_break_10",
   "description",
   "estimated_time_and_cost",
@@ -311,6 +314,24 @@
    "label": "Pending Qty",
    "no_copy": 1,
    "read_only": 1
+  },
+  {
+   "fieldname": "source_storage_location",
+   "fieldtype": "Link",
+   "label": "Source Storage Location",
+   "options": "Storage Location"
+  },
+  {
+   "fieldname": "wip_storage_location",
+   "fieldtype": "Link",
+   "label": "WIP Storage Location",
+   "options": "Storage Location"
+  },
+  {
+   "fieldname": "fg_storage_location",
+   "fieldtype": "Link",
+   "label": "Finished Goods Storage Location",
+   "options": "Storage Location"
   }
  ],
  "grid_page_length": 50,

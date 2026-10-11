@@ -14,6 +14,8 @@
   "posting_date",
   "posting_time",
   "posting_datetime",
+  "inventory_dimension",
+  "storage_location",
   "section_break_11",
   "actual_qty",
   "valuation_rate",
@@ -229,6 +231,21 @@
    "fieldtype": "Long Text",
    "label": "FIFO Queue",
    "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "inventory_dimension",
+   "fieldtype": "Section Break",
+   "label": "Inventory Dimension"
+  },
+  {
+   "fieldname": "storage_location",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Storage Location",
+   "options": "Storage Location",
+   "read_only": 1,
+   "search_index": 1
   }
  ],
  "hide_toolbar": 1,
@@ -236,7 +253,7 @@
  "in_create": 1,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2024-12-10 21:56:36.633567",
+ "modified": "2026-10-10 00:58:21.787839",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Stock Closing Balance",
@@ -256,6 +273,7 @@
    "role": "Accounts Manager"
   }
  ],
+ "row_format": "Dynamic",
  "sort_field": "creation",
  "sort_order": "DESC",
  "states": []

@@ -33,9 +33,24 @@ frappe.ui.form.on("Job Card", {
 		frm.events.set_company_filters(frm, "target_warehouse");
 		frm.events.set_company_filters(frm, "source_warehouse");
 		frm.events.set_company_filters(frm, "wip_warehouse");
+		frm.events.set_company_filters(frm, "scrap_warehouse");
+
+		for (const [location_field, warehouse_field] of [
+			["source_storage_location", "source_warehouse"],
+			["wip_storage_location", "wip_warehouse"],
+			["target_storage_location", "target_warehouse"],
+			["scrap_storage_location", "scrap_warehouse"],
+		]) {
+			frm.set_query(location_field, () => ({
+				filters: { warehouse: frm.doc[warehouse_field] || "", disabled: 0 },
+			}));
+		}
 
 		frm.set_query("source_warehouse", "items", () => ({
 			filters: { company: frm.doc.company },
+		}));
+		frm.set_query("source_storage_location", "items", (doc, cdt, cdn) => ({
+			filters: { warehouse: locals[cdt][cdn].source_warehouse || "", disabled: 0 },
 		}));
 
 		frm.set_indicator_formatter("sub_operation", (doc) => {
@@ -861,11 +876,22 @@ frappe.ui.form.on("Job Card", {
 	},
 
 	source_warehouse(frm) {
+		frm.set_value("source_storage_location", "");
 		if (frm.doc.source_warehouse) {
 			frm.doc.items.forEach((d) => {
+				frappe.model.set_value(d.doctype, d.name, "source_storage_location", "");
 				frappe.model.set_value(d.doctype, d.name, "source_warehouse", frm.doc.source_warehouse);
 			});
 		}
+	},
+	wip_warehouse(frm) {
+		frm.set_value("wip_storage_location", "");
+	},
+	target_warehouse(frm) {
+		frm.set_value("target_storage_location", "");
+	},
+	scrap_warehouse(frm) {
+		frm.set_value("scrap_storage_location", "");
 	},
 });
 
@@ -880,6 +906,12 @@ frappe.ui.form.on("Job Card Time Log", {
 		}
 
 		frm.events.set_total_completed_qty(frm);
+	},
+});
+
+frappe.ui.form.on("Job Card Item", {
+	source_warehouse(frm, cdt, cdn) {
+		frappe.model.set_value(cdt, cdn, "source_storage_location", "");
 	},
 });
 

@@ -4,10 +4,16 @@
 import frappe
 from frappe import _
 
+from erpnext.stock.report.storage_location_utils import (
+	add_location_column,
+	set_bundle_storage_locations,
+	show_location_wise_stock,
+)
+
 
 def execute(filters=None):
-	data = get_data(filters)
-	columns = get_columns(filters, data)
+	data = set_bundle_storage_locations(get_data(filters))
+	columns = add_location_column(get_columns(filters, data), filters)
 
 	return columns, data
 
@@ -28,6 +34,7 @@ def get_data(filters):
 			"`tabSerial and Batch Entry`.`serial_no`",
 			"`tabSerial and Batch Entry`.`batch_no`",
 			"`tabSerial and Batch Entry`.`warehouse`",
+			"`tabSerial and Batch Entry`.`storage_location`",
 			"`tabSerial and Batch Entry`.`incoming_rate`",
 			"`tabSerial and Batch Entry`.`stock_value_difference`",
 			"`tabSerial and Batch Entry`.`qty`",

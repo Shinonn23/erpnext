@@ -5,6 +5,7 @@
 from frappe import _
 
 from erpnext.stock.report.delayed_item_report.delayed_item_report import DelayedItemReport
+from erpnext.stock.report.storage_location_utils import add_location_column, location_key
 
 
 def execute(filters=None):
@@ -17,7 +18,9 @@ def execute(filters=None):
 
 class DelayedOrderReport(DelayedItemReport):
 	def run(self):
-		return self.get_columns(), self.get_data(consolidated=True) or []
+		columns = self.get_columns()
+		columns.append({"label": _("Warehouse"), "fieldname": "warehouse", "fieldtype": "Link", "options": "Warehouse", "width": 150})
+		return add_location_column(columns, self.filters), self.get_data(consolidated=True) or []
 
 	def get_data(self, consolidated=False):
 		data = super().get_data(consolidated) or []
@@ -25,8 +28,11 @@ class DelayedOrderReport(DelayedItemReport):
 		so_list = []
 		result = []
 		for d in data:
-			if d.sales_order not in so_list:
-				so_list.append(d.sales_order)
+			key = (d.sales_order, d.warehouse, location_key(d, self.filters))
+			if key not in so_list:
+				if any(existing.sales_order == d.sales_order for existing in result):
+					d.grand_total = None
+				so_list.append(key)
 				result.append(d)
 
 		return result

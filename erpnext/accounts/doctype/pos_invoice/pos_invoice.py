@@ -220,6 +220,7 @@ class POSInvoice(SalesInvoice):
 		self.set_status()
 		self.validate_pos()
 		self.validate_payment_amount()
+		self.check_phone_payments()
 		self.validate_loyalty_transaction()
 		self.validate_company_with_pos_company()
 		self.validate_full_payment()
@@ -242,7 +243,6 @@ class POSInvoice(SalesInvoice):
 			against_psi_doc.make_loyalty_point_entry()
 		if self.redeem_loyalty_points and self.loyalty_points:
 			self.apply_loyalty_points()
-		self.check_phone_payments()
 		self.set_status(update=True)
 		self.make_bundle_for_sales_purchase_return()
 		for table_name in ["items", "packed_items"]:
@@ -368,7 +368,7 @@ class POSInvoice(SalesInvoice):
 
 	def check_phone_payments(self):
 		for pay in self.payments:
-			if pay.type == "Phone" and pay.amount >= 0:
+			if pay.type == "Phone" and pay.amount > 0:
 				paid_amt = frappe.db.get_value(
 					"Payment Request",
 					filters=dict(
@@ -380,7 +380,14 @@ class POSInvoice(SalesInvoice):
 					fieldname="grand_total",
 				)
 
-				if paid_amt and pay.amount != paid_amt:
+				if not paid_amt:
+					frappe.throw(
+						_(
+							"This phone payment has no completed receipt. Payment Requests are discontinued; "
+							"record the customer receipt in a Payment Entry with Payment Type Receive."
+						)
+					)
+				if pay.amount != paid_amt:
 					return frappe.throw(
 						_("Payment related to {0} is not completed").format(pay.mode_of_payment)
 					)
@@ -785,65 +792,9 @@ class POSInvoice(SalesInvoice):
 
 	@frappe.whitelist()
 	def create_payment_request(self):
-		for pay in self.payments:
-			if pay.type == "Phone":
-				if pay.amount <= 0:
-					frappe.throw(_("Payment amount cannot be less than or equal to 0"))
-
-				if not self.contact_mobile:
-					frappe.throw(_("Please enter the phone number first"))
-
-				pay_req = self.get_existing_payment_request(pay)
-				if not pay_req:
-					pay_req = self.get_new_payment_request(pay)
-					pay_req.submit()
-				else:
-					pay_req.request_phone_payment()
-
-				return pay_req
-
-	def get_new_payment_request(self, mop):
-		from erpnext.accounts.doctype.payment_request.payment_request import make_payment_request
-
-		payment_gateway_account = frappe.db.get_value(
-			"Payment Gateway Account",
-			{
-				"payment_account": mop.account,
-			},
-			["name"],
+		frappe.throw(
+			_("Payment Requests are discontinued. Record customer receipts in a Payment Entry with Payment Type Receive.")
 		)
-
-		args = {
-			"dt": "POS Invoice",
-			"dn": self.name,
-			"recipient_id": self.contact_mobile,
-			"mode_of_payment": mop.mode_of_payment,
-			"payment_gateway_account": payment_gateway_account,
-			"payment_request_type": "Inward",
-			"party_type": "Customer",
-			"party": self.customer,
-			"return_doc": True,
-		}
-		return make_payment_request(**args)
-
-	def get_existing_payment_request(self, pay):
-		payment_gateway_account = frappe.db.get_value(
-			"Payment Gateway Account",
-			{
-				"payment_account": pay.account,
-			},
-			["name"],
-		)
-
-		filters = {
-			"reference_doctype": "POS Invoice",
-			"reference_name": self.name,
-			"payment_gateway_account": payment_gateway_account,
-			"email_to": self.contact_mobile,
-		}
-		pr = frappe.db.get_value("Payment Request", filters=filters)
-		if pr:
-			return frappe.get_doc("Payment Request", pr)
 
 	@frappe.whitelist()
 	def update_payments(self, payments):

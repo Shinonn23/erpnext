@@ -16,6 +16,7 @@ from erpnext.stock.doctype.inventory_dimension.inventory_dimension import get_in
 from erpnext.stock.doctype.serial_no.serial_no import get_serial_nos
 from erpnext.stock.doctype.stock_reconciliation.stock_reconciliation import get_stock_balance_for
 from erpnext.stock.doctype.warehouse.warehouse import apply_warehouse_filter
+from erpnext.stock.report.storage_location_utils import set_location_ledger_balances, show_location_wise_stock
 from erpnext.stock.utils import (
 	is_reposting_item_valuation_in_progress,
 	update_included_uom_in_report,
@@ -139,6 +140,9 @@ def execute(filters=None):
 		if include_uom:
 			conversion_factors.append(item_detail.conversion_factor)
 
+	set_location_ledger_balances(data, filters)
+	if include_uom:
+		conversion_factors = [item_details.get(row.get("item_code"), {}).get("conversion_factor", 0) for row in data]
 	update_included_uom_in_report(columns, data, include_uom, conversion_factors)
 	return columns, data
 
@@ -305,6 +309,8 @@ def get_columns(filters):
 	]
 
 	for dimension in get_inventory_dimensions():
+		if dimension.fieldname == "storage_location" and not show_location_wise_stock(filters):
+			continue
 		columns.append(
 			{
 				"label": _(dimension.doctype),

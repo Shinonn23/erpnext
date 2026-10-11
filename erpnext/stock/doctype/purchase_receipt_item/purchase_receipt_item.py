@@ -37,6 +37,7 @@ class PurchaseReceiptItem(Document):
 		discount_percentage: DF.Percent
 		distributed_discount_amount: DF.Currency
 		expense_account: DF.Link | None
+		from_storage_location: DF.Link | None
 		from_warehouse: DF.Link | None
 		has_item_scanned: DF.Check
 		image: DF.Attach | None
@@ -82,6 +83,7 @@ class PurchaseReceiptItem(Document):
 		rejected_qty: DF.Float
 		rejected_serial_and_batch_bundle: DF.Link | None
 		rejected_serial_no: DF.Text | None
+		rejected_storage_location: DF.Link | None
 		rejected_warehouse: DF.Link | None
 		retain_sample: DF.Check
 		return_qty_from_rejected_warehouse: DF.Check
@@ -97,6 +99,7 @@ class PurchaseReceiptItem(Document):
 		stock_qty: DF.Float
 		stock_uom: DF.Link
 		stock_uom_rate: DF.Currency
+		storage_location: DF.Link | None
 		subcontracting_receipt_item: DF.Data | None
 		supplier_part_no: DF.Data | None
 		total_weight: DF.Float

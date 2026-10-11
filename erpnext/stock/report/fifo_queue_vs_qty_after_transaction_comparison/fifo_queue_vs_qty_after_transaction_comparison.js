@@ -5,6 +5,7 @@ const DIFFERNCE_FIELD_NAMES = ["fifo_qty_diff", "fifo_value_diff"];
 
 frappe.query_reports["FIFO Queue vs Qty After Transaction Comparison"] = {
 	filters: [
+		{fieldname: "show_location_wise_stock", label: __("Show Storage Location Wise Stock"), fieldtype: "Check", default: 1},
 		{
 			fieldname: "item_code",
 			fieldtype: "Link",

@@ -13,6 +13,10 @@
   "s_warehouse",
   "col_break1",
   "t_warehouse",
+  "inventory_dimension",
+  "storage_location",
+  "inventory_dimension_col_break",
+  "to_storage_location",
   "sec_break1",
   "item_code",
   "item_name",
@@ -502,6 +506,32 @@
    "fieldtype": "Column Break"
   },
   {
+   "collapsible": 1,
+   "fieldname": "inventory_dimension",
+   "fieldtype": "Section Break",
+   "label": "Inventory Dimension"
+  },
+  {
+   "depends_on": "eval:doc.s_warehouse",
+   "fieldname": "storage_location",
+   "fieldtype": "Link",
+   "label": "Storage Location",
+   "options": "Storage Location",
+   "search_index": 1
+  },
+  {
+   "fieldname": "inventory_dimension_col_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:doc.t_warehouse",
+   "fieldname": "to_storage_location",
+   "fieldtype": "Link",
+   "label": "Target Storage Location",
+   "options": "Storage Location",
+   "search_index": 1
+  },
+  {
    "fetch_from": "item_code.item_group",
    "fieldname": "item_group",
    "fieldtype": "Data",
@@ -693,7 +723,7 @@
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-08-07 17:31:31.732720",
+ "modified": "2026-10-10 01:15:34.576573",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Stock Entry Detail",
