@@ -6,6 +6,7 @@ from frappe.query_builder import Criterion
 from frappe.query_builder.functions import IfNull, Sum
 from frappe.utils import flt, fmt_money, get_link_to_form
 
+from erpnext.accounts.doctype.accounting_dimension.accounting_dimension import get_accounting_dimensions
 from erpnext.accounts.doctype.budget.budget import BudgetError, get_accumulated_monthly_budget
 from erpnext.accounts.utils import get_fiscal_year
 
@@ -150,9 +151,8 @@ class BudgetValidation:
 						self.item_map.setdefault(key, []).append(gl)
 
 	def get_dimensions(self):
-		self.dimensions = []
-		for _x in frappe.db.get_all("Accounting Dimension"):
-			self.dimensions.append(frappe.get_lazy_doc("Accounting Dimension", _x.name))
+		self.dimensions = get_accounting_dimensions(as_list=False)
+		self.dimensions.append({"fieldname": "project", "document_type": "Project"})
 
 	def get_budget_records(self) -> list:
 		bud = qb.DocType("Budget")
@@ -187,6 +187,7 @@ class BudgetValidation:
 				& (bud.company == self.company)
 				& (bud.budget_start_date <= self.doc_date)
 				& (bud.budget_end_date >= self.doc_date)
+				& bud.budget_against.isin([dimension.get("document_type") for dimension in self.dimensions])
 			)
 		)
 

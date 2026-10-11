@@ -1,7 +1,5 @@
 # Copyright (c) 2019, Frappe Technologies Pvt. Ltd. and Contributors
 # See license.txt
-import unittest
-
 import frappe
 
 from erpnext.accounts.doctype.journal_entry.test_journal_entry import make_journal_entry
@@ -10,6 +8,32 @@ from erpnext.tests.utils import ERPNextTestSuite
 
 
 class TestAccountingDimension(ERPNextTestSuite):
+	def test_budget_options_follow_dimension_enablement(self):
+		dimension = frappe.get_doc("Accounting Dimension", "Department")
+		dimension.disabled = 0
+		dimension.save()
+		options = frappe.get_meta("Budget").get_field("budget_against").options.split("\n")
+		self.assertEqual(options.count("Project"), 1)
+		self.assertEqual(options.count("Department"), 1)
+		self.assertEqual(frappe.get_meta("Budget").get_field("project").options, "Project")
+
+		dimension.disabled = 1
+		dimension.save()
+		options = frappe.get_meta("Budget").get_field("budget_against").options.split("\n")
+		self.assertIn("Project", options)
+		self.assertNotIn("Department", options)
+
+		dimension.disabled = 0
+		dimension.save()
+		options = frappe.get_meta("Budget").get_field("budget_against").options.split("\n")
+		self.assertEqual(options.count("Project"), 1)
+		self.assertEqual(options.count("Department"), 1)
+
+	def test_project_is_a_builtin_budget_dimension(self):
+		dimension = frappe.get_doc({"doctype": "Accounting Dimension", "document_type": "Project"})
+		with self.assertRaises(frappe.ValidationError):
+			dimension.insert()
+
 	def test_dimension_against_sales_invoice(self):
 		si = create_sales_invoice(do_not_save=1)
 
@@ -70,7 +94,11 @@ class TestAccountingDimension(ERPNextTestSuite):
 
 	def test_mandatory(self):
 		location = frappe.get_doc("Accounting Dimension", "Location")
-		location.dimension_defaults[0].mandatory_for_bs = True
+		for default in location.dimension_defaults:
+			if default.company == "_Test Company":
+				default.mandatory_for_bs = True
+				# A configured default would correctly satisfy the mandatory dimension.
+				default.default_dimension = None
 		location.save()
 
 		si = create_sales_invoice(do_not_save=1)
@@ -88,4 +116,32 @@ class TestAccountingDimension(ERPNextTestSuite):
 		)
 
 		si.save()
-		self.assertRaises(frappe.ValidationError, si.submit)
+		self.assertFalse(si.location)
+		savepoint = "mandatory_dimension_" + frappe.generate_hash(length=10)
+		frappe.db.savepoint(savepoint)
+		try:
+			with self.assertRaises(frappe.ValidationError):
+				si.submit()
+		finally:
+			frappe.db.rollback(save_point=savepoint)
+		si.reload()
+		self.assertEqual(si.docstatus, 0)
+		self.assertFalse(
+			frappe.db.exists("GL Entry", {"voucher_type": "Sales Invoice", "voucher_no": si.name})
+		)
+		si.location = "Block 1"
+		for row in si.items:
+			row.location = "Block 1"
+		si.save()
+		si.submit()
+		si.reload()
+		self.assertEqual(si.docstatus, 1)
+		self.assertEqual(
+			frappe.db.get_value(
+				"GL Entry",
+				{"voucher_type": "Sales Invoice", "voucher_no": si.name, "account": si.debit_to},
+				"location",
+			),
+			"Block 1",
+		)
+		si.cancel()

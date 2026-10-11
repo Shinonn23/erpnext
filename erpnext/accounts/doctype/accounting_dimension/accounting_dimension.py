@@ -7,6 +7,7 @@ import json
 import frappe
 from frappe import _, scrub
 from frappe.custom.doctype.custom_field.custom_field import create_custom_field
+from frappe.custom.doctype.property_setter.property_setter import make_property_setter
 from frappe.database.schema import validate_column_name
 from frappe.model import core_doctypes_list
 from frappe.model.document import Document
@@ -169,6 +170,8 @@ def make_dimension_in_accounting_doctypes(doc, doclist=None):
 		frappe.publish_progress(count * 100 / len(doclist), title=_("Creating Dimensions..."))
 		frappe.clear_cache(doctype=doctype)
 
+	sync_budget_dimensions()
+
 
 def add_dimension_to_budget_doctype(df, doc):
 	df.update(
@@ -180,29 +183,22 @@ def add_dimension_to_budget_doctype(df, doc):
 
 	create_custom_field("Budget", df, ignore_validate=True)
 
-	property_setter = frappe.db.exists("Property Setter", "Budget-budget_against-options")
 
-	if property_setter:
-		property_setter_doc = frappe.get_doc("Property Setter", "Budget-budget_against-options")
-		dimension_types = ["Project"] + frappe.get_all(
-			"Accounting Dimension", filters={"disabled": 0}, pluck="document_type"
-		)
-		property_setter_doc.value = "\n" + "\n".join(dimension_types)
-		property_setter_doc.save()
+def get_budget_dimensions(exclude_dimension=None):
+	filters = {"disabled": 0}
+	if exclude_dimension:
+		filters["name"] = ["!=", exclude_dimension]
+	return ["Project", *frappe.get_all("Accounting Dimension", filters=filters, pluck="document_type")]
 
-		frappe.clear_cache(doctype="Budget")
-	else:
-		frappe.get_doc(
-			{
-				"doctype": "Property Setter",
-				"doctype_or_field": "DocField",
-				"doc_type": "Budget",
-				"field_name": "budget_against",
-				"property": "options",
-				"property_type": "Text",
-				"value": "\nProject\n" + doc.document_type,
-			}
-		).insert(ignore_permissions=True)
+
+def sync_budget_dimensions(exclude_dimension=None):
+	make_property_setter(
+		"Budget",
+		"budget_against",
+		"options",
+		"\n" + "\n".join(get_budget_dimensions(exclude_dimension)),
+		"Text",
+	)
 
 
 def delete_accounting_dimension(doc):
@@ -224,12 +220,7 @@ def delete_accounting_dimension(doc):
 		tuple([doc.fieldname, *doclist]),
 	)
 
-	budget_against_property = frappe.get_doc("Property Setter", "Budget-budget_against-options")
-	dimension_types = ["Project"] + frappe.get_all(
-		"Accounting Dimension", filters={"disabled": 0, "name": ["!=", doc.name]}, pluck="document_type"
-	)
-	budget_against_property.value = "\n" + "\n".join(dimension_types)
-	budget_against_property.save()
+	sync_budget_dimensions(exclude_dimension=doc.name)
 
 	for doctype in doclist:
 		frappe.clear_cache(doctype=doctype)
@@ -264,6 +255,8 @@ def toggle_disabling(doc):
 			custom_field.save()
 
 		frappe.clear_cache(doctype=doctype)
+
+	sync_budget_dimensions()
 
 
 def get_doctypes_with_dimensions():

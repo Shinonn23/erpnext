@@ -9,6 +9,7 @@
  "field_order": [
   "naming_series",
   "budget_against",
+  "project",
   "company",
   "account",
   "column_break_3",
@@ -54,9 +55,18 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Budget Against",
-   "options": "",
+   "options": "\nProject",
    "read_only_depends_on": "eval: doc.revision_of",
    "reqd": 1
+  },
+  {
+   "depends_on": "eval:doc.budget_against == 'Project'",
+   "fieldname": "project",
+   "fieldtype": "Link",
+   "label": "Project",
+   "mandatory_depends_on": "eval:doc.budget_against == 'Project'",
+   "options": "Project",
+   "read_only_depends_on": "eval: doc.revision_of"
   },
   {
    "fieldname": "company",

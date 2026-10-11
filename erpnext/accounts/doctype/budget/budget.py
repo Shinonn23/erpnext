@@ -13,6 +13,7 @@ from frappe.utils.data import get_first_day, nowdate
 
 from erpnext.accounts.doctype.accounting_dimension.accounting_dimension import (
 	get_accounting_dimensions,
+	get_budget_dimensions,
 )
 from erpnext.accounts.utils import get_fiscal_year
 
@@ -78,11 +79,8 @@ class Budget(Document):
 		self.validate_existing_expenses()
 
 	def validate_budget_against(self):
-		allowed_dimensions = frappe.get_all(
-			"Accounting Dimension", filters={"disabled": 0}, pluck="document_type"
-		)
-		if self.budget_against not in allowed_dimensions:
-			frappe.throw(_("Budget Against must be an enabled Accounting Dimension"))
+		if self.budget_against not in get_budget_dimensions():
+			frappe.throw(_("Budget Against must be Project or an enabled Accounting Dimension"))
 
 	def validate_budget_amount(self):
 		if self.budget_amount <= 0:
@@ -129,6 +127,7 @@ class Budget(Document):
 			WHERE
 				docstatus < 2
 				AND company = %s
+				AND budget_against = %s
 				AND {budget_against_field} = %s
 				AND account = %s
 				AND name != %s
@@ -137,7 +136,15 @@ class Budget(Document):
 					AND (SELECT year_end_date FROM `tabFiscal Year` WHERE name = to_fiscal_year) >= %s
 				)
 			""",
-			(self.company, budget_against, account, self.name, self.budget_end_date, self.budget_start_date),
+			(
+				self.company,
+				self.budget_against,
+				budget_against,
+				account,
+				self.name,
+				self.budget_end_date,
+				self.budget_start_date,
+			),
 			as_dict=True,
 		)
 
@@ -415,7 +422,9 @@ def validate_expense_against_budget(params, expense_amount=0):
 	if not params.account:
 		return
 
-	for dimension in get_accounting_dimensions(as_list=False):
+	dimensions = get_accounting_dimensions(as_list=False)
+	dimensions.append({"fieldname": "project", "document_type": "Project"})
+	for dimension in dimensions:
 		budget_against = dimension.get("fieldname")
 
 		if (
@@ -463,9 +472,10 @@ def validate_expense_against_budget(params, expense_amount=0):
 					AND b.docstatus = 1
 					AND %s BETWEEN b.budget_start_date AND b.budget_end_date
 					AND b.account = %s
+					AND b.budget_against = %s
 					{condition}
 				""",
-				(params.company, params.posting_date, params.account),
+				(params.company, params.posting_date, params.account, doctype),
 				as_dict=True,
 			)  # nosec
 

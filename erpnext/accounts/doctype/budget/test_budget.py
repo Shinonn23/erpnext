@@ -1,10 +1,7 @@
 # Copyright (c) 2015, Frappe Technologies Pvt. Ltd. and Contributors
 # See license.txt
-import unittest
-
 import frappe
-from frappe.client import submit
-from frappe.utils import add_days, flt, get_first_day, get_last_day, getdate, now_datetime, nowdate
+from frappe.utils import add_months, flt, getdate, nowdate
 
 from erpnext.accounts.doctype.budget.budget import (
 	BudgetError,
@@ -20,17 +17,195 @@ from erpnext.tests.utils import ERPNextTestSuite
 
 class TestBudget(ERPNextTestSuite):
 	def setUp(self):
+		super().setUp()
 		frappe.db.set_single_value("Accounts Settings", "use_legacy_budget_controller", False)
-		project_dimension = frappe.db.get_value("Accounting Dimension", {"document_type": "Project"})
-		if project_dimension:
-			frappe.db.set_value("Accounting Dimension", project_dimension, "disabled", 0)
-		else:
-			frappe.get_doc({"doctype": "Accounting Dimension", "document_type": "Project"}).insert()
 
 		self.company = "_Test Company"
-		self.fiscal_year = frappe.db.get_value("Fiscal Year", {}, "name")
+		self.fiscal_year = get_fiscal_year(nowdate(), company=self.company)[0]
 		self.account = "_Test Account Cost for Goods Sold - _TC"
 		self.project = frappe.db.get_value("Project", {"project_name": "_Test Project"})
+
+	def make_independent_project(self):
+		return frappe.get_doc(
+			{
+				"doctype": "Project",
+				"project_name": "_Test Budget " + frappe.generate_hash(length=10),
+				"company": self.company,
+			}
+		).insert()
+
+	def assert_rejected_submission(self, doc):
+		"""Emulate the request transaction boundary for a rejected submission."""
+		self.assertEqual(doc.docstatus, 0)
+		filters = {"voucher_type": doc.doctype, "voucher_no": doc.name}
+		before = frappe.get_all("GL Entry", filters=filters, fields=["name", "debit", "credit"])
+		bin_filters = {
+			"item_code": ["in", [row.item_code for row in (doc.get("items") or [])]],
+			"warehouse": ["in", [row.warehouse for row in (doc.get("items") or []) if row.warehouse]],
+		}
+		bin_fields = ["name", "actual_qty", "indented_qty", "ordered_qty", "projected_qty"]
+		bins_before = frappe.get_all("Bin", filters=bin_filters, fields=bin_fields, order_by="name")
+		savepoint = "budget_rejection_" + frappe.generate_hash(length=10)
+		frappe.db.savepoint(savepoint)
+		try:
+			with self.assertRaises(BudgetError):
+				doc.submit()
+		finally:
+			frappe.db.rollback(save_point=savepoint)
+		doc.reload()
+		self.assertEqual(doc.docstatus, 0)
+		self.assertEqual(
+			frappe.get_all("GL Entry", filters=filters, fields=["name", "debit", "credit"]), before
+		)
+		self.assertEqual(
+			frappe.get_all("Bin", filters=bin_filters, fields=bin_fields, order_by="name"), bins_before
+		)
+
+	def test_project_budget_journal_entry_submit_and_cancel(self):
+		project = self.make_independent_project()
+		budget = make_budget(
+			budget_against="Project",
+			project=project.name,
+			budget_amount=120000,
+			do_not_save=False,
+			submit_budget=True,
+		)
+		budget.reload()
+		self.assertEqual(budget.docstatus, 1)
+		self.assertEqual(budget.project, project.name)
+		self.assertEqual(len(budget.budget_distribution), 12)
+		self.assertEqual(budget.budget_distribution_total, 120000)
+		self.assertTrue(all(row.amount == 10000 for row in budget.budget_distribution))
+		posting_date = getdate(budget.budget_start_date)
+		je = make_journal_entry(
+			self.account,
+			"_Test Bank - _TC",
+			7500,
+			project=project.name,
+			posting_date=posting_date,
+		)
+		filters = {"voucher_type": "Journal Entry", "voucher_no": je.name}
+		self.assertFalse(frappe.db.exists("GL Entry", filters))
+		je.submit()
+		je.reload()
+		self.assertEqual(je.docstatus, 1)
+		entries = frappe.get_all(
+			"GL Entry",
+			filters=filters,
+			fields=["account", "company", "project", "debit", "credit", "is_cancelled"],
+		)
+		self.assertEqual(len(entries), 2)
+		self.assertCountEqual(
+			[(row.account, row.debit, row.credit) for row in entries],
+			[(self.account, 7500, 0), ("_Test Bank - _TC", 0, 7500)],
+		)
+		self.assertTrue(all(row.company == self.company and row.project == project.name for row in entries))
+		self.assertTrue(all(not row.is_cancelled for row in entries))
+		self.assert_budget_variance(budget, 7500)
+
+		je.cancel()
+		je.reload()
+		self.assertEqual(je.docstatus, 2)
+		entries = frappe.get_all("GL Entry", filters=filters, fields=["account", "debit", "credit"])
+		self.assertEqual(len(entries), 4)
+		for account in (self.account, "_Test Bank - _TC"):
+			self.assertEqual(sum(row.debit - row.credit for row in entries if row.account == account), 0)
+		self.assert_budget_variance(budget, 0)
+		budget.cancel()
+		budget.reload()
+		self.assertEqual(budget.docstatus, 2)
+
+	def assert_budget_variance(self, budget, actual):
+		from erpnext.accounts.report.budget_variance_report.budget_variance_report import execute
+
+		filters = frappe._dict(
+			company=self.company,
+			from_fiscal_year=budget.from_fiscal_year,
+			to_fiscal_year=budget.to_fiscal_year,
+			budget_against="Project",
+			budget_against_filter=[budget.project],
+			period="Monthly",
+		)
+		data = execute(filters)[1]
+		self.assertEqual(len(data), 1)
+		self.assertEqual(data[0]["budget_against"], budget.project)
+		self.assertEqual(data[0]["account"], self.account)
+		self.assertEqual(data[0]["total_budget"], 120000)
+		self.assertEqual(data[0]["total_actual"], actual)
+		self.assertEqual(data[0]["total_variance"], 120000 - actual)
+
+	def test_project_budget_rejects_journal_entry_without_partial_gl(self):
+		project = self.make_independent_project()
+		budget = make_budget(
+			budget_against="Project",
+			project=project.name,
+			budget_amount=120000,
+			do_not_save=False,
+			submit_budget=False,
+		)
+		budget.action_if_accumulated_monthly_budget_exceeded = "Stop"
+		budget.save()
+		budget.submit()
+		je = make_journal_entry(
+			self.account,
+			"_Test Bank - _TC",
+			10001,
+			project=project.name,
+			posting_date=budget.budget_start_date,
+		)
+		self.assert_rejected_submission(je)
+		self.assert_budget_variance(budget, 0)
+		budget.reload()
+		self.assertEqual(budget.docstatus, 1)
+
+	def test_hidden_project_does_not_apply_another_dimension_budget(self):
+		for legacy_controller in (False, True):
+			with self.subTest(legacy_controller=legacy_controller):
+				frappe.db.set_single_value(
+					"Accounts Settings", "use_legacy_budget_controller", legacy_controller
+				)
+				project = self.make_independent_project()
+				department = frappe.get_doc(
+					{
+						"doctype": "Department",
+						"department_name": "_Test Budget " + frappe.generate_hash(length=10),
+						"company": self.company,
+					}
+				).insert()
+				budget = make_budget(
+					budget_against="Department",
+					project=project.name,
+					budget_amount=1200,
+					do_not_save=True,
+					submit_budget=False,
+				)
+				budget.department = department.name
+				budget.insert()
+				budget.submit()
+				je = make_journal_entry(
+					self.account,
+					"_Test Bank - _TC",
+					1500,
+					project=project.name,
+					posting_date=budget.budget_start_date,
+				)
+				je.submit()
+				je.reload()
+				self.assertEqual(je.docstatus, 1)
+				entries = frappe.get_all(
+					"GL Entry",
+					filters={"voucher_type": "Journal Entry", "voucher_no": je.name},
+					fields=["account", "department", "project", "debit", "credit"],
+				)
+				self.assertEqual(len(entries), 2)
+				self.assertTrue(all(row.department != department.name for row in entries))
+				self.assertTrue(all(row.project == project.name for row in entries))
+				self.assertCountEqual(
+					[(row.account, row.debit, row.credit) for row in entries],
+					[(self.account, 1500, 0), ("_Test Bank - _TC", 0, 1500)],
+				)
+				je.cancel()
+				budget.cancel()
 
 	def test_monthly_budget_crossed_ignore(self):
 		set_total_expense_zero(nowdate(), "project")
@@ -41,6 +216,7 @@ class TestBudget(ERPNextTestSuite):
 			"_Test Account Cost for Goods Sold - _TC",
 			"_Test Bank - _TC",
 			40000,
+			project=self.project,
 			posting_date=nowdate(),
 			submit=True,
 		)
@@ -144,11 +320,11 @@ class TestBudget(ERPNextTestSuite):
 
 		mr.set_missing_values()
 
-		self.assertRaises(BudgetError, mr.submit)
+		mr.insert()
+		self.assert_rejected_submission(mr)
 
 		budget.load_from_db()
 		budget.cancel()
-		mr.cancel()
 
 	def test_monthly_budget_crossed_for_po(self):
 		budget = make_budget(
@@ -175,11 +351,10 @@ class TestBudget(ERPNextTestSuite):
 
 		po.set_missing_values()
 
-		self.assertRaises(BudgetError, po.submit)
+		self.assert_rejected_submission(po)
 
 		budget.load_from_db()
 		budget.cancel()
-		po.cancel()
 
 	def test_monthly_budget_crossed_stop2(self):
 		set_total_expense_zero(nowdate(), "project")
@@ -246,17 +421,16 @@ class TestBudget(ERPNextTestSuite):
 		set_total_expense_zero(nowdate(), "project")
 
 		budget = make_budget(budget_against="Project", do_not_save=False, submit_budget=True)
-		month = now_datetime().month
-		if month > 9:
-			month = 9
+		# After cancellation, 60,000 still exceeds the third fiscal month's 50,000 limit.
+		posting_date = add_months(budget.budget_start_date, 2)
 
-		for _i in range(month + 1):
+		for _i in range(4):
 			jv = make_journal_entry(
 				"_Test Account Cost for Goods Sold - _TC",
 				"_Test Bank - _TC",
 				20000,
 				project=self.project,
-				posting_date=nowdate(),
+				posting_date=posting_date,
 				submit=True,
 			)
 
@@ -275,17 +449,16 @@ class TestBudget(ERPNextTestSuite):
 		set_total_expense_zero(nowdate(), "project")
 
 		budget = make_budget(budget_against="Project", do_not_save=False, submit_budget=True)
-		month = now_datetime().month
-		if month > 9:
-			month = 9
+		# After cancellation, 60,000 still exceeds the third fiscal month's 50,000 limit.
+		posting_date = add_months(budget.budget_start_date, 2)
 
 		project = frappe.get_value("Project", {"project_name": "_Test Project"})
-		for _i in range(month + 1):
+		for _i in range(4):
 			jv = make_journal_entry(
 				"_Test Account Cost for Goods Sold - _TC",
 				"_Test Bank - _TC",
 				20000,
-				posting_date=nowdate(),
+				posting_date=posting_date,
 				submit=True,
 				project=project,
 			)
@@ -300,9 +473,6 @@ class TestBudget(ERPNextTestSuite):
 
 		budget.load_from_db()
 		budget.cancel()
-
-
-
 
 	def test_action_for_cumulative_limit(self):
 		set_total_expense_zero(nowdate(), "project")
@@ -337,7 +507,7 @@ class TestBudget(ERPNextTestSuite):
 		)
 		po.set_missing_values()
 
-		self.assertRaises(BudgetError, po.submit)
+		self.assert_rejected_submission(po)
 
 		frappe.db.set_value(
 			"Budget", budget.name, "action_if_accumulated_monthly_exceeded_on_cumulative_expense", "Ignore"
@@ -397,22 +567,47 @@ class TestBudget(ERPNextTestSuite):
 		self.assertTrue(all(d.amount == 10000 for d in budget.budget_distribution))
 
 	def test_create_revised_budget(self):
+		project = self.make_independent_project()
 		budget = make_budget(
-			budget_against="Project", budget_amount=120000, do_not_save=False, submit_budget=True
+			budget_against="Project",
+			project=project.name,
+			budget_amount=120000,
+			do_not_save=False,
+			submit_budget=True,
 		)
-
+		distribution = [
+			(row.start_date, row.end_date, row.amount, row.percent) for row in budget.budget_distribution
+		]
 		revised_name = revise_budget(budget.name)
-
 		revised_budget = frappe.get_doc("Budget", revised_name)
 		self.assertNotEqual(budget.name, revised_budget.name)
 		self.assertEqual(revised_budget.budget_against, budget.budget_against)
 		self.assertEqual(revised_budget.budget_amount, budget.budget_amount)
-
-		old_budget = frappe.get_doc("Budget", budget.name)
-		self.assertEqual(old_budget.docstatus, 2)
+		self.assertEqual(revised_budget.docstatus, 0)
+		self.assertEqual(revised_budget.revision_of, budget.name)
+		self.assertEqual(revised_budget.project, project.name)
+		self.assertEqual(revised_budget.account, self.account)
+		budget.reload()
+		self.assertEqual(budget.docstatus, 2)
+		self.assertEqual(
+			[
+				(row.start_date, row.end_date, row.amount, row.percent)
+				for row in revised_budget.budget_distribution
+			],
+			distribution,
+		)
+		revised_budget.submit()
+		revised_budget.reload()
+		self.assertEqual(revised_budget.docstatus, 1)
+		self.assertEqual(revised_budget.budget_distribution_total, 120000)
+		self.assert_budget_variance(revised_budget, 0)
+		revised_budget.cancel()
+		revised_budget.reload()
+		self.assertEqual(revised_budget.docstatus, 2)
+		self.assertEqual(revised_budget.revision_of, budget.name)
 
 	def test_revision_preserves_distribution(self):
-		set_total_expense_zero(nowdate(), "project", "_Test Project - _TC")
+		set_total_expense_zero(nowdate(), "project", self.project)
 		budget = make_budget(
 			budget_against="Project", budget_amount=120000, do_not_save=False, submit_budget=True
 		)
@@ -474,7 +669,7 @@ class TestBudget(ERPNextTestSuite):
 	def test_manual_distribution_total_equals_budget_amount(self):
 		budget = make_budget(
 			budget_against="Project",
-			project="_Test Project - _TC",
+			project=self.project,
 			distribute_equally=0,
 			budget_amount=12000,
 			do_not_save=False,
@@ -501,7 +696,7 @@ class TestBudget(ERPNextTestSuite):
 		new_budget.from_fiscal_year = budget.from_fiscal_year
 		new_budget.to_fiscal_year = new_budget.from_fiscal_year
 		new_budget.budget_against = "Project"
-		new_budget.project = "_Test Project - _TC"
+		new_budget.project = self.project
 		new_budget.account = "_Test Account Cost for Goods Sold - _TC"
 		new_budget.budget_amount = 10000
 
@@ -515,13 +710,13 @@ def set_total_expense_zero(posting_date, budget_against_field=None, dimension_va
 	else:
 		budget_against = dimension_value or frappe.db.get_value("Project", {"project_name": "_Test Project"})
 
-	fiscal_year = get_fiscal_year(nowdate())[0]
-	fiscal_year_start_date, fiscal_year_end_date = get_fiscal_year(nowdate())[1:3]
+	fiscal_year = get_fiscal_year(posting_date, company="_Test Company")[0]
+	fiscal_year_start_date, fiscal_year_end_date = get_fiscal_year(posting_date, company="_Test Company")[1:3]
 
 	args = frappe._dict(
 		{
 			"account": "_Test Account Cost for Goods Sold - _TC",
-			"project": "_Test Project - _TC",
+			"project": budget_against,
 			"month_end_date": posting_date,
 			"company": "_Test Company",
 			"from_fiscal_year": fiscal_year,
@@ -552,7 +747,7 @@ def set_total_expense_zero(posting_date, budget_against_field=None, dimension_va
 				-existing_expense,
 				submit=True,
 				project=budget_against,
-				posting_date=nowdate(),
+				posting_date=posting_date,
 			)
 
 
@@ -564,7 +759,7 @@ def make_budget(**args):
 	fiscal_year = get_fiscal_year(nowdate())[0]
 
 	if budget_against == "Project":
-		project = frappe.get_value("Project", {"project_name": "_Test Project"})
+		project = project or frappe.get_value("Project", {"project_name": "_Test Project"})
 		budget_list = frappe.get_all(
 			"Budget",
 			filters={
@@ -592,7 +787,7 @@ def make_budget(**args):
 	budget = frappe.new_doc("Budget")
 
 	if budget_against == "Project":
-		budget.project = frappe.get_value("Project", {"project_name": "_Test Project"})
+		budget.project = project or frappe.get_value("Project", {"project_name": "_Test Project"})
 	else:
 		budget.project = project or frappe.get_value("Project", {"project_name": "_Test Project"})
 
