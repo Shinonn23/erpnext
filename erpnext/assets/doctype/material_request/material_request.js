@@ -287,7 +287,7 @@ frappe.ui.form.on("Material Request", {
 		if (frm.doc.docstatus !== 1) return;
 		const action_refresh_id = (frm.__material_request_action_refresh_id || 0) + 1;
 		frm.__material_request_action_refresh_id = action_refresh_id;
-		frm.call("get_post_submit_actions").then((r) => {
+		return Promise.resolve(frm.call("get_post_submit_actions")).then((r) => {
 			if (
 				frm.doc.name !== request_name ||
 				frm.doc.docstatus !== 1 ||
