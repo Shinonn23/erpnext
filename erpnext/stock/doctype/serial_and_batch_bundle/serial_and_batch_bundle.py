@@ -2511,7 +2511,9 @@ def get_available_serial_nos(kwargs):
 	if not kwargs.get("ignore_warehouse"):
 		filters["warehouse"] = ("is", "set")
 		if kwargs.warehouse:
-			filters["warehouse"] = kwargs.warehouse
+			filters["warehouse"] = (
+				("in", kwargs.warehouse) if isinstance(kwargs.warehouse, list) else kwargs.warehouse
+			)
 
 	reserved_entries = get_reserved_serial_nos_for_sre(kwargs)
 

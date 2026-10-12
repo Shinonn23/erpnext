@@ -544,6 +544,7 @@ class PickList(TransactionBase):
 					{
 						"item_code": row.item_code,
 						"warehouse": row.warehouse,
+						"storage_location": row.storage_location,
 						"voucher_type": self.doctype,
 						"voucher_no": self.name,
 						"voucher_detail_no": row.name,
@@ -1895,6 +1896,7 @@ def map_pl_locations(pick_list, item_mapper, target_doc, sales_order=None):
 			child_item.against_pick_list = pick_list.name
 			child_item.pick_list_item = location.name
 			child_item.warehouse = location.warehouse
+			child_item.storage_location = location.storage_location
 			child_item.qty = flt(location.picked_qty - location.delivered_qty) / (
 				flt(child_item.conversion_factor) or 1
 			)

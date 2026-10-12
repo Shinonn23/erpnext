@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import Mock, patch
 
 import frappe
 from frappe.utils import flt, get_last_day, today
@@ -9,6 +10,7 @@ from erpnext.accounts.general_ledger import is_immutable_ledger_enabled
 from erpnext.accounts.utils import get_fiscal_year
 from erpnext.assets.doctype.asset.test_asset import create_fixed_asset_item
 from erpnext.assets.doctype.stock_to_asset_conversion.stock_to_asset_conversion import (
+	create_immediate_depreciation_entry,
 	get_accounting_treatment,
 	get_default_accounting_treatment,
 	normalize_accounting_treatment,
@@ -38,6 +40,49 @@ class TestStockToAssetConversion(unittest.TestCase):
 
 	def test_legacy_capitalized_treatment_maps_to_scheduled_depreciation(self):
 		self.assertEqual(normalize_accounting_treatment("Capitalized"), "Scheduled Depreciation")
+
+	def test_immediate_depreciation_journal_is_generated_from_approved_conversion(self):
+		asset = Mock(net_purchase_amount=120, company="Company", stock_to_asset_conversion="Conversion")
+		asset.name = "Asset"
+		asset.precision.return_value = None
+		journal = Mock(accounts=[frappe._dict(), frappe._dict()], flags=frappe._dict())
+		conversion = frappe._dict(name="Conversion", docstatus=1, company="Company")
+		with (
+			patch("erpnext.assets.doctype.asset.asset.make_journal_entry", return_value=journal) as make_journal,
+			patch("frappe.get_doc", return_value=conversion) as get_doc,
+		):
+			result = create_immediate_depreciation_entry(asset, "2026-10-12")
+		make_journal.assert_called_once_with("Asset")
+		get_doc.assert_called_once_with("Stock to Asset Conversion", "Conversion")
+		self.assertIs(result, journal)
+		self.assertEqual(journal.is_system_generated, 1)
+		self.assertIn("Conversion", journal.journal_entry_reason)
+		self.assertEqual(journal.posting_date, "2026-10-12")
+		self.assertEqual(journal.accounts[0].debit, 120)
+		self.assertEqual(journal.accounts[0].debit_in_account_currency, 120)
+		self.assertEqual(journal.accounts[1].credit, 120)
+		self.assertEqual(journal.accounts[1].credit_in_account_currency, 120)
+		journal.insert.assert_called_once_with()
+		journal.submit.assert_called_once_with()
+
+	def test_immediate_depreciation_rejects_unapproved_or_other_company_conversion(self):
+		asset = Mock(net_purchase_amount=120, company="Company", stock_to_asset_conversion="Conversion")
+		asset.name = "Asset"
+		asset.precision.return_value = None
+		for docstatus, company in ((0, "Company"), (1, "Other Company")):
+			with self.subTest(docstatus=docstatus, company=company):
+				journal = Mock()
+				with (
+					patch("erpnext.assets.doctype.asset.asset.make_journal_entry", return_value=journal),
+					patch("frappe.get_doc", return_value=frappe._dict(docstatus=docstatus, company=company)),
+					patch("frappe.throw", side_effect=frappe.ValidationError) as throw,
+				):
+					with self.assertRaises(frappe.ValidationError):
+						create_immediate_depreciation_entry(asset, "2026-10-12")
+				journal.insert.assert_not_called()
+				journal.submit.assert_not_called()
+				throw.assert_called_once()
+				self.assertIn("submitted Stock to Asset Conversion", throw.call_args.args[0])
 
 
 class TestStockToAssetConversionIntegration(ERPNextTestSuite):
