@@ -155,6 +155,9 @@ class StockReconciliation(StockController):
 		self.make_gl_entries_on_cancel()
 		self.repost_future_sle_and_gle()
 		self.delete_auto_created_batches()
+		from erpnext.stock.doctype.stock_count.stock_count import allow_generated_stock_count_cancellation
+
+		allow_generated_stock_count_cancellation(self)
 
 	def make_bundle_for_current_qty(self):
 		from erpnext.stock.serial_batch_bundle import SerialBatchCreation

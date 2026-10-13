@@ -674,6 +674,9 @@ class StockEntry(StockController, SubcontractingInwardController):
 			self.set_material_request_transfer_status("In Transit")
 
 		super().on_cancel_subcontracting_inward()
+		from erpnext.stock.doctype.stock_count.stock_count import allow_generated_stock_count_cancellation
+
+		allow_generated_stock_count_cancellation(self)
 
 	def on_update(self):
 		super().on_update()
