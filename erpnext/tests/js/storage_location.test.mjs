@@ -112,6 +112,20 @@ test("default warehouse without Item context remains a scoped location search", 
   );
 });
 
+test("supplied raw materials use supplier warehouse rather than the finished-goods warehouse", () => {
+  const f = fixture("Subcontracting Receipt", {
+    supplier_warehouse: "Supplier",
+  });
+  f.context.locals.Row.row = {
+    rm_item_code: "Raw Material",
+    parentfield: "supplied_items",
+    warehouse: "Finished Goods",
+  };
+  const result = f.queries["storage_location:items"](f.frm.doc, "Row", "row");
+  assert.equal(result.filters.warehouse, "Supplier");
+  assert.equal(result.filters.item_code, "Raw Material");
+});
+
 test("Putaway control is hidden only when explicitly disabled in boot settings", () => {
   const f = fixture("Purchase Receipt");
   f.handlers["Purchase Receipt"].refresh(f.frm);

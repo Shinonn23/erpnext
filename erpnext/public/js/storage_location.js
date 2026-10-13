@@ -25,6 +25,13 @@ for (const doctype of [
 	frappe.ui.form.on(doctype, {
 		setup(frm) {
 			const warehouse_for_field = (fieldname, row) => {
+				if (
+					fieldname === "storage_location" &&
+					row.rm_item_code &&
+					row.parentfield === "supplied_items"
+				) {
+					return frm.doc.supplier_warehouse;
+				}
 				if (fieldname.startsWith("rejected_")) return row.rejected_warehouse;
 				if (fieldname.startsWith("from_")) return row.from_warehouse;
 				if (fieldname.startsWith("to_")) {
