@@ -27,6 +27,9 @@ frappe.ui.form.on("Stock Count", {
 		frm.set_query("scan_storage_location", () => ({
 			filters: { warehouse: frm.doc.warehouse, disabled: 0 },
 		}));
+		frm.set_query("storage_location", "items", (doc, cdt, cdn) =>
+			erpnext.queries.storage_location(doc.warehouse, locals[cdt][cdn].item_code)
+		);
 		frm.set_query("inventory_dimension", "dimensions", () => ({ filters: { apply_to_all_doctypes: 1 } }));
 		frm.set_query("batch_no", "items", (doc, cdt, cdn) => ({
 			filters: { item: locals[cdt][cdn].item_code },

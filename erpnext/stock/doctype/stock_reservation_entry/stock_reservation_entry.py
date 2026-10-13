@@ -85,7 +85,7 @@ class StockReservationEntry(Document):
 		self.validate_group_warehouse()
 		validate_disabled_warehouse(self.warehouse)
 		validate_warehouse_company(self.warehouse, self.company)
-		validate_storage_location_warehouse(self.storage_location, self.warehouse)
+		validate_storage_location_warehouse(self.storage_location, self.warehouse, item_code=self.item_code)
 		self.validate_uom_is_integer()
 
 	def before_submit(self) -> None:

@@ -230,11 +230,11 @@ class TestStockControllerStorageLocation(unittest.TestCase):
 			self.assertEqual(warehouses.call_count, 2)
 			warehouses.assert_any_call(self.doc, self.row)
 			warehouses.assert_any_call(self.doc, supplied)
-			validate.assert_any_call("Source Shelf", "Warehouse")
-			validate.assert_any_call("Target Shelf", "Target")
-			validate.assert_any_call("From Shelf", "Source")
-			validate.assert_any_call("Rejected Shelf", "Rejected")
-			validate.assert_any_call("Supplier Shelf", "Warehouse")
+			validate.assert_any_call("Source Shelf", "Warehouse", item_code="Stock Item")
+			validate.assert_any_call("Target Shelf", "Target", item_code="Stock Item")
+			validate.assert_any_call("From Shelf", "Source", item_code="Stock Item")
+			validate.assert_any_call("Rejected Shelf", "Rejected", item_code="Stock Item")
+			validate.assert_any_call("Supplier Shelf", "Warehouse", item_code="Raw Material")
 			self.assertEqual(validate.call_count, 5)
 
 	def test_validation_propagates_invalid_location(self):
@@ -250,10 +250,10 @@ class TestStockControllerStorageLocation(unittest.TestCase):
 	def test_validation_uses_native_warehouse_mapping_for_transfers(self):
 		with patch(f"{CONTROLLER}.validate_storage_location_warehouse") as validate:
 			StockController.validate_storage_locations(self.validation_document())
-			validate.assert_any_call("Source Shelf", "Source")
-			validate.assert_any_call("Target Shelf", "Target")
-			validate.assert_any_call("From Shelf", "Source")
-			validate.assert_any_call("Rejected Shelf", "Rejected")
+			validate.assert_any_call("Source Shelf", "Source", item_code="Stock Item")
+			validate.assert_any_call("Target Shelf", "Target", item_code="Stock Item")
+			validate.assert_any_call("From Shelf", "Source", item_code="Stock Item")
+			validate.assert_any_call("Rejected Shelf", "Rejected", item_code="Stock Item")
 			self.assertEqual(validate.call_count, 4)
 
 	def test_empty_locations_are_allowed_before_posting(self):

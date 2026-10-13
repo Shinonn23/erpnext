@@ -82,6 +82,9 @@
   "weight_per_unit",
   "weight_uom",
   "allow_negative_stock",
+  "storage_preferences_section",
+  "storage_condition",
+  "preferred_storage_locations",
   "sb_barcodes",
   "barcodes",
   "reorder_section",
@@ -1117,6 +1120,26 @@
    "fieldname": "item_prices_column",
    "fieldtype": "Column Break",
    "label": "Item Prices"
+  },
+  {
+   "fieldname": "storage_preferences_section",
+   "fieldtype": "Section Break",
+   "label": "Storage Preferences",
+   "depends_on": "eval:doc.is_stock_item"
+  },
+  {
+   "fieldname": "storage_condition",
+   "fieldtype": "Link",
+   "label": "Storage Condition",
+   "options": "Storage Condition",
+   "description": "Required storage condition. Leave blank only while the item has no configured storage requirement."
+  },
+  {
+   "fieldname": "preferred_storage_locations",
+   "fieldtype": "Table",
+   "label": "Preferred Storage Locations",
+   "options": "Item Storage Location",
+   "description": "Locations are suggested in this row order, followed by other compatible locations in the selected warehouse."
   }
  ],
  "icon": "fa fa-tag",

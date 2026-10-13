@@ -1,9 +1,16 @@
-// Warehouse-specific queries for the built-in Storage Location inventory dimension.
+// Item preferences and compatible locations share one permission-aware server query.
+frappe.provide("erpnext.queries");
+erpnext.queries.storage_location = (warehouse, item_code) => ({
+	query: "erpnext.stock.doctype.storage_location.storage_location.storage_location_query",
+	filters: { warehouse: warehouse || "", item_code: item_code || "" },
+});
+
 for (const doctype of [
 	"BOM",
 	"Delivery Note",
 	"Job Card",
 	"Material Request",
+	"Item",
 	"Plant Floor",
 	"Production Plan",
 	"Purchase Invoice",
@@ -46,12 +53,26 @@ for (const doctype of [
 			const set_storage_location_query = (fieldname, get_row) => {
 				const query = (doc, cdt, cdn) => {
 					const row = get_row ? locals[cdt][cdn] : doc;
-					return {
-						filters: {
-							warehouse: warehouse_for_field(fieldname, row) || "",
-							disabled: 0,
-						},
-					};
+					const result = erpnext.queries.storage_location(
+						warehouse_for_field(fieldname, row),
+						row.item_code ||
+							row.rm_item_code ||
+							([
+								"fg_storage_location",
+								"target_storage_location",
+								"to_storage_location",
+								"default_target_storage_location",
+								"warehouse_storage_location",
+							].includes(fieldname)
+								? row.finished_good || row.production_item || row.item
+								: "")
+					);
+					if (doctype === "Item") {
+						// Preview the unsaved condition while editing Item preferences.
+						result.filters.item_code = "";
+						result.filters.storage_condition = doc.storage_condition || "";
+					}
+					return result;
 				};
 
 				if (get_row) frm.set_query(fieldname, get_row.table, query);
@@ -71,6 +92,20 @@ for (const doctype of [
 				)) {
 					set_storage_location_query(field.fieldname, { table: table.fieldname });
 				}
+			}
+			if (doctype === "Item") {
+				frm.set_query("warehouse", "preferred_storage_locations", () => ({
+					filters: { is_group: 0, disabled: 0 },
+				}));
+			}
+		},
+		refresh(frm) {
+			if (frm.meta.fields.some((field) => field.fieldname === "apply_putaway_rule")) {
+				const enabled = frappe.boot.sysdefaults.enable_putaway_rule !== 0;
+				if (!enabled && !frm.doc.docstatus && frm.doc.apply_putaway_rule) {
+					frm.set_value("apply_putaway_rule", 0);
+				}
+				frm.toggle_display("apply_putaway_rule", enabled);
 			}
 		},
 	});

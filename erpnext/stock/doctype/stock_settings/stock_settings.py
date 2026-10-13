@@ -339,6 +339,12 @@ class StockSettings(Document):
 			)
 
 
+def is_putaway_rule_enabled():
+	value = frappe.db.get_singles_dict("Stock Settings").get("enable_putaway_rule")
+	# Preserve existing sites until the new setting is explicitly disabled.
+	return value is None or bool(cint(value))
+
+
 def clean_all_descriptions():
 	for item in frappe.get_all("Item", ["name", "description"]):
 		if item.description:

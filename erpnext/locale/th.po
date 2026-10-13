@@ -63884,3 +63884,51 @@ msgstr "เอกสาร {0} {1} ที่เชื่อมโยงไม่
 
 msgid "Generated document links can only be set by Stock Count submission."
 msgstr "ระบบจะกำหนดเอกสารที่เชื่อมโยงเมื่อยืนยันรายการตรวจนับเท่านั้น"
+
+msgid "Storage Preferences"
+msgstr "การจัดเก็บสินค้า"
+
+msgid "Storage Condition"
+msgstr "เงื่อนไขการจัดเก็บ"
+
+msgid "Storage Condition Name"
+msgstr "ชื่อเงื่อนไขการจัดเก็บ"
+
+msgid "Supported Storage Conditions"
+msgstr "เงื่อนไขการจัดเก็บที่รองรับ"
+
+msgid "Preferred Storage Locations"
+msgstr "ตำแหน่งจัดเก็บแนะนำ"
+
+msgid "Preferred for Item"
+msgstr "ตำแหน่งแนะนำสำหรับสินค้า"
+
+msgid "Enable Putaway Rules"
+msgstr "ใช้กฎจัดเก็บสินค้า (Putaway Rule)"
+
+msgid "Incompatible Storage Location"
+msgstr "ตำแหน่งจัดเก็บไม่รองรับเงื่อนไข"
+
+msgid "Storage Conditions cannot be repeated."
+msgstr "เงื่อนไขการจัดเก็บต้องไม่ซ้ำกัน"
+
+msgid "Row {0}: Preferred Storage Location cannot be repeated."
+msgstr "แถว {0}: ตำแหน่งจัดเก็บแนะนำต้องไม่ซ้ำกัน"
+
+msgid "Storage Location {0} does not support Storage Condition {1} required by Item {2}."
+msgstr "ตำแหน่งจัดเก็บ {0} ไม่รองรับเงื่อนไข {1} ที่สินค้า {2} ต้องการ"
+
+msgid "Putaway Rules are disabled. Select a compatible Storage Location using Item preferences."
+msgstr "ปิดการใช้ Putaway Rule แล้ว กรุณาเลือกตำแหน่งที่รองรับเงื่อนไขจากรายการแนะนำของสินค้า"
+
+msgid "Required storage condition. Leave blank only while the item has no configured storage requirement."
+msgstr "เงื่อนไขที่สินค้าต้องการ เว้นว่างเมื่อยังไม่ได้กำหนดข้อกำหนดการจัดเก็บเท่านั้น"
+
+msgid "Locations are suggested in this row order, followed by other compatible locations in the selected warehouse."
+msgstr "ระบบแนะนำตำแหน่งตามลำดับแถวนี้ แล้วแสดงตำแหน่งอื่นในคลังที่รองรับเงื่อนไขตามหลัง"
+
+msgid "Select every storage condition supported by this location. A location without conditions is excluded for items with a required condition."
+msgstr "เลือกทุกเงื่อนไขที่ตำแหน่งนี้รองรับ ตำแหน่งที่ไม่ระบุเงื่อนไขจะใช้กับสินค้าที่กำหนดเงื่อนไขไม่ได้"
+
+msgid "Disable when storage locations are selected using Item storage preferences instead of capacity-based Putaway Rules."
+msgstr "ปิดเมื่อเลือกตำแหน่งจากรายการแนะนำในสินค้าแทน Putaway Rule ที่จัดสรรตามความจุ"

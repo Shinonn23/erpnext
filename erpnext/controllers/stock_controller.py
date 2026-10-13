@@ -1329,7 +1329,9 @@ class StockController(AccountsController):
 	def validate_storage_locations(self):
 		if self.docstatus == 2:
 			return
-		if self.doctype in ("Sales Invoice", "Purchase Invoice", "POS Invoice") and not self.get("update_stock"):
+		if self.doctype in ("Sales Invoice", "Purchase Invoice", "POS Invoice") and not self.get(
+			"update_stock"
+		):
 			return
 
 		for table in self.meta.get_table_fields():
@@ -1339,7 +1341,9 @@ class StockController(AccountsController):
 					continue
 				for fieldname, warehouse in get_storage_location_warehouses(self, row).items():
 					if row.meta.has_field(fieldname) and row.get(fieldname):
-						validate_storage_location_warehouse(row.get(fieldname), warehouse)
+						validate_storage_location_warehouse(
+							row.get(fieldname), warehouse, item_code=item_code
+						)
 
 	def update_storage_location(self, row, sl_dict):
 		"""Copy the native stock location independently of configurable Inventory Dimensions."""

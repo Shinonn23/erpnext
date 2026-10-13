@@ -11,7 +11,7 @@ from frappe.model.mapper import map_child_doc
 from frappe.query_builder import Case
 from frappe.query_builder.custom import GROUP_CONCAT
 from frappe.query_builder.functions import Coalesce, Locate, Replace, Sum
-from frappe.utils import ceil, cint, floor, flt, get_link_to_form, now_datetime
+from frappe.utils import cint, floor, flt, get_link_to_form, now_datetime
 from frappe.utils.nestedset import get_descendants_of
 
 from erpnext.selling.doctype.sales_order.sales_order import (
@@ -313,7 +313,9 @@ class PickList(TransactionBase):
 					validate_storage_location_warehouse,
 				)
 
-				validate_storage_location_warehouse(location.storage_location, location.warehouse)
+				validate_storage_location_warehouse(
+					location.storage_location, location.warehouse, item_code=location.item_code
+				)
 
 	def check_serial_no_status(self):
 		from erpnext.stock.doctype.serial_no.serial_no import get_serial_nos

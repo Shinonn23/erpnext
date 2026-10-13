@@ -26,6 +26,7 @@
   "warehouse_defaults_section",
   "default_warehouse",
   "sample_retention_warehouse",
+  "enable_putaway_rule",
   "stock_validations_tab",
   "negative_stock_section",
   "allow_negative_stock",
@@ -601,6 +602,13 @@
   {
    "fieldname": "section_break_kcvr",
    "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "enable_putaway_rule",
+   "fieldtype": "Check",
+   "label": "Enable Putaway Rules",
+   "default": "1",
+   "description": "Disable when storage locations are selected using Item storage preferences instead of capacity-based Putaway Rules."
   }
  ],
  "icon": "icon-cog",

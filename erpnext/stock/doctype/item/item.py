@@ -1,9 +1,6 @@
 # Copyright (c) 2021, Frappe Technologies Pvt. Ltd. and Contributors
 # License: GNU General Public License v3. See license.txt
 
-import copy
-import json
-
 import frappe
 from frappe import _, bold
 from frappe.model.document import Document
@@ -20,7 +17,6 @@ from frappe.utils import (
 	now_datetime,
 	nowtime,
 	strip,
-	strip_html,
 )
 from frappe.utils.html_utils import clean_html
 from pypika import Order
@@ -227,9 +223,27 @@ class Item(Document):
 		self.validate_customer_provided_part()
 		self.update_defaults_from_item_group()
 		self.validate_item_defaults()
+		self.validate_storage_preferences()
 		self.validate_auto_reorder_enabled_in_stock_settings()
 		self.validate_serial_and_batch_no_enabled_in_stock_settings()
 		self.cant_change()
+
+	def validate_storage_preferences(self):
+		from erpnext.stock.doctype.storage_location.storage_location import (
+			validate_storage_location_warehouse,
+		)
+
+		seen = set()
+		for row in self.get("preferred_storage_locations") or []:
+			if row.storage_location in seen:
+				frappe.throw(_("Row {0}: Preferred Storage Location cannot be repeated.").format(row.idx))
+			seen.add(row.storage_location)
+			validate_storage_location_warehouse(
+				row.storage_location,
+				row.warehouse,
+				item_code=self.name,
+				storage_condition=self.get("storage_condition") or "",
+			)
 
 	def validate_demo_asset_item_code(self):
 		if not self.demo_asset_item_code:
