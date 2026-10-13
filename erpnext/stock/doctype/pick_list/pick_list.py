@@ -113,6 +113,9 @@ class PickList(TransactionBase):
 				item.update(get_item_details(item.item_code, item.uom, item.warehouse, company))
 
 	def validate(self):
+		from erpnext.stock.warehouse_policy import validate_document_policy
+
+		validate_document_policy(self)
 		self.validate_customer_demo_workflow()
 		self.validate_custody_loan()
 		self.validate_expired_batches()
@@ -400,6 +403,9 @@ class PickList(TransactionBase):
 			validate_custody_loan_pick_list(self, require_picked_qty=True)
 
 	def before_cancel(self):
+		from erpnext.stock.warehouse_policy import validate_document_policy
+
+		validate_document_policy(self)
 		if self.get("custody_loan"):
 			from erpnext.loan.doctype.custody_loan.custody_loan_core import validate_custody_loan_pick_list
 

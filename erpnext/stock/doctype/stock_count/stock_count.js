@@ -24,6 +24,9 @@ frappe.ui.form.on("Stock Count", {
 				disabled: 0,
 			},
 		}));
+		frm.set_query("scan_storage_location", () => ({
+			filters: { warehouse: frm.doc.warehouse, disabled: 0 },
+		}));
 		frm.set_query("inventory_dimension", "dimensions", () => ({ filters: { apply_to_all_doctypes: 1 } }));
 		frm.set_query("batch_no", "items", (doc, cdt, cdn) => ({
 			filters: { item: locals[cdt][cdn].item_code },
@@ -34,6 +37,7 @@ frappe.ui.form.on("Stock Count", {
 		frm.toggle_display("item_count", frm.doc.count_type === "Monthly");
 		frm.toggle_display("quarantine_warehouse", frm.doc.count_type === "Monthly");
 		frm.toggle_display("scan_barcode", frm.doc.status === "In Progress" && !frm.doc.docstatus);
+		frm.toggle_display("scan_storage_location", frm.doc.status === "In Progress" && !frm.doc.docstatus);
 		frm.set_df_property("dimensions", "read_only", frm.doc.status !== "Draft");
 		frm.set_df_property("warehouse", "read_only", frm.doc.status !== "Draft");
 		frm.set_df_property("count_type", "read_only", frm.doc.status !== "Draft");
@@ -70,51 +74,67 @@ frappe.ui.form.on("Stock Count", {
 	scan_barcode(frm) {
 		const value = (frm.doc.scan_barcode || "").trim();
 		if (!value) return;
+		const location = frm.doc.scan_storage_location;
 
 		frm.set_value("scan_barcode", "");
-		frappe.call({
-			method: "erpnext.stock.utils.scan_barcode",
-			args: { search_value: value, ctx: { company: frm.doc.company } },
-		}).then((r) => {
-			const scanned = r.message;
-			if (!scanned || !scanned.item_code) {
-				frappe.show_alert({
-					message: __("Item, Batch, or Serial No was not found."),
-					indicator: "red",
-				});
-				return;
-			}
-
-			const rows = frm.doc.items || [];
-			let row = scanned.serial_no
-				? rows.find((d) => d.item_code === scanned.item_code && d.serial_no === scanned.serial_no)
-				: scanned.batch_no
-					? rows.find((d) => d.item_code === scanned.item_code && d.batch_no === scanned.batch_no && !d.serial_no)
-					: rows.find((d) => d.item_code === scanned.item_code && !d.batch_no && !d.serial_no);
-
-			if (!row) {
-				frappe.show_alert({
-					message: __("This item, batch, or serial number is not in the prepared sample."),
-					indicator: "orange",
-				});
-				return;
-			}
-
-			if (scanned.serial_no) {
-				if (flt(row.counted_qty)) {
+		frappe
+			.call({
+				method: "erpnext.stock.utils.scan_barcode",
+				args: { search_value: value, ctx: { company: frm.doc.company } },
+			})
+			.then((r) => {
+				const scanned = r.message;
+				if (!scanned || !scanned.item_code) {
 					frappe.show_alert({
-						message: __("Serial No {0} was already counted.", [scanned.serial_no]),
+						message: __("Item, Batch, or Serial No was not found."),
+						indicator: "red",
+					});
+					return;
+				}
+
+				const rows = frm.doc.items || [];
+				const matches = rows.filter(
+					(d) =>
+						d.item_code === scanned.item_code &&
+						(scanned.serial_no
+							? d.serial_no === scanned.serial_no
+							: !d.serial_no &&
+							  (!scanned.batch_no || d.batch_no === scanned.batch_no) &&
+							  (!location || d.storage_location === location))
+				);
+				if (matches.length > 1) {
+					frappe.msgprint(
+						__(
+							"Multiple count rows match this scan. Select a Scan Storage Location and scan the Batch No if needed, or enter the count in the matching row."
+						)
+					);
+					return;
+				}
+				const row = matches[0];
+
+				if (!row) {
+					frappe.show_alert({
+						message: __("This item, batch, or serial number is not in the prepared sample."),
 						indicator: "orange",
 					});
 					return;
 				}
-				frappe.model.set_value(row.doctype, row.name, "counted_qty", 1);
-			} else {
-				frappe.model.set_value(row.doctype, row.name, "counted_qty", flt(row.counted_qty) + 1);
-			}
-			frappe.model.set_value(row.doctype, row.name, "is_counted", 1);
-			frm.refresh_field("items");
-		});
+
+				if (scanned.serial_no) {
+					if (flt(row.counted_qty)) {
+						frappe.show_alert({
+							message: __("Serial No {0} was already counted.", [scanned.serial_no]),
+							indicator: "orange",
+						});
+						return;
+					}
+					frappe.model.set_value(row.doctype, row.name, "counted_qty", 1);
+				} else {
+					frappe.model.set_value(row.doctype, row.name, "counted_qty", flt(row.counted_qty) + 1);
+				}
+				frappe.model.set_value(row.doctype, row.name, "is_counted", 1);
+				frm.refresh_field("items");
+			});
 	},
 });
 

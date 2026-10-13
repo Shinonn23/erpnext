@@ -15,6 +15,7 @@ from erpnext.stock.doctype.inventory_dimension.inventory_dimension import get_in
 from erpnext.stock.doctype.serial_and_batch_bundle.serial_and_batch_bundle import (
 	get_serial_nos_based_on_posting_date,
 )
+from erpnext.stock.doctype.storage_location.storage_location import validate_storage_location_warehouse
 
 
 class StockCount(Document):
@@ -33,6 +34,7 @@ class StockCount(Document):
 		quarantine_storage_location: DF.Link | None
 		quarantine_warehouse: DF.Link | None
 		scan_barcode: DF.Data | None
+		scan_storage_location: DF.Link | None
 		snapshot_datetime: DF.Datetime | None
 		status: DF.Literal["", "Draft", "In Progress", "Completed"]
 		stock_entry: DF.Link | None
@@ -40,6 +42,7 @@ class StockCount(Document):
 		warehouse: DF.Link
 
 	def validate(self):
+		validate_storage_location_warehouse(self.get("scan_storage_location"), self.warehouse)
 		if self.warehouse:
 			warehouse = frappe.db.get_value(
 				"Warehouse", self.warehouse, ["company", "is_group", "disabled"], as_dict=True
@@ -167,6 +170,9 @@ class StockCount(Document):
 	def validate_count_lines(self):
 		seen = set()
 		seen_serials = set()
+		dimension_fields = sorted(
+			{dimension.source_fieldname for dimension in self.get_countable_dimensions()}
+		)
 		for row in self.items:
 			if not row.item_code:
 				frappe.throw(_("Row {0}: Item Code is required.").format(row.idx))
@@ -199,9 +205,18 @@ class StockCount(Document):
 				frappe.throw(_("Row {0}: Serial No count must be zero or one.").format(row.idx))
 			row.difference_qty = flt(row.counted_qty) - flt(row.system_qty)
 
-			key = (row.item_code, row.batch_no or "", row.serial_no or "")
+			key = (
+				row.item_code,
+				row.batch_no or "",
+				row.serial_no or "",
+				tuple(row.get(fieldname) or "" for fieldname in dimension_fields),
+			)
 			if key in seen:
-				frappe.throw(_("Row {0}: duplicate Item, Batch, and Serial combination.").format(row.idx))
+				frappe.throw(
+					_("Row {0}: duplicate Item, Batch, Serial, and Inventory Dimensions combination.").format(
+						row.idx
+					)
+				)
 			seen.add(key)
 			if row.serial_no:
 				seen_serials.add(row.serial_no)

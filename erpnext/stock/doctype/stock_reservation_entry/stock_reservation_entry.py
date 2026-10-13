@@ -77,6 +77,7 @@ class StockReservationEntry(Document):
 	# end: auto-generated types
 
 	def validate(self) -> None:
+		self.validate_warehouse_policy()
 		from erpnext.stock.utils import validate_disabled_warehouse, validate_warehouse_company
 
 		self.validate_amended_doc()
@@ -88,6 +89,7 @@ class StockReservationEntry(Document):
 		self.validate_uom_is_integer()
 
 	def before_submit(self) -> None:
+		self.validate_warehouse_policy()
 		self.set_reservation_based_on()
 		self.validate_reservation_based_on_qty()
 		self.auto_reserve_serial_and_batch()
@@ -118,7 +120,16 @@ class StockReservationEntry(Document):
 		self.update_reserved_stock_in_bin()
 
 	def before_cancel(self) -> None:
+		self.validate_warehouse_policy()
 		self.validate_reserved_entries()
+
+	def before_update_after_submit(self) -> None:
+		self.validate_warehouse_policy()
+
+	def validate_warehouse_policy(self) -> None:
+		from erpnext.stock.warehouse_policy import validate_warehouse_operation
+
+		validate_warehouse_operation(self.warehouse, "transfer", cancellation=True, for_update=True)
 
 	def validate_reserved_entries(self):
 		entries = frappe.get_all(
@@ -535,6 +546,7 @@ class StockReservationEntry(Document):
 
 	def update_reserved_stock_in_bin(self) -> None:
 		"""Updates `Reserved Stock` in Bin."""
+		self.validate_warehouse_policy()
 
 		bin_name = get_or_make_bin(self.item_code, self.warehouse)
 		bin_doc = frappe.get_cached_doc("Bin", bin_name)

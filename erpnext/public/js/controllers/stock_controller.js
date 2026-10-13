@@ -3,6 +3,29 @@
 
 frappe.provide("erpnext.stock");
 
+for (const doctype of [
+	"Stock Entry",
+	"Stock Reconciliation",
+	"Purchase Receipt",
+	"Purchase Invoice",
+	"Delivery Note",
+	"Sales Invoice",
+	"POS Invoice",
+	"Subcontracting Receipt",
+	"Pick List",
+]) {
+	frappe.ui.form.on(doctype, {
+		validate(frm) {
+			return frappe.call("erpnext.stock.warehouse_policy.validate_document", { doc: frm.doc });
+		},
+		before_cancel(frm) {
+			return frappe.call("erpnext.stock.warehouse_policy.validate_document", {
+				doc: { ...frm.doc, docstatus: 2 },
+			});
+		},
+	});
+}
+
 erpnext.stock.StockController = class StockController extends frappe.ui.form.Controller {
 	onload() {
 		// warehouse query if company

@@ -83,6 +83,9 @@ class StockReconciliation(StockController):
 		self.set_zero_value_for_customer_provided_items()
 		self.clean_serial_nos()
 		self.set_total_qty_and_amount()
+		from erpnext.stock.warehouse_policy import validate_document_policy
+
+		validate_document_policy(self)
 		self.validate_putaway_capacity()
 		self.validate_inventory_dimension()
 		# Stock Reconciliation overrides validate() without calling super(), so the shared

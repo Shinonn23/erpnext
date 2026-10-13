@@ -5,13 +5,69 @@
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
-  "description"
+  "description",
+  "allow_receipt",
+  "allow_issue",
+  "allow_transfer",
+  "allow_sales",
+  "allow_loan",
+  "allow_reconciliation",
+  "freeze_stock",
+  "outgoing_role"
  ],
  "fields": [
   {
    "fieldname": "description",
    "fieldtype": "Small Text",
    "label": "Description"
+  },
+  {
+   "fieldname": "allow_receipt",
+   "fieldtype": "Check",
+   "label": "Allow Receipt",
+   "default": "1"
+  },
+  {
+   "fieldname": "allow_issue",
+   "fieldtype": "Check",
+   "label": "Allow Issue",
+   "default": "1"
+  },
+  {
+   "fieldname": "allow_transfer",
+   "fieldtype": "Check",
+   "label": "Allow Transfer",
+   "default": "1"
+  },
+  {
+   "fieldname": "allow_sales",
+   "fieldtype": "Check",
+   "label": "Allow Sales",
+   "default": "1"
+  },
+  {
+   "fieldname": "allow_loan",
+   "fieldtype": "Check",
+   "label": "Allow Loan",
+   "default": "1"
+  },
+  {
+   "fieldname": "allow_reconciliation",
+   "fieldtype": "Check",
+   "label": "Allow Reconciliation",
+   "default": "1"
+  },
+  {
+   "fieldname": "freeze_stock",
+   "fieldtype": "Check",
+   "label": "Freeze Stock",
+   "default": "0"
+  },
+  {
+   "fieldname": "outgoing_role",
+   "fieldtype": "Link",
+   "label": "Outgoing Role",
+   "options": "Role"
   }
  ],
  "links": [],
@@ -34,16 +90,13 @@
    "write": 1
   },
   {
-   "create": 1,
-   "delete": 1,
    "email": 1,
    "export": 1,
    "print": 1,
    "read": 1,
    "report": 1,
    "role": "Item Manager",
-   "share": 1,
-   "write": 1
+   "share": 1
   },
   {
    "create": 1,

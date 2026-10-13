@@ -128,6 +128,9 @@ class StockController(AccountsController):
 		self.reset_conversion_factor()
 		self.validate_storage_locations()
 		self.validate_inventory_dimension_mandatory()
+		from erpnext.stock.warehouse_policy import validate_document_policy
+
+		validate_document_policy(self)
 
 	def on_update(self):
 		super().on_update()
