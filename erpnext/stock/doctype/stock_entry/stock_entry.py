@@ -353,6 +353,9 @@ class StockEntry(StockController, SubcontractingInwardController):
 		# Stock Entry overrides validate() without calling super(), so the shared mandatory
 		# inventory dimension check must be invoked explicitly here.
 		self.validate_inventory_dimension_mandatory()
+		from erpnext.stock.warehouse_policy import validate_document_policy
+
+		validate_document_policy(self)
 
 		if self.get("purpose") != "Manufacture":
 			# ignore other item wh difference and empty source/target wh

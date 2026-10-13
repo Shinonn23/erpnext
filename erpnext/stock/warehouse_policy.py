@@ -9,6 +9,7 @@ from frappe.utils import cint, flt
 MOVEMENT_DOCTYPES = {
 	"Stock Entry", "Stock Reconciliation", "Purchase Receipt", "Purchase Invoice",
 	"Delivery Note", "Sales Invoice", "POS Invoice", "Subcontracting Receipt", "Pick List",
+	"Stock to Asset Conversion", "Asset Capitalization",
 }
 
 
@@ -84,7 +85,7 @@ def validate_document_policy(doc):
 		return
 	cancellation = doc.docstatus == 2
 	loan = False if cancellation else is_loan_movement(doc)
-	for table in ("items", "packed_items", "supplied_items", "locations"):
+	for table in ("items", "packed_items", "supplied_items", "locations", "stock_items"):
 		for row in doc.get(table) or []:
 			item = row.get("item_code") or row.get("rm_item_code")
 			if not item or not frappe.get_cached_value("Item", item, "is_stock_item"):
@@ -92,7 +93,7 @@ def validate_document_policy(doc):
 			if doc.doctype == "Stock Entry":
 				legs = [(row.get("s_warehouse"), True), (row.get("t_warehouse"), False)]
 			else:
-				outgoing = doc.doctype in ("Delivery Note", "Sales Invoice", "POS Invoice", "Pick List")
+				outgoing = table == "stock_items" or doc.doctype in ("Delivery Note", "Sales Invoice", "POS Invoice", "Pick List")
 				if doc.get("is_return"):
 					outgoing = not outgoing
 				if doc.doctype == "Stock Reconciliation":

@@ -95,6 +95,58 @@ class TestWarehousePolicy(unittest.TestCase):
 			with self.assertRaises(frappe.ValidationError):
 				warehouse_policy.validate_document_policy(doc)
 
+	def test_asset_stock_consumption_uses_issue_policy_and_outgoing_role(self):
+		with patch.object(frappe, "get_cached_value", return_value=1):
+			for doctype in ("Stock to Asset Conversion", "Asset Capitalization"):
+				doc = frappe._dict(doctype=doctype, docstatus=0,
+					stock_items=[frappe._dict(item_code="Item", warehouse="WH", qty=1)])
+				self.policy.allow_receipt = 0
+				warehouse_policy.validate_document_policy(doc)
+				self.policy.allow_issue = 0
+				with self.assertRaises(frappe.ValidationError):
+					warehouse_policy.validate_document_policy(doc)
+				self.policy.allow_issue = 1
+				self.policy.outgoing_role = "Stock Manager"
+				with self.assertRaises(frappe.PermissionError):
+					warehouse_policy.validate_document_policy(doc)
+				self.policy.outgoing_role = None
+				self.policy.freeze_stock = 1
+				doc.docstatus = 2
+				with self.assertRaises(frappe.ValidationError):
+					warehouse_policy.validate_document_policy(doc)
+				self.policy.freeze_stock = 0
+
+	def test_stock_entry_controller_draft_validation_checks_policy(self):
+		with patch.object(frappe, "logger", return_value=logging.getLogger("offline")):
+			from erpnext.stock.doctype.stock_entry.stock_entry import StockEntry
+		data = dict(doctype="Stock Entry", docstatus=0, purpose="Material Receipt", work_order=None,
+			from_bom=0, items=[frappe._dict(item_code="Item", t_warehouse="WH", qty=1)])
+		doc = Mock(**data)
+		doc.get = lambda field, default=None: data.get(field, default)
+		self.policy.freeze_stock = 1
+		with patch.object(frappe, "get_cached_value", return_value=1):
+			with self.assertRaises(frappe.ValidationError):
+				StockEntry.validate(doc)
+
+	def test_asset_stock_controller_draft_validation_checks_policy(self):
+		with patch.object(frappe, "logger", return_value=logging.getLogger("offline")):
+			from erpnext.assets.doctype.stock_to_asset_conversion.stock_to_asset_conversion import StocktoAssetConversion
+			from erpnext.assets.doctype.asset_capitalization.asset_capitalization import AssetCapitalization
+		methods = ("validate_company_settings", "sync_pick_list_selections", "sync_material_request_rows",
+			"validate_storage_locations", "set_missing_values", "validate_stock_items", "build_asset_preview",
+			"calculate_totals", "validate_posting_time", "validate_target_item", "validate_target_asset",
+			"validate_consumed_stock_item", "validate_consumed_asset_item", "validate_service_item",
+			"set_warehouse_details", "set_asset_values", "set_title", "validate_inventory_dimension_mandatory")
+		self.policy.freeze_stock = 1
+		with patch.object(frappe, "get_cached_value", return_value=1), patch("erpnext.stock.doctype.storage_location.storage_location.set_default_storage_locations"):
+			for doctype, controller in (("Stock to Asset Conversion", StocktoAssetConversion), ("Asset Capitalization", AssetCapitalization)):
+				doc = SimpleNamespace(doctype=doctype, docstatus=0,
+					stock_items=[frappe._dict(item_code="Item", warehouse="WH", qty=1)],
+					**{method: Mock() for method in methods})
+				doc.get = lambda field, default=None: getattr(doc, field, default)
+				with self.assertRaises(frappe.ValidationError):
+					controller.validate(doc)
+
 	def test_stockless_invoice_and_planning_are_ignored(self):
 		with patch.object(warehouse_policy, "is_loan_movement") as loan:
 			for doctype in ("Sales Invoice", "Purchase Invoice", "POS Invoice", "Purchase Order", "Material Request"):

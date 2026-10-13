@@ -13,6 +13,8 @@ for (const doctype of [
 	"POS Invoice",
 	"Subcontracting Receipt",
 	"Pick List",
+	"Stock to Asset Conversion",
+	"Asset Capitalization",
 ]) {
 	frappe.ui.form.on(doctype, {
 		validate(frm) {

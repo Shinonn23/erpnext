@@ -60,6 +60,9 @@ class StocktoAssetConversion(StockController):
 		self.validate_stock_items()
 		self.build_asset_preview()
 		self.calculate_totals()
+		from erpnext.stock.warehouse_policy import validate_document_policy
+
+		validate_document_policy(self)
 
 	def validate_company_settings(self):
 		if not self.company:

@@ -63848,3 +63848,30 @@ msgstr "{} {} ถูกเชื่อมโยงกับ {} {} แล้ว"
 msgid "{} {} is not affecting bank account {}"
 msgstr "{} {} ไม่ส่งผลต่อบัญชีธนาคาร {}"
 
+
+msgid "Allow Receipt"
+msgstr "อนุญาตรับสินค้า"
+
+msgid "Allow Issue"
+msgstr "อนุญาตจ่ายสินค้า"
+
+msgid "Allow Transfer"
+msgstr "อนุญาตโอนสินค้า"
+
+msgid "Allow Loan"
+msgstr "อนุญาตยืมสินค้า"
+
+msgid "Allow Reconciliation"
+msgstr "อนุญาตปรับยอดสต็อก"
+
+msgid "Freeze Stock"
+msgstr "ระงับการเคลื่อนไหวสต็อก"
+
+msgid "Outgoing Role"
+msgstr "บทบาทที่อนุญาตให้นำสินค้าออก"
+
+msgid "Scan Storage Location"
+msgstr "ตำแหน่งจัดเก็บที่กำลังตรวจนับ"
+
+msgid "Select the location being counted before scanning an item stored in multiple locations."
+msgstr "เลือกตำแหน่งที่กำลังนับก่อนสแกนสินค้าที่เก็บอยู่หลายตำแหน่ง"
