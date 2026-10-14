@@ -365,7 +365,7 @@ class TestCustodyLoanIntegration(ERPNextTestSuite):
 		)
 
 	def test_stock_freeze_blocks_loan_dispatch_but_allows_verified_return(self):
-		from erpnext.stock.stock_control import OPERATIONS
+		from erpnext.stock.stock_control import OPERATIONS, stock_control_permission_field
 
 		loan, _issued, _serials = self.stock_loan()
 		item = loan.items[0].item_code
@@ -375,7 +375,9 @@ class TestCustodyLoanIntegration(ERPNextTestSuite):
 				"doctype": "Warehouse Type",
 				"name": "_Test Loan Stock Control",
 				"handling_category": "Normal",
-				**{"allow_" + operation: 1 for operation in OPERATIONS},
+				**{
+					stock_control_permission_field("Warehouse Type", operation): 1 for operation in OPERATIONS
+				},
 			}
 		).insert()
 		for name in frappe.get_all(

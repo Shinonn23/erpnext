@@ -1,0 +1,643 @@
+# Copyright (c) 2026, Frappe Technologies Pvt. Ltd. and contributors
+# For license information, please see license.txt
+
+import logging
+import sys
+import unittest
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
+
+import frappe
+
+from erpnext.stock import warehouse_policy
+from erpnext.stock.doctype.warehouse_type.warehouse_type import WarehouseType
+
+
+class TestWarehousePolicy(unittest.TestCase):
+	def setUp(self):
+		self.warehouse = frappe._dict(is_group=0, warehouse_type="Normal")
+		self.policy = frappe._dict(
+			name="Normal",
+			freeze_stock=0,
+			outgoing_role=None,
+			**{
+				f"allow_{operation}": 1
+				for operation in ("receipt", "issue", "transfer", "sales", "loan", "reconciliation")
+			},
+		)
+		self.addCleanup(patch.stopall)
+		patch.object(
+			frappe,
+			"get_doc",
+			side_effect=lambda doctype, name, **kwargs: (
+				self.warehouse if doctype == "Warehouse" else self.policy
+			),
+		).start()
+		patch.object(frappe, "get_roles", return_value=["Stock User"]).start()
+		patch.object(
+			frappe,
+			"throw",
+			side_effect=lambda message, exc=frappe.ValidationError: (_ for _ in ()).throw(exc(message)),
+		).start()
+		patch.object(warehouse_policy, "_", side_effect=lambda text: text).start()
+		patch.object(frappe, "flags", frappe._dict()).start()
+		patch.object(warehouse_policy, "lock_stock_control_policies").start()
+		patch.object(
+			warehouse_policy, "_current_doc", side_effect=lambda doctype, name: frappe.get_doc(doctype, name)
+		).start()
+
+	def test_normal_and_legacy_allow_movements(self):
+		for operation in ("receipt", "issue", "transfer", "sales", "loan", "reconciliation"):
+			warehouse_policy.validate_warehouse_operation("WH", operation, outgoing=True)
+		self.warehouse.warehouse_type = None
+		self.policy.freeze_stock = 1
+		warehouse_policy.validate_warehouse_operation("WH", "sales", outgoing=True)
+
+	def test_restricted_type_matrix(self):
+		for name, allowed in {
+			"Transit": {"transfer"},
+			"Loan": {"loan"},
+			"Quarantine": {"receipt", "transfer"},
+			"Write-Off": {"receipt", "transfer", "reconciliation"},
+		}.items():
+			self.policy.name = name
+			for operation in ("receipt", "issue", "transfer", "sales", "loan", "reconciliation"):
+				self.policy[f"allow_{operation}"] = operation in allowed
+				if operation in allowed:
+					warehouse_policy.validate_warehouse_operation("WH", operation)
+				else:
+					with self.assertRaises(frappe.ValidationError):
+						warehouse_policy.validate_warehouse_operation("WH", operation)
+
+	def test_freeze_blocks_every_operation_and_cancellation(self):
+		self.policy.freeze_stock = 1
+		for operation in ("receipt", "issue", "transfer", "sales", "loan", "reconciliation"):
+			for cancellation in (False, True):
+				with self.assertRaises(frappe.ValidationError):
+					warehouse_policy.validate_warehouse_operation("WH", operation, cancellation=cancellation)
+		self.policy.freeze_stock = 0
+		self.policy.allow_sales = 0
+		warehouse_policy.validate_warehouse_operation("WH", "sales", cancellation=True)
+
+	def test_group_never_allows_stock(self):
+		self.warehouse.is_group = 1
+		with self.assertRaises(frappe.ValidationError):
+			warehouse_policy.validate_warehouse_operation("WH", "receipt", cancellation=True)
+
+	def test_outgoing_role_does_not_block_receipts(self):
+		self.policy.outgoing_role = "Stock Manager"
+		warehouse_policy.validate_warehouse_operation("WH", "transfer", outgoing=False)
+		with self.assertRaises(frappe.PermissionError):
+			warehouse_policy.validate_warehouse_operation("WH", "transfer", outgoing=True)
+		with patch.object(frappe, "get_roles", return_value=["Stock Manager"]):
+			warehouse_policy.validate_warehouse_operation("WH", "transfer", outgoing=True)
+
+	def test_linked_loan_transit_leg_uses_transfer_policy(self):
+		self.warehouse.warehouse_type = "Transit"
+		self.policy.allow_loan = 0
+		warehouse_policy.validate_warehouse_operation("WH", "loan")
+		self.policy.allow_transfer = 0
+		with self.assertRaises(frappe.ValidationError):
+			warehouse_policy.validate_warehouse_operation("WH", "loan")
+
+	def test_reconciliation_quantity_and_value_reductions_need_outgoing_role(self):
+		self.policy.outgoing_role = "Stock Manager"
+		for row in (
+			frappe._dict(qty=1, current_qty=2, amount_difference=0),
+			frappe._dict(qty=2, current_qty=2, amount_difference=-1),
+		):
+			self.assertTrue(warehouse_policy.reconciliation_is_outgoing(row))
+			with self.assertRaises(frappe.PermissionError):
+				warehouse_policy.validate_warehouse_operation(
+					"WH", "reconciliation", outgoing=warehouse_policy.reconciliation_is_outgoing(row)
+				)
+
+	def test_document_blocks_disallowed_stock_entry_leg(self):
+		doc = frappe._dict(
+			doctype="Stock Entry",
+			purpose="Material Receipt",
+			docstatus=0,
+			items=[frappe._dict(item_code="Item", t_warehouse="WH")],
+		)
+		with patch.object(frappe, "get_cached_value", return_value=1):
+			warehouse_policy.validate_document_policy(doc)
+			self.policy.allow_receipt = 0
+			with self.assertRaises(frappe.ValidationError):
+				warehouse_policy.validate_document_policy(doc)
+
+	def test_asset_stock_consumption_uses_issue_policy_and_outgoing_role(self):
+		with patch.object(frappe, "get_cached_value", return_value=1):
+			for doctype in ("Stock to Asset Conversion", "Asset Capitalization"):
+				doc = frappe._dict(
+					doctype=doctype,
+					docstatus=0,
+					stock_items=[frappe._dict(item_code="Item", warehouse="WH", qty=1)],
+				)
+				self.policy.allow_receipt = 0
+				warehouse_policy.validate_document_policy(doc)
+				self.policy.allow_issue = 0
+				with self.assertRaises(frappe.ValidationError):
+					warehouse_policy.validate_document_policy(doc)
+				self.policy.allow_issue = 1
+				self.policy.outgoing_role = "Stock Manager"
+				with self.assertRaises(frappe.PermissionError):
+					warehouse_policy.validate_document_policy(doc)
+				self.policy.outgoing_role = None
+				self.policy.freeze_stock = 1
+				doc.docstatus = 2
+				with self.assertRaises(frappe.ValidationError):
+					warehouse_policy.validate_document_policy(doc)
+				self.policy.freeze_stock = 0
+
+	def test_stock_entry_controller_draft_validation_checks_policy(self):
+		with patch.object(frappe, "logger", return_value=logging.getLogger("offline")):
+			from erpnext.stock.doctype.stock_entry.stock_entry import StockEntry
+		data = dict(
+			doctype="Stock Entry",
+			docstatus=0,
+			purpose="Material Receipt",
+			work_order=None,
+			from_bom=0,
+			items=[frappe._dict(item_code="Item", t_warehouse="WH", qty=1)],
+		)
+		doc = Mock(**data)
+		doc.get = lambda field, default=None: data.get(field, default)
+		self.policy.freeze_stock = 1
+		with patch.object(frappe, "get_cached_value", return_value=1):
+			with self.assertRaises(frappe.ValidationError):
+				StockEntry.validate(doc)
+
+	def test_asset_stock_controller_draft_validation_checks_policy(self):
+		with patch.object(frappe, "logger", return_value=logging.getLogger("offline")):
+			from erpnext.assets.doctype.asset_capitalization.asset_capitalization import AssetCapitalization
+			from erpnext.assets.doctype.stock_to_asset_conversion.stock_to_asset_conversion import (
+				StocktoAssetConversion,
+			)
+		methods = (
+			"validate_company_settings",
+			"sync_pick_list_selections",
+			"sync_material_request_rows",
+			"validate_storage_locations",
+			"set_missing_values",
+			"validate_stock_items",
+			"build_asset_preview",
+			"calculate_totals",
+			"validate_posting_time",
+			"validate_target_item",
+			"validate_target_asset",
+			"validate_consumed_stock_item",
+			"validate_consumed_asset_item",
+			"validate_service_item",
+			"set_warehouse_details",
+			"set_asset_values",
+			"set_title",
+			"validate_inventory_dimension_mandatory",
+		)
+		self.policy.freeze_stock = 1
+		with (
+			patch.object(frappe, "get_cached_value", return_value=1),
+			patch("erpnext.stock.doctype.storage_location.storage_location.set_default_storage_locations"),
+		):
+			for doctype, controller in (
+				("Stock to Asset Conversion", StocktoAssetConversion),
+				("Asset Capitalization", AssetCapitalization),
+			):
+				doc = SimpleNamespace(
+					doctype=doctype,
+					docstatus=0,
+					stock_items=[frappe._dict(item_code="Item", warehouse="WH", qty=1)],
+					**{method: Mock() for method in methods},
+				)
+				doc.get = lambda field, default=None: getattr(doc, field, default)
+				with self.assertRaises(frappe.ValidationError):
+					controller.validate(doc)
+
+	def test_stockless_invoice_and_planning_are_ignored(self):
+		with patch.object(warehouse_policy, "is_loan_movement") as loan:
+			for doctype in (
+				"Sales Invoice",
+				"Purchase Invoice",
+				"POS Invoice",
+				"Purchase Order",
+				"Material Request",
+			):
+				warehouse_policy.validate_document_policy(frappe._dict(doctype=doctype, update_stock=0))
+			loan.assert_not_called()
+
+	def test_loan_and_internal_transfers_do_not_become_sales(self):
+		doc = frappe._dict(doctype="Delivery Note", is_internal_customer=1)
+		row = frappe._dict(target_warehouse="Loan WH")
+		self.assertEqual(warehouse_policy.movement_operation(doc, True, loan=True, row=row), "loan")
+		self.assertEqual(warehouse_policy.movement_operation(doc, True, row=row), "transfer")
+		doc.is_internal_customer = 0
+		self.assertEqual(warehouse_policy.movement_operation(doc, True, row=row), "sales")
+
+	def test_loan_marker_alone_does_not_qualify(self):
+		doc = frappe._dict(doctype="Delivery Note", is_custody_loan_transaction=1)
+		self.assertFalse(warehouse_policy.is_loan_movement(doc))
+		doc.custody_loan = "Loan"
+		core = SimpleNamespace(
+			validate_generated_transaction=Mock(side_effect=frappe.ValidationError("invalid link"))
+		)
+		with patch.dict(sys.modules, {"erpnext.loan.doctype.custody_loan.custody_loan_core": core}):
+			with self.assertRaises(frappe.ValidationError):
+				warehouse_policy.is_loan_movement(doc)
+
+	def test_ledger_cancellation_uses_stored_voucher_status(self):
+		doc = frappe._dict(doctype="Stock Entry", purpose="Material Issue", docstatus=1, items=[])
+		entry = frappe._dict(
+			voucher_type="Stock Entry", voucher_no="SE", warehouse="WH", actual_qty=-1, is_cancelled=1
+		)
+		self.policy.allow_issue = 0
+		with patch.object(
+			frappe,
+			"get_doc",
+			side_effect=lambda doctype, name, **kwargs: (
+				doc if doctype == doc.doctype else self.warehouse if doctype == "Warehouse" else self.policy
+			),
+		):
+			with self.assertRaises(frappe.ValidationError):
+				warehouse_policy.validate_stock_ledger_policy([entry])
+			doc.docstatus = 2
+			warehouse_policy.validate_stock_ledger_policy([entry])
+			self.policy.freeze_stock = 1
+			with self.assertRaises(frappe.ValidationError):
+				warehouse_policy.validate_stock_ledger_policy([entry])
+
+	def test_loan_adjustment_matches_source_and_custody_warehouse(self):
+		doc = frappe._dict(
+			doctype="Stock Entry",
+			purpose="Material Issue",
+			custody_loan="Loan",
+			custody_loan_source_doctype="Custody Loan Adjustment",
+			custody_loan_source_name="Adjustment",
+			items=[frappe._dict(custody_loan_item="Item", qty=2, s_warehouse="Loan WH", t_warehouse=None)],
+		)
+		loan = frappe._dict(customer_loan_warehouse="Loan WH")
+		adjustment = frappe._dict(docstatus=1, items=[frappe._dict(custody_loan_item="Item", qty=2)])
+		core = SimpleNamespace(validate_generated_transaction=Mock())
+		with (
+			patch.dict(sys.modules, {"erpnext.loan.doctype.custody_loan.custody_loan_core": core}),
+			patch.object(frappe, "get_doc", side_effect=[loan, adjustment, loan, adjustment]),
+		):
+			self.assertTrue(warehouse_policy.is_loan_movement(doc))
+			doc["items"][0].s_warehouse = "Other WH"
+			with self.assertRaises(frappe.ValidationError):
+				warehouse_policy.is_loan_movement(doc)
+
+	def test_landed_cost_reversal_still_respects_freeze(self):
+		doc = frappe._dict(doctype="Purchase Receipt", docstatus=1, items=[])
+		entry = frappe._dict(
+			voucher_type="Purchase Receipt", voucher_no="PR", warehouse="WH", actual_qty=-1, is_cancelled=1
+		)
+		self.policy.allow_issue = 0
+		with patch.object(
+			frappe,
+			"get_doc",
+			side_effect=lambda doctype, name, **kwargs: (
+				doc if doctype == doc.doctype else self.warehouse if doctype == "Warehouse" else self.policy
+			),
+		):
+			warehouse_policy.validate_stock_ledger_policy([entry], via_landed_cost_voucher=True)
+			self.policy.freeze_stock = 1
+			with self.assertRaises(frappe.ValidationError):
+				warehouse_policy.validate_stock_ledger_policy([entry], via_landed_cost_voucher=True)
+
+	def test_policy_permissions_apply_with_ignore_permissions(self):
+		with (
+			patch.object(frappe, "session", frappe._dict(user="ordinary")),
+			patch("erpnext.stock.doctype.warehouse_type.warehouse_type._", side_effect=lambda text: text),
+		):
+			with self.assertRaises(frappe.PermissionError):
+				WarehouseType.validate_policy_permission(
+					frappe._dict(flags=frappe._dict(ignore_permissions=True))
+				)
+			with patch.object(frappe, "get_roles", return_value=["Stock Manager"]):
+				WarehouseType.validate_policy_permission(frappe._dict())
+
+	def test_supplied_materials_validate_supplier_header_warehouse(self):
+		doc = frappe._dict(
+			doctype="Subcontracting Receipt",
+			docstatus=0,
+			supplier_warehouse="WH",
+			supplied_items=[frappe._dict(rm_item_code="RM", consumed_qty=1)],
+		)
+		self.policy.allow_issue = 0
+		with patch.object(frappe, "get_cached_value", return_value=1):
+			with self.assertRaises(frappe.ValidationError):
+				warehouse_policy.validate_document_policy(doc)
+
+	def test_pick_list_cancel_checks_freeze_before_linked_actions(self):
+		with patch.object(frappe, "logger", return_value=logging.getLogger("offline")):
+			from erpnext.stock.doctype.pick_list.pick_list import PickList
+		doc = frappe._dict(
+			doctype="Pick List",
+			docstatus=2,
+			purpose="Delivery",
+			locations=[frappe._dict(item_code="Item", warehouse="WH")],
+		)
+		self.policy.freeze_stock = 1
+		with patch.object(frappe, "get_cached_value", return_value=1):
+			with self.assertRaises(frappe.ValidationError):
+				PickList.before_cancel(doc)
+
+	def test_reservation_mutations_check_freeze_without_operation_restriction(self):
+		with patch.object(frappe, "logger", return_value=logging.getLogger("offline")):
+			from erpnext.stock.doctype.stock_reservation_entry.stock_reservation_entry import (
+				StockReservationEntry,
+			)
+		doc = SimpleNamespace(
+			warehouse="WH", validate_reserved_entries=Mock(), set_reservation_based_on=Mock()
+		)
+		doc.validate_warehouse_policy = lambda: StockReservationEntry.validate_warehouse_policy(doc)
+		self.policy.allow_transfer = 0
+		StockReservationEntry.before_cancel(doc)
+		self.policy.freeze_stock = 1
+		for method in (
+			StockReservationEntry.before_submit,
+			StockReservationEntry.before_cancel,
+			StockReservationEntry.before_update_after_submit,
+			StockReservationEntry.update_reserved_stock_in_bin,
+		):
+			with self.assertRaises(frappe.ValidationError):
+				method(doc)
+		doc.set_reservation_based_on.assert_not_called()
+
+	def test_direct_ledger_cannot_claim_landed_cost_reversal_context(self):
+		with patch.object(frappe, "logger", return_value=logging.getLogger("offline")):
+			from erpnext.stock.doctype.stock_ledger_entry.stock_ledger_entry import StockLedgerEntry
+		doc = frappe._dict(doctype="Stock Entry", purpose="Material Issue", docstatus=1, items=[])
+		entry = frappe._dict(
+			voucher_type="Stock Entry",
+			voucher_no="SE",
+			warehouse="WH",
+			actual_qty=-1,
+			is_cancelled=1,
+			via_landed_cost_voucher=1,
+			flags=frappe._dict(),
+		)
+		self.policy.allow_issue = 0
+		with (
+			patch.object(frappe, "flags", frappe._dict()),
+			patch.object(
+				frappe,
+				"get_doc",
+				side_effect=lambda doctype, name, **kwargs: (
+					doc
+					if doctype == doc.doctype
+					else self.warehouse
+					if doctype == "Warehouse"
+					else self.policy
+				),
+			),
+		):
+			with self.assertRaises(frappe.ValidationError):
+				StockLedgerEntry.validate(entry)
+
+	def test_reloaded_shipment_loan_voucher_has_server_posting_action(self):
+		with patch.object(frappe, "logger", return_value=logging.getLogger("offline")):
+			from erpnext.loan.doctype.custody_loan import custody_loan_core as core
+		doc = SimpleNamespace(
+			doctype="Delivery Note",
+			name="DN",
+			docstatus=1,
+			company="Co",
+			flags=frappe._dict(),
+			is_system_generated=1,
+			is_custody_loan_transaction=1,
+			custody_loan="Loan",
+			custody_loan_source_doctype="Custody Loan",
+			custody_loan_source_name="Loan",
+			items=[],
+			is_internal_customer=1,
+			represents_company="Co",
+			customer="IC",
+			is_return=0,
+			requires_shipment=1,
+		)
+		doc.get = lambda field, default=None: getattr(doc, field, default)
+		loan = SimpleNamespace(name="Loan", docstatus=1, company="Co", loan_type="Stock")
+		stored = frappe._dict(
+			is_custody_loan_transaction=1,
+			custody_loan="Loan",
+			custody_loan_source_doctype="Custody Loan",
+			custody_loan_source_name="Loan",
+		)
+
+		def db_value(doctype, name, fields, **kwargs):
+			if doctype == "Customer":
+				return "IC"
+			return stored if isinstance(fields, list) else 1
+
+		entry = frappe._dict(voucher_type="Delivery Note", voucher_no="DN", warehouse="WH", actual_qty=-1)
+		with (
+			patch.object(frappe, "db", SimpleNamespace(exists=lambda *args: True, get_value=db_value)),
+			patch.object(
+				frappe,
+				"get_doc",
+				side_effect=lambda doctype, name, **kwargs: (
+					doc
+					if doctype == "Delivery Note"
+					else loan
+					if doctype == "Custody Loan"
+					else self.warehouse
+					if doctype == "Warehouse"
+					else self.policy
+				),
+			),
+			patch.object(core, "_", side_effect=lambda text: text),
+			patch.object(
+				core,
+				"validate_delivery_note_shipment_link",
+				side_effect=frappe.ValidationError("Shipment must be submitted"),
+			) as shipment,
+		):
+			with self.assertRaisesRegex(frappe.ValidationError, "Shipment must be submitted"):
+				warehouse_policy.validate_stock_ledger_policy([entry])
+			shipment.assert_called_once_with(doc)
+			self.assertEqual(doc._action, "submit")
+
+	def test_enabled_manufacture_uses_business_permission_instead_of_issue(self):
+		doc = frappe._dict(
+			doctype="Stock Entry",
+			purpose="Manufacture",
+			company="COMPANY",
+			docstatus=0,
+			items=[frappe._dict(item_code="Item", s_warehouse="WH")],
+		)
+		self.policy.allow_issue = 0
+		self.policy.allow_manufacture = 1
+		with (
+			patch.object(warehouse_policy, "is_stock_control_enabled", return_value=True),
+			patch.object(frappe, "get_cached_value", return_value=1),
+		):
+			warehouse_policy.validate_document_policy(doc)
+			self.policy.allow_manufacture = 0
+			with self.assertRaises(frappe.ValidationError):
+				warehouse_policy.validate_document_policy(doc)
+		with (
+			patch.object(warehouse_policy, "is_stock_control_enabled", return_value=False),
+			patch.object(frappe, "get_cached_value", return_value=1),
+		):
+			with self.assertRaises(frappe.ValidationError):
+				warehouse_policy.validate_document_policy(doc)
+
+	def test_transfer_permission_field_is_shared_for_warehouse_and_distinct_for_location(self):
+		from erpnext.stock.stock_control import stock_control_permission_field
+
+		for doctype in ("Warehouse", "Warehouse Type"):
+			self.assertEqual(stock_control_permission_field(doctype, "internal_transfer"), "allow_transfer")
+		for doctype in ("Location", "Location Type"):
+			self.assertEqual(
+				stock_control_permission_field(doctype, "internal_transfer"), "allow_internal_transfer"
+			)
+
+	def test_verified_pos_consolidation_keeps_hard_freeze_but_not_changed_dispatch_policy(self):
+		doc = frappe._dict(
+			doctype="Sales Invoice",
+			docstatus=1,
+			update_stock=1,
+			items=[frappe._dict(item_code="Item", warehouse="WH")],
+		)
+		self.policy.allow_sales = 0
+		self.policy.outgoing_role = "Stock Manager"
+		with (
+			patch.object(warehouse_policy, "is_verified_pos_consolidation", return_value=True),
+			patch.object(frappe, "get_cached_value", return_value=1),
+		):
+			warehouse_policy.validate_document_policy(doc)
+			self.policy.freeze_stock = 1
+			with self.assertRaises(frappe.ValidationError):
+				warehouse_policy.validate_document_policy(doc)
+		self.policy.freeze_stock = 0
+		with patch.object(frappe, "get_cached_value", return_value=1):
+			with self.assertRaises(frappe.ValidationError):
+				warehouse_policy.validate_document_policy(doc)
+
+	def test_landed_cost_reapplication_keeps_hard_freeze_without_new_receipt_permission(self):
+		doc = frappe._dict(doctype="Purchase Receipt", docstatus=1, items=[])
+		entry = frappe._dict(voucher_type="Purchase Receipt", voucher_no="PR", warehouse="WH", actual_qty=1)
+		self.policy.allow_receipt = 0
+		with patch.object(
+			frappe,
+			"get_doc",
+			side_effect=lambda doctype, name, **kwargs: (
+				doc if doctype == doc.doctype else self.warehouse if doctype == "Warehouse" else self.policy
+			),
+		):
+			warehouse_policy.validate_stock_ledger_policy([entry], via_landed_cost_voucher=True)
+			warehouse_policy.lock_stock_control_policies.assert_called_with(warehouse_names={"WH"})
+			self.policy.freeze_stock = 1
+			with self.assertRaises(frappe.ValidationError):
+				warehouse_policy.validate_stock_ledger_policy([entry], via_landed_cost_voucher=True)
+
+	def test_quality_manager_policy_edits_and_remote_field_reason_tracking(self):
+		from erpnext.stock import stock_control
+
+		with (
+			patch.object(frappe, "session", frappe._dict(user="quality")),
+			patch.object(frappe, "get_roles", return_value=["Quality Manager"]),
+		):
+			WarehouseType.validate_policy_permission(frappe._dict())
+			for field, value in (
+				("allow_receipt", 0),
+				("allow_transfer", 0),
+				("freeze_stock", 1),
+				("outgoing_role", "Stock Manager"),
+			):
+				old = frappe._dict(self.policy, handling_category="Normal")
+				doc = frappe._dict(old, doctype="Warehouse Type")
+				doc[field] = value
+				doc.get_doc_before_save = lambda: old
+				with (
+					self.subTest(field=field),
+					patch.object(stock_control, "_", side_effect=lambda text: text),
+				):
+					with self.assertRaisesRegex(frappe.ValidationError, "Policy Change Reason"):
+						stock_control.validate_stock_control_type(doc)
+
+	def test_qa_type_cannot_enable_published_outbound_permission(self):
+		from erpnext.stock import stock_control
+
+		doc = frappe._dict(doctype="Warehouse Type", handling_category="QA", allow_issue=1)
+		doc.get_doc_before_save = lambda: None
+		with (
+			patch.object(frappe, "get_roles", return_value=["Quality Manager"]),
+			patch.object(stock_control, "_", side_effect=lambda text: text),
+		):
+			with self.assertRaisesRegex(frappe.ValidationError, "QA and Quarantine"):
+				stock_control.validate_stock_control_type(doc)
+
+	def test_transfer_source_and_target_use_canonical_warehouse_permission(self):
+		from erpnext.stock import stock_control
+
+		source = frappe._dict(allow_transfer=1, allow_internal_transfer=0, handling_category="Normal")
+		target = frappe._dict(source)
+		warehouse = frappe._dict(is_group=0, disabled=0, company="COMPANY")
+		with (
+			patch.object(stock_control, "is_stock_control_enabled", return_value=True),
+			patch.object(stock_control, "lock_stock_control_policies"),
+			patch.object(stock_control, "_current_doc", return_value=warehouse),
+			patch.object(stock_control, "get_active_stock_freezes", return_value=[]),
+			patch.object(
+				stock_control,
+				"get_stock_control_policy",
+				side_effect=lambda dt, name: source if name == "SOURCE" else target,
+			),
+			patch.object(stock_control, "_", side_effect=lambda text: text),
+		):
+			stock_control.validate_stock_control_source(
+				"COMPANY", "Warehouse", "SOURCE", "internal_transfer", target="TARGET"
+			)
+			target.allow_transfer = 0
+			with self.assertRaisesRegex(frappe.ValidationError, "Target"):
+				stock_control.validate_stock_control_source(
+					"COMPANY", "Warehouse", "SOURCE", "internal_transfer", target="TARGET"
+				)
+			target.allow_transfer = 1
+			source.allow_transfer = 0
+			with self.assertRaisesRegex(frappe.ValidationError, "does not allow"):
+				stock_control.validate_stock_control_source(
+					"COMPANY", "Warehouse", "SOURCE", "internal_transfer", target="TARGET"
+				)
+
+	def test_verified_internal_customer_transfer_preserves_mixed_sales_row_permissions(self):
+		from erpnext.stock import stock_control_transactions as control
+
+		transfer = frappe._dict(
+			name="TRANSFER", item_code="Item", warehouse="SOURCE", target_warehouse="TARGET"
+		)
+		sale = frappe._dict(name="SALE", item_code="Item", warehouse="SOURCE")
+		doc = frappe._dict(
+			doctype="Delivery Note",
+			company="COMPANY",
+			customer="INTERNAL",
+			is_internal_customer=1,
+			items=[transfer],
+		)
+		customer = frappe._dict(is_internal_customer=1, represents_company="COMPANY")
+		policy = frappe._dict(allow_transfer=1, allow_sales=0)
+
+		def value(doctype, name, fields, **kwargs):
+			return customer if doctype == "Customer" else "COMPANY"
+
+		with (
+			patch.object(frappe, "db", SimpleNamespace(get_value=value)),
+			patch.object(control, "is_stock_control_enabled", return_value=True),
+			patch.object(control, "get_stock_control_policy", return_value=policy),
+			patch.object(control, "_", side_effect=lambda text: text),
+		):
+			self.assertEqual(control.get_stock_control_operation(doc, transfer), "internal_transfer")
+			self.assertEqual(control.get_stock_control_operation(doc, sale), "sales")
+			control.validate_selected_stock_control_sources(doc)
+			doc["items"].append(sale)
+			with self.assertRaises(frappe.ValidationError):
+				control.validate_selected_stock_control_sources(doc)
+			doc["items"].pop()
+			customer.is_internal_customer = 0
+			self.assertEqual(control.get_stock_control_operation(doc, transfer), "sales")
+			with self.assertRaises(frappe.ValidationError):
+				control.validate_selected_stock_control_sources(doc)
+			customer.is_internal_customer = 1
+			customer.represents_company = "OTHER COMPANY"
+			self.assertEqual(control.get_stock_control_operation(doc, transfer), "sales")

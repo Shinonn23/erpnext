@@ -5,7 +5,7 @@ import frappe
 
 from erpnext.stock.doctype.item.test_item import create_item
 from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse
-from erpnext.stock.stock_control import get_active_stock_freezes
+from erpnext.stock.stock_control import OPERATIONS, get_active_stock_freezes, stock_control_permission_field
 from erpnext.tests.utils import ERPNextTestSuite
 
 
@@ -101,6 +101,11 @@ class TestStockFreeze(ERPNextTestSuite):
 				"doctype": "Warehouse Type",
 				"name": "_Test Freeze QA",
 				"handling_category": "QA",
+				**{
+					stock_control_permission_field("Warehouse Type", operation): 0
+					for operation in OPERATIONS
+					if operation != "internal_transfer"
+				},
 				"allow_sales": 1,
 			}
 		)
@@ -110,7 +115,12 @@ class TestStockFreeze(ERPNextTestSuite):
 
 	def test_policy_changes_require_a_reason(self):
 		policy = frappe.get_doc(
-			{"doctype": "Warehouse Type", "name": "_Test Freeze Normal", "handling_category": "Normal"}
+			{
+				"doctype": "Warehouse Type",
+				"name": "_Test Freeze Normal",
+				"handling_category": "Normal",
+				"allow_sales": 0,
+			}
 		).insert()
 		policy.allow_sales = 1
 		with self.assertRaises(frappe.ValidationError):

@@ -101,6 +101,9 @@ class AssetCapitalization(StockController):
 		# Asset Capitalization overrides validate() without calling super(), so the shared
 		# mandatory inventory dimension check must be invoked explicitly here.
 		self.validate_inventory_dimension_mandatory()
+		from erpnext.stock.warehouse_policy import validate_document_policy
+
+		validate_document_policy(self)
 
 	def on_update(self):
 		if self.stock_items:

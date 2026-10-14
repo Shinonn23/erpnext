@@ -67,6 +67,9 @@ class StocktoAssetConversion(StockController):
 		self.validate_stock_items()
 		self.build_asset_preview()
 		self.calculate_totals()
+		from erpnext.stock.warehouse_policy import validate_document_policy
+
+		validate_document_policy(self)
 
 	def validate_company_settings(self):
 		if not self.company:
@@ -823,6 +826,11 @@ def create_immediate_depreciation_entry(asset, posting_date):
 	if amount <= 0:
 		frappe.throw(_("Asset {0} must have a positive value to depreciate").format(asset.name))
 	journal_entry = make_journal_entry(asset.name)
+	conversion = frappe.get_doc("Stock to Asset Conversion", asset.stock_to_asset_conversion)
+	if conversion.docstatus != 1 or conversion.company != asset.company:
+		frappe.throw(_("Immediate depreciation requires a submitted Stock to Asset Conversion"))
+	journal_entry.is_system_generated = 1
+	journal_entry.journal_entry_reason = _("Immediate depreciation from approved conversion {0}").format(conversion.name)
 	journal_entry.posting_date = posting_date
 	journal_entry.accounts[0].debit = amount
 	journal_entry.accounts[0].debit_in_account_currency = amount

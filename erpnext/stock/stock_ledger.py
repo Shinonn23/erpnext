@@ -121,7 +121,9 @@ def make_sl_entries(sl_entries, allow_negative_stock=False, via_landed_cost_vouc
 
 	if sl_entries:
 		from erpnext.stock.stock_control_transactions import validate_stock_ledger_entries
+		from erpnext.stock.warehouse_policy import validate_stock_ledger_policy
 
+		validate_stock_ledger_policy(sl_entries, via_landed_cost_voucher)
 		validate_stock_ledger_entries(sl_entries, via_landed_cost_voucher)
 		validate_stock_frozen_by_closing_entry(sl_entries)
 
@@ -259,7 +261,12 @@ def make_entry(args, allow_negative_stock=False, via_landed_cost_voucher=False):
 	sle.flags.ignore_permissions = 1
 	sle.allow_negative_stock = allow_negative_stock
 	sle.via_landed_cost_voucher = via_landed_cost_voucher
-	sle.submit()
+	previous_lcv_entry = frappe.flags.get("warehouse_policy_lcv_entry")
+	frappe.flags.warehouse_policy_lcv_entry = sle if via_landed_cost_voucher else None
+	try:
+		sle.submit()
+	finally:
+		frappe.flags.warehouse_policy_lcv_entry = previous_lcv_entry
 
 	# Added to handle the case when the stock ledger entry is created from the repostig
 	if args.get("creation_time") and args.get("voucher_type") == "Stock Reconciliation":

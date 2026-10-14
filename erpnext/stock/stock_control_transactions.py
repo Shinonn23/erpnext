@@ -21,6 +21,7 @@ from erpnext.stock.stock_control import (
 	is_stock_control_enabled,
 	lock_stock_control_items,
 	lock_stock_control_policies,
+	stock_control_permission_field,
 	validate_stock_control_source,
 )
 
@@ -44,9 +45,23 @@ def _request_operation(doc):
 	return None
 
 
-def get_stock_control_operation(doc):
+def get_stock_control_operation(doc, row=None):
 	"""Classify the business operation, rather than trusting a client-provided exemption."""
 	doctype = doc.get("doctype")
+	if (
+		doctype in ("Delivery Note", "Sales Invoice", "POS Invoice")
+		and doc.get("is_internal_customer")
+		and not doc.get("custody_loan")
+		and doc.get("customer")
+		and doc.get("company")
+	):
+		rows = [row] if row is not None else (doc.get("items") or [])
+		if rows and all(item.get("target_warehouse") for item in rows):
+			customer = frappe.db.get_value(
+				"Customer", doc.customer, ["is_internal_customer", "represents_company"], as_dict=True
+			)
+			if customer and customer.is_internal_customer and customer.represents_company == doc.company:
+				return "internal_transfer"
 	if doctype in ("Purchase Receipt", "Purchase Invoice"):
 		return "disposal" if doc.get("is_return") else None
 	if doc.get("is_return"):
@@ -192,8 +207,12 @@ def validate_stock_ledger_entries(entries, via_landed_cost_voucher=False):
 		if flt(entry.get("actual_qty")) >= 0:
 			continue
 		row = rows.get(entry.get("voucher_detail_no"), frappe._dict())
-		entry_operation = operation
-		target = row.get("t_warehouse") if entry_operation == "internal_transfer" else None
+		entry_operation = get_stock_control_operation(doc, row) or operation
+		target = (
+			(row.get("t_warehouse") or row.get("target_warehouse"))
+			if entry_operation == "internal_transfer"
+			else None
+		)
 		if doc.doctype in ("Delivery Note", "Sales Invoice") and doc.get("is_return"):
 			entry_operation = "sales"
 			if row.get("target_warehouse") == entry.get("warehouse"):
@@ -232,13 +251,14 @@ def validate_selected_stock_control_sources(doc):
 	if not operation:
 		return
 	for row in (doc.get("items") or []) + (doc.get("packed_items") or []):
+		operation = get_stock_control_operation(doc, row) or operation
 		if row.get("asset"):
 			asset = frappe.db.get_value("Asset", row.get("asset"), ["location", "company"], as_dict=True)
 			if not asset or asset.company != doc.company:
 				frappe.throw(_("The selected Asset must belong to the transaction Company."))
 			location = asset.location
 			policy = get_stock_control_policy("Location", location)
-			if not cint(policy.get("allow_" + operation)):
+			if not cint(policy.get(stock_control_permission_field("Location", operation))):
 				frappe.throw(_("Asset Location {0} does not allow {1}.").format(location, operation))
 		if doc.doctype == "Material Request":
 			warehouse = row.get("from_warehouse") or doc.get("set_from_warehouse")
@@ -256,7 +276,7 @@ def validate_selected_stock_control_sources(doc):
 		policy = get_stock_control_policy("Warehouse", warehouse)
 		if frappe.db.get_value("Warehouse", warehouse, "company") != doc.company:
 			frappe.throw(_("The selected Warehouse must belong to the transaction Company."))
-		if not cint(policy.get("allow_" + operation)):
+		if not cint(policy.get(stock_control_permission_field("Warehouse", operation))):
 			frappe.throw(_("Warehouse {0} does not allow {1}.").format(warehouse, operation))
 	if doc.get("set_warehouse") and doc.get("doctype") in ("Quotation", "Sales Order"):
 		policy = get_stock_control_policy("Warehouse", doc.get("set_warehouse"))
@@ -270,17 +290,16 @@ def validate_pos_stock_control(doc):
 	rows = doc.get("items", []) + (doc.get("packed_items") or [])
 	lock_stock_control_policies(
 		warehouse_names={
-			row.get(field)
-			for row in rows
-			for field in ("warehouse", "target_warehouse")
-			if row.get(field)
+			row.get(field) for row in rows for field in ("warehouse", "target_warehouse") if row.get(field)
 		}
 	)
 	lock_stock_control_items({row.item_code for row in rows})
 	for row in rows:
 		if not frappe.get_cached_value("Item", row.item_code, "is_stock_item"):
 			continue
-		warehouse, operation, target = row.warehouse, "sales", None
+		operation = get_stock_control_operation(doc, row) or "sales"
+		warehouse = row.warehouse
+		target = row.get("target_warehouse") if operation == "internal_transfer" else None
 		if doc.is_return and flt(row.qty) <= 0:
 			if not row.get("target_warehouse"):
 				continue

@@ -3,19 +3,27 @@
 
 import frappe
 from frappe import _
+from frappe.desk.reportview import get_match_cond
 from frappe.model.document import Document
 
 
 class StorageLocation(Document):
 	def validate(self):
-		warehouse = frappe.get_cached_value("Warehouse", self.warehouse, ["is_group", "disabled"], as_dict=True)
+		conditions = [row.storage_condition for row in self.get("supported_storage_conditions") or []]
+		if len(conditions) != len(set(conditions)):
+			frappe.throw(_("Storage Conditions cannot be repeated."))
+		warehouse = frappe.get_cached_value(
+			"Warehouse", self.warehouse, ["is_group", "disabled"], as_dict=True
+		)
 		if not warehouse or warehouse.is_group or warehouse.disabled:
 			frappe.throw(_("Storage Location requires an active, non-group Warehouse."))
 		if not self.is_new() and self.has_value_changed("warehouse"):
 			if frappe.db.has_column("Stock Ledger Entry", "storage_location") and frappe.db.exists(
 				"Stock Ledger Entry", {"storage_location": self.name}
 			):
-				frappe.throw(_("Cannot change Warehouse after stock transactions exist for this Storage Location."))
+				frappe.throw(
+					_("Cannot change Warehouse after stock transactions exist for this Storage Location.")
+				)
 
 
 def setup_storage_location_dimension():
@@ -31,7 +39,9 @@ def setup_storage_location_dimension():
 			or dimension.source_fieldname != "storage_location"
 			or dimension.target_fieldname != "storage_location"
 		):
-			frappe.throw(_("The existing Storage Location Inventory Dimension conflicts with the built-in dimension."))
+			frappe.throw(
+				_("The existing Storage Location Inventory Dimension conflicts with the built-in dimension.")
+			)
 		dimension.add_custom_fields()
 		return
 	dimension = frappe.get_doc(
@@ -179,8 +189,9 @@ def get_storage_location_warehouses(doc, row):
 def set_default_storage_locations(doc, method=None):
 	"""Persist warehouse defaults before stock valuation and serial/batch processing."""
 	# Historical submissions and cancellations must retain their original dimensions.
-	if doc.docstatus == 2 or (not doc.is_new() and doc.get_doc_before_save()
-		and doc.get_doc_before_save().docstatus == 1):
+	if doc.docstatus == 2 or (
+		not doc.is_new() and doc.get_doc_before_save() and doc.get_doc_before_save().docstatus == 1
+	):
 		return
 	if doc.doctype in ("Sales Invoice", "Purchase Invoice", "POS Invoice") and not doc.get("update_stock"):
 		return
@@ -192,7 +203,9 @@ def set_default_storage_locations(doc, method=None):
 					continue
 				location = frappe.get_cached_value("Warehouse", warehouse, "default_storage_location")
 				if location:
-					validate_storage_location_warehouse(location, warehouse)
+					validate_storage_location_warehouse(
+						location, warehouse, item_code=row.get("item_code") or row.get("rm_item_code")
+					)
 					row.set(fieldname, location)
 
 
@@ -208,14 +221,26 @@ def validate_storage_location(ledger_entry):
 				title=_("Storage Location Required"),
 			)
 		return
-	location = frappe.get_cached_value("Storage Location", location_name, ["warehouse", "disabled"], as_dict=True)
+	location = frappe.get_cached_value(
+		"Storage Location", location_name, ["warehouse", "disabled"], as_dict=True
+	)
 	if not location or location.warehouse != ledger_entry.warehouse:
-		frappe.throw(_("Storage Location {0} does not belong to Warehouse {1}.").format(location_name, ledger_entry.warehouse))
+		frappe.throw(
+			_("Storage Location {0} does not belong to Warehouse {1}.").format(
+				location_name, ledger_entry.warehouse
+			)
+		)
 	if location.disabled and not ledger_entry.get("is_cancelled"):
 		frappe.throw(_("Storage Location {0} is disabled.").format(location_name))
+	# Valuation-only LCV recreation keeps the historical location, as cancellations do.
+	if (
+		not ledger_entry.get("is_cancelled")
+		and frappe.flags.get("warehouse_policy_lcv_entry") is not ledger_entry
+	):
+		validate_item_storage_condition(location_name, ledger_entry.get("item_code"))
 
 
-def validate_storage_location_warehouse(storage_location, warehouse):
+def validate_storage_location_warehouse(storage_location, warehouse, item_code=None, storage_condition=None):
 	"""Validate a selected Storage Location against its warehouse before it reaches a stock ledger."""
 	if not storage_location:
 		return
@@ -233,3 +258,85 @@ def validate_storage_location_warehouse(storage_location, warehouse):
 		)
 	if location.disabled:
 		frappe.throw(_("Storage Location {0} is disabled.").format(storage_location))
+	validate_item_storage_condition(storage_location, item_code, storage_condition)
+
+
+def validate_item_storage_condition(storage_location, item_code=None, storage_condition=None):
+	"""Enforce Item requirements even when the location is supplied outside the picker."""
+	if storage_condition is None:
+		storage_condition = (
+			frappe.get_cached_value("Item", item_code, "storage_condition") if item_code else None
+		)
+	if not storage_condition:
+		return
+	conditions = (
+		frappe.get_cached_doc("Storage Location", storage_location).get("supported_storage_conditions") or []
+	)
+	if not any(row.storage_condition == storage_condition for row in conditions):
+		frappe.throw(
+			_("Storage Location {0} does not support Storage Condition {1} required by Item {2}.").format(
+				storage_location, storage_condition, item_code or _("(not set)")
+			),
+			title=_("Incompatible Storage Location"),
+		)
+
+
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def storage_location_query(doctype, txt, searchfield, start, page_len, filters):
+	"""Rank Item preferences before other active locations satisfying the same condition."""
+	filters = frappe.parse_json(filters) or {}
+	warehouse = filters.get("warehouse")
+	if doctype != "Storage Location" or not warehouse:
+		return []
+	if not frappe.has_permission("Storage Location", "select"):
+		frappe.throw(_("Not permitted"), frappe.PermissionError)
+	warehouse_doc = frappe.get_cached_doc("Warehouse", warehouse)
+	if (
+		warehouse_doc.is_group
+		or warehouse_doc.disabled
+		or not frappe.has_permission("Warehouse", "read", doc=warehouse_doc)
+	):
+		return []
+	item_code = filters.get("item_code")
+	condition = filters.get("storage_condition")
+	if item_code:
+		item = frappe.get_cached_doc("Item", item_code)
+		if not frappe.has_permission("Item", "select", doc=item):
+			return []
+		# An Item's persisted requirement cannot be overridden by request filters.
+		condition = item.get("storage_condition")
+
+	return frappe.db.sql(
+		"""select `tabStorage Location`.name, `tabStorage Location`.location_code,
+			case when preference.idx is null then '' else %(preferred_label)s end
+		from `tabStorage Location`
+		left join `tabItem Storage Location` preference
+			on preference.storage_location = `tabStorage Location`.name
+			and preference.parent = %(item_code)s and preference.parenttype = 'Item'
+			and preference.parentfield = 'preferred_storage_locations'
+		where `tabStorage Location`.warehouse = %(warehouse)s and `tabStorage Location`.disabled = 0
+			and (%(condition)s = '' or exists (
+				select 1 from `tabStorage Location Condition` supported
+				where supported.parent = `tabStorage Location`.name
+					and supported.parenttype = 'Storage Location'
+					and supported.parentfield = 'supported_storage_conditions'
+					and supported.storage_condition = %(condition)s
+			))
+			and (`tabStorage Location`.name like %(txt)s or `tabStorage Location`.location_code like %(txt)s
+				or `tabStorage Location`.zone like %(txt)s or `tabStorage Location`.rack like %(txt)s
+				or `tabStorage Location`.shelf like %(txt)s)
+			{match_cond}
+		order by case when preference.idx is null then 1 else 0 end,
+			preference.idx, `tabStorage Location`.name
+		limit %(page_len)s offset %(start)s""".format(match_cond=get_match_cond("Storage Location")),
+		{
+			"warehouse": warehouse,
+			"item_code": item_code or "",
+			"condition": condition or "",
+			"txt": f"%{txt}%",
+			"preferred_label": _("Preferred for Item"),
+			"page_len": page_len,
+			"start": start,
+		},
+	)

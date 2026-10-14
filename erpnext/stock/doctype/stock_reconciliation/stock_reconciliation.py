@@ -83,6 +83,9 @@ class StockReconciliation(StockController):
 		self.set_zero_value_for_customer_provided_items()
 		self.clean_serial_nos()
 		self.set_total_qty_and_amount()
+		from erpnext.stock.warehouse_policy import validate_document_policy
+
+		validate_document_policy(self)
 		self.validate_putaway_capacity()
 		self.validate_inventory_dimension()
 		# Stock Reconciliation overrides validate() without calling super(), so the shared
@@ -152,6 +155,9 @@ class StockReconciliation(StockController):
 		self.make_gl_entries_on_cancel()
 		self.repost_future_sle_and_gle()
 		self.delete_auto_created_batches()
+		from erpnext.stock.doctype.stock_count.stock_count import allow_generated_stock_count_cancellation
+
+		allow_generated_stock_count_cancellation(self)
 
 	def make_bundle_for_current_qty(self):
 		from erpnext.stock.serial_batch_bundle import SerialBatchCreation

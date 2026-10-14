@@ -92,6 +92,9 @@ class StockLedgerEntry(Document):
 
 	def validate(self):
 		self.flags.ignore_submit_comment = True
+		from erpnext.stock.warehouse_policy import validate_stock_ledger_policy
+
+		validate_stock_ledger_policy([self], frappe.flags.get("warehouse_policy_lcv_entry") is self)
 		from erpnext.stock.utils import validate_disabled_warehouse, validate_warehouse_company
 
 		self.set_posting_datetime()

@@ -13,6 +13,7 @@ from frappe.utils import cint, cstr, floor, flt, nowdate
 from pydantic import InstanceOf
 
 from erpnext.stock.doctype.serial_no.serial_no import get_serial_nos
+from erpnext.stock.doctype.stock_settings.stock_settings import is_putaway_rule_enabled
 from erpnext.stock.utils import get_stock_balance
 
 
@@ -118,6 +119,10 @@ def apply_putaway_rule(
 	purpose: Purpose of Stock Entry
 	sync (optional): Sync with client side only for client side calls
 	"""
+	if not is_putaway_rule_enabled():
+		frappe.throw(
+			_("Putaway Rules are disabled. Select a compatible Storage Location using Item preferences.")
+		)
 	if isinstance(items, str):
 		items = json.loads(items)
 

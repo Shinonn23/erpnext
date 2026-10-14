@@ -131,14 +131,14 @@ class TestStockControlAssetAdapters(unittest.TestCase):
 	def test_split_denied_before_quantity_or_finance_changes(self):
 		from erpnext.assets.doctype.asset.asset import split_asset
 
-		asset = Mock()
+		asset = Mock(docstatus=1)
 		with (
 			patch("frappe.get_doc", return_value=asset),
 			patch("frappe.flags", frappe._dict()),
 			patch(
 				"erpnext.stock.stock_control.validate_asset_operation", side_effect=RuntimeError("Frozen")
 			) as validate,
-			patch("erpnext.assets.doctype.asset.asset.process_asset_split") as split,
+			patch("erpnext.assets.doctype.asset.asset.create_new_asset_from_split") as split,
 		):
 			with self.assertRaisesRegex(RuntimeError, "Frozen"):
 				split_asset("Asset 1", 1)

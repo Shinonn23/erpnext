@@ -603,7 +603,9 @@ def get_batches_from_serial_and_batch_bundle(searchfields, txt, filters, start=0
 		bundle_query = bundle_query.where(stock_ledger_entry.warehouse == filters.get("warehouse"))
 
 	if filters.get("storage_location"):
-		bundle_query = bundle_query.where(stock_ledger_entry.storage_location == filters.get("storage_location"))
+		bundle_query = bundle_query.where(
+			stock_ledger_entry.storage_location == filters.get("storage_location")
+		)
 
 	for field in searchfields:
 		bundle_query = bundle_query.select(batch_table[field])
@@ -1178,7 +1180,11 @@ def get_warehouse_address(doctype: str, txt: str, searchfield: str, start: int, 
 @frappe.whitelist()
 def get_stock_control_source_options(doc):
 	"""Return extra Link predicates; native source searches retain their permissions."""
-	from erpnext.stock.stock_control import OPERATIONS, is_stock_control_enabled
+	from erpnext.stock.stock_control import (
+		OPERATIONS,
+		is_stock_control_enabled,
+		stock_control_permission_field,
+	)
 	from erpnext.stock.stock_control_transactions import get_stock_control_operation
 
 	doc = frappe._dict(frappe.parse_json(doc))
@@ -1187,6 +1193,9 @@ def get_stock_control_source_options(doc):
 	frappe.has_permission("Company", "read", doc=doc.company, throw=True)
 	if not is_stock_control_enabled(doc.company):
 		return None
+
+	if doc.get("customer") and doc.get("is_internal_customer"):
+		frappe.has_permission("Customer", "read", doc=doc.customer, throw=True)
 
 	# The classifier reads trusted references; check access before following them.
 	for doctype, name in (
@@ -1207,19 +1216,39 @@ def get_stock_control_source_options(doc):
 	if operation not in OPERATIONS:
 		frappe.throw(_("Invalid stock control operation."))
 
-	filters = {"allow_" + operation: 1}
-	if operation != "internal_transfer":
-		filters["handling_category"] = "Normal"
-	warehouse_types = frappe.get_list("Warehouse Type", filters=filters, pluck="name", limit_page_length=0)
-	locations = []
-	if (
-		operation != "reconciliation"
-		and frappe.has_permission("Location Type", "read")
-		and frappe.has_permission("Location", "read")
-	):
-		location_types = frappe.get_list("Location Type", filters=filters, pluck="name", limit_page_length=0)
-		if location_types:
-			locations = frappe.get_list(
-				"Location", filters={"location_type": ["in", location_types]}, pluck="name", limit_page_length=0
+	operations = {get_stock_control_operation(doc, row) or operation for row in doc.get("items") or []} or {
+		operation
+	}
+	warehouse_types, locations = set(), set()
+	for row_operation in sorted(operations):
+		filters = {stock_control_permission_field("Warehouse Type", row_operation): 1}
+		if row_operation != "internal_transfer":
+			filters["handling_category"] = "Normal"
+		warehouse_types.update(
+			frappe.get_list("Warehouse Type", filters=filters, pluck="name", limit_page_length=0)
+		)
+		if (
+			row_operation != "reconciliation"
+			and frappe.has_permission("Location Type", "read")
+			and frappe.has_permission("Location", "read")
+		):
+			location_filters = {stock_control_permission_field("Location Type", row_operation): 1}
+			if row_operation != "internal_transfer":
+				location_filters["handling_category"] = "Normal"
+			location_types = frappe.get_list(
+				"Location Type", filters=location_filters, pluck="name", limit_page_length=0
 			)
-	return {"operation": operation, "warehouse_types": warehouse_types, "locations": locations}
+			if location_types:
+				locations.update(
+					frappe.get_list(
+						"Location",
+						filters={"location_type": ["in", location_types]},
+						pluck="name",
+						limit_page_length=0,
+					)
+				)
+	return {
+		"operation": operation,
+		"warehouse_types": sorted(warehouse_types),
+		"locations": sorted(locations),
+	}

@@ -183,3 +183,47 @@ class TestStockControlTransactions(unittest.TestCase):
 			self.assertEqual(frappe.flags.stock_control_pos_consolidation, frozenset({"POS"}))
 			raise ValueError("Failed submit")
 		self.assertEqual(frappe.flags.get("stock_control_pos_consolidation"), previous)
+
+	def test_pos_internal_customer_transfer_uses_canonical_policy_and_actual_customer(self):
+		from erpnext.stock import stock_control
+
+		doc = frappe._dict(
+			doctype="POS Invoice",
+			company="Company",
+			customer="Internal",
+			is_internal_customer=1,
+			is_return=0,
+			items=[frappe._dict(item_code="Item", warehouse="Main", target_warehouse="Target", qty=1)],
+		)
+		customer = frappe._dict(is_internal_customer=1, represents_company="Company")
+		warehouse = frappe._dict(company="Company", is_group=0, disabled=0)
+		policy = frappe._dict(allow_transfer=1, allow_sales=0, handling_category="Normal")
+
+		def reject(message):
+			raise frappe.ValidationError(message)
+
+		with (
+			patch.object(control, "is_stock_control_enabled", return_value=True),
+			patch.object(control, "lock_stock_control_policies"),
+			patch.object(control, "lock_stock_control_items"),
+			patch.object(frappe, "get_cached_value", return_value=1),
+			patch.object(frappe.db, "get_value", return_value=customer),
+			patch.object(stock_control, "is_stock_control_enabled", return_value=True),
+			patch.object(stock_control, "lock_stock_control_policies"),
+			patch.object(stock_control, "_current_doc", return_value=warehouse),
+			patch.object(stock_control, "get_stock_control_policy", return_value=policy),
+			patch.object(stock_control, "get_active_stock_freezes", return_value=[]),
+			patch.object(stock_control, "_", side_effect=lambda text: text),
+			patch.object(frappe, "throw", side_effect=reject),
+			patch.object(
+				control, "validate_stock_control_source", wraps=control.validate_stock_control_source
+			) as validate,
+		):
+			control.validate_pos_stock_control(doc)
+			self.assertEqual(validate.call_args.args[2:4], ("Main", "internal_transfer"))
+			self.assertEqual(validate.call_args.kwargs["target"], "Target")
+			customer.is_internal_customer = 0
+			with self.assertRaisesRegex(frappe.ValidationError, "does not allow sales"):
+				control.validate_pos_stock_control(doc)
+			self.assertEqual(validate.call_args.args[3], "sales")
+			self.assertIsNone(validate.call_args.kwargs["target"])

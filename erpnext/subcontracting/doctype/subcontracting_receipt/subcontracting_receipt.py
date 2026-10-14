@@ -168,6 +168,9 @@ class SubcontractingReceipt(SubcontractingController):
 		# last so auto-populated supplied-item dimensions (set_supplied_items_inventory_dimensions)
 		# are already in place.
 		self.validate_inventory_dimension_mandatory()
+		from erpnext.stock.warehouse_policy import validate_document_policy
+
+		validate_document_policy(self)
 
 	def validate_with_previous_doc(self):
 		super().validate_with_previous_doc(

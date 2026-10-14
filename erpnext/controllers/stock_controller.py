@@ -128,6 +128,9 @@ class StockController(AccountsController):
 		self.reset_conversion_factor()
 		self.validate_storage_locations()
 		self.validate_inventory_dimension_mandatory()
+		from erpnext.stock.warehouse_policy import validate_document_policy
+
+		validate_document_policy(self)
 
 	def on_update(self):
 		super().on_update()
@@ -676,6 +679,10 @@ class StockController(AccountsController):
 			qty = row.transfer_qty
 			warehouse = row.s_warehouse or row.t_warehouse
 
+		if self.is_internal_transfer() and row.get("from_warehouse") and not self.is_return:
+			warehouse = row.from_warehouse
+			type_of_transaction = "Outward"
+
 		serial_nos = row.serial_no
 		if is_rejected:
 			serial_nos = row.get("rejected_serial_no")
@@ -710,6 +717,12 @@ class StockController(AccountsController):
 				"batch_no": row.batch_no,
 			}
 		)
+
+		location_details = frappe._dict(
+			warehouse=warehouse, actual_qty=abs(qty) if type_of_transaction == "Inward" else -abs(qty)
+		)
+		self.update_storage_location(row, location_details)
+		bundle_details["storage_location"] = location_details.storage_location
 
 	def create_serial_batch_bundle(self, bundle_details, row):
 		from erpnext.stock.serial_batch_bundle import SerialBatchCreation
@@ -1316,7 +1329,9 @@ class StockController(AccountsController):
 	def validate_storage_locations(self):
 		if self.docstatus == 2:
 			return
-		if self.doctype in ("Sales Invoice", "Purchase Invoice", "POS Invoice") and not self.get("update_stock"):
+		if self.doctype in ("Sales Invoice", "Purchase Invoice", "POS Invoice") and not self.get(
+			"update_stock"
+		):
 			return
 
 		for table in self.meta.get_table_fields():
@@ -1326,7 +1341,9 @@ class StockController(AccountsController):
 					continue
 				for fieldname, warehouse in get_storage_location_warehouses(self, row).items():
 					if row.meta.has_field(fieldname) and row.get(fieldname):
-						validate_storage_location_warehouse(row.get(fieldname), warehouse)
+						validate_storage_location_warehouse(
+							row.get(fieldname), warehouse, item_code=item_code
+						)
 
 	def update_storage_location(self, row, sl_dict):
 		"""Copy the native stock location independently of configurable Inventory Dimensions."""

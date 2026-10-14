@@ -1,0 +1,34 @@
+{
+ "doctype": "DocType",
+ "module": "Stock",
+ "engine": "InnoDB",
+ "actions": [],
+ "links": [],
+ "states": [],
+ "name": "Item Storage Location",
+ "istable": 1,
+ "editable_grid": 1,
+ "field_order": [
+  "warehouse",
+  "storage_location"
+ ],
+ "fields": [
+  {
+   "fieldname": "warehouse",
+   "fieldtype": "Link",
+   "label": "Warehouse",
+   "options": "Warehouse",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "storage_location",
+   "fieldtype": "Link",
+   "label": "Storage Location",
+   "options": "Storage Location",
+   "reqd": 1,
+   "in_list_view": 1
+  }
+ ],
+ "permissions": []
+}

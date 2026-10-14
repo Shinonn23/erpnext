@@ -2,7 +2,8 @@
 # For license information, please see license.txt
 
 
-# import frappe
+import frappe
+from frappe import _
 from frappe.model.document import Document
 
 
@@ -21,4 +22,17 @@ class WarehouseType(Document):
 	def validate(self):
 		from erpnext.stock.stock_control import validate_stock_control_type
 
+		self.validate_policy_permission()
 		validate_stock_control_type(self)
+
+	def on_trash(self):
+		self.validate_policy_permission()
+
+	def validate_policy_permission(self):
+		if frappe.session.user != "Administrator" and not set(frappe.get_roles()).intersection(
+			{"Stock Manager", "Quality Manager", "System Manager"}
+		):
+			frappe.throw(
+				_("Only a Stock Manager, Quality Manager or System Manager may change warehouse type policy."),
+				frappe.PermissionError,
+			)

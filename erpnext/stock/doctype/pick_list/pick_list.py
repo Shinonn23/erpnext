@@ -11,7 +11,7 @@ from frappe.model.mapper import map_child_doc
 from frappe.query_builder import Case
 from frappe.query_builder.custom import GROUP_CONCAT
 from frappe.query_builder.functions import Coalesce, Locate, Replace, Sum
-from frappe.utils import ceil, cint, floor, flt, get_link_to_form, now_datetime
+from frappe.utils import cint, floor, flt, get_link_to_form, now_datetime
 from frappe.utils.nestedset import get_descendants_of
 
 from erpnext.selling.doctype.sales_order.sales_order import (
@@ -113,6 +113,9 @@ class PickList(TransactionBase):
 				item.update(get_item_details(item.item_code, item.uom, item.warehouse, company))
 
 	def validate(self):
+		from erpnext.stock.warehouse_policy import validate_document_policy
+
+		validate_document_policy(self)
 		self.validate_customer_demo_workflow()
 		self.validate_custody_loan()
 		self.validate_expired_batches()
@@ -310,7 +313,9 @@ class PickList(TransactionBase):
 					validate_storage_location_warehouse,
 				)
 
-				validate_storage_location_warehouse(location.storage_location, location.warehouse)
+				validate_storage_location_warehouse(
+					location.storage_location, location.warehouse, item_code=location.item_code
+				)
 
 	def check_serial_no_status(self):
 		from erpnext.stock.doctype.serial_no.serial_no import get_serial_nos
@@ -400,6 +405,9 @@ class PickList(TransactionBase):
 			validate_custody_loan_pick_list(self, require_picked_qty=True)
 
 	def before_cancel(self):
+		from erpnext.stock.warehouse_policy import validate_document_policy
+
+		validate_document_policy(self)
 		if self.get("custody_loan"):
 			from erpnext.loan.doctype.custody_loan.custody_loan_core import validate_custody_loan_pick_list
 
@@ -544,6 +552,7 @@ class PickList(TransactionBase):
 					{
 						"item_code": row.item_code,
 						"warehouse": row.warehouse,
+						"storage_location": row.storage_location,
 						"voucher_type": self.doctype,
 						"voucher_no": self.name,
 						"voucher_detail_no": row.name,
@@ -1895,6 +1904,7 @@ def map_pl_locations(pick_list, item_mapper, target_doc, sales_order=None):
 			child_item.against_pick_list = pick_list.name
 			child_item.pick_list_item = location.name
 			child_item.warehouse = location.warehouse
+			child_item.storage_location = location.storage_location
 			child_item.qty = flt(location.picked_qty - location.delivered_qty) / (
 				flt(child_item.conversion_factor) or 1
 			)

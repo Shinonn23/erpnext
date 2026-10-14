@@ -20,7 +20,7 @@ from erpnext.stock.doctype.serial_and_batch_bundle.test_serial_and_batch_bundle 
 from erpnext.stock.doctype.stock_entry.stock_entry_utils import make_stock_entry
 from erpnext.stock.doctype.stock_reconciliation.test_stock_reconciliation import create_stock_reconciliation
 from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse
-from erpnext.stock.stock_control import OPERATIONS
+from erpnext.stock.stock_control import OPERATIONS, stock_control_permission_field
 from erpnext.tests.utils import ERPNextTestSuite
 
 
@@ -34,7 +34,9 @@ class TestStockFreezeIntegration(ERPNextTestSuite):
 				"doctype": "Warehouse Type",
 				"name": "_Test Controlled Stock",
 				"handling_category": "Normal",
-				**{"allow_" + operation: 1 for operation in OPERATIONS},
+				**{
+					stock_control_permission_field("Warehouse Type", operation): 1 for operation in OPERATIONS
+				},
 			}
 		).insert()
 		qa = frappe.get_doc(
@@ -42,7 +44,12 @@ class TestStockFreezeIntegration(ERPNextTestSuite):
 				"doctype": "Warehouse Type",
 				"name": "_Test Controlled QA",
 				"handling_category": "QA",
-				"allow_internal_transfer": 1,
+				**{
+					stock_control_permission_field("Warehouse Type", operation): 0
+					for operation in OPERATIONS
+					if operation != "internal_transfer"
+				},
+				"allow_transfer": 1,
 			}
 		).insert()
 		self.main = create_warehouse("_Test Control Main", {"warehouse_type": normal.name})

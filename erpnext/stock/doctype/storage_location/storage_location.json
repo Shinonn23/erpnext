@@ -10,6 +10,7 @@
   "warehouse_column",
   "warehouse",
   "disabled",
+  "supported_storage_conditions",
   "physical_position_section",
   "zone",
   "rack_column",
@@ -95,6 +96,13 @@
    "fieldname": "description",
    "fieldtype": "Small Text",
    "label": "Notes"
+  },
+  {
+   "fieldname": "supported_storage_conditions",
+   "fieldtype": "Table MultiSelect",
+   "label": "Supported Storage Conditions",
+   "options": "Storage Location Condition",
+   "description": "Select every storage condition supported by this location. A location without conditions is excluded for items with a required condition."
   }
  ],
  "permissions": [

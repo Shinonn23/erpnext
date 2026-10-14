@@ -19,6 +19,15 @@ OPERATIONS = (
 QA_CATEGORIES = {"QA", "Quarantine"}
 
 
+def stock_control_permission_field(doctype, operation):
+	"""Warehouse transfer retains its published field; Location uses its native field."""
+	return (
+		"allow_transfer"
+		if doctype in ("Warehouse", "Warehouse Type") and operation == "internal_transfer"
+		else "allow_" + operation
+	)
+
+
 def require_stock_control_role():
 	if not CONTROL_ROLES.intersection(frappe.get_roles()):
 		frappe.throw(
@@ -173,7 +182,7 @@ def validate_stock_control_source(
 	if doctype == "Warehouse" and source_row.company != company:
 		frappe.throw(_("Source Warehouse must belong to the transaction Company."))
 	policy = get_stock_control_policy(doctype, name)
-	if not cint(policy.get("allow_" + operation)):
+	if not cint(policy.get(stock_control_permission_field(doctype, operation))):
 		frappe.throw(_("{0} {1} does not allow {2}.").format(doctype, name, operation))
 	holds = get_active_stock_freezes(company, item_code, batch_nos, serial_nos, asset, source_item_codes)
 	target_policy = None
@@ -182,7 +191,7 @@ def validate_stock_control_source(
 		if doctype == "Warehouse" and target_row.company != company:
 			frappe.throw(_("Internal Transfer requires Warehouses in the same Company."))
 		target_policy = get_stock_control_policy(doctype, target)
-		if not cint(target_policy.allow_internal_transfer):
+		if not cint(target_policy.get(stock_control_permission_field(doctype, "internal_transfer"))):
 			frappe.throw(_("Target {0} {1} does not allow Internal Transfer.").format(doctype, target))
 	if holds and not (
 		operation == "internal_transfer"
@@ -322,10 +331,11 @@ def validate_stock_control_type(doc):
 	fields = (
 		"handling_category",
 		*(
-			"allow_" + operation
+			stock_control_permission_field(doc.doctype, operation)
 			for operation in OPERATIONS
 			if doc.doctype == "Warehouse Type" or operation != "reconciliation"
 		),
+		*(("allow_receipt", "freeze_stock", "outgoing_role") if doc.doctype == "Warehouse Type" else ()),
 	)
 	old = doc.get_doc_before_save()
 	changed = not old or any(old.get(field) != doc.get(field) for field in fields)
@@ -337,7 +347,9 @@ def validate_stock_control_type(doc):
 	if doc.handling_category not in ("Normal", "QA", "Quarantine"):
 		frappe.throw(_("Invalid Handling Category."))
 	if doc.handling_category in QA_CATEGORIES and any(
-		cint(doc.get("allow_" + op)) for op in OPERATIONS if op != "internal_transfer"
+		cint(doc.get(stock_control_permission_field(doc.doctype, op)))
+		for op in OPERATIONS
+		if op != "internal_transfer"
 	):
 		frappe.throw(_("QA and Quarantine Types may only allow Internal Transfer."))
 	if old:
