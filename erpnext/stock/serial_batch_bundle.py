@@ -418,6 +418,24 @@ class SerialBatchBundle:
 
 		doc = frappe.get_cached_doc("Serial and Batch Bundle", self.sle.serial_and_batch_bundle)
 		if doc.docstatus == 1:
+			if not self.sle.is_cancelled or any(
+				doc.get(field) != self.sle.get(field)
+				for field in (
+					"voucher_type",
+					"voucher_no",
+					"voucher_detail_no",
+					"item_code",
+					"company",
+					"warehouse",
+				)
+			):
+				frappe.throw(
+					_("Serial and Batch Bundle {0} does not belong to the cancelled stock ledger entry.").format(
+						doc.name
+					)
+				)
+			# The authorized stock cancellation reverses only its own bundle.
+			doc.flags.ignore_permissions = True
 			doc.cancel()
 
 	def is_pos_or_asset_repair_transaction(self):

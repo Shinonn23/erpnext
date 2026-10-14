@@ -178,6 +178,8 @@ def convert_draft_asset_depr_schedules_into_active(asset_doc):
 		if not asset_depr_schedule_doc:
 			continue
 
+		# The authorized Asset submission owns this Asset and Finance Book's schedule.
+		asset_depr_schedule_doc.flags.ignore_permissions = True
 		asset_depr_schedule_doc.submit()
 
 
@@ -188,6 +190,8 @@ def cancel_asset_depr_schedules(asset_doc):
 		if not asset_depr_schedule_doc:
 			continue
 
+		# The authorized Asset cancellation owns this Asset and Finance Book's schedule.
+		asset_depr_schedule_doc.flags.ignore_permissions = True
 		asset_depr_schedule_doc.cancel()
 
 

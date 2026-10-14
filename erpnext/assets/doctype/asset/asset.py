@@ -152,6 +152,7 @@ class Asset(AccountsController):
 		self.status = self.get_status()
 
 	def create_asset_depreciation_schedule(self):
+		# Maintain this Asset's own schedules as part of its authorized lifecycle.
 		self.set_depr_rate_and_value_after_depreciation()
 
 		if self.split_from or not self.calculate_depreciation:
@@ -168,7 +169,7 @@ class Asset(AccountsController):
 				new_schedule = frappe.new_doc("Asset Depreciation Schedule")
 				new_schedule.asset = self.name
 				new_schedule.create_depreciation_schedule(fb_row)
-				new_schedule.save()
+				new_schedule.save(ignore_permissions=True)
 				created_schedules.append(new_schedule.name)
 				continue
 
@@ -186,7 +187,7 @@ class Asset(AccountsController):
 			existing_doc, asset_details_changed, depreciation_settings_changed
 		):
 			existing_doc.create_depreciation_schedule(fb_row)
-			existing_doc.save()
+			existing_doc.save(ignore_permissions=True)
 
 	def has_asset_details_changed(self, existing_doc):
 		"""Check if core asset details that affect depreciation have changed"""
