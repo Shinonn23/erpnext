@@ -3,6 +3,7 @@ from __future__ import annotations
 import frappe
 from frappe import _
 from frappe.model.document import Document
+from frappe.model.workflow import set_workflow_state_on_action
 from frappe.utils import cint, flt, getdate
 
 from erpnext.stock.doctype.serial_no.serial_no import get_serial_nos
@@ -963,20 +964,57 @@ class CustodyLoanReturn(Document):
 		return status
 
 	def before_cancel(self):
-		for fieldname in ("delivery_note", "asset_movement"):
-			cancel_source_transaction(self, fieldname)
-		if self.delivery_note:
-			quality_inspections = frappe.get_all(
+		previous = self.get_doc_before_save()
+		if not previous or previous.docstatus != 1 or any(
+			(self.get(field) or None) != (previous.get(field) or None)
+			for field in ("company", "custody_loan", "loan_type", "delivery_note", "asset_movement")
+		):
+			frappe.throw(_("Loan Return references cannot be changed while cancelling."))
+		delivery_note = frappe.get_doc("Delivery Note", self.delivery_note) if self.delivery_note else None
+		inspections = []
+		if delivery_note:
+			if (
+				not is_custody_loan_return_delivery_note(delivery_note)
+				or delivery_note.custody_loan_source_name != self.name
+				or delivery_note.custody_loan != self.custody_loan
+				or delivery_note.company != self.company
+			):
+				frappe.throw(_("Loan Return Delivery Note must belong to this return and Company."))
+			rows = {row.name: row for row in delivery_note.items}
+			for name in frappe.get_all(
 				"Quality Inspection",
-				filters={"reference_type": "Delivery Note", "reference_name": self.delivery_note},
+				filters={"reference_type": "Delivery Note", "reference_name": delivery_note.name},
 				pluck="name",
-			)
-			for quality_inspection_name in quality_inspections:
-				quality_inspection = frappe.get_doc("Quality Inspection", quality_inspection_name)
-				if quality_inspection.docstatus == 1:
-					quality_inspection.cancel()
-				elif quality_inspection.docstatus == 0:
-					frappe.delete_doc("Quality Inspection", quality_inspection.name, force=True)
+			):
+				inspection = frappe.get_doc("Quality Inspection", name)
+				if inspection.docstatus == 2:
+					continue
+				row = rows.get(inspection.child_row_reference)
+				if (
+					inspection.company != self.company
+					or not row
+					or row.item_code != inspection.item_code
+					or row.custody_loan_item not in {item.custody_loan_item for item in previous.items}
+				):
+					frappe.throw(_("Quality Inspection must belong to a returned item in this Company."))
+				inspections.append(inspection)
+		# Draft receipts must remain available to inspection cancellation/deletion callbacks.
+		for fieldname in ("delivery_note", "asset_movement"):
+			if fieldname == "delivery_note" and delivery_note and delivery_note.docstatus == 0:
+				continue
+			cancel_source_transaction(self, fieldname)
+		for inspection in inspections:
+			if inspection.docstatus == 1:
+				# Cancelling the authorized return also reverses only its own inspections.
+				inspection.flags.ignore_permissions = True
+				inspection.docstatus = 2
+				if workflow := inspection.meta.get_workflow():
+					set_workflow_state_on_action(inspection, workflow, "cancel")
+				inspection.cancel()
+			elif inspection.docstatus == 0:
+				frappe.delete_doc("Quality Inspection", inspection.name, force=True, ignore_permissions=True)
+		if delivery_note and delivery_note.docstatus == 0:
+			cancel_source_transaction(self, "delivery_note")
 
 	def on_cancel(self):
 		self.status = "Cancelled"
@@ -1367,6 +1405,13 @@ def validate_generated_transaction_cancellation(doc, method=None):
 				frappe.throw(_("Generated transaction is linked to an unrelated Material Request"))
 
 	doc.ignore_linked_doctypes = tuple(LOAN_SOURCE_DOCTYPES | {"Material Request"})
+	if (
+		doc.doctype == "Delivery Note"
+		and is_trusted_custody_operation(doc)
+		and doc.flags.get("custody_loan_shipment_cancellation") == doc.get("custody_loan_shipment")
+		and doc.get("custody_loan_shipment")
+	):
+		doc.ignore_linked_doctypes += ("Shipment",)
 	if doc.doctype == "Delivery Note" and source_doctype == "Custody Loan Return":
 		# The owning Return cancels its row inspections after reversing receipt.
 		# Inspections cannot be cancelled while that receipt is still submitted.
@@ -1912,7 +1957,10 @@ def transaction_is_received(stock_entry_name, asset_movement_name):
 
 
 def cancel_source_transaction(source, fieldname):
-	name = source.get(fieldname)
+	stored_source = frappe.get_doc(source.doctype, source.name)
+	if any(source.get(field) != stored_source.get(field) for field in (fieldname, "company", "custody_loan")):
+		frappe.throw(_("Custody Loan cancellation must use the saved source transaction links"))
+	name = stored_source.get(fieldname)
 	if not name:
 		return
 	doctype = {
@@ -1929,14 +1977,49 @@ def cancel_source_transaction(source, fieldname):
 	shipment_field = "custody_loan_shipment" if doctype == "Delivery Note" else "shipment"
 	shipment_name = doc.get(shipment_field)
 	shipment_status = frappe.db.get_value("Shipment", shipment_name, "docstatus") if shipment_name else None
-	if shipment_status == 1:
-		frappe.throw(
-			_("Cannot cancel {0} {1} because submitted Shipment {2} has already posted its transaction.").format(
-				doctype, name, shipment_name
-			)
-		)
-	if shipment_status == 0:
-		frappe.throw(_("Cancel draft Shipment {0} before cancelling {1} {2}.").format(shipment_name, doctype, name))
+	shipment = None
+	if doctype == "Delivery Note":
+		loan_name = stored_source.name if source.doctype == "Custody Loan" else stored_source.custody_loan
+		loan = frappe.get_doc("Custody Loan", loan_name)
+		if (
+			source.doctype not in LOAN_SOURCE_DOCTYPES
+			or stored_source.docstatus != 1
+			or loan.company != stored_source.company
+			or doc.company != stored_source.company
+			or not doc.get("is_custody_loan_transaction")
+			or doc.get("custody_loan") != loan_name
+			or doc.get("custody_loan_source_doctype") != source.doctype
+			or doc.get("custody_loan_source_name") != source.name
+		):
+			frappe.throw(_("Delivery Note must belong to the saved Custody Loan source and Company"))
+		if shipment_status in (0, 1):
+			shipment = frappe.get_doc("Shipment", shipment_name)
+			references = shipment.get("shipment_documents") or []
+			if (
+				shipment.get("custody_loan") != loan_name
+				or len(references) != 1
+				or references[0].reference_doctype != doctype
+				or references[0].reference_name != name
+				or any(row.delivery_note != name for row in shipment.get("shipment_delivery_note") or [])
+				or any(
+					parent != shipment_name
+					for child_doctype, filters in (
+						("Shipment Document", {"reference_doctype": doctype, "reference_name": name}),
+						("Shipment Delivery Note", {"delivery_note": name}),
+					)
+					for parent in frappe.get_all(
+						child_doctype,
+						filters={**filters, "docstatus": ["!=", 2]},
+						pluck="parent",
+					)
+				)
+			):
+				frappe.throw(_("Only the Shipment exclusively linked to this Custody Loan transaction can be cancelled"))
+			stored_source.check_permission("cancel")
+			doc.flags.ignore_permissions = True
+			doc.flags.custody_loan_shipment_cancellation = shipment_name
+	elif shipment_status in (0, 1):
+		frappe.throw(_("Cancel Shipment {0} before cancelling {1} {2}.").format(shipment_name, doctype, name))
 	if doc.docstatus == 1 and doc.get("requires_shipment") and not shipment_name:
 		frappe.throw(_("Cannot cancel {0} {1} because it requires a Shipment that is not linked.").format(doctype, name))
 	if doc.docstatus == 1:
@@ -1946,7 +2029,15 @@ def cancel_source_transaction(source, fieldname):
 			set(doc.get("ignore_linked_doctypes") or ()) | LOAN_SOURCE_DOCTYPES | {"Material Request"}
 		)
 		doc.cancel()
-	elif doc.docstatus == 0:
+	if shipment:
+		# Shipment callbacks still need the source document, including a draft receipt.
+		if shipment.docstatus == 1:
+			shipment.flags.ignore_permissions = True
+			shipment.cancel()
+		else:
+			frappe.delete_doc("Shipment", shipment.name, ignore_permissions=True, force=True)
+			doc.db_set(shipment_field, None)
+	if doc.docstatus == 0:
 		frappe.delete_doc(doctype, name, ignore_permissions=True, force=True)
 
 
