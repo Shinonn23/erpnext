@@ -6,6 +6,8 @@ from frappe import _, qb
 from frappe.query_builder import Criterion
 from frappe.query_builder.functions import Sum
 
+from erpnext.accounts.ledger_permissions import check_ledger_voucher_permissions
+
 
 class General_Payment_Ledger_Comparison:
 	"""
@@ -79,6 +81,19 @@ class General_Payment_Ledger_Comparison:
 				else:
 					outstanding = (Sum(gle.credit) - Sum(gle.debit)).as_("outstanding")
 
+				check_ledger_voucher_permissions(
+					qb.from_(gle)
+					.select(gle.voucher_type, gle.voucher_no, gle.against_voucher_type, gle.against_voucher)
+					.where(
+						(gle.company == self.filters.company)
+						& (gle.is_cancelled == 0)
+						& (gle.account.isin(val.accounts))
+					)
+					.where(Criterion.all(filter_criterion))
+					.distinct()
+					.run(as_dict=True)
+				)
+
 				self.account_types[acc_type].gle = (
 					qb.from_(gle)
 					.select(
@@ -122,6 +137,19 @@ class General_Payment_Ledger_Comparison:
 
 				if self.filters.party:
 					filter_criterion.append(ple.party.eq(self.filters.party))
+
+				check_ledger_voucher_permissions(
+					qb.from_(ple)
+					.select(ple.voucher_type, ple.voucher_no, ple.against_voucher_type, ple.against_voucher_no)
+					.where(
+						(ple.company == self.filters.company)
+						& (ple.delinked == 0)
+						& (ple.account.isin(val.accounts))
+					)
+					.where(Criterion.all(filter_criterion))
+					.distinct()
+					.run(as_dict=True)
+				)
 
 				self.account_types[acc_type].ple = (
 					qb.from_(ple)

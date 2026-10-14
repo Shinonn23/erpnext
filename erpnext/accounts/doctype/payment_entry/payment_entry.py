@@ -37,6 +37,7 @@ from erpnext.accounts.general_ledger import (
 	make_reverse_gl_entries,
 	process_gl_map,
 )
+from erpnext.accounts.ledger_permissions import check_ledger_voucher_permissions
 from erpnext.accounts.party import (
 	complete_contact_details,
 	get_default_contact,
@@ -2456,6 +2457,7 @@ def get_outstanding_reference_documents(args, validate=False):
 				)
 			)
 
+	check_ledger_voucher_permissions(data)
 	return data
 
 

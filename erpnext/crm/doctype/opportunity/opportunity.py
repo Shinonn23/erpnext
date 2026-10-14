@@ -3,6 +3,8 @@
 
 
 import json
+from contextlib import contextmanager
+from contextvars import ContextVar
 
 import frappe
 from frappe import _
@@ -23,6 +25,21 @@ from erpnext.crm.utils import (
 )
 from erpnext.setup.utils import get_exchange_rate
 from erpnext.utilities.transaction_base import TransactionBase
+
+_quotation_status_source = ContextVar("opportunity_quotation_status_source", default=None)
+
+
+def get_native_quotation_status_source():
+	return _quotation_status_source.get()
+
+
+@contextmanager
+def quotation_status_update_source(quotation):
+	token = _quotation_status_source.set(quotation)
+	try:
+		yield
+	finally:
+		_quotation_status_source.reset(token)
 
 
 class Opportunity(TransactionBase, CRMNote):
@@ -147,6 +164,19 @@ class Opportunity(TransactionBase, CRMNote):
 
 	def on_update(self):
 		self.update_prospect()
+
+	def set_status(self, update=False, status=None, update_modified=True):
+		if not update or self.is_new():
+			return super().set_status(update=update, status=status, update_modified=update_modified)
+		previous_status = self.status
+		self.status = status or previous_status
+		new_status = self.get_status()["status"]
+		self.status = previous_status
+		if new_status != previous_status or new_status == "Lost":
+			self.run_method("before_status_update", status=new_status)
+		super().set_status(update=True, status=status, update_modified=update_modified)
+		if new_status != previous_status or new_status == "Lost":
+			self.run_method("on_status_update")
 
 	def validate_qty(self):
 		for item in self.items:

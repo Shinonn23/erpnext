@@ -4,6 +4,8 @@
 
 import hashlib
 import json
+from collections import Counter
+from contextlib import contextmanager
 
 import frappe
 from frappe import _
@@ -153,8 +155,9 @@ class POSInvoiceMergeLog(Document):
 		if not sales_invoice.posting_time:
 			sales_invoice.posting_time = get_time(self.posting_time)
 
-		sales_invoice.save()
-		sales_invoice.submit()
+		with pos_invoice_consolidation([doc.name for doc in data]):
+			sales_invoice.save()
+			sales_invoice.submit()
 		self.consolidated_invoice = sales_invoice.name
 
 		return sales_invoice
@@ -709,3 +712,66 @@ def get_error_message(message) -> str:
 		return message["message"]
 	except Exception:
 		return str(message)
+
+
+@contextmanager
+def pos_invoice_consolidation(pos_invoices):
+	previous = frappe.flags.get("stock_control_pos_consolidation")
+	frappe.flags.stock_control_pos_consolidation = frozenset(pos_invoices)
+	try:
+		yield
+	finally:
+		frappe.flags.stock_control_pos_consolidation = previous
+
+
+
+def _inventory_signature(rows):
+	return Counter(
+		(
+			row.item_code,
+			row.get("warehouse"),
+			flt(row.get("stock_qty") or flt(row.get("qty")) * flt(row.get("conversion_factor") or 1), 9),
+			row.get("serial_and_batch_bundle"),
+			tuple(sorted((row.get("serial_no") or "").split())),
+			row.get("batch_no"),
+			row.get("storage_location"),
+			row.get("target_warehouse"),
+			row.get("to_storage_location"),
+		)
+		for row in rows
+	)
+
+
+def is_verified_pos_consolidation(doc, check_packed=True):
+	names = frappe.flags.get("stock_control_pos_consolidation")
+	if not names or doc.doctype != "Sales Invoice":
+		return False
+	originals = []
+	for name in sorted(names):
+		frappe.db.get_value("POS Invoice", name, "name", for_update=True)
+		pos = frappe.get_doc("POS Invoice", name)
+		if pos.docstatus != 1 or pos.company != doc.company or bool(pos.is_return) != bool(doc.is_return):
+			frappe.throw(_("Invalid POS consolidation source."))
+		originals.append(pos)
+	for row in doc.get("items", []):
+		original = next(
+			(
+				item
+				for pos in originals
+				if pos.name == row.get("pos_invoice")
+				for item in pos.get("items", [])
+				if item.name == row.get("pos_invoice_item")
+			),
+			None,
+		)
+		if not original or _inventory_signature([row]) != _inventory_signature([original]):
+			frappe.throw(_("POS consolidation must preserve the original inventory allocation."))
+	if _inventory_signature(doc.get("items", [])) != _inventory_signature(
+		[row for pos in originals for row in pos.get("items", [])]
+	):
+		frappe.throw(_("POS consolidation must preserve the original items and quantities."))
+	if check_packed and _inventory_signature(doc.get("packed_items", [])) != _inventory_signature(
+		[row for pos in originals for row in pos.get("packed_items", [])]
+	):
+		frappe.throw(_("POS consolidation must preserve the original packed items."))
+	return True

@@ -17,6 +17,7 @@ from erpnext.accounts.doctype.accounting_dimension.accounting_dimension import (
 	get_accounting_dimensions,
 	get_dimension_with_children,
 )
+from erpnext.accounts.ledger_permissions import _ledger_query_permission_context
 from erpnext.accounts.report.utils import convert_to_presentation_currency, get_currency
 from erpnext.accounts.utils import get_fiscal_year, get_zero_cutoff
 
@@ -569,7 +570,9 @@ def get_accounting_entries(
 
 	from frappe.desk.reportview import build_match_conditions
 
-	if match_conditions := build_match_conditions(doctype):
+	with _ledger_query_permission_context():
+		match_conditions = build_match_conditions(doctype)
+	if match_conditions:
 		query = query.where(Bracket(LiteralValue(match_conditions)))
 
 	return query.run(as_dict=True)

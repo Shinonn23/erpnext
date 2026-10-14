@@ -3054,7 +3054,7 @@ class AccountsController(TransactionBase):
 		jv.posting_date = self.posting_date
 		jv.company = self.company
 		jv.remark = f"Adjustment for {self.doctype} {self.name}"
-		jv.is_system_generated = True
+		jv.mark_as_system_generated()
 
 		reconcilation_entry = frappe._dict()
 		advance_entry = frappe._dict()

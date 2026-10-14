@@ -7,6 +7,7 @@ from frappe import _
 from frappe.query_builder.functions import Sum
 from frappe.utils import cint, flt
 
+from erpnext.accounts.ledger_permissions import check_ledger_voucher_permissions
 from erpnext.accounts.report.general_ledger.general_ledger import get_accounts_with_children
 from erpnext.accounts.report.trial_balance.trial_balance import validate_filters
 from erpnext.accounts.utils import get_currency_precision
@@ -42,6 +43,8 @@ def get_data(filters, show_party_name):
 	account_filter = []
 	if filters.get("account"):
 		account_filter = get_accounts_with_children(filters.get("account"))
+
+	check_party_ledger_sources(filters, account_filter)
 
 	company_currency = frappe.get_cached_value("Company", filters.company, "default_currency")
 	precision = get_currency_precision()
@@ -99,6 +102,32 @@ def get_data(filters, show_party_name):
 	data.append(total_row)
 
 	return data
+
+
+def check_party_ledger_sources(filters, account_filter):
+	gle = frappe.qb.DocType("GL Entry")
+	query = (
+		frappe.qb.from_(gle)
+		.select(gle.voucher_type, gle.voucher_no, gle.against_voucher_type, gle.against_voucher)
+		.where(
+			(gle.company == filters.company)
+			& (gle.is_cancelled == 0)
+			& (gle.party_type == filters.party_type)
+			& (gle.party != "")
+			& (gle.posting_date <= filters.to_date)
+			& (
+				(gle.posting_date < filters.from_date)
+				| (gle.is_opening == "Yes")
+				| ((gle.is_opening == "No") & (gle.posting_date >= filters.from_date))
+			)
+		)
+		.distinct()
+	)
+	if filters.get("party"):
+		query = query.where(gle.party == filters.party)
+	if account_filter:
+		query = query.where(gle.account.isin(account_filter))
+	check_ledger_voucher_permissions(query.run(as_dict=True))
 
 
 def get_opening_balances(filters, account_filter=None):

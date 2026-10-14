@@ -189,7 +189,6 @@ class Timesheet(Document):
 		for project in projects:
 			project_doc = frappe.get_doc("Project", project)
 			project_doc.update_project()
-			project_doc.save(ignore_permissions=True)
 
 	def validate_dates(self):
 		for time_log in self.time_logs:

@@ -255,17 +255,21 @@ class Quotation(SellingController):
 			self.update_opportunity_status(status)
 
 	def update_opportunity_status(self, status, opportunity=None):
+		from erpnext.crm.doctype.opportunity.opportunity import quotation_status_update_source
+
 		if not opportunity:
 			opportunity = self.opportunity
 
 		opp = frappe.get_doc("Opportunity", opportunity)
-		opp.set_status(status=status, update=True)
+		with quotation_status_update_source(self):
+			opp.set_status(status=status, update=True)
 
 	@frappe.whitelist()
 	def declare_enquiry_lost(
 		self, lost_reasons_list: list, competitors: list, detailed_reason: str | None = None
 	):
 		self.check_permission("write")
+		self.run_method("before_declare_enquiry_lost", lost_reasons_list=lost_reasons_list)
 
 		if not (self.is_fully_ordered() or self.is_partially_ordered()):
 			get_lost_reasons = frappe.get_list("Quotation Lost Reason", fields=["name"])

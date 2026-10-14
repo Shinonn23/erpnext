@@ -37,6 +37,19 @@ from erpnext.assets.doctype.asset_depreciation_schedule.asset_depreciation_sched
 )
 from erpnext.controllers.accounts_controller import AccountsController
 
+_ASSET_RECEIPT_TOKEN = object()
+_ASSET_SPLIT_TOKEN = object()
+
+
+def get_native_asset_receipt_source(movement):
+	if movement.flags.get("native_asset_receipt_token") is _ASSET_RECEIPT_TOKEN:
+		return movement.flags.get("native_asset_receipt_source")
+
+
+def get_native_asset_split_source(asset):
+	if asset.flags.get("native_asset_split_token") is _ASSET_SPLIT_TOKEN:
+		return asset.flags.get("native_asset_split_source")
+
 
 class Asset(AccountsController):
 	# begin: auto-generated types
@@ -589,7 +602,10 @@ class Asset(AccountsController):
 				"reference_doctype": reference_doctype,
 				"reference_name": reference_docname,
 			}
-		).insert()
+		)
+		asset_movement.flags.native_asset_receipt_token = _ASSET_RECEIPT_TOKEN
+		asset_movement.flags.native_asset_receipt_source = self.name
+		asset_movement.insert()
 		asset_movement.submit()
 
 	def set_depreciation_rate(self):
@@ -740,6 +756,9 @@ class Asset(AccountsController):
 
 		for movement in movements:
 			movement = frappe.get_doc("Asset Movement", movement.get("name"))
+			if movement.purpose == "Receipt":
+				movement.flags.native_asset_receipt_token = _ASSET_RECEIPT_TOKEN
+				movement.flags.native_asset_receipt_source = self.name
 			movement.cancel()
 
 	def delete_depreciation_entries(self):
@@ -1394,6 +1413,9 @@ def get_values_from_purchase_doc(purchase_doc_name: str, item_code: str, doctype
 def split_asset(asset_name, split_qty):
 	"""Split an asset into two based on the given quantity."""
 	existing_asset = frappe.get_doc("Asset", asset_name)
+	existing_asset.check_permission("write")
+	if existing_asset.docstatus != 1:
+		frappe.throw(_("Only a submitted Asset can be split."))
 	split_qty = cint(split_qty)
 
 	validate_split_quantity(existing_asset, split_qty)
@@ -1407,6 +1429,8 @@ def split_asset(asset_name, split_qty):
 
 
 def validate_split_quantity(existing_asset, split_qty):
+	if split_qty <= 0:
+		frappe.throw(_("Split Quantity must be greater than zero"))
 	if split_qty >= existing_asset.asset_quantity:
 		frappe.throw(_("Split Quantity must be less than Asset Quantity"))
 
@@ -1427,12 +1451,19 @@ def process_asset_split(existing_asset, split_qty, splitted_asset=None, is_new_a
 	new_asset = frappe.copy_doc(existing_asset) if is_new_asset else splitted_asset
 	asset_doc = new_asset if is_new_asset else existing_asset
 	asset_doc.flags.is_split_asset = True
+	previous_token = asset_doc.flags.get("native_asset_split_token")
+	previous_source = asset_doc.flags.get("native_asset_split_source")
+	asset_doc.flags.native_asset_split_token = _ASSET_SPLIT_TOKEN
+	asset_doc.flags.native_asset_split_source = existing_asset.name
+	try:
+		set_split_asset_values(asset_doc, scaling_factor, split_qty, existing_asset, is_new_asset)
+		log_asset_activity(existing_asset, asset_doc, splitted_asset, is_new_asset)
 
-	set_split_asset_values(asset_doc, scaling_factor, split_qty, existing_asset, is_new_asset)
-	log_asset_activity(existing_asset, asset_doc, splitted_asset, is_new_asset)
-
-	# Update finance books and depreciation schedules
-	update_finance_books(asset_doc, existing_asset, new_asset, scaling_factor, is_new_asset)
+		# Update finance books and depreciation schedules
+		update_finance_books(asset_doc, existing_asset, new_asset, scaling_factor, is_new_asset)
+	finally:
+		asset_doc.flags.native_asset_split_token = previous_token
+		asset_doc.flags.native_asset_split_source = previous_source
 	return new_asset
 
 
@@ -1486,7 +1517,7 @@ def update_finance_books(asset_doc, existing_asset, new_asset, scaling_factor, i
 	if is_new_asset:
 		for row in new_asset.get("finance_books"):
 			depr_schedule_doc = get_depr_schedule(new_asset.name, "Active", row.finance_book)
-			for schedule in depr_schedule_doc:
+			for schedule in depr_schedule_doc or []:
 				if schedule.journal_entry:
 					add_reference_in_jv_on_split(
 						schedule.journal_entry,

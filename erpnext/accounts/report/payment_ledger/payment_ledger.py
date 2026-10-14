@@ -7,6 +7,8 @@ import frappe
 from frappe import _, qb
 from frappe.query_builder import Criterion
 
+from erpnext.accounts.ledger_permissions import check_ledger_voucher_permissions
+
 
 class PaymentLedger:
 	def __init__(self, filters=None):
@@ -135,6 +137,8 @@ class PaymentLedger:
 			.where(Criterion.all(self.conditions))
 			.run(as_dict=True)
 		)
+
+		check_ledger_voucher_permissions(self.voucher_amount)
 
 	def get_columns(self):
 		options = None

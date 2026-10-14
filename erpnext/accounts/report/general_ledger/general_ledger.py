@@ -12,6 +12,10 @@ from erpnext.accounts.doctype.accounting_dimension.accounting_dimension import (
 	get_accounting_dimensions,
 	get_dimension_with_children,
 )
+from erpnext.accounts.ledger_permissions import (
+	_ledger_query_permission_context,
+	check_ledger_voucher_permissions,
+)
 from erpnext.accounts.report.utils import convert_to_presentation_currency, get_currency
 from erpnext.accounts.utils import get_account_currency
 
@@ -189,6 +193,9 @@ def get_gl_entries(filters, accounting_dimensions):
 			"debit_in_transaction_currency, credit_in_transaction_currency, transaction_currency,"
 		)
 
+	with _ledger_query_permission_context():
+		conditions = get_conditions(filters)
+
 	gl_entries = frappe.db.sql(
 		f"""
 		select
@@ -198,13 +205,14 @@ def get_gl_entries(filters, accounting_dimensions):
 			against_voucher_type, against_voucher, account_currency,
 			against, is_opening, creation {select_fields}
 		from `tabGL Entry`
-		where company=%(company)s {get_conditions(filters)}
+		where company=%(company)s {conditions}
 		{order_by_statement}
 	""",
 		filters,
 		as_dict=1,
 	)
 
+	check_ledger_voucher_permissions(gl_entries)
 	party_name_map = get_party_name_map()
 
 	for gl_entry in gl_entries:
@@ -940,6 +948,7 @@ def get_gl_entries_duckdb(filters, accounting_dimensions, conn):
 	rows = conn.execute(sql, params).fetchall()
 	gl_entries = [frappe._dict(zip(col_names, row, strict=False)) for row in rows]
 
+	check_ledger_voucher_permissions(gl_entries)
 	party_name_map = get_party_name_map()
 	for gl_entry in gl_entries:
 		if gl_entry.party_type and gl_entry.party:

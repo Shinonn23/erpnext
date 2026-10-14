@@ -10,6 +10,13 @@ from erpnext.stock.doctype.inventory_dimension.inventory_dimension import (
 )
 from erpnext.stock.utils import _get_incoming_rate, get_stock_balance
 
+_GENERATED_ASSET_TOKEN = object()
+
+
+def get_native_conversion_source(asset):
+	if asset.flags.get("stock_conversion_token") is _GENERATED_ASSET_TOKEN:
+		return asset.flags.get("stock_conversion_source")
+
 
 class StocktoAssetConversion(StockController):
 	# begin: auto-generated types
@@ -496,7 +503,10 @@ class StocktoAssetConversion(StockController):
 					finally:
 						asset.db_set("stock_to_asset_depreciation_journal_entry", row.journal_entry, update_modified=False)
 				asset_serial = frappe.db.get_value("Asset", row.asset, "source_serial_no")
-				frappe.get_doc("Asset", row.asset).cancel()
+				asset = frappe.get_doc("Asset", row.asset)
+				asset.flags.stock_conversion_token = _GENERATED_ASSET_TOKEN
+				asset.flags.stock_conversion_source = self.name
+				asset.cancel()
 				if asset_serial and frappe.db.get_value("Serial No", asset_serial, "asset") == row.asset:
 					frappe.db.set_value("Serial No", asset_serial, "asset", None)
 		self.update_stock_ledger()
@@ -705,6 +715,8 @@ class StocktoAssetConversion(StockController):
 		for output in self.assets:
 			asset = frappe.get_doc("Asset", output.asset)
 			asset.flags.from_stock_to_asset_conversion = True
+			asset.flags.stock_conversion_token = _GENERATED_ASSET_TOKEN
+			asset.flags.stock_conversion_source = self.name
 			asset.submit()
 			if output.source_serial_no:
 				frappe.db.set_value("Serial No", output.source_serial_no, "asset", asset.name)

@@ -40,6 +40,13 @@ class StockAccountInvalidTransaction(frappe.ValidationError):
 	pass
 
 
+_SYSTEM_GENERATION_TOKEN = object()
+
+
+def is_trusted_system_generation(doc):
+	return doc.flags.get("system_generation_token") is _SYSTEM_GENERATION_TOKEN
+
+
 class JournalEntry(AccountsController):
 	# begin: auto-generated types
 	# This code is auto-generated. Do not modify anything in this block.
@@ -121,6 +128,12 @@ class JournalEntry(AccountsController):
 		write_off_amount: DF.Currency
 		write_off_based_on: DF.Literal["Accounts Receivable", "Accounts Payable"]
 	# end: auto-generated types
+
+	def mark_as_system_generated(self):
+		"""Mark a native generator's document without trusting client-supplied flags."""
+		self.is_system_generated = True
+		self.flags.system_generation_token = _SYSTEM_GENERATION_TOKEN
+		return self
 
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)

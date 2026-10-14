@@ -183,6 +183,7 @@ def get_closing_balance_as_per_statement(bank_account: str, date: str):
 	"""
 	Get the closing balance as per statement for a bank account and date
 	"""
+	frappe.get_doc("Bank Account", bank_account).check_permission("read")
 	latest_balance = frappe.get_list(
 		"Bank Account Balance",
 		filters={"bank_account": bank_account, "date": ["<=", date]},
@@ -202,6 +203,7 @@ def set_closing_balance_as_per_statement(bank_account: str, date: str | datetime
 	Set the closing balance as per statement for a bank account and date
 	"""
 
+	frappe.get_doc("Bank Account", bank_account).check_permission("write")
 	existing = frappe.db.exists("Bank Account Balance", {"bank_account": bank_account, "date": date})
 
 	if existing:

@@ -278,6 +278,9 @@ def create_deposit_invoice(source_name, target_doc=None):
 			},
 		)
 
+		target.run_method("set_missing_values")
+		target.run_method("calculate_taxes_and_totals")
+
 	# Map the Order to a Invoice
 	doc = get_mapped_doc(
 		order_doctype,

@@ -39,6 +39,10 @@ import erpnext
 # imported to enable erpnext.accounts.utils.get_account_currency
 from erpnext.accounts.doctype.account.account import get_account_currency
 from erpnext.accounts.doctype.accounting_dimension.accounting_dimension import get_dimensions
+from erpnext.accounts.ledger_permissions import (
+	_ledger_query_permission_context,
+	check_ledger_voucher_permissions,
+)
 from erpnext.stock import get_warehouse_account_map
 from erpnext.stock.utils import get_combine_datetime, get_stock_value_on
 
@@ -316,6 +320,14 @@ def get_balance_on(
 				OR gle.finance_book IS NULL
 			)"""
 		)
+
+	if party_type and party:
+		sources = frappe.db.sql(
+			"""select distinct voucher_type, voucher_no, against_voucher_type, against_voucher
+			from `tabGL Entry` gle where {}""".format(" and ".join(cond)),
+			as_dict=True,
+		)
+		check_ledger_voucher_permissions(sources)
 
 	if account or (party_type and party) or account_type:
 		precision = get_currency_precision()
@@ -1379,8 +1391,10 @@ def get_account_balances_coa(company: str, include_default_fb_balances: bool = F
 
 	GLEntry = DocType("GL Entry")
 	precision = get_currency_precision()
+	with _ledger_query_permission_context():
+		get_ledger_balances_query = frappe.get_query(GLEntry, fields=[GLEntry.account], ignore_permissions=False)
 	get_ledger_balances_query = (
-		frappe.get_query(GLEntry, fields=[GLEntry.account], ignore_permissions=False)
+		get_ledger_balances_query
 		.select(
 			(Sum(Round(GLEntry.debit, precision)) - Sum(Round(GLEntry.credit, precision))).as_("balance"),
 			(
@@ -2445,7 +2459,7 @@ def create_gain_loss_journal(
 	journal_entry.company = company
 	journal_entry.posting_date = posting_date or nowdate()
 	journal_entry.multi_currency = 1
-	journal_entry.is_system_generated = True
+	journal_entry.mark_as_system_generated()
 
 	party_account_currency = frappe.get_cached_value("Account", party_account, "account_currency")
 

@@ -11,6 +11,12 @@ from erpnext.stock.serial_batch_bundle import get_serial_nos_from_bundle
 
 BORROWER_TYPES = {"Employee", "Customer", "Supplier", "Contact"}
 LOAN_SOURCE_DOCTYPES = {"Custody Loan", "Custody Loan Return", "Custody Loan Adjustment"}
+_CUSTODY_OPERATION_TOKEN = object()
+
+
+def is_trusted_custody_operation(doc):
+	"""Distinguish native generation/reversal from client-supplied transaction markers."""
+	return doc.flags.get("custody_operation_token") is _CUSTODY_OPERATION_TOKEN
 
 
 def get_custody_loan_return_delivery_note(quality_inspection):
@@ -736,6 +742,7 @@ class CustodyLoan(Document):
 			frappe.throw(_("The linked Asset Sale Invoice is already cancelled"))
 		invoice.check_permission("cancel")
 		invoice.flags.custody_loan_cancellation = True
+		invoice.flags.custody_operation_token = _CUSTODY_OPERATION_TOKEN
 		invoice.cancel()
 		self.update_status()
 		return invoice.name
@@ -1214,6 +1221,7 @@ def set_loan_transaction_source(transaction, loan, source):
 	transaction.custody_loan_source_doctype = source.doctype
 	transaction.custody_loan_source_name = source.name
 	transaction.flags.custody_loan_generated = True
+	transaction.flags.custody_operation_token = _CUSTODY_OPERATION_TOKEN
 
 
 def validate_generated_transaction(doc, method=None):
@@ -1910,6 +1918,7 @@ def cancel_source_transaction(source, fieldname):
 		frappe.throw(_("Cannot cancel {0} {1} because it requires a Shipment that is not linked.").format(doctype, name))
 	if doc.docstatus == 1:
 		doc.flags.custody_loan_cancellation = True
+		doc.flags.custody_operation_token = _CUSTODY_OPERATION_TOKEN
 		doc.ignore_linked_doctypes = tuple(
 			set(doc.get("ignore_linked_doctypes") or ()) | LOAN_SOURCE_DOCTYPES | {"Material Request"}
 		)

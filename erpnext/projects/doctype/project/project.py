@@ -90,10 +90,11 @@ class Project(Document):
 		self.onload()
 
 	def validate(self):
-		if not self.is_new():
+		if not self.is_new() and not self.flags.from_task_update:
 			self.copy_from_template()
 			self.control_access_for_project_users()
-		self.send_welcome_email()
+		if not self.flags.from_task_update:
+			self.send_welcome_email()
 		self.update_costing()
 		self.update_percent_complete()
 		self.validate_from_to_dates("expected_start_date", "expected_end_date")
@@ -196,10 +197,17 @@ class Project(Document):
 				return True
 
 	def update_project(self):
-		"""Called externally by Task"""
-		self.update_percent_complete()
-		self.update_costing()
-		self.db_update()
+		"""Persist derived Task/Timesheet changes through the Project lifecycle."""
+		self.reload()
+		previous = self.flags.from_task_update
+		previous_permissions = self.flags.ignore_permissions
+		self.flags.from_task_update = True
+		try:
+			# Updating a deleted template task must not recreate the template's tasks.
+			self.save(ignore_permissions=True)
+		finally:
+			self.flags.from_task_update = previous
+			self.flags.ignore_permissions = previous_permissions
 
 	def after_insert(self):
 		self.copy_from_template()  # nosemgrep
