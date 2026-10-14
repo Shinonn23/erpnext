@@ -62,6 +62,17 @@ class Warehouse(NestedSet):
 
 		self.name = self.warehouse_name
 
+	def _save(self, ignore_permissions=None, ignore_version=None):
+		from erpnext.stock.stock_control import lock_stock_control_assignment_types
+
+		lock_stock_control_assignment_types(self)
+		return super()._save(ignore_permissions=ignore_permissions, ignore_version=ignore_version)
+
+	def before_insert(self):
+		from erpnext.stock.stock_control import lock_stock_control_assignment_types
+
+		lock_stock_control_assignment_types(self)
+
 	def onload(self):
 		if self.company and cint(frappe.db.get_value("Company", self.company, "enable_perpetual_inventory")):
 			account = self.account or get_warehouse_account(self, raise_error=False)
@@ -72,6 +83,9 @@ class Warehouse(NestedSet):
 		self.set_onload("stock_exists", self.check_if_sle_exists(non_cancelled_only=True))
 
 	def validate(self):
+		from erpnext.stock.stock_control import validate_stock_control_assignment
+
+		validate_stock_control_assignment(self)
 		if self.default_storage_location:
 			from erpnext.stock.doctype.storage_location.storage_location import (
 				validate_storage_location_warehouse,

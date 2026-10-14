@@ -907,6 +907,18 @@ def asset_query(doctype, txt, searchfield, start, page_len, filters, as_dict=Fal
 	if filters.material_request_type == "Customer Demo":
 		conditions.append("tabAsset.is_demo_asset=1")
 	values = {"company": filters.company, "txt": f"%{txt}%", "start": start, "page_len": page_len}
+	from erpnext.controllers.queries import get_stock_control_source_options
+
+	policy = get_stock_control_source_options(
+		{
+			"doctype": "Material Request",
+			"company": filters.company,
+			"material_request_type": filters.material_request_type,
+		}
+	)
+	if policy and policy.get("operation"):
+		conditions.append("tabAsset.location in %(stock_control_locations)s")
+		values["stock_control_locations"] = tuple(policy["locations"] or [""])
 	if filters.item_code:
 		conditions.append("tabAsset.item_code=%(item_code)s")
 		values["item_code"] = filters.item_code

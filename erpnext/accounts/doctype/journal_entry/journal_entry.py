@@ -212,6 +212,7 @@ class JournalEntry(AccountsController):
 			return self._cancel()
 
 	def before_submit(self):
+		self.validate_stock_control_disposal()
 		# Do not validate while importing via data import
 		if not frappe.flags.in_import:
 			self.validate_total_debit_and_credit()
@@ -439,8 +440,26 @@ class JournalEntry(AccountsController):
 			):
 				frappe.db.set_value("Depreciation Schedule", d.name, "journal_entry", self.name)
 
+	def validate_stock_control_disposal(self):
+		if self.voucher_type == "Asset Disposal":
+			from erpnext.stock.stock_control import (
+				get_asset_stock_control_items,
+				is_stock_control_enabled,
+				lock_stock_control_items,
+				lock_stock_control_policies,
+				validate_asset_operation,
+			)
+
+			if is_stock_control_enabled(self.company):
+				assets = [frappe.get_doc("Asset", name) for name in sorted({row.reference_name for row in self.accounts if row.reference_type == "Asset" and row.reference_name})]
+				lock_stock_control_policies(location_names={asset.location for asset in assets})
+				lock_stock_control_items({item for asset in assets for item in get_asset_stock_control_items(asset)}, [asset.name for asset in assets])
+				for asset in assets:
+					validate_asset_operation(asset, "disposal", lock=False)
+
 	def update_asset_on_disposal(self):
 		if self.voucher_type == "Asset Disposal":
+			self.validate_stock_control_disposal()
 			disposed_assets = []
 			for d in self.get("accounts"):
 				if (

@@ -179,6 +179,9 @@ class MaterialRequest(BuyingController):
 					)
 
 	def validate(self):
+		from erpnext.stock.stock_control_transactions import validate_selected_stock_control_sources
+
+		validate_selected_stock_control_sources(self)
 		super().validate()
 
 		self.validate_schedule_date()

@@ -339,6 +339,9 @@ def get_message_for_depr_entry_posting_error(asset_links, error_log_links):
 def scrap_asset(asset_name: str, scrap_date: DateTimeLikeObject | None = None):
 	frappe.has_permission("Asset", "write", asset_name, throw=True)
 	asset = frappe.get_doc("Asset", asset_name)
+	from erpnext.stock.stock_control import validate_asset_operation
+
+	validate_asset_operation(asset, "disposal")
 	scrap_date = getdate(scrap_date) or getdate(today())
 	asset.db_set("disposal_date", scrap_date)
 	validate_asset_for_scrap(asset, scrap_date)

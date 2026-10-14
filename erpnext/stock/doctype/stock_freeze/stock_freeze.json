@@ -1,0 +1,208 @@
+{
+ "doctype": "DocType",
+ "name": "Stock Freeze",
+ "module": "Stock",
+ "autoname": "format:SF-{#####}",
+ "engine": "InnoDB",
+ "field_order": [
+  "freeze_scope_section",
+  "company",
+  "freeze_level",
+  "freeze_scope_column",
+  "status",
+  "item_code",
+  "batch_no",
+  "serial_no",
+  "asset",
+  "freeze_details_section",
+  "reason",
+  "freeze_details_column",
+  "evidence",
+  "release_details_section",
+  "release_reason",
+  "release_details_column",
+  "released_by",
+  "released_on"
+ ],
+ "fields": [
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "options": "Company",
+   "label": "Company",
+   "reqd": 1,
+   "in_list_view": 1,
+   "search_index": 1,
+   "read_only_depends_on": "eval:!doc.__islocal"
+  },
+  {
+   "fieldname": "freeze_level",
+   "fieldtype": "Select",
+   "label": "Freeze Level",
+   "options": "Item\nBatch\nSerial No\nAsset",
+   "reqd": 1,
+   "in_list_view": 1,
+   "read_only_depends_on": "eval:!doc.__islocal",
+   "description": "The freeze applies across all Warehouses and Asset Locations in the selected Company."
+  },
+  {
+   "fieldname": "item_code",
+   "fieldtype": "Link",
+   "label": "Item",
+   "options": "Item",
+   "depends_on": "eval:doc.freeze_level == \"Item\"",
+   "mandatory_depends_on": "eval:doc.freeze_level == \"Item\"",
+   "search_index": 1,
+   "read_only_depends_on": "eval:!doc.__islocal"
+  },
+  {
+   "fieldname": "batch_no",
+   "fieldtype": "Link",
+   "label": "Batch",
+   "options": "Batch",
+   "depends_on": "eval:doc.freeze_level == \"Batch\"",
+   "mandatory_depends_on": "eval:doc.freeze_level == \"Batch\"",
+   "search_index": 1,
+   "read_only_depends_on": "eval:!doc.__islocal"
+  },
+  {
+   "fieldname": "serial_no",
+   "fieldtype": "Link",
+   "label": "Serial No",
+   "options": "Serial No",
+   "depends_on": "eval:doc.freeze_level == \"Serial No\"",
+   "mandatory_depends_on": "eval:doc.freeze_level == \"Serial No\"",
+   "search_index": 1,
+   "read_only_depends_on": "eval:!doc.__islocal"
+  },
+  {
+   "fieldname": "asset",
+   "fieldtype": "Link",
+   "label": "Asset",
+   "options": "Asset",
+   "depends_on": "eval:doc.freeze_level == \"Asset\"",
+   "mandatory_depends_on": "eval:doc.freeze_level == \"Asset\"",
+   "search_index": 1,
+   "read_only_depends_on": "eval:!doc.__islocal"
+  },
+  {
+   "fieldname": "reason",
+   "fieldtype": "Small Text",
+   "label": "Freeze Reason",
+   "reqd": 1,
+   "read_only_depends_on": "eval:!doc.__islocal"
+  },
+  {
+   "fieldname": "evidence",
+   "fieldtype": "Attach",
+   "label": "Evidence"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Active\nReleased",
+   "default": "Active",
+   "reqd": 1,
+   "read_only": 1,
+   "in_list_view": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "release_reason",
+   "fieldtype": "Small Text",
+   "label": "Release Reason",
+   "read_only": 1
+  },
+  {
+   "fieldname": "released_by",
+   "fieldtype": "Link",
+   "options": "User",
+   "label": "Released By",
+   "read_only": 1
+  },
+  {
+   "fieldname": "released_on",
+   "fieldtype": "Datetime",
+   "label": "Released On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "freeze_scope_section",
+   "fieldtype": "Section Break",
+   "label": "Freeze Scope"
+  },
+  {
+   "fieldname": "freeze_scope_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "freeze_details_section",
+   "fieldtype": "Section Break",
+   "label": "Freeze Details"
+  },
+  {
+   "fieldname": "freeze_details_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "release_details_section",
+   "fieldtype": "Section Break",
+   "label": "Release Details",
+   "depends_on": "eval:doc.status == \"Released\""
+  },
+  {
+   "fieldname": "release_details_column",
+   "fieldtype": "Column Break"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1
+  },
+  {
+   "role": "Stock Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1
+  },
+  {
+   "role": "Quality Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1
+  },
+  {
+   "role": "Stock User",
+   "read": 1,
+   "select": 1
+  },
+  {
+   "role": "Sales User",
+   "read": 1,
+   "select": 1
+  },
+  {
+   "role": "Purchase User",
+   "read": 1,
+   "select": 1
+  },
+  {
+   "role": "Accounts User",
+   "read": 1,
+   "select": 1
+  },
+  {
+   "role": "Manufacturing User",
+   "read": 1,
+   "select": 1
+  }
+ ],
+ "track_changes": 1,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "allow_rename": 0
+}

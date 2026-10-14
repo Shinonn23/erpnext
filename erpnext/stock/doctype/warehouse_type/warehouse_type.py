@@ -18,4 +18,7 @@ class WarehouseType(Document):
 		description: DF.SmallText | None
 	# end: auto-generated types
 
-	pass
+	def validate(self):
+		from erpnext.stock.stock_control import validate_stock_control_type
+
+		validate_stock_control_type(self)

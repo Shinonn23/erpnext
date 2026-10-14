@@ -1173,3 +1173,53 @@ def get_warehouse_address(doctype: str, txt: str, searchfield: str, start: int, 
 		.limit(page_len)
 	)
 	return query.run(as_list=1)
+
+
+@frappe.whitelist()
+def get_stock_control_source_options(doc):
+	"""Return extra Link predicates; native source searches retain their permissions."""
+	from erpnext.stock.stock_control import OPERATIONS, is_stock_control_enabled
+	from erpnext.stock.stock_control_transactions import get_stock_control_operation
+
+	doc = frappe._dict(frappe.parse_json(doc))
+	if not doc.get("company"):
+		return None
+	frappe.has_permission("Company", "read", doc=doc.company, throw=True)
+	if not is_stock_control_enabled(doc.company):
+		return None
+
+	# The classifier reads trusted references; check access before following them.
+	for doctype, name in (
+		("Material Request", doc.get("material_request")),
+		("Custody Loan", doc.get("custody_loan")),
+		(doc.get("reference_doctype"), doc.get("reference_name")),
+	):
+		if doctype and name:
+			frappe.has_permission(doctype, "read", doc=name, throw=True)
+
+	for row in (doc.get("items") or []) + (doc.get("locations") or []):
+		if row.get("material_request"):
+			frappe.has_permission("Material Request", "read", doc=row["material_request"], throw=True)
+
+	operation = get_stock_control_operation(doc)
+	if operation is None:
+		return {"operation": None}
+	if operation not in OPERATIONS:
+		frappe.throw(_("Invalid stock control operation."))
+
+	filters = {"allow_" + operation: 1}
+	if operation != "internal_transfer":
+		filters["handling_category"] = "Normal"
+	warehouse_types = frappe.get_list("Warehouse Type", filters=filters, pluck="name", limit_page_length=0)
+	locations = []
+	if (
+		operation != "reconciliation"
+		and frappe.has_permission("Location Type", "read")
+		and frappe.has_permission("Location", "read")
+	):
+		location_types = frappe.get_list("Location Type", filters=filters, pluck="name", limit_page_length=0)
+		if location_types:
+			locations = frappe.get_list(
+				"Location", filters={"location_type": ["in", location_types]}, pluck="name", limit_page_length=0
+			)
+	return {"operation": operation, "warehouse_types": warehouse_types, "locations": locations}

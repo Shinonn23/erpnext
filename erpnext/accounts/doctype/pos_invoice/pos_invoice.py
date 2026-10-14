@@ -248,6 +248,9 @@ class POSInvoice(SalesInvoice):
 		for table_name in ["items", "packed_items"]:
 			self.make_bundle_using_old_serial_batch_fields(table_name)
 			self.submit_serial_batch_bundle(table_name)
+		from erpnext.stock.stock_control_transactions import validate_pos_stock_control
+
+		validate_pos_stock_control(self)
 
 		if self.coupon_code:
 			from erpnext.accounts.doctype.pricing_rule.utils import update_coupon_code_count

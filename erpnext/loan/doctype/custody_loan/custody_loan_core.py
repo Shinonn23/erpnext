@@ -110,6 +110,9 @@ class CustodyLoan(Document):
 	def validate(self):
 		self.validate_material_request()
 		self.validate_items()
+		from erpnext.stock.stock_control_transactions import validate_selected_stock_control_sources
+
+		validate_selected_stock_control_sources(self)
 		self.validate_shipment_scope()
 		self.refresh_balances()
 
@@ -254,10 +257,30 @@ class CustodyLoan(Document):
 	def before_submit(self):
 		lock_material_request(self.material_request)
 		self.validate_material_request()
-		for row in self.items:
-			if row.asset:
-				lock_asset(row.asset)
+		from erpnext.stock.stock_control import (
+			get_asset_stock_control_items,
+			is_stock_control_enabled,
+			lock_stock_control_items,
+			lock_stock_control_policies,
+		)
+
+		if is_stock_control_enabled(self.company):
+			assets = [frappe.get_doc("Asset", row.asset) for row in self.items if row.asset]
+			locations = {asset.location for asset in assets}
+			locations.update(row.target_location for row in self.items if row.target_location)
+			lock_stock_control_policies(
+				warehouse_names=[row.source_warehouse for row in self.items if row.source_warehouse],
+				location_names=locations,
+			)
+			item_codes = {row.item_code for row in self.items if row.item_code}
+			item_codes.update(item for asset in assets for item in get_asset_stock_control_items(asset))
+			lock_stock_control_items(item_codes, [asset.name for asset in assets])
+		for asset_name in sorted({row.asset for row in self.items if row.asset}):
+			lock_asset(asset_name)
 		self.validate_items(require_allocation=False, require_source_warehouse=True)
+		from erpnext.stock.stock_control_transactions import validate_selected_stock_control_sources
+
+		validate_selected_stock_control_sources(self)
 		if frappe.db.exists(
 			"Custody Loan",
 			{"material_request": self.material_request, "loan_type": self.loan_type, "docstatus": 1},

@@ -120,6 +120,9 @@ def make_sl_entries(sl_entries, allow_negative_stock=False, via_landed_cost_vouc
 	from erpnext.controllers.stock_controller import future_sle_exists, invalidate_future_sle_cache
 
 	if sl_entries:
+		from erpnext.stock.stock_control_transactions import validate_stock_ledger_entries
+
+		validate_stock_ledger_entries(sl_entries, via_landed_cost_voucher)
 		validate_stock_frozen_by_closing_entry(sl_entries)
 
 		cancelled = sl_entries[0].get("is_cancelled")

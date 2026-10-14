@@ -364,6 +364,68 @@ class TestCustodyLoanIntegration(ERPNextTestSuite):
 			frappe.db.exists("Stock Ledger Entry", {"voucher_no": issued.name, "is_cancelled": 0})
 		)
 
+	def test_stock_freeze_blocks_loan_dispatch_but_allows_verified_return(self):
+		from erpnext.stock.stock_control import OPERATIONS
+
+		loan, _issued, _serials = self.stock_loan()
+		item = loan.items[0].item_code
+		make_stock_entry(item_code=item, target=self.source_warehouse, qty=1, rate=100)
+		policy = frappe.get_doc(
+			{
+				"doctype": "Warehouse Type",
+				"name": "_Test Loan Stock Control",
+				"handling_category": "Normal",
+				**{"allow_" + operation: 1 for operation in OPERATIONS},
+			}
+		).insert()
+		for name in frappe.get_all(
+			"Warehouse", filters={"company": self.company, "is_group": 0, "disabled": 0}, pluck="name"
+		):
+			warehouse = frappe.get_doc("Warehouse", name)
+			warehouse.warehouse_type = policy.name
+			warehouse.stock_control_change_reason = "Prepare isolated loan freeze test"
+			warehouse.save()
+		location_policy = frappe.get_doc(
+			{
+				"doctype": "Location Type",
+				"name": "_Test Loan Location Control",
+				"handling_category": "Normal",
+				**{"allow_" + operation: 1 for operation in OPERATIONS if operation != "reconciliation"},
+			}
+		).insert()
+		for name in frappe.get_all("Asset", filters={"company": self.company}, pluck="location"):
+			if name:
+				location = frappe.get_doc("Location", name)
+				location.location_type = location_policy.name
+				location.stock_control_change_reason = "Prepare isolated loan freeze test"
+				location.save()
+		company = frappe.get_doc("Company", self.company)
+		company.enable_stock_control = 1
+		company.save()
+		frappe.get_doc(
+			{
+				"doctype": "Stock Freeze",
+				"company": self.company,
+				"freeze_level": "Item",
+				"item_code": item,
+				"reason": "Investigate stock already on loan",
+			}
+		).insert()
+		request = self.make_request("Customer Borrow / Loan", [{"item_code": item, "qty": 1}])
+		additional = self.make_custody_loan(request, "Stock")
+		additional.submit()
+		self.assert_request_rejected(lambda: self.complete_stock_loan_issue(additional), additional)
+		self.assert_stock(item, 1, 3)
+		returned = loan.make_return()
+		returned.items[0].returned_qty = 1
+		returned.submit()
+		self.complete_stock_loan_return(returned)
+		self.assert_stock(item, 2, 2)
+		self.assert_balance(loan, 1, 0, 2, "Partially Returned")
+		returned.cancel()
+		self.assert_stock(item, 1, 3)
+		self.assert_balance(loan, 0, 0, 3, "Active")
+
 	def test_stock_write_off_cancellation_reverses_exact_accounting(self):
 		loan, _, _ = self.stock_loan(qty=2)
 		item = loan.items[0].item_code

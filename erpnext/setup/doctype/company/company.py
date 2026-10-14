@@ -168,6 +168,9 @@ class Company(NestedSet):
 		return exists
 
 	def validate(self):
+		from erpnext.stock.stock_control import validate_company_stock_control
+
+		validate_company_stock_control(self)
 		old_doc = self.get_doc_before_save()
 		self.update_default_account = False
 		if self.is_new():

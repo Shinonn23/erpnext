@@ -106,7 +106,8 @@
   "amended_from",
   "credit_note",
   "is_return",
-  "tab_connections"
+  "tab_connections",
+  "stock_control_release_reason"
  ],
  "fields": [
   {
@@ -887,6 +888,13 @@
   {
    "fieldname": "column_break_wgvc",
    "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "stock_control_release_reason",
+   "fieldtype": "Small Text",
+   "label": "QA Release Reason",
+   "no_copy": 1,
+   "description": "Required by an authorized controller when transferring stock from QA or Quarantine to a normal Warehouse."
   }
  ],
  "grid_page_length": 50,

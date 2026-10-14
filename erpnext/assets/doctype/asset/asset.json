@@ -724,8 +724,11 @@
   },
   {
    "group": "Stock to Asset Conversion",
-   "link_doctype": "Stock to Asset Conversion",
-   "link_fieldname": "stock_to_asset_conversion"
+   "link_doctype": "Stock to Asset Conversion Asset",
+   "link_fieldname": "asset",
+   "is_child_table": 1,
+   "parent_doctype": "Stock to Asset Conversion",
+   "table_fieldname": "assets"
   }
  ],
  "modified": "2026-10-10 01:29:25.044953",

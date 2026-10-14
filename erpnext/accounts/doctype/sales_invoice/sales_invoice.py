@@ -455,6 +455,26 @@ class SalesInvoice(SellingController):
 		self.set_account_for_mode_of_payment()
 
 	def before_submit(self):
+		if not self.is_return:
+			from erpnext.stock.stock_control import (
+				get_asset_stock_control_items,
+				is_stock_control_enabled,
+				lock_stock_control_items,
+				lock_stock_control_policies,
+				validate_asset_operation,
+			)
+
+			if is_stock_control_enabled(self.company):
+				assets = [frappe.get_doc("Asset", name) for name in sorted({row.asset for row in self.items if row.get("asset")})]
+				items = {row.item_code for row in self.items + (self.get("packed_items") or [])}
+				items.update(item for asset in assets for item in get_asset_stock_control_items(asset))
+				lock_stock_control_policies(
+					warehouse_names={row.warehouse for row in self.items + (self.get("packed_items") or []) if row.get("warehouse")},
+					location_names={asset.location for asset in assets},
+				)
+				lock_stock_control_items(items, [asset.name for asset in assets])
+				for asset in assets:
+					validate_asset_operation(asset, "sales", lock=False)
 		self.add_remarks()
 
 	def on_submit(self):
@@ -494,7 +514,12 @@ class SalesInvoice(SellingController):
 			self.update_stock_ledger()
 			self.validate_produced_serial_nos_against_reservation()
 
-		self.split_asset_based_on_sale_qty()
+		previous_asset_sale = frappe.flags.get("stock_control_asset_sale")
+		frappe.flags.stock_control_asset_sale = frozenset(row.asset for row in self.items if row.get("asset"))
+		try:
+			self.split_asset_based_on_sale_qty()
+		finally:
+			frappe.flags.stock_control_asset_sale = previous_asset_sale
 
 		self.process_asset_depreciation()
 
@@ -1353,6 +1378,10 @@ class SalesInvoice(SellingController):
 			packed_item.set_actual_and_projected_qty()
 
 	def update_packing_list(self):
+		from erpnext.stock.stock_control_transactions import preserve_pos_packed_items
+
+		if preserve_pos_packed_items(self):
+			return
 		if cint(self.update_stock) == 1:
 			from erpnext.stock.doctype.packed_item.packed_item import make_packing_list
 

@@ -5,13 +5,121 @@
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
-  "description"
+  "stock_control_section",
+  "description",
+  "handling_column",
+  "handling_category",
+  "allowed_operations_section",
+  "allow_sales",
+  "allow_demo",
+  "allow_loan",
+  "operations_column",
+  "allow_issue",
+  "allow_manufacture",
+  "allow_disposal",
+  "allow_reconciliation",
+  "internal_transfer_section",
+  "allow_internal_transfer",
+  "policy_change_section",
+  "policy_change_reason"
  ],
  "fields": [
+  {
+   "fieldname": "stock_control_section",
+   "fieldtype": "Section Break",
+   "label": "Handling"
+  },
   {
    "fieldname": "description",
    "fieldtype": "Small Text",
    "label": "Description"
+  },
+  {
+   "fieldname": "handling_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "handling_category",
+   "fieldtype": "Select",
+   "label": "Handling Category",
+   "options": "Normal\nQA\nQuarantine",
+   "default": "Normal",
+   "reqd": 1,
+   "description": "QA and Quarantine allow internal transfer only."
+  },
+  {
+   "fieldname": "allowed_operations_section",
+   "fieldtype": "Section Break",
+   "label": "Allowed Operations"
+  },
+  {
+   "fieldname": "allow_sales",
+   "fieldtype": "Check",
+   "label": "Allow Sales",
+   "default": "0"
+  },
+  {
+   "fieldname": "allow_demo",
+   "fieldtype": "Check",
+   "label": "Allow Demo",
+   "default": "0"
+  },
+  {
+   "fieldname": "allow_loan",
+   "fieldtype": "Check",
+   "label": "Allow Loan",
+   "default": "0"
+  },
+  {
+   "fieldname": "operations_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "allow_issue",
+   "fieldtype": "Check",
+   "label": "Allow Issue",
+   "default": "0"
+  },
+  {
+   "fieldname": "allow_manufacture",
+   "fieldtype": "Check",
+   "label": "Allow Manufacture",
+   "default": "0"
+  },
+  {
+   "fieldname": "allow_disposal",
+   "fieldtype": "Check",
+   "label": "Allow Disposal",
+   "default": "0"
+  },
+  {
+   "fieldname": "allow_reconciliation",
+   "fieldtype": "Check",
+   "label": "Allow Reconciliation",
+   "default": "0"
+  },
+  {
+   "fieldname": "internal_transfer_section",
+   "fieldtype": "Section Break",
+   "label": "Internal Transfer"
+  },
+  {
+   "fieldname": "allow_internal_transfer",
+   "fieldtype": "Check",
+   "label": "Allow Internal Transfer",
+   "default": "0",
+   "description": "Allows movement between warehouses or asset locations within the same company. Does not permit sales, demo, or loan dispatch."
+  },
+  {
+   "fieldname": "policy_change_section",
+   "fieldtype": "Section Break",
+   "label": "Policy Change"
+  },
+  {
+   "fieldname": "policy_change_reason",
+   "fieldtype": "Small Text",
+   "label": "Policy Change Reason",
+   "no_copy": 1
   }
  ],
  "links": [],
@@ -30,18 +138,6 @@
    "read": 1,
    "report": 1,
    "role": "System Manager",
-   "share": 1,
-   "write": 1
-  },
-  {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Item Manager",
    "share": 1,
    "write": 1
   },
@@ -101,6 +197,17 @@
    "report": 1,
    "role": "Manufacturing User",
    "share": 1
+  },
+  {
+   "role": "Quality Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1
+  },
+  {
+   "role": "Item Manager",
+   "read": 1,
+   "select": 1
   }
  ],
  "quick_entry": 1,

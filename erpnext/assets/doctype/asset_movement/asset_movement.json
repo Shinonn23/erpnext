@@ -35,7 +35,8 @@
   "customer_contact_email",
   "more_info_tab",
   "return_details_section",
-  "expected_return_date"
+  "expected_return_date",
+  "stock_control_release_reason"
  ],
  "fields": [
   {
@@ -255,6 +256,12 @@
    "fieldname": "more_info_tab",
    "fieldtype": "Tab Break",
    "label": "More Info"
+  },
+  {
+   "fieldname": "stock_control_release_reason",
+   "fieldtype": "Small Text",
+   "label": "Stock Control Release Reason",
+   "no_copy": 1
   }
  ],
  "grid_page_length": 50,

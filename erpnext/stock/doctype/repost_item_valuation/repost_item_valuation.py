@@ -375,11 +375,16 @@ class RepostItemValuation(Document):
 		"""Recreate Stock Ledger Entries for the transaction."""
 		if self.based_on == "Transaction" and self.recreate_stock_ledgers:
 			doc = frappe.get_doc(self.voucher_type, self.voucher_no)
-			doc.db_set("docstatus", 2)
-			doc.update_stock_ledger(allow_negative_stock=True)
+			previous = frappe.flags.get("stock_control_reposting")
+			frappe.flags.stock_control_reposting = True
+			try:
+				doc.db_set("docstatus", 2)
+				doc.update_stock_ledger(allow_negative_stock=True)
 
-			doc.db_set("docstatus", 1)
-			doc.update_stock_ledger(allow_negative_stock=True)
+				doc.db_set("docstatus", 1)
+				doc.update_stock_ledger(allow_negative_stock=True)
+			finally:
+				frappe.flags.stock_control_reposting = previous
 
 
 @frappe.whitelist(methods=["POST"])

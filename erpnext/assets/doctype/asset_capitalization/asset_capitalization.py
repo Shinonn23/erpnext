@@ -107,6 +107,28 @@ class AssetCapitalization(StockController):
 			self.set_serial_and_batch_bundle(table_name="stock_items")
 
 	def before_submit(self):
+		from erpnext.stock.stock_control import (
+			get_asset_stock_control_items,
+			is_stock_control_enabled,
+			lock_stock_control_items,
+			lock_stock_control_policies,
+			validate_asset_operation,
+		)
+
+		if is_stock_control_enabled(self.company):
+			assets = [frappe.get_doc("Asset", row.asset) for row in self.asset_items]
+			locations = {asset.location for asset in assets}
+			lock_stock_control_policies(
+				warehouse_names=[row.warehouse for row in self.stock_items if row.warehouse],
+				location_names=locations,
+			)
+			item_codes = {row.item_code for row in self.stock_items if row.item_code}
+			item_codes.update(item for asset in assets for item in get_asset_stock_control_items(asset))
+			if self.target_item_code:
+				item_codes.add(self.target_item_code)
+			lock_stock_control_items(item_codes, [asset.name for asset in assets])
+			for asset in assets:
+				validate_asset_operation(asset, "manufacture", lock=False)
 		self.validate_source_mandatory()
 		# self.create_target_asset()
 

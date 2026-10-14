@@ -22,6 +22,10 @@
   "is_group",
   "column_break_qhdh",
   "customer",
+  "stock_control_section",
+  "warehouse_type",
+  "column_break_qajx",
+  "stock_control_change_reason",
   "asset_location_section",
   "asset_location",
   "address_and_contact",
@@ -39,8 +43,6 @@
   "state",
   "pin",
   "transit_section",
-  "warehouse_type",
-  "column_break_qajx",
   "default_in_transit_warehouse",
   "tree_details",
   "lft",
@@ -236,7 +238,8 @@
    "fieldname": "warehouse_type",
    "fieldtype": "Link",
    "label": "Warehouse Type",
-   "options": "Warehouse Type"
+   "options": "Warehouse Type",
+   "description": "Select a Warehouse Type to define the permitted stock operations."
   },
   {
    "fieldname": "column_break_3",
@@ -301,6 +304,17 @@
    "options": "Storage Location",
    "depends_on": "eval:!doc.__islocal && !doc.is_group",
    "description": "Used for stock transactions when Storage Location is not specified."
+  },
+  {
+   "fieldname": "stock_control_change_reason",
+   "fieldtype": "Small Text",
+   "label": "Stock Control Change Reason",
+   "no_copy": 1
+  },
+  {
+   "fieldname": "stock_control_section",
+   "fieldtype": "Section Break",
+   "label": "Stock Control"
   }
  ],
  "grid_page_length": 50,
@@ -382,7 +396,9 @@
   },
   {
    "role": "Quality Manager",
-   "select": 1
+   "select": 1,
+   "read": 1,
+   "write": 1
   },
   {
    "role": "Website Manager",

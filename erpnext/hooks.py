@@ -25,6 +25,7 @@ develop_version = "15.x.x-develop"
 app_include_js = [
 	"erpnext.bundle.js",
 	"/assets/erpnext/js/storage_location.js",
+	"/assets/erpnext/js/stock_control.js",
 	"/assets/erpnext/js/thailand/address.js",
 	"/assets/erpnext/js/thailand/print_format.js",
 	"/assets/erpnext/js/thailand/deposit_utils.js",
