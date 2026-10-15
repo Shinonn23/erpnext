@@ -63,12 +63,12 @@ frappe.ui.form.on("Invoice Discounting", {
 			if (frm.doc.status == "Sanctioned") {
 				frm.add_custom_button(__("Disburse Loan"), function () {
 					frm.events.create_disbursement_entry(frm);
-				}).addClass("btn-primary");
+				}, undefined, "Journal Entry").addClass("btn-primary");
 			}
 			if (frm.doc.status == "Disbursed") {
 				frm.add_custom_button(__("Close Loan"), function () {
 					frm.events.close_loan(frm);
-				}).addClass("btn-primary");
+				}, undefined, "Journal Entry").addClass("btn-primary");
 			}
 		}
 	},

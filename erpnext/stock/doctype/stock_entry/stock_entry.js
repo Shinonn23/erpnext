@@ -265,7 +265,8 @@ frappe.ui.form.on("Stock Entry", {
 					let transaction_controller = new erpnext.TransactionController({ frm: frm });
 					transaction_controller.make_quality_inspection();
 				},
-				__("Create")
+				__("Create"),
+				"Quality Inspection"
 			);
 			frm.page.set_inner_btn_group_as_primary(__("Create"));
 		}
@@ -455,7 +456,7 @@ frappe.ui.form.on("Stock Entry", {
 						method: "erpnext.stock.doctype.stock_entry.stock_entry.make_stock_in_entry",
 						frm: frm,
 					});
-				});
+				}, undefined, "Stock Entry");
 			}
 
 			if (frm.doc.per_transferred > 0) {
@@ -522,7 +523,8 @@ frappe.ui.form.on("Stock Entry", {
 							__("Create")
 						);
 					},
-					__("Create")
+					__("Create"),
+					"Stock Entry"
 				);
 			}
 		}
@@ -644,7 +646,8 @@ frappe.ui.form.on("Stock Entry", {
 				function () {
 					frm.trigger("make_retention_stock_entry");
 				},
-				__("Create")
+				__("Create"),
+				"Stock Entry"
 			);
 		}
 
@@ -1652,7 +1655,8 @@ erpnext.stock.StockEntry = class StockEntry extends erpnext.stock.StockControlle
 					excise.voucher_type = "Excise Entry";
 					frappe.set_route("Form", "Journal Entry", excise.name);
 				},
-				__("Create")
+				__("Create"),
+				"Journal Entry"
 			);
 	}
 

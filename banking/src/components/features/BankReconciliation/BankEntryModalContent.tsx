@@ -95,7 +95,7 @@ const BulkBankEntryForm = ({ selectedTransactions }: { selectedTransactions: Unr
                 }
             })
 
-            toast.success(_("Journal Entry drafts created. Request approval on each entry to post and match."), {
+            toast.success(_("Bank Entries Created"), {
                 duration: 4000,
             })
 
@@ -286,7 +286,7 @@ const BankEntryForm = ({ selectedTransaction }: { selectedTransaction: Unreconci
                     }
                 ]
             })
-            toast.success(_("Journal Entry draft created. Request approval to post and match it."), {
+            toast.success(_("Bank Entry Created"), {
                 duration: 4000,
                 closeButton: true,
                 action: {

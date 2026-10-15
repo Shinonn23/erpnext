@@ -77,7 +77,8 @@ frappe.ui.form.on("Project", {
 				() => {
 					frm.events.create_duplicate(frm);
 				},
-				__("Actions")
+				__("Actions"),
+				"Project"
 			);
 
 			frm.add_custom_button(

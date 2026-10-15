@@ -43,7 +43,7 @@ frappe.ui.form.on("Sales Forecast", {
 					method: "erpnext.manufacturing.doctype.sales_forecast.sales_forecast.create_mps",
 					frm: frm,
 				});
-			}).addClass("btn-primary");
+			}, undefined, "Master Production Schedule").addClass("btn-primary");
 		}
 	},
 });

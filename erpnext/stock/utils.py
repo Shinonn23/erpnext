@@ -109,6 +109,9 @@ def get_stock_balance(
 	from erpnext.stock.stock_ledger import get_previous_sle
 
 	frappe.has_permission("Item", "read", throw=True)
+	inventory_dimensions_dict = frappe.parse_json(inventory_dimensions_dict)
+	if inventory_dimensions_dict is not None and not isinstance(inventory_dimensions_dict, dict):
+		frappe.throw(_("Inventory dimensions must be a JSON object."))
 
 	if posting_date is None:
 		posting_date = nowdate()
@@ -141,6 +144,19 @@ def get_stock_balance(
 				extra_cond += f" and {field} = %({field})s"
 
 	last_entry = get_previous_sle(args, extra_cond=extra_cond)
+	if last_entry and inventory_dimensions_dict and any(
+		value not in (None, "") for value in inventory_dimensions_dict.values()
+	):
+		# Assigned dimensions post deltas; unassigned reconciliations can reset the warehouse balance.
+		args["posting_datetime"] = get_combine_datetime(posting_date, posting_time)
+		last_entry.qty_after_transaction = flt(
+			frappe.db.sql(
+				f"""select sum(actual_qty) from `tabStock Ledger Entry`
+				where item_code = %(item_code)s and warehouse = %(warehouse)s
+				and posting_datetime <= %(posting_datetime)s and is_cancelled = 0 {extra_cond}""",
+				args,
+			)[0][0]
+		)
 
 	if with_valuation_rate:
 		if with_serial_no:

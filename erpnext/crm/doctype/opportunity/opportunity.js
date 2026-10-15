@@ -90,7 +90,8 @@ frappe.ui.form.on("Opportunity", {
 					function () {
 						frm.trigger("make_request_for_quotation");
 					},
-					__("Create")
+					__("Create"),
+					"Request for Quotation"
 				);
 			}
 

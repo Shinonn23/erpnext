@@ -92,7 +92,7 @@ frappe.ui.form.on("Employee", {
 				});
 
 				dialog.show();
-			});
+			}, undefined, "User");
 		}
 	},
 

@@ -287,7 +287,10 @@ frappe.ui.form.on("Material Request", {
 		if (frm.doc.docstatus !== 1) return;
 		const action_refresh_id = (frm.__material_request_action_refresh_id || 0) + 1;
 		frm.__material_request_action_refresh_id = action_refresh_id;
-		return Promise.resolve(frm.call("get_post_submit_actions")).then((r) => {
+		return Promise.resolve(frappe.call({
+			method: "run_doc_method",
+			args: { dt: frm.doc.doctype, dn: request_name, method: "get_post_submit_actions" },
+		})).then((r) => {
 			if (
 				frm.doc.name !== request_name ||
 				frm.doc.docstatus !== 1 ||
@@ -299,7 +302,8 @@ frappe.ui.form.on("Material Request", {
 				const loan_type = actions.stock_custody_loan ? "Stock" : "Asset";
 				frm.add_custom_button(__("Loan Order"), () =>
 					frm.call("make_custody_loan", { loan_type }).then((r) => open_generated_doc(r.message)),
-					__("Create")
+					__("Create"),
+					"Custody Loan"
 				);
 			}
 			if (actions.asset_movement) {

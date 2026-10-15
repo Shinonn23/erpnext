@@ -8,6 +8,7 @@
   "item_code",
   "item_name",
   "batch_no",
+  "expiry_date",
   "serial_no",
   "column_break_1",
   "system_qty",
@@ -42,6 +43,13 @@
    "in_list_view": 1,
    "label": "Batch No",
    "options": "Batch",
+   "read_only": 1
+  },
+  {
+   "fieldname": "expiry_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Expiry Date",
    "read_only": 1
   },
   {

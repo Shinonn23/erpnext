@@ -186,13 +186,15 @@ frappe.ui.form.on("Material Request", {
 					frm.add_custom_button(
 						__("Material Transfer"),
 						() => frm.events.make_stock_entry(frm),
-						__("Create")
+						__("Create"),
+						"Stock Entry"
 					);
 
 					frm.add_custom_button(
 						__("Material Transfer (In Transit)"),
 						() => frm.events.make_in_transit_stock_entry(frm),
-						__("Create")
+						__("Create"),
+						"Stock Entry"
 					);
 				}
 
@@ -208,7 +210,8 @@ frappe.ui.form.on("Material Request", {
 					frm.add_custom_button(
 						__("Material Receipt"),
 						() => frm.events.make_stock_entry(frm),
-						__("Create")
+						__("Create"),
+						"Stock Entry"
 					);
 				}
 
@@ -244,7 +247,8 @@ frappe.ui.form.on("Material Request", {
 					frm.add_custom_button(
 						__("Subcontracted Purchase Order"),
 						() => frm.events.make_purchase_order(frm),
-						__("Create")
+						__("Create"),
+						"Purchase Order"
 					);
 				}
 

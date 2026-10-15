@@ -13,6 +13,7 @@ from erpnext.regional.thailand.custom.payment_entry import make_withholding_tax_
 class TestThaiTaxWithholdingIntegration(unittest.TestCase):
 	def test_core_withholding_entry_builds_thai_certificate_line(self):
 		cert = MagicMock()
+		payment_source = MagicMock()
 		supplier = MagicMock(supplier_name="Supplier Co", supplier_primary_address="Supplier Address")
 		category = {
 			"thai_type_of_income": "5",
@@ -35,10 +36,16 @@ class TestThaiTaxWithholdingIntegration(unittest.TestCase):
 
 		with (
 			patch("erpnext.regional.thailand.custom.payment_entry.frappe.new_doc", return_value=cert),
-			patch("erpnext.regional.thailand.custom.payment_entry.frappe.get_doc", return_value=supplier),
 			patch(
-				"erpnext.regional.thailand.custom.payment_entry.frappe.db.get_value",
-				return_value=category,
+				"erpnext.regional.thailand.custom.payment_entry.frappe.get_doc",
+				side_effect=lambda doctype, name: payment_source if doctype == "Payment Entry" else supplier,
+			),
+			patch(
+				"erpnext.regional.thailand.custom.payment_entry.frappe.has_permission", return_value=True
+			) as destination_permission,
+			patch(
+				"erpnext.regional.thailand.custom.payment_entry.frappe.db",
+				MagicMock(get_value=MagicMock(return_value=category)),
 			),
 		):
 			result = make_withholding_tax_cert(
@@ -47,6 +54,8 @@ class TestThaiTaxWithholdingIntegration(unittest.TestCase):
 			)
 
 		self.assertIs(result, cert)
+		payment_source.check_permission.assert_called_once_with("read")
+		destination_permission.assert_called_once_with("Withholding Tax Cert", "create", throw=True)
 		cert.append.assert_called_once_with(
 			"withholding_tax_items",
 			{

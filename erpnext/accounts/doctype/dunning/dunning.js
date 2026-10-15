@@ -43,7 +43,8 @@ frappe.ui.form.on("Dunning", {
 				function () {
 					frm.events.make_payment_entry(frm);
 				},
-				__("Create")
+				__("Create"),
+				"Payment Entry"
 			);
 			frm.page.set_inner_btn_group_as_primary(__("Create"));
 		}

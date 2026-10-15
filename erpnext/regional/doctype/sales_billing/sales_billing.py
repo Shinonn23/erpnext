@@ -88,6 +88,8 @@ def create_multi_payment_entries(
 		frappe.throw(_("Failed to parse payment details. Please check your input."))
 
 	sales_billing = frappe.get_doc("Sales Billing", sales_billing_name)
+	sales_billing.check_permission("read")
+	frappe.has_permission("Payment Entry", "create", throw=True)
 	customer, company = sales_billing.customer, sales_billing.company
 	company_currency = frappe.get_value("Company", company, "default_currency")
 

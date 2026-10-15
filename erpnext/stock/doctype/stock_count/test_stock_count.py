@@ -88,6 +88,63 @@ class TestStockCount(ERPNextTestSuite):
 		self.assertRaises(frappe.ValidationError, count.validate)
 
 
+class TestStockCountSnapshot(unittest.TestCase):
+	def test_expiry_is_copied_once_per_group_and_batchless_rows_stay_empty(self):
+		for has_serial_no in (False, True):
+			for batch_no, expiry_date in (("BATCH-A", "2027-01-31"), ("BATCH-B", None), (None, None)):
+				with self.subTest(has_serial_no=has_serial_no, batch_no=batch_no):
+					rows = []
+					count = SimpleNamespace(
+						warehouse="Count Warehouse",
+						get_dimension_filters=lambda: (
+							[frappe._dict(fieldname="storage_location", source_fieldname="storage_location")],
+							{},
+						),
+						get_stock_ledger_groups=MagicMock(
+							return_value=[
+								frappe._dict(
+									item_code="Count Item", batch_no=batch_no, qty=2, storage_location="SHELF"
+								)
+							]
+						),
+						append=lambda fieldname, row: rows.append(row),
+					)
+					with (
+						patch.object(frappe, "get_cached_doc", return_value=frappe._dict(has_serial_no=has_serial_no)),
+						patch.object(frappe, "get_cached_value", return_value=expiry_date) as get_expiry,
+						patch(
+							"erpnext.stock.doctype.stock_count.stock_count.get_serial_nos_based_on_posting_date",
+							return_value=["SERIAL-1", "SERIAL-2"],
+						) as get_serials,
+					):
+						StockCount.append_snapshot_rows(count, "Count Item", "2026-10-15 12:00:00")
+					if batch_no:
+						get_expiry.assert_called_once_with("Batch", batch_no, "expiry_date")
+					else:
+						get_expiry.assert_not_called()
+					base_row = {
+						"item_code": "Count Item",
+						"batch_no": batch_no,
+						"expiry_date": expiry_date,
+						"system_qty": 2,
+						"counted_qty": 0,
+						"storage_location": "SHELF",
+					}
+					if has_serial_no:
+						self.assertEqual(
+							rows,
+							[{**base_row, "serial_no": serial, "system_qty": 1} for serial in ("SERIAL-1", "SERIAL-2")],
+						)
+						get_serials.assert_called_once()
+						self.assertEqual(get_serials.call_args.args[0].batch_no, batch_no)
+						self.assertEqual(
+							get_serials.call_args.args[0].inventory_dimensions_dict, {"storage_location": "SHELF"}
+						)
+					else:
+						self.assertEqual(rows, [base_row])
+						get_serials.assert_not_called()
+
+
 class TestStockCountLineValidation(unittest.TestCase):
 	def make_count(self, rows, dimensions=("storage_location",)):
 		return SimpleNamespace(

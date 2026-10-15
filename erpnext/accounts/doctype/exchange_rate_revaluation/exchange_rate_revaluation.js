@@ -32,7 +32,8 @@ frappe.ui.form.on("Exchange Rate Revaluation", {
 								function () {
 									return frm.events.make_jv(frm);
 								},
-								__("Create")
+								__("Create"),
+								"Journal Entry"
 							);
 						} else if (!r.message.reversals_posted) {
 							frm.add_custom_button(
@@ -40,7 +41,8 @@ frappe.ui.form.on("Exchange Rate Revaluation", {
 								function () {
 									return frm.events.make_reverse_journal(frm);
 								},
-								__("Create")
+								__("Create"),
+								"Journal Entry"
 							);
 						}
 					}

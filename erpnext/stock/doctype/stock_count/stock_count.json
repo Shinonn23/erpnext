@@ -2,6 +2,7 @@
  "actions": [],
  "autoname": "naming_series:",
  "creation": "2026-10-05 00:00:00.000000",
+ "default_print_format": "Stock Count Audit",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
@@ -16,8 +17,10 @@
   "item_count",
   "quarantine_warehouse",
   "quarantine_storage_location",
+  "count_status_section",
   "snapshot_datetime",
   "status",
+  "scanning_section",
   "scan_storage_location",
   "scan_barcode",
   "items_section",
@@ -104,6 +107,11 @@
    "description": "Optional destination location in the Quarantine Warehouse."
   },
   {
+   "fieldname": "count_status_section",
+   "fieldtype": "Section Break",
+   "label": "Count Status"
+  },
+  {
    "fieldname": "snapshot_datetime",
    "fieldtype": "Datetime",
    "label": "Snapshot Datetime",
@@ -122,19 +130,27 @@
    "in_list_view": 1
   },
   {
-   "depends_on": "eval:doc.status == 'In Progress' && doc.docstatus == 0",
+   "depends_on": "eval:doc.status == 'In Progress' && doc.docstatus == 0 && (!doc.workflow_state || doc.workflow_state == 'Stock Count Draft')",
+   "fieldname": "scanning_section",
+   "fieldtype": "Section Break",
+   "label": "Scan Items"
+  },
+  {
+   "depends_on": "eval:doc.status == 'In Progress' && doc.docstatus == 0 && (!doc.workflow_state || doc.workflow_state == 'Stock Count Draft')",
    "fieldname": "scan_storage_location",
    "fieldtype": "Link",
    "label": "Scan Storage Location",
    "options": "Storage Location",
+   "print_hide": 1,
    "description": "Select the location being counted before scanning items stored in multiple locations.",
    "no_copy": 1
   },
   {
-   "depends_on": "eval:doc.status == 'In Progress' && doc.docstatus == 0",
+   "depends_on": "eval:doc.status == 'In Progress' && doc.docstatus == 0 && (!doc.workflow_state || doc.workflow_state == 'Stock Count Draft')",
    "fieldname": "scan_barcode",
    "fieldtype": "Data",
    "label": "Scan Item, Batch, or Serial No",
+   "print_hide": 1,
    "options": "Barcode"
   },
   {
@@ -186,6 +202,7 @@
  "permissions": [
   {
    "create": 1,
+   "print": 1,
    "read": 1,
    "write": 1,
    "role": "Stock User"
@@ -195,6 +212,7 @@
    "cancel": 1,
    "create": 1,
    "delete": 1,
+   "print": 1,
    "read": 1,
    "report": 1,
    "role": "Stock Manager",
@@ -203,6 +221,7 @@
    "write": 1
   },
   {
+   "print": 1,
    "read": 1,
    "role": "Accounts Manager"
   }

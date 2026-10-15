@@ -182,7 +182,8 @@ frappe.ui.form.on("Pick List", {
 					frm.add_custom_button(
 						__("Reserve"),
 						() => frm.events.create_stock_reservation_entries(frm),
-						__("Stock Reservation")
+						__("Stock Reservation"),
+						"Stock Reservation Entry"
 					);
 				}
 

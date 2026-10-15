@@ -32,6 +32,8 @@ class PettyCashHolder(Document):
 def create_journal_entry(
 	posting_date, petty_cash_holder, from_account, to_account, amount: float, type
 ):
+	frappe.get_doc("Petty Cash Holder", petty_cash_holder).check_permission("read")
+	frappe.has_permission("Journal Entry", "create", throw=True)
 	journal_entry = frappe.new_doc("Journal Entry")
 	journal_entry.update(
 		{

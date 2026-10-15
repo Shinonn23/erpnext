@@ -375,6 +375,9 @@ class StockCount(Document):
 			base_row = {
 				"item_code": item_code,
 				"batch_no": group.batch_no,
+				"expiry_date": frappe.get_cached_value("Batch", group.batch_no, "expiry_date")
+				if group.batch_no
+				else None,
 				"system_qty": flt(group.qty),
 				"counted_qty": 0,
 				**row_values,

@@ -127,7 +127,7 @@ def get_item_price_qty_data(filters):
 def get_price_map(price_list_names, buying=0, selling=0):
 	price_map = {}
 
-	if not price_list_names:
+	if not price_list_names or not frappe.has_permission("Item Price", "read"):
 		return price_map
 
 	rate_key = "Buying Rate" if buying else "Selling Rate"
@@ -139,8 +139,8 @@ def get_price_map(price_list_names, buying=0, selling=0):
 	else:
 		filters["selling"] = 1
 
-	pricing_details = frappe.get_all(
-		"Item Price", fields=["name", "price_list", "price_list_rate"], filters=filters
+	pricing_details = frappe.get_list(
+		"Item Price", fields=["name", "price_list", "price_list_rate"], filters=filters, limit_page_length=0
 	)
 
 	for d in pricing_details:

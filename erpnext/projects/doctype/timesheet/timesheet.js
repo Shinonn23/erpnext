@@ -55,7 +55,7 @@ frappe.ui.form.on("Timesheet", {
 			) {
 				frm.add_custom_button(__("Create Sales Invoice"), function () {
 					frm.trigger("make_invoice");
-				});
+				}, undefined, "Sales Invoice");
 			}
 		}
 

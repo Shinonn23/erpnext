@@ -49,7 +49,7 @@ frappe.ui.form.on("Warranty Claim", {
 					method: "erpnext.support.doctype.warranty_claim.warranty_claim.make_maintenance_visit",
 					frm: frm,
 				});
-			});
+			}, undefined, "Maintenance Visit");
 		}
 	},
 

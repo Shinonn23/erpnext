@@ -90,27 +90,17 @@ def get_price_list():
 	"""Get selling & buying price list of every item"""
 
 	rate = {}
-
-	ip = frappe.qb.DocType("Item Price")
-	pl = frappe.qb.DocType("Price List")
-	cu = frappe.qb.DocType("Currency")
-
-	price_list = (
-		frappe.qb.from_(ip)
-		.from_(pl)
-		.from_(cu)
-		.select(
-			ip.item_code,
-			ip.buying,
-			ip.selling,
-			(IfNull(cu.symbol, ip.currency)).as_("currency"),
-			ip.price_list_rate,
-			ip.price_list,
-		)
-		.where((ip.price_list == pl.name) & (pl.currency == cu.name) & (pl.enabled == 1))
-	).run(as_dict=True)
+	if not frappe.has_permission("Item Price", "read"):
+		return rate
+	price_list = frappe.get_list(
+		"Item Price",
+		fields=["item_code", "buying", "selling", "currency", "price_list_rate", "price_list"],
+		filters={"price_list": ["in", frappe.get_all("Price List", filters={"enabled": 1}, pluck="name")]},
+		limit_page_length=0,
+	)
 
 	for d in price_list:
+		d.currency = frappe.get_cached_value("Currency", d.currency, "symbol") or d.currency
 		d.update({"price": f"{d.currency} {round(d.price_list_rate, 2)} - {d.price_list}"})
 		d.pop("currency")
 		d.pop("price_list_rate")

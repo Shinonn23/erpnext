@@ -181,7 +181,8 @@ frappe.ui.form.on("Production Plan", {
 						() => {
 							frm.trigger("make_work_order");
 						},
-						__("Create")
+						__("Create"),
+						["Work Order", "Purchase Order"]
 					);
 					has_create_buttons = true;
 				}
@@ -304,7 +305,8 @@ frappe.ui.form.on("Production Plan", {
 				frm.add_custom_button(
 					__("Reserve for Sub-assembly"),
 					() => erpnext.stock_reservation.make_entries(frm, "sub_assembly_items"),
-					__("Stock Reservation")
+					__("Stock Reservation"),
+					"Stock Reservation Entry"
 				);
 			}
 
@@ -330,7 +332,8 @@ frappe.ui.form.on("Production Plan", {
 				frm.add_custom_button(
 					__("Reserve for Raw Materials"),
 					() => erpnext.stock_reservation.make_entries(frm, "mr_items"),
-					__("Stock Reservation")
+					__("Stock Reservation"),
+					"Stock Reservation Entry"
 				);
 			}
 

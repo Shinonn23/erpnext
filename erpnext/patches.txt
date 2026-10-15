@@ -525,3 +525,4 @@ erpnext.patches.v16_0.migrate_inventory_dimension_doctypes
 erpnext.patches.v16_0.remove_cost_center_doctypes
 erpnext.patches.v16_0.purge_cost_center_data
 erpnext.patches.v16_0.restore_budget_dimensions
+erpnext.patches.v16_0.add_stock_count_expiry_and_print

@@ -122,7 +122,8 @@ frappe.ui.form.on("Purchase Order", {
 						},
 					});
 				},
-				__("Create")
+				__("Create"),
+				"Stock Entry"
 			);
 		}
 	},
@@ -395,7 +396,8 @@ erpnext.buying.PurchaseOrderController = class PurchaseOrderController extends (
 										function () {
 											me.make_stock_entry();
 										},
-										__("Transfer")
+										__("Transfer"),
+										"Stock Entry"
 									);
 								}
 							} else {
@@ -447,7 +449,8 @@ erpnext.buying.PurchaseOrderController = class PurchaseOrderController extends (
 								function () {
 									me.make_inter_company_order(me.frm);
 								},
-								__("Create")
+								__("Create"),
+								"Sales Order"
 							);
 						}
 					}

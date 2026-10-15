@@ -141,7 +141,7 @@ erpnext.regional.thailand.deposit_utils.add_create_deposit_button = function (fr
 			});
 
 			dialog.show();
-		}).addClass(frm.doc.has_deposit ? "btn-primary" : "btn-secondary");
+		}, undefined, frm.doc.doctype === "Sales Order" ? "Sales Invoice" : "Purchase Invoice").addClass(frm.doc.has_deposit ? "btn-primary" : "btn-secondary");
 	}
 };
 

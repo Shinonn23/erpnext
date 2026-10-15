@@ -316,6 +316,8 @@ def validate_sales_tax_invoice_zero_tax(doc, method):
 
 @frappe.whitelist()
 def to_clear_undue_tax(dt, dn):
+	frappe.get_doc(dt, dn).check_permission("read")
+	frappe.has_permission("Journal Entry", "create", throw=True)
 	if is_tax_invoice_exists(dt, dn):
 		return False
 	if not make_clear_vat_journal_entry(dt, dn):
@@ -336,6 +338,8 @@ def is_tax_invoice_exists(dt, dn):
 @frappe.whitelist()
 def make_clear_vat_journal_entry(dt, dn):
 	doc = frappe.get_doc(dt, dn)
+	doc.check_permission("read")
+	frappe.has_permission("Journal Entry", "create", throw=True)
 	tax = get_thai_tax_settings(doc.company)
 	je = frappe.new_doc("Journal Entry")
 	je.entry_type = "Journal Entry"

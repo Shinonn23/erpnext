@@ -136,7 +136,8 @@ frappe.ui.form.on("Asset", {
 					function () {
 						frm.trigger("make_journal_entry");
 					},
-					__("Create")
+					__("Create"),
+					"Journal Entry"
 				);
 				has_create_buttons = true;
 			}
@@ -152,7 +153,8 @@ frappe.ui.form.on("Asset", {
 						function () {
 							frm.trigger("create_asset_maintenance");
 						},
-						__("Actions")
+						__("Actions"),
+						"Asset Maintenance"
 					);
 				}
 				if (frm.doc.status === "Fully Depreciated") {
@@ -161,7 +163,8 @@ frappe.ui.form.on("Asset", {
 						function () {
 							frm.trigger("create_asset_repair");
 						},
-						__("Actions")
+						__("Actions"),
+						"Asset Repair"
 					);
 				}
 				frm.add_custom_button(
@@ -169,7 +172,8 @@ frappe.ui.form.on("Asset", {
 					function () {
 						frm.trigger("split_asset");
 					},
-					__("Actions")
+					__("Actions"),
+					"Asset"
 				);
 
 				frm.add_custom_button(
@@ -177,7 +181,8 @@ frappe.ui.form.on("Asset", {
 					function () {
 						erpnext.asset.transfer_asset(frm);
 					},
-					__("Actions")
+					__("Actions"),
+					"Asset Movement"
 				);
 
 				frm.add_custom_button(
@@ -193,7 +198,8 @@ frappe.ui.form.on("Asset", {
 					function () {
 						frm.trigger("sell_asset");
 					},
-					__("Actions")
+					__("Actions"),
+					"Sales Invoice"
 				);
 			} else if (frm.doc.status == "Scrapped") {
 				frm.add_custom_button(__("Restore Asset"), function () {
@@ -243,7 +249,7 @@ frappe.ui.form.on("Asset", {
 
 							frm.add_custom_button(__("Capitalize Asset"), function () {
 								frm.trigger("create_asset_capitalization");
-							});
+							}, undefined, "Asset Capitalization");
 						}
 					},
 				});

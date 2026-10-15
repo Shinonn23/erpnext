@@ -107,7 +107,8 @@ erpnext.accounts.PurchaseInvoice = class PurchaseInvoice extends erpnext.buying.
 					function () {
 						me.unblock_invoice();
 					},
-					__("Create")
+					__("Create"),
+					false
 				);
 			} else if (!doc.on_hold) {
 				this.frm.add_custom_button(
@@ -115,7 +116,8 @@ erpnext.accounts.PurchaseInvoice = class PurchaseInvoice extends erpnext.buying.
 					function () {
 						me.block_invoice();
 					},
-					__("Create")
+					__("Create"),
+					false
 				);
 			}
 		}
@@ -222,7 +224,8 @@ erpnext.accounts.PurchaseInvoice = class PurchaseInvoice extends erpnext.buying.
 						function () {
 							me.make_inter_company_invoice(me.frm);
 						},
-						__("Create")
+						__("Create"),
+						"Sales Invoice"
 					);
 				}
 			});

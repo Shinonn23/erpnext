@@ -131,7 +131,8 @@ frappe.ui.form.on("Subcontracting Receipt", {
 						make_standard_return();
 					}
 				},
-				__("Create")
+				__("Create"),
+				"Subcontracting Receipt"
 			);
 			frm.page.set_inner_btn_group_as_primary(__("Create"));
 		}

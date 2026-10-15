@@ -220,7 +220,7 @@ frappe.ui.form.on("Sales Billing", {
 				});
 
 				d.show();
-			}).addClass("btn-primary");
+			}, undefined, "Payment Entry").addClass("btn-primary");
 		}
 	},
 });

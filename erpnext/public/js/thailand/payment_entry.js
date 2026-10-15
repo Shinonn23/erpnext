@@ -78,7 +78,7 @@ frappe.ui.form.on("Payment Entry", {
 				__("Withholding Tax Cert"),
 				__("Create Withholding Tax Cert")
 			);
-		});
+		}, undefined, "Withholding Tax Cert");
 	},
 
 	load_tax_withholding_categories: function (frm) {
@@ -110,7 +110,7 @@ frappe.ui.form.on("Payment Entry", {
 					// Add button
 					frm.add_custom_button(__("Clear Undue Tax"), function () {
 						frm.trigger("make_clear_vat_journal_entry");
-					});
+					}, undefined, "Journal Entry");
 				}
 			},
 		});

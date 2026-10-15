@@ -60,7 +60,8 @@ frappe.ui.form.on("Custody Loan", {
 						frm.add_custom_button(
 							__("Create Loan Delivery Note"),
 							() => open_generated_doc(frm, "make_delivery_note"),
-							__("Create")
+							__("Create"),
+							"Delivery Note"
 						);
 					}
 				});
@@ -85,19 +86,21 @@ frappe.ui.form.on("Custody Loan", {
 		}
 		if (!["Active", "Partially Returned"].includes(frm.doc.status)) return;
 		if (frappe.model.can_create("Custody Loan Return")) {
-			frm.add_custom_button(__("Return"), () => open_generated_doc(frm, "make_return"), __("Create"));
+			frm.add_custom_button(__("Return"), () => open_generated_doc(frm, "make_return"), __("Create"), "Custody Loan Return");
 		}
 		if (frm.doc.loan_type === "Stock" && frappe.model.can_create("Custody Loan Adjustment")) {
 			frm.add_custom_button(
 				__("Adjustment"),
 				() => open_generated_doc(frm, "make_adjustment"),
-				__("Create")
+				__("Create"),
+				"Custody Loan Adjustment"
 			);
 		} else if (frm.doc.loan_type === "Asset" && frm.doc.borrower_type === "Customer" && frappe.model.can_create("Sales Invoice")) {
 			frm.add_custom_button(
 				__("Asset Sale Invoice"),
 				() => open_generated_doc(frm, "make_asset_sale_invoice"),
-				__("Create")
+				__("Create"),
+				"Sales Invoice"
 			);
 		}
 	},

@@ -282,7 +282,8 @@ frappe.ui.form.on("BOM", {
 					let new_bom = frappe.model.copy_doc(frm.doc);
 					frappe.set_route("Form", "BOM", new_bom.name);
 				},
-				__("Actions")
+				__("Actions"),
+				"BOM"
 			);
 		}
 
@@ -301,7 +302,8 @@ frappe.ui.form.on("BOM", {
 					function () {
 						frm.trigger("make_variant_bom");
 					},
-					__("Create")
+					__("Create"),
+					"BOM"
 				);
 			}
 

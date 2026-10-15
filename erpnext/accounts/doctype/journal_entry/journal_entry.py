@@ -1817,6 +1817,8 @@ def get_average_exchange_rate(account):
 
 @frappe.whitelist()
 def make_inter_company_journal_entry(name, voucher_type, company):
+	frappe.get_doc("Journal Entry", name).check_permission("read")
+	frappe.has_permission("Journal Entry", "create", throw=True)
 	journal_entry = frappe.new_doc("Journal Entry")
 	journal_entry.voucher_type = voucher_type
 	journal_entry.company = company

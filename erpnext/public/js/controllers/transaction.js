@@ -438,7 +438,8 @@ erpnext.TransactionController = class TransactionController extends erpnext.taxe
 				() => {
 					me.make_quality_inspection();
 				},
-				__("Create")
+				__("Create"),
+				"Quality Inspection"
 			);
 		}
 

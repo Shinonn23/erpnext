@@ -88,7 +88,7 @@ const BulkInternalTransferForm = ({ transactions }: { transactions: Unreconciled
                     bank_account: data.bank_account,
                 }
             })
-            toast.success(_("Payment Entry drafts created. Request approval on each entry to post and match."), {
+            toast.success(_("Transfer Recorded"), {
                 duration: 4000,
                 closeButton: true,
             })
@@ -204,7 +204,7 @@ const InternalTransferForm = ({ selectedBankAccount, selectedTransaction }: { se
                     }
                 ]
             })
-            toast.success(_("Payment Entry draft created. Request approval to post and match it."), {
+            toast.success(_("Transfer Recorded"), {
                 duration: 4000,
                 closeButton: true,
                 action: {

@@ -74,8 +74,7 @@ erpnext.selling.InstallationNote = class InstallationNote extends frappe.ui.form
 						},
 					});
 				},
-				"fa fa-download",
-				"btn-default"
+				"fa fa-download"
 			);
 		}
 	}

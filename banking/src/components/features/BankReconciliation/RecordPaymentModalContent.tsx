@@ -114,7 +114,7 @@ const BulkPaymentEntryForm = ({ transactions }: { transactions: UnreconciledTran
                 }
             })
 
-            toast.success(_("Payment Entry drafts created. Request approval on each entry to post and match."), {
+            toast.success(_("Payment Recorded"), {
                 duration: 4000,
                 closeButton: true,
             })
@@ -337,7 +337,7 @@ const PaymentEntryForm = ({ selectedTransaction, selectedBankAccount }: { select
                     }
                 ]
             })
-            toast.success(_("Payment Entry draft created. Request approval to post and match it."), {
+            toast.success(_("Payment Entry Created"), {
                 duration: 4000,
                 closeButton: true,
                 action: {

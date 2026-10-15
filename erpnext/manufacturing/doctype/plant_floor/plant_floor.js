@@ -19,7 +19,7 @@ frappe.ui.form.on("Plant Floor", {
 				null,
 				doc
 			);
-		}).addClass("btn-primary");
+		}, undefined, "Workstation").addClass("btn-primary");
 	},
 
 	setup_queries(frm) {

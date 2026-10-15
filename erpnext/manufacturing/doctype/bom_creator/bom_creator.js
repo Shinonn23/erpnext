@@ -195,7 +195,7 @@ frappe.ui.form.on("BOM Creator", {
 		if (frm.doc.docstatus === 1 && frm.doc.status !== "Completed") {
 			frm.add_custom_button(__("Create Multi-level BOM"), () => {
 				frm.trigger("create_multi_level_bom");
-			});
+			}, undefined, "BOM");
 		}
 	},
 

@@ -1761,7 +1761,7 @@ def make_custody_loan_from_request(request, loan_type):
 				"source_location": request_item.source_location,
 				"target_location": request_item.target_location or request.loan_recipient_location or request.customer_location,
 			})
-	loan.insert(ignore_permissions=True)
+	loan.insert()
 	return loan.as_dict()
 
 

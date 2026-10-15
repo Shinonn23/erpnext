@@ -96,6 +96,8 @@ def get_payment_entry_for_employee(
 def make_withholding_tax_cert(filters, doc):
 	filters = frappe.parse_json(filters)
 	pay = frappe.parse_json(doc)
+	frappe.get_doc("Payment Entry", pay.get("name")).check_permission("read")
+	frappe.has_permission("Withholding Tax Cert", "create", throw=True)
 	cert = frappe.new_doc("Withholding Tax Cert")
 	cert.supplier = pay.get("party_type") == "Supplier" and pay.get("party") or ""
 	if cert.supplier:

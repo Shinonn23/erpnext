@@ -238,14 +238,16 @@ frappe.ui.form.on("Item", {
 					function () {
 						erpnext.item.show_single_variant_dialog(frm);
 					},
-					__("Create")
+					__("Create"),
+					"Item"
 				);
 				frm.add_custom_button(
 					__("Multiple Variants"),
 					function () {
 						erpnext.item.show_multiple_variants_dialog(frm);
 					},
-					__("Create")
+					__("Create"),
+					"Item"
 				);
 			} else {
 				frm.add_custom_button(
@@ -253,7 +255,8 @@ frappe.ui.form.on("Item", {
 					function () {
 						erpnext.item.show_modal_for_manufacturers(frm);
 					},
-					__("Create")
+					__("Create"),
+					"Item"
 				);
 			}
 		}
@@ -287,7 +290,7 @@ frappe.ui.form.on("Item", {
 				new_item.description = null;
 			}
 			frappe.set_route("Form", "Item", new_item.name);
-		});
+		}, undefined, "Item");
 
 		const stock_exists = frm.doc.__onload && frm.doc.__onload.stock_exists ? 1 : 0;
 

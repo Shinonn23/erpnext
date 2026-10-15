@@ -187,6 +187,8 @@ class InvoiceDiscounting(AccountsController):
 
 	@frappe.whitelist()
 	def create_disbursement_entry(self):
+		self.check_permission("read")
+		frappe.has_permission("Journal Entry", "create", throw=True)
 		je = frappe.new_doc("Journal Entry")
 		je.voucher_type = "Journal Entry"
 		je.company = self.company
@@ -247,6 +249,8 @@ class InvoiceDiscounting(AccountsController):
 
 	@frappe.whitelist()
 	def close_loan(self):
+		self.check_permission("read")
+		frappe.has_permission("Journal Entry", "create", throw=True)
 		je = frappe.new_doc("Journal Entry")
 		je.voucher_type = "Journal Entry"
 		je.company = self.company

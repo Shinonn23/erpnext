@@ -118,7 +118,7 @@ frappe.ui.form.on("Petty Cash Holder", {
 						},
 						__("Top Up")
 					);
-				});
+				}, undefined, "Journal Entry");
 				// Withdraw from petty cash holder
 				frm.add_custom_button(__("Withdraw"), function () {
 					frappe.prompt(
@@ -229,7 +229,7 @@ frappe.ui.form.on("Petty Cash Holder", {
 						},
 						__("Withdraw")
 					);
-				});
+				}, undefined, "Journal Entry");
 			}
 			// History
 			frm.add_custom_button(__("History"), function () {

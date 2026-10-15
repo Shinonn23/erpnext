@@ -13,6 +13,7 @@ function setup(rows, scanned, location) {
   const messages = [];
   const queries = {};
   const displays = {};
+  const properties = {};
   const frm = {
     doc: {
       items: rows,
@@ -32,7 +33,9 @@ function setup(rows, scanned, location) {
     toggle_display(fieldname, visible) {
       displays[fieldname] = visible;
     },
-    set_df_property() {},
+    set_df_property(fieldname, property, value) {
+      properties[`${fieldname}.${property}`] = value;
+    },
   };
   const context = {
     __: (message) => message,
@@ -62,6 +65,7 @@ function setup(rows, scanned, location) {
     messages,
     queries,
     displays,
+    properties,
   };
 }
 
@@ -198,4 +202,76 @@ test("scan location uses the current warehouse and active locations and is visib
   fixture.frm.doc.status = "Completed";
   fixture.handlers.refresh(fixture.frm);
   assert.equal(fixture.displays.scan_storage_location, false);
+});
+
+test("requesting approval locks counting until the document returns for recount", () => {
+  const fixture = setup([], {});
+  for (const state of [
+    "Stock Count Pending Stock Approval",
+    "Stock Count Pending Accounts Approval",
+    "Stock Count Pending Final Approval",
+  ]) {
+    fixture.frm.doc.workflow_state = state;
+    fixture.handlers.refresh(fixture.frm);
+    assert.equal(fixture.displays.scan_barcode, false);
+    assert.equal(fixture.displays.scan_storage_location, false);
+    assert.equal(fixture.properties["items.read_only"], true);
+  }
+  fixture.frm.doc.workflow_state = "Stock Count Draft";
+  fixture.handlers.refresh(fixture.frm);
+  assert.equal(fixture.displays.scan_barcode, true);
+  assert.equal(fixture.properties["items.read_only"], false);
+});
+
+test("native layout keeps counting controls outside Monthly Count Setup", () => {
+  const layout = JSON.parse(
+    fs.readFileSync(
+      new URL("../../stock/doctype/stock_count/stock_count.json", import.meta.url),
+      "utf8"
+    )
+  );
+  const fields = Object.fromEntries(layout.fields.map((field) => [field.fieldname, field]));
+  const ancestorSections = {};
+  let section;
+  for (const fieldname of layout.field_order) {
+    const field = fields[fieldname];
+    if (field.fieldtype === "Section Break") section = field;
+    ancestorSections[fieldname] = section ? [section] : [];
+  }
+  const visible = (fieldname, doc) =>
+    [...ancestorSections[fieldname], fields[fieldname]].every(
+      (field) =>
+        !field.hidden &&
+        (!field.depends_on ||
+          vm.runInNewContext(field.depends_on.replace(/^eval:/, ""), { doc }))
+    );
+
+  for (const count_type of ["Monthly", "Annual"]) {
+    for (const status of ["Draft", "In Progress", "Completed"]) {
+      for (const docstatus of [0, 1, 2]) {
+        const doc = { count_type, status, docstatus };
+        for (const fieldname of ["scan_storage_location", "scan_barcode"]) {
+          assert.equal(
+            visible(fieldname, doc),
+            status === "In Progress" && docstatus === 0,
+            `${fieldname}: ${JSON.stringify(doc)}`
+          );
+        }
+        for (const fieldname of ["snapshot_datetime", "status"]) {
+          assert.equal(visible(fieldname, doc), true, `${fieldname}: ${JSON.stringify(doc)}`);
+        }
+        for (const fieldname of ["item_count", "quarantine_warehouse", "quarantine_storage_location"]) {
+          assert.equal(
+            visible(fieldname, doc),
+            count_type === "Monthly",
+            `${fieldname}: ${JSON.stringify(doc)}`
+          );
+        }
+      }
+    }
+  }
+  assert.equal(ancestorSections.scan_storage_location[0].label, "Scan Items");
+  assert.equal(ancestorSections.scan_barcode[0].label, "Scan Items");
+  assert.equal(ancestorSections.snapshot_datetime[0].label, "Count Status");
+  assert.equal(ancestorSections.status[0].label, "Count Status");
 });

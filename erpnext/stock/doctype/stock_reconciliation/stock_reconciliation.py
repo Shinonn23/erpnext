@@ -4,6 +4,7 @@
 
 import frappe
 from frappe import _, bold, json, msgprint
+from frappe.core.doctype.submission_queue.submission_queue import queue_submission
 from frappe.query_builder.functions import Sum
 from frappe.utils import add_to_date, cint, cstr, flt, get_datetime, now
 
@@ -578,7 +579,7 @@ class StockReconciliation(StockController):
 				item, include_empty=bool(self.stock_count)
 			)
 
-			item_dict = get_stock_balance_for(
+			item_dict = _get_stock_balance_for(
 				item.item_code,
 				item.warehouse,
 				self.posting_date,
@@ -1294,23 +1295,13 @@ class StockReconciliation(StockController):
 
 	def submit(self):
 		if len(self.items) > 100:
-			msgprint(
-				_(
-					"The task has been enqueued as a background job. In case there is any issue on processing in background, the system will add a comment about the error on this Stock Reconciliation and revert to the Draft stage"
-				)
-			)
-			self.queue_action("submit", timeout=4600)
+			queue_submission(self, "_submit", timeout=4600)
 		else:
 			self._submit()
 
 	def cancel(self):
 		if len(self.items) > 100:
-			msgprint(
-				_(
-					"The task has been enqueued as a background job. In case there is any issue on processing in background, the system will add a comment about the error on this Stock Reconciliation and revert to the Submitted stage"
-				)
-			)
-			self.queue_action("cancel", timeout=2000)
+			queue_submission(self, "_cancel", timeout=2000)
 		else:
 			self._cancel()
 
@@ -1517,6 +1508,30 @@ def get_stock_balance_for(
 ):
 	frappe.has_permission("Stock Reconciliation", "write", throw=True)
 
+	return _get_stock_balance_for(
+		item_code,
+		warehouse,
+		posting_date,
+		posting_time,
+		batch_no=batch_no,
+		with_valuation_rate=with_valuation_rate,
+		inventory_dimensions_dict=inventory_dimensions_dict,
+		row=row,
+		company=company,
+	)
+
+
+def _get_stock_balance_for(
+	item_code: str,
+	warehouse: str,
+	posting_date,
+	posting_time,
+	batch_no: str | None = None,
+	with_valuation_rate: bool = True,
+	inventory_dimensions_dict=None,
+	row=None,
+	company=None,
+):
 	item_dict = frappe.get_cached_value("Item", item_code, ["has_serial_no", "has_batch_no"], as_dict=1)
 
 	if isinstance(row, str):

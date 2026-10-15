@@ -670,6 +670,7 @@ class TestCustodyLoanIntegration(ERPNextTestSuite):
 				"target_location": self.customer_location,
 			},
 		)
+		request_fixtures.prepare_request_prices(request)
 		request.insert()
 		if frappe.db.exists("Workflow", {"document_type": "Material Request", "is_active": 1}):
 			request_fixtures.apply_workflow(request.as_dict(), "Request Approval")

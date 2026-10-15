@@ -129,7 +129,7 @@ frappe.ui.form.on("Job Card", {
 				() => frm.events.make_manufacture_stock_entry(frm, 1),
 				() => frm.events.make_manufacture_stock_entry(frm, 0)
 			);
-		}).addClass("btn-primary");
+		}, undefined, "Stock Entry").addClass("btn-primary");
 	},
 
 	make_manufacture_stock_entry(frm, submit_entry) {
@@ -243,7 +243,8 @@ frappe.ui.form.on("Job Card", {
 			frm.add_custom_button(
 				__("Material Transfer"),
 				() => frm.trigger("make_stock_entry"),
-				__("Create")
+				__("Create"),
+				"Stock Entry"
 			);
 		}
 	},
@@ -435,7 +436,7 @@ frappe.ui.form.on("Job Card", {
 					method: "erpnext.manufacturing.doctype.job_card.job_card.make_subcontracting_po",
 					frm: frm,
 				});
-			}).addClass("btn-primary");
+			}, undefined, "Purchase Order").addClass("btn-primary");
 		}
 	},
 
@@ -501,7 +502,8 @@ frappe.ui.form.on("Job Card", {
 					__("Select Corrective Operation")
 				);
 			},
-			__("Make")
+			__("Make"),
+			"Job Card"
 		);
 	},
 

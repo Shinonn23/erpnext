@@ -1123,6 +1123,8 @@ def get_asset_naming_series():
 @frappe.whitelist()
 def make_sales_invoice(asset, item_code, company, sell_qty, serial_no=None):
 	asset_doc = frappe.get_doc("Asset", asset)
+	asset_doc.check_permission("read")
+	frappe.has_permission("Sales Invoice", "create", throw=True)
 	si = frappe.new_doc("Sales Invoice")
 	si.company = company
 	si.currency = frappe.get_cached_value("Company", company, "default_currency")
@@ -1156,6 +1158,8 @@ def make_sales_invoice(asset, item_code, company, sell_qty, serial_no=None):
 
 @frappe.whitelist()
 def create_asset_maintenance(asset, item_code, item_name, asset_category, company):
+	frappe.get_doc("Asset", asset).check_permission("read")
+	frappe.has_permission("Asset Maintenance", "create", throw=True)
 	asset_maintenance = frappe.new_doc("Asset Maintenance")
 	asset_maintenance.update(
 		{
@@ -1171,6 +1175,8 @@ def create_asset_maintenance(asset, item_code, item_name, asset_category, compan
 
 @frappe.whitelist()
 def create_asset_repair(company, asset, asset_name):
+	frappe.get_doc("Asset", asset).check_permission("read")
+	frappe.has_permission("Asset Repair", "create", throw=True)
 	asset_repair = frappe.new_doc("Asset Repair")
 	asset_repair.update({"company": company, "asset": asset, "asset_name": asset_name})
 	return asset_repair
@@ -1178,6 +1184,8 @@ def create_asset_repair(company, asset, asset_name):
 
 @frappe.whitelist()
 def create_asset_capitalization(company, asset, asset_name, item_code):
+	frappe.get_doc("Asset", asset).check_permission("read")
+	frappe.has_permission("Asset Capitalization", "create", throw=True)
 	asset_capitalization = frappe.new_doc("Asset Capitalization")
 	asset_capitalization.update(
 		{
@@ -1192,6 +1200,8 @@ def create_asset_capitalization(company, asset, asset_name, item_code):
 
 @frappe.whitelist()
 def create_asset_value_adjustment(asset, asset_category, company):
+	frappe.get_doc("Asset", asset).check_permission("read")
+	frappe.has_permission("Asset Value Adjustment", "create", throw=True)
 	asset_value_adjustment = frappe.new_doc("Asset Value Adjustment")
 	asset_value_adjustment.update({"asset": asset, "company": company, "asset_category": asset_category})
 	return asset_value_adjustment
@@ -1318,10 +1328,12 @@ def make_asset_movement(assets, purpose=None):
 	if len(assets) == 0:
 		frappe.throw(_("At least one asset has to be selected."))
 
+	frappe.has_permission("Asset Movement", "create", throw=True)
 	asset_movement = frappe.new_doc("Asset Movement")
 	asset_movement.quantity = len(assets)
 	for asset in assets:
 		asset = frappe.get_doc("Asset", asset.get("name"))
+		asset.check_permission("read")
 		asset_movement.company = asset.get("company")
 		asset_movement.append(
 			"assets",

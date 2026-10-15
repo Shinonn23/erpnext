@@ -64,7 +64,7 @@ frappe.ui.form.on("Delivery Note", {
 					});
 				}
 			});
-		});
+		}, undefined, "Quality Inspection");
 	},
 	setup: function (frm) {
 		(frm.custom_make_buttons = {
@@ -136,7 +136,8 @@ frappe.ui.form.on("Delivery Note", {
 						frm: cur_frm,
 					});
 				},
-				__("Create")
+				__("Create"),
+				"Sales Invoice"
 			);
 			frm.page.set_inner_btn_group_as_primary(__("Create"));
 		}
@@ -161,7 +162,8 @@ frappe.ui.form.on("Delivery Note", {
 							frm: frm,
 						});
 					},
-					__("Create")
+					__("Create"),
+					"Purchase Receipt"
 				);
 			}
 		}
@@ -314,7 +316,8 @@ erpnext.stock.DeliveryNoteController = class DeliveryNoteController extends (
 					function () {
 						me.make_sales_return();
 					},
-					__("Create")
+					__("Create"),
+					"Delivery Note"
 				);
 			}
 

@@ -101,7 +101,8 @@ frappe.ui.form.on("Journal Entry", {
 				function () {
 					return erpnext.journal_entry.reverse_journal_entry(frm);
 				},
-				__("Actions")
+				__("Actions"),
+				"Journal Entry"
 			);
 		}
 
@@ -124,7 +125,8 @@ frappe.ui.form.on("Journal Entry", {
 				function () {
 					frm.trigger("make_inter_company_journal_entry");
 				},
-				__("Make")
+				__("Make"),
+				"Journal Entry"
 			);
 		}
 

@@ -184,7 +184,7 @@ class OpeningInvoiceCreationTool(Document):
 			party_doc.supplier_group = supplier_group
 
 		party_doc.flags.ignore_mandatory = True
-		party_doc.save(ignore_permissions=True)
+		party_doc.save()
 		return party_doc.name
 
 	def get_invoice_dict(self, row=None):
@@ -243,6 +243,10 @@ class OpeningInvoiceCreationTool(Document):
 
 	@frappe.whitelist()
 	def make_invoices(self):
+		self.check_permission("read")
+		frappe.has_permission(
+			"Sales Invoice" if self.invoice_type == "Sales" else "Purchase Invoice", "create", throw=True
+		)
 		self.validate_company()
 		invoices = self.get_invoices()
 		if len(invoices) < 50:

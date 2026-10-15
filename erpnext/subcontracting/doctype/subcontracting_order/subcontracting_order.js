@@ -163,7 +163,8 @@ frappe.ui.form.on("Subcontracting Order", {
 						frm.add_custom_button(
 							__("Reserve"),
 							() => frm.events.create_stock_reservation_entries(frm),
-							__("Stock Reservation")
+							__("Stock Reservation"),
+							"Stock Reservation Entry"
 						);
 					}
 				}
@@ -588,7 +589,8 @@ frappe.ui.form.on("Subcontracting Order", {
 						freeze_message: __("Creating Return of Components ..."),
 					});
 				},
-				__("Create")
+				__("Create"),
+				"Stock Entry"
 			);
 		}
 	},
@@ -627,7 +629,8 @@ erpnext.buying.SubcontractingOrderController = class SubcontractingOrderControll
 						this.frm.add_custom_button(
 							__("Material to Supplier"),
 							this.make_stock_entry,
-							__("Transfer")
+							__("Transfer"),
+							"Stock Entry"
 						);
 					}
 				}

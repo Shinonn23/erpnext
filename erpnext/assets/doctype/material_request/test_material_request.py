@@ -26,6 +26,23 @@ from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse
 from erpnext.tests.utils import ERPNextTestSuite
 
 
+def prepare_request_prices(request):
+	"""Seed prices explicitly for successful demo/loan fixtures without changing Buying Settings."""
+	if frappe.session.user != "Administrator":
+		raise RuntimeError("Prepare price masters before switching to the requester profile")
+	price_list = frappe.get_doc({
+		"doctype": "Price List", "price_list_name": "MR fixture buying " + frappe.generate_hash(length=10),
+		"enabled": 1, "buying": 1, "selling": 0,
+		"currency": frappe.get_cached_value("Company", request.company, "default_currency"),
+	}).insert()
+	for item_code, uom in {(row.item_code, row.uom) for row in request.items}:
+		frappe.get_doc({
+			"doctype": "Item Price", "item_code": item_code, "price_list": price_list.name,
+			"uom": uom, "price_list_rate": 100, "valid_from": request.transaction_date,
+		}).insert()
+	request.buying_price_list = price_list.name
+
+
 class FakeDocument:
 	def __init__(self, doctype):
 		self.doctype = doctype
@@ -591,6 +608,8 @@ class TestCustomerMaterialRequestIntegration(ERPNextTestSuite):
 					"warehouse": self.loan_warehouse if item.is_stock_item else None,
 				}
 			)
+		if request_type in {"Purchase", "Customer Demo", "Customer Borrow / Loan"}:
+			prepare_request_prices(request)
 		request.insert()
 		if frappe.db.exists("Workflow", {"document_type": "Material Request", "is_active": 1}):
 			apply_workflow(request.as_dict(), "Request Approval")

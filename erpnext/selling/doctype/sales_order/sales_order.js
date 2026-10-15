@@ -106,7 +106,8 @@ frappe.ui.form.on("Sales Order", {
 					frm.add_custom_button(
 						__("Reserve"),
 						() => frm.events.create_stock_reservation_entries(frm),
-						__("Stock Reservation")
+						__("Stock Reservation"),
+						"Stock Reservation Entry"
 					);
 				}
 			}
@@ -1103,7 +1104,8 @@ erpnext.selling.SalesOrderController = class SalesOrderController extends erpnex
 						this.frm.add_custom_button(
 							__("Request for Raw Materials"),
 							() => this.make_raw_material_request(),
-							__("Create")
+							__("Create"),
+							"Material Request"
 						);
 					}
 
@@ -1161,7 +1163,8 @@ erpnext.selling.SalesOrderController = class SalesOrderController extends erpnex
 								function () {
 									me.make_inter_company_order();
 								},
-								__("Create")
+								__("Create"),
+								"Purchase Order"
 							);
 						}
 					}

@@ -179,8 +179,7 @@ erpnext.selling.QuotationController = class QuotationController extends erpnext.
 						},
 					});
 				},
-				__("Get Items From"),
-				"btn-default"
+				__("Get Items From")
 			);
 		}
 

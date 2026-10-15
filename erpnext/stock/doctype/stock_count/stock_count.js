@@ -37,10 +37,15 @@ frappe.ui.form.on("Stock Count", {
 	},
 
 	refresh(frm) {
+		const can_count =
+			frm.doc.status === "In Progress" &&
+			!frm.doc.docstatus &&
+			(!frm.doc.workflow_state || frm.doc.workflow_state === "Stock Count Draft");
 		frm.toggle_display("item_count", frm.doc.count_type === "Monthly");
 		frm.toggle_display("quarantine_warehouse", frm.doc.count_type === "Monthly");
-		frm.toggle_display("scan_barcode", frm.doc.status === "In Progress" && !frm.doc.docstatus);
-		frm.toggle_display("scan_storage_location", frm.doc.status === "In Progress" && !frm.doc.docstatus);
+		frm.toggle_display("scan_barcode", can_count);
+		frm.toggle_display("scan_storage_location", can_count);
+		frm.set_df_property("items", "read_only", !can_count);
 		frm.set_df_property("dimensions", "read_only", frm.doc.status !== "Draft");
 		frm.set_df_property("warehouse", "read_only", frm.doc.status !== "Draft");
 		frm.set_df_property("count_type", "read_only", frm.doc.status !== "Draft");

@@ -446,8 +446,10 @@ def get_timesheet_data(name, project=None):
 
 @frappe.whitelist()
 def make_sales_invoice(source_name, item_code=None, customer=None, currency=None):
-	target = frappe.new_doc("Sales Invoice")
 	timesheet = frappe.get_doc("Timesheet", source_name)
+	timesheet.check_permission("read")
+	frappe.has_permission("Sales Invoice", "create", throw=True)
+	target = frappe.new_doc("Sales Invoice")
 
 	if not timesheet.total_billable_hours:
 		frappe.throw(_("Invoice can't be made for zero billing hour"))

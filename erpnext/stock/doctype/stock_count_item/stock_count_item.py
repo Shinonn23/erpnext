@@ -13,6 +13,7 @@ class StockCountItem(Document):
 		batch_no: DF.Link | None
 		counted_qty: DF.Float | None
 		difference_qty: DF.Float | None
+		expiry_date: DF.Date | None
 		is_counted: DF.Check
 		item_code: DF.Link
 		item_name: DF.Data | None

@@ -29,7 +29,7 @@ frappe.ui.form.on("Payment Order", {
 		if (frm.doc.docstatus === 1 && frm.doc.payment_order_type === "Payment Request") {
 			frm.add_custom_button(__("Create Journal Entries"), function () {
 				frm.trigger("make_payment_records");
-			});
+			}, undefined, "Journal Entry");
 		}
 	},
 

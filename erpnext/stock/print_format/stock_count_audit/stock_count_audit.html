@@ -1,0 +1,168 @@
+{%- from "templates/print_formats/standard_macros.html" import add_header with context -%}
+{%- set items = doc.get("items") or [] -%}
+{%- set show_serial = items | selectattr("serial_no") | list | length > 0 -%}
+{%- set dimensions = doc.get_countable_dimensions() -%}
+{%- set annual = doc.count_type == "Annual" -%}
+
+<style>
+	@font-face {
+		font-family: "THSarabun";
+		src: url("{{ frappe.utils.get_url() }}/assets/erpnext/fonts/THSarabun.ttf") format("truetype");
+	}
+	.print-format {
+		page-size: A4;
+		orientation: landscape;
+		margin-top: 10mm;
+		margin-bottom: 20mm;
+		margin-left: 10mm;
+		margin-right: 10mm;
+		max-width: none;
+		padding: 0;
+		font-size: 18px;
+		line-height: 1.1;
+	}
+	/* PDF margins are also read as options; do not add them again inside the page. */
+	.print-format-gutter .print-format, body > .print-format { margin: 0; }
+	.print-format, .print-format * {
+		font-family: "THSarabun", sans-serif !important;
+	}
+	.print-format .print-heading { margin: 0 0 6px; padding: 0 0 4px; }
+	.print-format .print-heading h2 { margin: 0; font-size: 26px; }
+	.print-format .print-heading .sub-heading { font-size: 19px; }
+	.print-format .count-status { text-align: center; font-weight: bold; margin: 4px 0 8px; }
+	.print-format .count-details { width: 100%; margin-bottom: 8px; }
+	.print-format .count-details td { width: 50%; padding: 1px 4px; vertical-align: top; }
+	.print-format .count-items { width: 100%; table-layout: fixed; border-collapse: collapse; }
+	.print-format .count-items thead { display: table-header-group; }
+	.print-format .count-items tbody { page-break-inside: auto !important; }
+	.print-format .count-items tr { page-break-inside: avoid !important; }
+	.print-format .count-items th, .print-format .count-items td {
+		border: 1px solid #777;
+		padding: 2px 5px !important;
+		vertical-align: top;
+		word-wrap: break-word;
+		font-size: 18px;
+		line-height: 1.05;
+	}
+	.print-format .count-items th { background: #eee !important; font-weight: bold; }
+	.print-format .count-items .number { text-align: right; }
+	.print-format .count-items .item-name { font-size: 17px; }
+	.print-format .count-signatures { page-break-inside: avoid; margin-top: 12px; }
+	.print-format .approval-details { width: 100%; border-collapse: collapse; }
+	.print-format .approval-details th, .print-format .approval-details td {
+		border: 1px solid #aaa;
+		padding: 4px 7px !important;
+		text-align: left;
+		vertical-align: top;
+		font-size: 18px;
+	}
+	.print-format .approval-details th { width: 23%; }
+	.print-format .auditor-signature { margin-top: 14px; line-height: 2; }
+	.print-format .page-number { font-size: 16px; }
+</style>
+
+{# Keep the first heading in the body; PDF header extraction can clip a tall letterhead. #}
+{{ add_header(1, 1, doc, letter_head, no_letterhead, footer, print_settings, print_heading_template) }}
+<div class="count-status">
+	{% if doc.docstatus == 2 %}
+		{{ _("CANCELLED") }}
+	{% elif doc.docstatus == 1 %}
+		{{ _("APPROVED / SUBMITTED") }}
+	{% else %}
+		{{ _("DRAFT / UNAPPROVED — Physical Count Worksheet") }}
+	{% endif %}
+</div>
+<table class="count-details">
+	<tr>
+		<td><strong>{{ _("Company") }}:</strong> {{ doc.company | e }}</td>
+		<td><strong>{{ _("Warehouse") }}:</strong> {{ doc.warehouse | e }}</td>
+	</tr>
+	<tr>
+		<td><strong>{{ _("Count Type") }}:</strong> {{ _(doc.count_type) | e }}</td>
+		<td><strong>{{ _("Snapshot Datetime") }}:</strong> {{ doc.get_formatted("snapshot_datetime") }}</td>
+	</tr>
+	{% if doc.get("workflow_state") %}
+	<tr><td colspan="2"><strong>{{ _("Workflow State") }}:</strong> {{ _(doc.workflow_state) | e }}</td></tr>
+	{% endif %}
+</table>
+
+<table class="count-items">
+	<colgroup>
+		<col style="width: 3%;">
+		<col style="width: {{ '23' if show_serial else '39' }}%;">
+		<col style="width: 11%;">
+		<col style="width: 8%;">
+		{% if show_serial %}<col style="width: 16%;">{% endif %}
+		<col style="width: 18%;">
+		<col style="width: 7%;"><col style="width: 7%;"><col style="width: 7%;">
+	</colgroup>
+	<thead>
+		<tr>
+			<th>{{ _("No.") }}</th>
+			<th>{{ _("Item Code / Item Name") }}</th>
+			<th>{{ _("Batch No") }}</th>
+			<th>{{ _("Expiry Date") }}</th>
+			{% if show_serial %}<th>{{ _("Serial No") }}</th>{% endif %}
+			<th>{{ _("Storage Location / Inventory Dimensions") }}</th>
+			<th class="number">{{ _("System Qty") }}</th>
+			<th class="number">{{ _("Counted Qty") }}</th>
+			<th class="number">{{ _("Difference Qty") }}</th>
+		</tr>
+	</thead>
+	<tbody>
+		{% for row in items %}
+		<tr>
+			<td>{{ row.idx }}</td>
+			<td><strong>{{ row.item_code | e }}</strong>{% if row.item_name %} <span class="item-name">{{ row.item_name | e }}</span>{% endif %}</td>
+			<td>{{ (row.batch_no or "") | e }}</td>
+			<td>{{ row.get_formatted("expiry_date") if row.expiry_date else "" }}</td>
+			{% if show_serial %}<td>{{ (row.serial_no or "") | e }}</td>{% endif %}
+			<td>
+				{{ (row.get("storage_location") or "") | e }}
+				{% for dimension in dimensions if dimension.source_fieldname != "storage_location" %}
+					{% if row.get(dimension.source_fieldname) %}
+					<div>{{ _(dimension.dimension_name) | e }}: {{ row.get(dimension.source_fieldname) | e }}</div>
+					{% endif %}
+				{% endfor %}
+			</td>
+			<td class="number">{{ row.get_formatted("system_qty") }}</td>
+			<td class="number">{{ row.get_formatted("counted_qty") if row.is_counted else "" }}</td>
+			<td class="number">{{ row.get_formatted("difference_qty") if row.is_counted else "" }}</td>
+		</tr>
+		{% endfor %}
+	</tbody>
+</table>
+
+{% macro actor_details(actor_field, date_field, approval=false) -%}
+	{% if doc.get(actor_field) %}
+		{{ frappe.get_fullname(doc.get(actor_field)) | e }}
+		{% if doc.get(date_field) %} — {{ doc.get_formatted(date_field) }}{% endif %}
+	{% elif approval and doc.docstatus == 1 %}
+		{{ _("Historical approval details not recorded") }}
+	{% elif approval and doc.docstatus == 0 %}
+		{{ _("Pending") }}
+	{% endif %}
+{%- endmacro %}
+<div class="count-signatures">
+	<table class="approval-details">
+		<tr><th>{{ _("Counted By / Date and Time") }}</th><td>{{ actor_details("counted_by", "counted_on") }}</td></tr>
+		<tr><th>{{ _("Stock Approval / Date and Time") }}</th><td>{{ actor_details("stock_approved_by", "stock_approved_on", true) }}</td></tr>
+		{% if annual %}
+		<tr><th>{{ _("Accounts Approval / Date and Time") }}</th><td>{{ actor_details("accounts_approved_by", "accounts_approved_on", true) }}</td></tr>
+		<tr><th>{{ _("Final Approval / Date and Time") }}</th><td>{{ actor_details("final_approved_by", "final_approved_on", true) }}</td></tr>
+		{% endif %}
+	</table>
+	<div class="auditor-signature">
+		<strong>{{ _("Auditor") }}</strong><br>
+		{{ _("Name") }}: ____________________________________
+		&nbsp;&nbsp; {{ _("Signature") }}: ____________________________________
+		&nbsp;&nbsp; {{ _("Date") }}: ____________________
+	</div>
+</div>
+
+<div {% if print_settings.repeat_header_footer %}id="footer-html" class="visible-pdf"{% endif %}>
+	{% if not no_letterhead and footer %}<div class="letter-head-footer">{{ footer }}</div>{% endif %}
+	{% if print_settings.repeat_header_footer %}
+	<p class="text-center page-number visible-pdf">{{ _("Page {0} of {1}").format('<span class="page"></span>', '<span class="topage"></span>') }}</p>
+	{% endif %}
+</div>

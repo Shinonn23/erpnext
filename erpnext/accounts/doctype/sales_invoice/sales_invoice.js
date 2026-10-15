@@ -183,7 +183,8 @@ erpnext.accounts.SalesInvoiceController = class SalesInvoiceController extends (
 					function () {
 						me.make_inter_company_invoice();
 					},
-					__("Create")
+					__("Create"),
+					"Purchase Invoice"
 				);
 
 				frappe.call({

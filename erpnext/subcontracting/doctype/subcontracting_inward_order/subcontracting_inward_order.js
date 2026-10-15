@@ -135,7 +135,8 @@ frappe.ui.form.on("Subcontracting Inward Order", {
 					frm.add_custom_button(
 						__("Raw Materials to Customer"),
 						() => frm.trigger("make_rm_return"),
-						__("Return")
+						__("Return"),
+						"Stock Entry"
 					);
 					if (frm.doc.per_produced < 100) {
 						frm.add_custom_button(
@@ -150,21 +151,24 @@ frappe.ui.form.on("Subcontracting Inward Order", {
 					frm.add_custom_button(
 						__("Material from Customer"),
 						() => frm.events.make_stock_entry(frm),
-						__("Receive")
+						__("Receive"),
+						"Stock Entry"
 					);
 				}
 				if (frm.doc.per_produced > 0 && frm.doc.per_delivered < 100) {
 					frm.add_custom_button(
 						__("Subcontracting Delivery"),
 						() => frm.events.make_subcontracting_delivery(frm),
-						__("Create")
+						__("Create"),
+						"Stock Entry"
 					);
 				}
 				if (frm.doc.per_delivered > 0 && frm.doc.per_returned < 100) {
 					frm.add_custom_button(
 						__("Finished Goods Return"),
 						() => frm.events.make_subcontracting_return(frm),
-						__("Return")
+						__("Return"),
+						"Stock Entry"
 					);
 				}
 				if (frm.doc.per_produced < 100) {

@@ -77,6 +77,7 @@ frappe.ui.form.on("Opening Invoice Creation Tool", {
 			});
 		});
 
+		frm.page.btn_primary.toggle(frappe.model.can_create(frm.doc.invoice_type === "Sales" ? "Sales Invoice" : "Purchase Invoice"));
 		frm.trigger("update_party_labels");
 	},
 
@@ -127,6 +128,7 @@ frappe.ui.form.on("Opening Invoice Creation Tool", {
 	},
 
 	invoice_type: function (frm) {
+		frm.page.btn_primary.toggle(frappe.model.can_create(frm.doc.invoice_type === "Sales" ? "Sales Invoice" : "Purchase Invoice"));
 		frm.clear_table("invoices");
 		frm.refresh_fields();
 		frm.trigger("update_party_labels");

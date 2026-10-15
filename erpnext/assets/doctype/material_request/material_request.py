@@ -742,9 +742,11 @@ class CustomerMaterialRequest(MaterialRequest):
 		if self.docstatus != 1:
 			return actions
 		if is_asset_transfer_request(self):
-			actions.asset_movement = any(flt(row.qty) - flt(row.fulfilled_qty) > 0 for row in self.items)
+			actions.asset_movement = frappe.has_permission("Asset Movement", "create") and any(
+				flt(row.qty) - flt(row.fulfilled_qty) > 0 for row in self.items
+			)
 			return actions
-		if is_customer_request(self):
+		if is_customer_request(self) and frappe.has_permission("Custody Loan", "create"):
 			from erpnext.loan.doctype.custody_loan.custody_loan_core import get_custody_loan_actions
 
 			loan_actions = get_custody_loan_actions(self)
@@ -765,6 +767,7 @@ class CustomerMaterialRequest(MaterialRequest):
 	def make_asset_movement(self):
 		self.reload()
 		self.check_permission("read")
+		frappe.has_permission("Asset Movement", "create", throw=True)
 		if self.docstatus != 1:
 			frappe.throw(_("Submit the request before creating an Asset Movement"))
 		if is_asset_transfer_request(self):
