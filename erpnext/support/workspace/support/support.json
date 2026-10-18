@@ -1,7 +1,7 @@
 {
  "app": "erpnext",
  "charts": [],
- "content": "[{\"id\":\"HOEnlt9aR9\",\"type\":\"header\",\"data\":{\"text\":\"This module is scheduled for deprecation and will be completely removed in version 17, please use <a href=\\\"https://frappe.io/helpdesk\\\">Frappe Helpdesk</a> instead.\",\"col\":12}},{\"id\":\"oxhWhXp9b2\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Reports &amp; Masters</b></span>\",\"col\":12}},{\"id\":\"Ff8Ab3nLLN\",\"type\":\"card\",\"data\":{\"card_name\":\"Issues\",\"col\":4}},{\"id\":\"_lndiuJTVP\",\"type\":\"card\",\"data\":{\"card_name\":\"Maintenance\",\"col\":4}},{\"id\":\"R_aNO5ESzJ\",\"type\":\"card\",\"data\":{\"card_name\":\"Service Level Agreement\",\"col\":4}},{\"id\":\"N8aA2afWfi\",\"type\":\"card\",\"data\":{\"card_name\":\"Warranty\",\"col\":4}},{\"id\":\"M5fxGuFwUR\",\"type\":\"card\",\"data\":{\"card_name\":\"Settings\",\"col\":4}},{\"id\":\"xKH0kO9q4P\",\"type\":\"card\",\"data\":{\"card_name\":\"Reports\",\"col\":4}}]",
+ "content": "[{\"id\": \"HOEnlt9aR9\", \"type\": \"header\", \"data\": {\"text\": \"This module is scheduled for deprecation and will be completely removed in version 17, please use <a href=\\\"https://frappe.io/helpdesk\\\">Frappe Helpdesk</a> instead.\", \"col\": 12}}, {\"id\": \"supportDkshHead\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>DKSH Equipment and Service</b></span>\", \"col\": 12}}, {\"id\": \"supportDksh00\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"DKSH Equipment\", \"col\": 4}}, {\"id\": \"supportDksh01\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Custody Movements\", \"col\": 4}}, {\"id\": \"supportDksh02\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Service Visits\", \"col\": 4}}, {\"id\": \"supportDksh03\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Maintenance Schedules\", \"col\": 4}}, {\"id\": \"supportDksh04\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"DKSH Settings\", \"col\": 4}}, {\"id\": \"oxhWhXp9b2\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Reports &amp; Masters</b></span>\", \"col\": 12}}, {\"id\": \"Ff8Ab3nLLN\", \"type\": \"card\", \"data\": {\"card_name\": \"Issues\", \"col\": 4}}, {\"id\": \"_lndiuJTVP\", \"type\": \"card\", \"data\": {\"card_name\": \"Maintenance\", \"col\": 4}}, {\"id\": \"R_aNO5ESzJ\", \"type\": \"card\", \"data\": {\"card_name\": \"Service Level Agreement\", \"col\": 4}}, {\"id\": \"N8aA2afWfi\", \"type\": \"card\", \"data\": {\"card_name\": \"Warranty\", \"col\": 4}}, {\"id\": \"M5fxGuFwUR\", \"type\": \"card\", \"data\": {\"card_name\": \"Settings\", \"col\": 4}}, {\"id\": \"xKH0kO9q4P\", \"type\": \"card\", \"data\": {\"card_name\": \"Reports\", \"col\": 4}}]",
  "creation": "2020-03-02 15:48:23.224699",
  "custom_blocks": [],
  "docstatus": 0,
@@ -172,7 +172,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-01-02 17:45:04.203273",
+ "modified": "2026-10-18 17:00:00.000000",
  "modified_by": "Administrator",
  "module": "Support",
  "name": "Support",
@@ -184,7 +184,47 @@
  "restrict_to_domain": "",
  "roles": [],
  "sequence_id": 12.0,
- "shortcuts": [],
+ "shortcuts": [
+  {
+   "color": "Blue",
+   "doc_view": "List",
+   "label": "DKSH Equipment",
+   "link_to": "Asset",
+   "stats_filter": "{\"asset_owner\": \"DKSH\"}",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Custody Movements",
+   "link_to": "Asset Movement",
+   "stats_filter": "{\"dksh_movement_type\": [\"is\", \"set\"]}",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Service Visits",
+   "link_to": "Maintenance Visit",
+   "stats_filter": "{\"dksh_asset\": [\"is\", \"set\"]}",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Maintenance Schedules",
+   "link_to": "Maintenance Schedule",
+   "stats_filter": "{\"dksh_asset\": [\"is\", \"set\"]}",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "DKSH Settings",
+   "link_to": "DKSH Settings",
+   "type": "DocType"
+  }
+ ],
  "title": "Support",
  "type": "Workspace"
 }

@@ -198,6 +198,17 @@
    "collapsible": 1,
    "indent": 0,
    "keep_closed": 0,
+   "label": "Product Group",
+   "link_to": "Product Group",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "indent": 0,
+   "keep_closed": 0,
    "label": "Item Attribute",
    "link_to": "Item Attribute",
    "link_type": "DocType",
@@ -649,7 +660,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-10-05 02:35:36.152136",
+ "modified": "2026-10-18 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "Stock",
  "module_onboarding": "Stock Onboarding",

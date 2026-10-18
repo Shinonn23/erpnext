@@ -69,6 +69,70 @@
   {
    "child": 0,
    "collapsible": 1,
+   "icon": "wrench",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "DKSH",
+   "link_type": "DocType",
+   "type": "Section Break"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "DKSH Equipment",
+   "link_to": "Asset",
+   "link_type": "DocType",
+   "route_options": "{\"asset_owner\": \"DKSH\"}",
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Custody Movements",
+   "link_to": "Asset Movement",
+   "link_type": "DocType",
+   "route_options": "{\"dksh_movement_type\": [\"is\", \"set\"]}",
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Service Visits",
+   "link_to": "Maintenance Visit",
+   "link_type": "DocType",
+   "route_options": "{\"dksh_asset\": [\"is\", \"set\"]}",
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Maintenance Schedules",
+   "link_to": "Maintenance Schedule",
+   "link_type": "DocType",
+   "route_options": "{\"dksh_asset\": [\"is\", \"set\"]}",
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "DKSH Settings",
+   "link_to": "DKSH Settings",
+   "link_type": "DocType",
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
    "icon": "database",
    "indent": 1,
    "keep_closed": 1,
@@ -145,7 +209,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-01-10 00:06:13.089991",
+ "modified": "2026-10-18 17:00:00.000000",
  "modified_by": "Administrator",
  "module": "Support",
  "name": "Support",
