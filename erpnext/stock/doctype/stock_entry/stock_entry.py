@@ -40,7 +40,7 @@ from erpnext.manufacturing.doctype.production_plan.work_order_quantities import 
 from erpnext.setup.doctype.brand.brand import get_brand_defaults
 from erpnext.setup.doctype.item_group.item_group import get_item_group_defaults
 from erpnext.stock.doctype.batch.batch import get_batch_qty
-from erpnext.stock.doctype.item.item import get_item_defaults
+from erpnext.stock.doctype.item.item import get_item_defaults, get_uom_conv_factor
 from erpnext.stock.doctype.serial_no.serial_no import get_serial_nos
 from erpnext.stock.doctype.stock_reconciliation.stock_reconciliation import (
 	OpeningEntryAccountError,
@@ -58,6 +58,37 @@ from erpnext.stock.serial_batch_bundle import (
 )
 from erpnext.stock.stock_ledger import NegativeStockError, get_previous_sle, get_valuation_rate
 from erpnext.stock.utils import _get_incoming_rate, get_bin, get_combine_datetime
+
+_NATIVE_OUTWARD_BUNDLES = object()
+
+
+def get_native_outward_bundle_ids(doc):
+	"""Return only bundles created by this controller during the current submission."""
+	proof = (getattr(doc, "flags", None) or {}).get("native_outward_bundle_ids")
+	if (
+		getattr(doc, "_action", None) == "submit"
+		and doc.docstatus == 1
+		and isinstance(proof, tuple)
+		and len(proof) == 2
+		and proof[0] is _NATIVE_OUTWARD_BUNDLES
+	):
+		return proof[1]
+	return {}
+
+
+def get_configured_stock_entry_uom_factor(item_code, uom, stock_uom):
+	"""Resolve a real alternate-UOM mapping without the generic factor-one fallback."""
+	item_names = [item_code]
+	variant_of = frappe.get_cached_value("Item", item_code, "variant_of")
+	if variant_of:
+		item_names.append(variant_of)
+	for item_name in item_names:
+		factor = frappe.db.get_value(
+			"UOM Conversion Detail", {"parent": item_name, "parenttype": "Item", "uom": uom}, "conversion_factor"
+		)
+		if factor:
+			return flt(factor)
+	return flt(get_uom_conv_factor(uom, stock_uom))
 
 
 class FinishedGoodError(frappe.ValidationError):
@@ -867,6 +898,17 @@ class StockEntry(StockController, SubcontractingInwardController):
 			reset_fields = ("stock_uom", "item_name")
 			for field in reset_fields:
 				item.set(field, item_details.get(field))
+
+			if item.uom and item.uom != item.stock_uom and not flt(item.conversion_factor):
+				item.conversion_factor = get_configured_stock_entry_uom_factor(
+					item.item_code, item.uom, item.stock_uom
+				)
+				if flt(item.conversion_factor) <= 0:
+					frappe.throw(
+						_("Row {0}: UOM Conversion Factor is required for {1} in Item {2}.").format(
+							item.idx, item.uom, item.item_code
+						)
+					)
 
 			update_fields = (
 				"uom",
@@ -1943,6 +1985,7 @@ class StockEntry(StockController, SubcontractingInwardController):
 			return
 
 		already_picked_serial_nos = []
+		native_bundles = {}
 
 		for row in self.items:
 			if row.use_serial_batch_fields:
@@ -2001,7 +2044,11 @@ class StockEntry(StockController, SubcontractingInwardController):
 
 				already_picked_serial_nos.append(entry.serial_no)
 
+			if not row.serial_and_batch_bundle:
+				native_bundles[row.name] = bundle_doc.name
 			row.serial_and_batch_bundle = bundle_doc.name
+
+		self.flags.native_outward_bundle_ids = (_NATIVE_OUTWARD_BUNDLES, native_bundles)
 
 	def set_serial_batch_fields_for_subcontracting_inward(self):
 		serial_nos, batch_nos = frappe._dict(), frappe._dict()
@@ -4772,6 +4819,13 @@ def make_stock_in_entry(source_name, target_doc=None):
 			"Stock Entry": {
 				"doctype": "Stock Entry",
 				"field_map": {"name": "outgoing_stock_entry"},
+				"field_no_map": [
+					"workflow_state",
+					"approval_snapshot",
+					"workflow_policy_version",
+					"operation_approval_started_on",
+					"operation_approval_due_on",
+				],
 				"validation": {"docstatus": ["=", 1]},
 			},
 			"Stock Entry Detail": {
@@ -4924,7 +4978,11 @@ def get_valuation_rate_for_finished_good_entry(work_order):
 def get_uom_details(item_code, uom, qty):
 	"""Returns dict `{"conversion_factor": [value], "transfer_qty": qty * [value]}`
 	:param args: dict with `item_code`, `uom` and `qty`"""
-	conversion_factor = get_conversion_factor(item_code, uom).get("conversion_factor")
+	stock_uom = frappe.get_cached_value("Item", item_code, "stock_uom")
+	if uom and stock_uom and uom != stock_uom:
+		conversion_factor = get_configured_stock_entry_uom_factor(item_code, uom, stock_uom)
+	else:
+		conversion_factor = get_conversion_factor(item_code, uom).get("conversion_factor")
 
 	if not conversion_factor:
 		frappe.msgprint(_("UOM conversion factor required for UOM: {0} in Item: {1}").format(uom, item_code))

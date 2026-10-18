@@ -99,7 +99,7 @@ frappe.ui.form.on("Material Request", {
 		});
 
 		erpnext.accounts.dimensions.setup_dimension_filters(frm, frm.doctype);
-		if (!frm.doc.buying_price_list) {
+		if (frm.is_new() && !frm.doc.buying_price_list) {
 			const buying_price_list = frappe.defaults.get_default("buying_price_list");
 			if (buying_price_list) {
 				const docname = frm.doc.name;
@@ -115,6 +115,7 @@ frappe.ui.form.on("Material Request", {
 					callback: ({ message }) => {
 						if (
 							message?.has_permission &&
+							frm.is_new() &&
 							frm.doc.name === docname &&
 							!frm.doc.buying_price_list
 						) {

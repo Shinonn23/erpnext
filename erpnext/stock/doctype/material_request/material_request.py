@@ -966,6 +966,19 @@ def make_supplier_quotation(source_name, target_doc=None):
 
 @frappe.whitelist()
 def make_stock_entry(source_name: str, target_doc: str | dict | None = None):
+	target_context = frappe.parse_json(target_doc) if isinstance(target_doc, str) else target_doc
+	purchase_internal_issue = bool(
+		target_context
+		and target_context.get("doctype") == "Stock Entry"
+		and target_context.get("docstatus", 0) == 0
+		and target_context.get("purpose") == "Material Issue"
+		and target_context.get("operation_issue_type") == "Internal Use"
+	)
+	target_company = target_context.get("company") if target_context else None
+	allowed_request_types = ["Material Transfer", "Material Issue", "Customer Provided"]
+	if purchase_internal_issue:
+		allowed_request_types.append("Purchase")
+
 	def update_item(obj, target, source_parent):
 		qty = (
 			flt(flt(obj.stock_qty) - flt(obj.ordered_qty)) / target.conversion_factor
@@ -993,13 +1006,38 @@ def make_stock_entry(source_name: str, target_doc: str | dict | None = None):
 			target.s_warehouse = obj.from_warehouse
 			target.storage_location = obj.from_storage_location
 
+		if source_parent.material_request_type == "Purchase":
+			target.s_warehouse = obj.from_warehouse or obj.warehouse
+			target.storage_location = (
+				obj.from_storage_location if obj.from_warehouse else obj.storage_location
+			)
+			target.t_warehouse = None
+			target.to_storage_location = None
+
 	def set_missing_values(source, target):
+		if source.material_request_type == "Purchase":
+			if not purchase_internal_issue:
+				frappe.throw(_("A Purchase Material Request can only be mapped to a draft Internal Use issue."))
+			if source.get("status") in {"Transferred", "Issued", "Cancelled", "Stopped"}:
+				frappe.throw(_("Cannot issue items from a stopped or completed Material Request."))
+			if not target_company or source.company != target_company:
+				frappe.throw(_("Material Request and Stock Entry must belong to the same company."))
+			if any(source.get(field) or target.get(field) for field in ("job_card", "work_order")):
+				frappe.throw(_("A Purchase Material Request for Internal Use cannot reference manufacturing."))
+
 		target.purpose = source.material_request_type
 		target.from_warehouse = source.set_from_warehouse
 		target.to_warehouse = source.set_warehouse
 		if source.material_request_type == "Material Issue":
 			target.from_warehouse = source.set_warehouse
 			target.to_warehouse = None
+
+		if source.material_request_type == "Purchase":
+			target.purpose = "Material Issue"
+			target.from_warehouse = source.set_from_warehouse or source.set_warehouse
+			target.to_warehouse = None
+			if target.get("to_storage_location"):
+				target.to_storage_location = None
 
 		if source.job_card:
 			target.purpose = "Material Transfer for Manufacture"
@@ -1048,7 +1086,7 @@ def make_stock_entry(source_name: str, target_doc: str | dict | None = None):
 					"docstatus": ["=", 1],
 					"material_request_type": [
 						"in",
-						["Material Transfer", "Material Issue", "Customer Provided"],
+						allowed_request_types,
 					],
 				},
 			},

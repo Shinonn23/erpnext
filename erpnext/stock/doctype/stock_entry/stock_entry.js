@@ -552,11 +552,18 @@ frappe.ui.form.on("Stock Entry", {
 			frm.add_custom_button(
 				__("Material Request"),
 				function () {
+					const purchase_internal_issue =
+						frm.doc.docstatus === 0 &&
+						frm.doc.purpose === "Material Issue" &&
+						frm.doc.operation_issue_type === "Internal Use";
 					const allowed_request_types = [
 						"Material Transfer",
 						"Material Issue",
 						"Customer Provided",
 					];
+					if (purchase_internal_issue) {
+						allowed_request_types.push("Purchase");
+					}
 					const depends_on_condition = "eval:doc.material_request_type==='Customer Provided'";
 					const d = erpnext.utils.map_current_doc({
 						method: "erpnext.stock.doctype.material_request.material_request.make_stock_entry",
@@ -569,7 +576,7 @@ frappe.ui.form.on("Stock Entry", {
 								label: __("Purpose"),
 								options: allowed_request_types.join("\n"),
 								fieldname: "material_request_type",
-								default: "Material Transfer",
+								default: purchase_internal_issue ? "Purchase" : "Material Transfer",
 								mandatory: 1,
 								change() {
 									if (this.value === "Customer Provided") {
@@ -588,6 +595,7 @@ frappe.ui.form.on("Stock Entry", {
 						],
 						get_query_filters: {
 							docstatus: 1,
+							...(purchase_internal_issue ? { company: frm.doc.company } : {}),
 							material_request_type: ["in", allowed_request_types],
 							status: ["not in", ["Transferred", "Issued", "Cancelled", "Stopped"]],
 						},
