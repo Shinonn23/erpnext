@@ -35,7 +35,9 @@ def validate_return_against(doc):
 	else:
 		ref_doc = frappe.get_doc(doc.doctype, doc.return_against)
 
-		party_type = "customer" if doc.doctype in ("Sales Invoice", "Delivery Note") else "supplier"
+		party_type = (
+			"customer" if doc.doctype in ("Sales Invoice", "Delivery Note", "POS Invoice") else "supplier"
+		)
 
 		if ref_doc.get(party_type) != doc.get(party_type):
 			frappe.throw(
@@ -127,6 +129,7 @@ def validate_returned_items(doc):
 				raise_exception = True
 		elif doc.doctype == "Delivery Note":
 			key = (d.item_code, d.get("dn_detail"))
+			raise_exception = True
 
 		if d.item_code and (flt(d.qty) <= 0 or flt(d.get("received_qty")) <= 0):
 			if key not in valid_items:
@@ -844,7 +847,7 @@ def get_return_against_item_fields(voucher_type):
 		"Delivery Note": "dn_detail",
 		"Sales Invoice": "sales_invoice_item",
 		"Subcontracting Receipt": "subcontracting_receipt_item",
-		"POS Invoice": "sales_invoice_item",
+		"POS Invoice": "pos_invoice_item",
 	}
 	return return_against_item_fields[voucher_type]
 

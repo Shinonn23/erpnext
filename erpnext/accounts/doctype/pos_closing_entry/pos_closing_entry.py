@@ -279,8 +279,10 @@ def get_cashiers(doctype, txt, searchfield, start, page_len, filters):
 
 @frappe.whitelist()
 def get_invoices(start, end, pos_profile, user):
+	from erpnext.selling.page.point_of_sale.point_of_sale import check_pos_profile_access
+
 	invoice_doctype = frappe.db.get_single_value("POS Settings", "invoice_type")
-	frappe.has_permission("POS Profile", doc=pos_profile, throw=True)
+	check_pos_profile_access(pos_profile)
 
 	frappe.has_permission("Sales Invoice", throw=True)
 	sales_inv_query = build_invoice_query("Sales Invoice", user, pos_profile, start, end)

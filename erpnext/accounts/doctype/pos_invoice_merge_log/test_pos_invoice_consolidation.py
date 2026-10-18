@@ -91,3 +91,18 @@ class TestPOSInvoiceConsolidation(TestCase):
 			self.assertEqual(frappe.flags.stock_control_pos_consolidation, frozenset({"POS"}))
 			raise ValueError("failed submission")
 		self.assertEqual(frappe.flags.stock_control_pos_consolidation, frozenset({"OUTER"}))
+
+	def test_native_credit_note_save_and_submit_have_only_their_return_sources(self):
+		credit_note = Mock()
+		observed = []
+		credit_note.save.side_effect = lambda: observed.append(frappe.flags.stock_control_pos_consolidation)
+		credit_note.submit.side_effect = lambda: observed.append(frappe.flags.stock_control_pos_consolidation)
+		controller = Mock(posting_date="2026-10-16", posting_time="10:00:00")
+		controller.merge_pos_invoice_into.return_value = credit_note
+		credit_note.name = "CREDIT-NOTE"
+		result = merge.POSInvoiceMergeLog.process_merging_into_credit_notes(
+			controller, {"SALE": [frappe._dict(name="RETURN")], "EMPTY": []}
+		)
+		self.assertEqual(observed, [frozenset({"RETURN"}), frozenset({"RETURN"})])
+		self.assertEqual(result, {"CREDIT-NOTE": ["RETURN"]})
+		self.assertIsNone(frappe.flags.stock_control_pos_consolidation)
