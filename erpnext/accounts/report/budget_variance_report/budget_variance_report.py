@@ -18,6 +18,7 @@ def execute(filters=None):
 	if not filters:
 		filters = {}
 
+	set_default_budget_against(filters)
 	validate_filters(filters)
 
 	columns = get_columns(filters)
@@ -38,6 +39,13 @@ def execute(filters=None):
 	chart_data = build_comparison_chart_data(filters, columns, data)
 
 	return columns, data, None, chart_data
+
+
+def set_default_budget_against(filters):
+	# The standard dashboard chart passes an empty "Budget Against"; use the
+	# same default as the report's filter instead of querying a blank DocType.
+	if not filters.get("budget_against"):
+		filters["budget_against"] = get_dimensions(with_project=True)[0][0].get("document_type")
 
 
 def validate_filters(filters):
