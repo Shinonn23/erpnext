@@ -467,6 +467,24 @@ function render_serial_batch_banner(wrapper) {
 
 $.extend(erpnext.item, {
 	setup_queries: function (frm) {
+		// Default and barcode UOMs come from this Item's UOMs table, including rows not saved yet.
+		const item_uoms = () =>
+			frappe.boot.sysdefaults.restrict_item_uoms
+				? {
+						filters: {
+							name: [
+								"in",
+								[frm.doc.stock_uom, ...(frm.doc.uoms || []).map((row) => row.uom)].filter(
+									Boolean
+								),
+							],
+						},
+				  }
+				: {};
+		frm.set_query("purchase_uom", item_uoms);
+		frm.set_query("sales_uom", item_uoms);
+		frm.set_query("uom", "barcodes", item_uoms);
+
 		frm.fields_dict["item_defaults"].grid.get_field("expense_account").get_query = function (
 			doc,
 			cdt,

@@ -79,6 +79,7 @@ from erpnext.stock.get_item_details import (
 	get_item_tax_map,
 	get_item_warehouse_,
 )
+from erpnext.stock.item_uom import validate_item_uoms
 from erpnext.stock.utils import (
 	is_group_warehouse,
 	validate_disabled_warehouse,
@@ -4455,6 +4456,8 @@ def update_child_qty_rate(
 	for idx, row in enumerate(parent.get(child_docname), start=1):
 		row.idx = idx
 
+	# Saving after submit skips validate, where the "*" hook checks row UOMs.
+	validate_item_uoms(parent)
 	parent.save()
 
 	if parent_doctype == "Purchase Order":

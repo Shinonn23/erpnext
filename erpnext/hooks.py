@@ -25,6 +25,7 @@ develop_version = "15.x.x-develop"
 app_include_js = [
 	"erpnext.bundle.js",
 	"/assets/erpnext/js/storage_location.js",
+	"/assets/erpnext/js/item_uom.js",
 	"/assets/erpnext/js/thailand/address.js",
 	"/assets/erpnext/js/thailand/print_format.js",
 	"/assets/erpnext/js/thailand/deposit_utils.js",
@@ -480,6 +481,7 @@ doc_events = {
 		"validate": [
 			"erpnext.support.doctype.service_level_agreement.service_level_agreement.apply",
 			"erpnext.setup.doctype.transaction_deletion_record.transaction_deletion_record.check_for_running_deletion_job",
+			"erpnext.stock.item_uom.validate_item_uoms",
 		],
 	},
 	tuple(period_closing_doctypes): {

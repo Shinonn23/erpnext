@@ -30,6 +30,7 @@ from erpnext.controllers.item_variant import (
 	validate_item_variant_attributes,
 )
 from erpnext.stock.doctype.item_default.item_default import ItemDefault
+from erpnext.stock.item_uom import validate_item_default_uoms
 from erpnext.stock.utils import get_valuation_method
 
 
@@ -220,6 +221,7 @@ class Item(Document):
 		self.clear_retain_sample()
 		self.validate_retain_sample()
 		self.validate_uom_conversion_factor()
+		validate_item_default_uoms(self)
 		self.validate_customer_provided_part()
 		self.update_defaults_from_item_group()
 		self.validate_item_defaults()

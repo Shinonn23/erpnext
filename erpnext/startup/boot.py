@@ -9,6 +9,7 @@ from frappe.utils import cint
 import erpnext.accounts.utils
 from erpnext.stock.doctype.price_list.price_list import is_price_list_enabled
 from erpnext.stock.doctype.stock_settings.stock_settings import is_putaway_rule_enabled
+from erpnext.stock.item_uom import is_item_uom_restricted
 
 
 def boot_session(bootinfo):
@@ -17,6 +18,7 @@ def boot_session(bootinfo):
 	if frappe.session["user"] != "Guest":
 		update_page_info(bootinfo)
 		bootinfo.sysdefaults.enable_putaway_rule = int(is_putaway_rule_enabled())
+		bootinfo.sysdefaults.restrict_item_uoms = int(is_item_uom_restricted())
 
 		bootinfo.sysdefaults.territory = frappe.get_single_value("Selling Settings", "territory")
 		bootinfo.sysdefaults.customer_group = frappe.get_single_value("Selling Settings", "customer_group")

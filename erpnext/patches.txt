@@ -533,3 +533,4 @@ erpnext.patches.v16_0.remove_standard_dimension_custom_fields
 erpnext.patches.v16_0.sync_standard_budget_dimensions
 erpnext.patches.v16_0.remove_stock_control
 erpnext.patches.v16_0.create_default_storage_locations
+erpnext.patches.v16_0.restrict_item_uoms_to_conversions

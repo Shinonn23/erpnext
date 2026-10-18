@@ -19,6 +19,7 @@ from erpnext.accounts.utils import build_qb_match_conditions
 from erpnext.selling.doctype.party_specific_item.party_specific_item import get_party_item_restrictions
 from erpnext.stock.doctype.item.item_search import get_item_search_candidates
 from erpnext.stock.get_item_details import ItemDetailsCtx, _get_item_tax_template
+from erpnext.stock.item_uom import get_item_uoms, is_item_uom_restricted
 from erpnext.stock.utils import get_combine_datetime
 
 
@@ -1124,25 +1125,14 @@ def get_filtered_child_rows(doctype, txt, searchfield, start, page_len, filters)
 @frappe.whitelist()
 @frappe.validate_and_sanitize_search_inputs
 def get_item_uom_query(doctype, txt, searchfield, start, page_len, filters):
-	if frappe.get_single_value("Stock Settings", "allow_uom_with_conversion_rate_defined_in_item"):
+	if is_item_uom_restricted():
 		item_code = filters.get("item_code")
 		if not item_code or not frappe.get_list("Item", filters=[["name", "=", item_code]], pluck="name"):
 			return []
 
-		query_filters = {"parent": item_code, "parenttype": "Item"}
-
-		if txt:
-			query_filters["uom"] = ["like", f"%{txt}%"]
-
-		return frappe.get_all(
-			"UOM Conversion Detail",
-			filters=query_filters,
-			fields=["uom", "conversion_factor"],
-			limit_start=start,
-			limit_page_length=page_len,
-			order_by="idx",
-			as_list=1,
-		)
+		txt = (txt or "").lower()
+		uoms = [[uom, factor] for uom, factor in get_item_uoms(item_code).items() if txt in uom.lower()]
+		return uoms[start : start + page_len]
 
 	return frappe.get_list(
 		"UOM",

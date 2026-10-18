@@ -11,6 +11,7 @@ from frappe.model.document import Document
 from frappe.utils import cint
 from frappe.utils.html_utils import clean_html
 
+from erpnext.stock.item_uom import RESTRICT_SETTING
 from erpnext.stock.utils import check_pending_reposting
 
 
@@ -116,6 +117,14 @@ class StockSettings(Document):
 		self.change_precision_for_purchase()
 		self.change_precision_for_stock_entry()
 		self.validate_do_not_use_batchwise_valuation()
+		# Single DocTypes have no doc-before-save, so compare with the stored value.
+		stored = frappe.db.get_single_value("Stock Settings", RESTRICT_SETTING, cache=False)
+		self.flags.item_uom_restriction_changed = cint(self.get(RESTRICT_SETTING)) != cint(stored)
+
+	def on_update(self):
+		# Item UOM pickers read the restriction from the boot info.
+		if self.flags.item_uom_restriction_changed:
+			frappe.clear_cache()
 
 	def validate_over_delivery_receipt_allowance(self):
 		if not self.over_delivery_receipt_allowance:

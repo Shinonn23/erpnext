@@ -487,8 +487,8 @@
    "label": "Batch Item settings"
   },
   {
-   "default": "0",
-   "description": "If enabled, the system will allow selecting UOMs in sales and purchase transactions only if the conversion rate is set in the item master.",
+   "default": "1",
+   "description": "If enabled, every UOM field of an Item, on any form, lists only the Item's stock UOM and the UOMs in its UOMs table (or its template's), and documents with any other UOM cannot be saved.",
    "fieldname": "allow_uom_with_conversion_rate_defined_in_item",
    "fieldtype": "Check",
    "label": "Allow UOM with conversion rate defined in Item"
@@ -616,7 +616,7 @@
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-09-28 12:00:00.000000",
+ "modified": "2026-10-18 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Stock Settings",
