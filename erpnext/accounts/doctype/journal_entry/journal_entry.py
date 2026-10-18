@@ -139,6 +139,7 @@ class JournalEntry(AccountsController):
 		super().__init__(*args, **kwargs)
 
 	def validate(self):
+		self.set_territory_sales_person()
 		if self.voucher_type == "Opening Entry":
 			self.is_opening = "Yes"
 
@@ -177,6 +178,68 @@ class JournalEntry(AccountsController):
 
 		if not self.title or (self.is_new() and self.amended_from):
 			self.title = self.get_title()
+
+	def set_territory_sales_person(self):
+		if self.reversal_of and not self.flags.get("preserve_dimension_stamps"):
+			source = frappe.get_doc("Journal Entry", self.reversal_of)
+			source.check_permission("read")
+			if source.docstatus != 1 or source.company != self.company:
+				frappe.throw(_("A reversal must reference a submitted Journal Entry in the same company."))
+			unmatched = list(source.accounts)
+			for row in self.accounts:
+				original = next(
+					(
+						item
+						for item in unmatched
+						if all(
+							(row.get(field) or None) == (item.get(field) or None)
+							for field in (
+								"account",
+								"party_type",
+								"party",
+								"project",
+								"department",
+								"territory",
+								"sales_person",
+								"account_currency",
+								"exchange_rate",
+							)
+						)
+						and all(
+							(row.get(debit) or 0) == (item.get(credit) or 0)
+							and (row.get(credit) or 0) == (item.get(debit) or 0)
+							for debit, credit in (
+								("debit", "credit"),
+								("debit_in_account_currency", "credit_in_account_currency"),
+							)
+						)
+					),
+					None,
+				)
+				if not original:
+					frappe.throw(
+						_("Reversal rows must match the original Journal Entry and its Sales Person.")
+					)
+				row.sales_person = original.get("sales_person")
+				unmatched.remove(original)
+			return
+
+		previous = self.get_doc_before_save()
+		previous_rows = {row.name: row for row in previous.accounts} if previous else {}
+		for row in self.accounts:
+			original = previous_rows.get(row.name)
+			if not row.get("territory"):
+				row.sales_person = None
+			elif original and original.get("territory") == row.get("territory"):
+				row.sales_person = original.get("sales_person")
+			elif self.flags.get("preserve_dimension_stamps"):
+				# built by the server from a voucher that already holds the stamp
+				continue
+			else:
+				row.sales_person = frappe.get_cached_value("Territory", row.get("territory"), "territory_manager")
+
+	def before_update_after_submit(self):
+		self.set_territory_sales_person()
 
 	def validate_advance_accounts(self):
 		journal_accounts = set([x.account for x in self.accounts])
@@ -1221,6 +1284,9 @@ class JournalEntry(AccountsController):
 					"remarks": remarks,
 					"voucher_detail_no": d.reference_detail_no,
 					"project": d.project,
+					"department": d.get("department"),
+					"territory": d.get("territory"),
+					"sales_person": d.get("sales_person"),
 					"finance_book": self.finance_book,
 					"advance_voucher_type": d.advance_voucher_type,
 					"advance_voucher_no": d.advance_voucher_no,

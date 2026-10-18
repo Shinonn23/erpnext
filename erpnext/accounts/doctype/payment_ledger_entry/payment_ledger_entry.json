@@ -15,6 +15,10 @@
   "due_date",
   "voucher_detail_no",
   "finance_book",
+  "project",
+  "department",
+  "territory",
+  "sales_person",
   "voucher_type",
   "voucher_no",
   "against_voucher_type",
@@ -131,6 +135,28 @@
    "fieldtype": "Link",
    "label": "Project",
    "options": "Project"
+  },
+  {
+   "fieldname": "department",
+   "fieldtype": "Link",
+   "label": "Department",
+   "options": "Department",
+   "reqd": 0
+  },
+  {
+   "fieldname": "territory",
+   "fieldtype": "Link",
+   "label": "Territory",
+   "options": "Territory",
+   "reqd": 0
+  },
+  {
+   "fieldname": "sales_person",
+   "fieldtype": "Link",
+   "label": "Sales Person",
+   "options": "Sales Person",
+   "read_only": 1,
+   "reqd": 0
   },
   {
    "fieldname": "due_date",

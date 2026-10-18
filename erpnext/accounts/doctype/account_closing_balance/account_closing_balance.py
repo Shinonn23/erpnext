@@ -32,11 +32,14 @@ class AccountClosingBalance(Document):
 		debit: DF.Currency
 		debit_in_account_currency: DF.Currency
 		debit_in_reporting_currency: DF.Currency
+		department: DF.Link | None
 		finance_book: DF.Link | None
 		is_period_closing_voucher_entry: DF.Check
 		period_closing_voucher: DF.Link | None
 		project: DF.Link | None
 		reporting_currency_exchange_rate: DF.Float
+		sales_person: DF.Link | None
+		territory: DF.Link | None
 	# end: auto-generated types
 
 	pass
@@ -94,6 +97,9 @@ def generate_key(entry, accounting_dimensions):
 		cstr(entry.get("account")),
 		cstr(entry.get("account_currency")),
 		cstr(entry.get("project")),
+		cstr(entry.get("department")),
+		cstr(entry.get("territory")),
+		cstr(entry.get("sales_person")),
 		cstr(entry.get("finance_book")),
 		cint(entry.get("is_period_closing_voucher_entry")),
 	]
@@ -103,6 +109,9 @@ def generate_key(entry, accounting_dimensions):
 		"account": cstr(entry.get("account")),
 		"account_currency": cstr(entry.get("account_currency")),
 		"project": cstr(entry.get("project")),
+		"department": cstr(entry.get("department")),
+		"territory": cstr(entry.get("territory")),
+		"sales_person": cstr(entry.get("sales_person")),
 		"finance_book": cstr(entry.get("finance_book")),
 		"is_period_closing_voucher_entry": cint(entry.get("is_period_closing_voucher_entry")),
 	}
@@ -134,6 +143,9 @@ def get_previous_closing_entries(company, closing_date, accounting_dimensions):
 			account_closing_balance.debit_in_account_currency,
 			account_closing_balance.credit_in_account_currency,
 			account_closing_balance.project,
+			account_closing_balance.department,
+			account_closing_balance.territory,
+			account_closing_balance.sales_person,
 			account_closing_balance.finance_book,
 			account_closing_balance.is_period_closing_voucher_entry,
 		)

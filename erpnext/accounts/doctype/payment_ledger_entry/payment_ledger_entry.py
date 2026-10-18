@@ -37,14 +37,17 @@ class PaymentLedgerEntry(Document):
 		amount: DF.Currency
 		amount_in_account_currency: DF.Currency
 		company: DF.Link | None
-		project: DF.Link | None
 		delinked: DF.Check
+		department: DF.Link | None
 		due_date: DF.Date | None
 		finance_book: DF.Link | None
 		party: DF.DynamicLink | None
 		party_type: DF.Link | None
 		posting_date: DF.Date | None
+		project: DF.Link | None
 		remarks: DF.Text | None
+		sales_person: DF.Link | None
+		territory: DF.Link | None
 		voucher_detail_no: DF.Data | None
 		voucher_no: DF.DynamicLink | None
 		voucher_type: DF.Link | None

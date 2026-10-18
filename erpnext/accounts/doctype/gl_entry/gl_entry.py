@@ -48,6 +48,7 @@ class GLEntry(Document):
 		debit_in_account_currency: DF.Currency
 		debit_in_reporting_currency: DF.Currency
 		debit_in_transaction_currency: DF.Currency
+		department: DF.Link | None
 		due_date: DF.Date | None
 		finance_book: DF.Link | None
 		fiscal_year: DF.Link | None
@@ -60,6 +61,8 @@ class GLEntry(Document):
 		project: DF.Link | None
 		remarks: DF.Text | None
 		reporting_currency_exchange_rate: DF.Float
+		sales_person: DF.Link | None
+		territory: DF.Link | None
 		to_rename: DF.Check
 		transaction_currency: DF.Link | None
 		transaction_date: DF.Date | None

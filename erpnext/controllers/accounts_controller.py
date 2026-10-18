@@ -609,13 +609,13 @@ class AccountsController(TransactionBase):
 		accounting_dimension = DocType("Accounting Dimension")
 		dimension_list = (
 			frappe.qb.from_(accounting_dimension)
-			.select(accounting_dimension.document_type)
+			.select(accounting_dimension.document_type, accounting_dimension.fieldname)
 			.join(doc_field)
 			.on(doc_field.parent == accounting_dimension.document_type)
 			.where(doc_field.fieldname == "company")
 		).run(as_list=True)
 
-		dimension_list = sum(dimension_list, ["Project"])
+		dimension_list.extend(["Project", "Department"])
 		self.validate_company(dimension_list)
 
 		for child in self.get_all_children() or []:
@@ -623,10 +623,14 @@ class AccountsController(TransactionBase):
 
 	def validate_company(self, dimension_list, child=None):
 		for dimension in dimension_list:
-			if not child:
-				dimension_value = self.get(frappe.scrub(dimension))
+			if isinstance(dimension, str):
+				fieldname = frappe.scrub(dimension)
 			else:
-				dimension_value = child.get(frappe.scrub(dimension))
+				dimension, fieldname = dimension
+			if not child:
+				dimension_value = self.get(fieldname)
+			else:
+				dimension_value = child.get(fieldname)
 
 			if dimension_value:
 				company = frappe.get_cached_value(dimension, dimension_value, "company")
@@ -3160,7 +3164,7 @@ class AccountsController(TransactionBase):
 	def check_if_fields_updated(self, fields_to_check, child_tables):
 		# Check if any field affecting accounting entry is altered
 		doc_before_update = self.get_doc_before_save()
-		accounting_dimensions = [*get_accounting_dimensions(), "project"]
+		accounting_dimensions = [*get_accounting_dimensions(), "project", "department", "territory", "sales_person"]
 
 		# Parent Level Accounts excluding party account
 		fields_to_check += accounting_dimensions
@@ -4466,7 +4470,7 @@ def update_child_qty_rate(
 
 
 def check_if_child_table_updated(child_table_before_update, child_table_after_update, fields_to_check):
-	fields_to_check = list(fields_to_check) + get_accounting_dimensions() + ["project"]
+	fields_to_check = list(fields_to_check) + get_accounting_dimensions() + ["project", "department", "territory", "sales_person"]
 
 	# Check if any field affecting accounting entry is altered
 	for index, item in enumerate(child_table_before_update):

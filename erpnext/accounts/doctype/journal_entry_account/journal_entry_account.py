@@ -25,6 +25,7 @@ class JournalEntryAccount(Document):
 		credit_in_account_currency: DF.Currency
 		debit: DF.Currency
 		debit_in_account_currency: DF.Currency
+		department: DF.Link | None
 		exchange_rate: DF.Float
 		is_advance: DF.Literal["No", "Yes"]
 		is_tax_withholding_account: DF.Check
@@ -56,6 +57,8 @@ class JournalEntryAccount(Document):
 			"Payment Entry",
 			"Bank Transaction",
 		]
+		sales_person: DF.Link | None
+		territory: DF.Link | None
 		user_remark: DF.SmallText | None
 	# end: auto-generated types
 

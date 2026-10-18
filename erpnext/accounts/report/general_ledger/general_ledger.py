@@ -88,8 +88,11 @@ def validate_filters(filters, account_details):
 	if filters.from_date > filters.to_date:
 		frappe.throw(_("From Date must be before To Date"))
 
-	if filters.get("project"):
-		filters.project = frappe.parse_json(filters.get("project"))
+	for dimension in ("project", "department", "territory", "sales_person"):
+		if filters.get(dimension):
+			if dimension != "project" and not frappe.db.has_column("GL Entry", dimension):
+				frappe.throw(_("{0} is not configured on GL Entry").format(_(dimension.replace("_", " ").title())))
+			filters[dimension] = frappe.parse_json(filters.get(dimension))
 
 
 def validate_party(filters):
@@ -196,12 +199,13 @@ def get_gl_entries(filters, accounting_dimensions):
 	with _ledger_query_permission_context():
 		conditions = get_conditions(filters)
 
+	standard_dimension_fields = ", ".join(_standard_dimension_selects())
 	gl_entries = frappe.db.sql(
 		f"""
 		select
 			name as gl_entry, posting_date, account, party_type, party,
 			voucher_type, voucher_subtype, voucher_no, {dimension_fields}
-			project, {transaction_currency_fields}
+			{standard_dimension_fields}, {transaction_currency_fields}
 			against_voucher_type, against_voucher, account_currency,
 			against, is_opening, creation {select_fields}
 		from `tabGL Entry`
@@ -306,8 +310,9 @@ def get_conditions(filters):
 	else:
 		conditions.append("posting_date <=%(to_date)s")
 
-	if filters.get("project"):
-		conditions.append("project in %(project)s")
+	for dimension in ("project", "department", "territory", "sales_person"):
+		if filters.get(dimension):
+			conditions.append(f"{dimension} in %({dimension})s")
 
 	if filters.get("include_default_book_entries"):
 		if filters.get("finance_book"):
@@ -598,7 +603,7 @@ def get_accountwise_gle(filters, accounting_dimensions, gl_entries, gle_map):
 				if filters.get("include_dimensions"):
 					for dim in accounting_dimensions:
 						keylist.append(gle.get(dim))
-					keylist.append(gle.get("project"))
+					keylist.extend(gle.get(dim) for dim in ("project", "department", "territory", "sales_person"))
 
 				key = tuple(keylist)
 				if key not in consolidated_gle:
@@ -607,7 +612,7 @@ def get_accountwise_gle(filters, accounting_dimensions, gl_entries, gle_map):
 					update_value_in_dict(consolidated_gle, key, gle)
 
 		if filters.get("include_dimensions"):
-			dimensions = [*accounting_dimensions, "project"]
+			dimensions = [*accounting_dimensions, "project", "department", "territory", "sales_person"]
 
 			for dimension in dimensions:
 				if val := gle.get(dimension):
@@ -789,7 +794,15 @@ def get_columns(filters):
 		)
 
 	if filters.get("include_dimensions"):
-		columns.append({"label": _("Project"), "options": "Project", "fieldname": "project", "width": 100})
+		for dimension in ("Project", "Department", "Territory", "Sales Person"):
+			columns.append(
+				{
+					"label": _(dimension),
+					"options": dimension,
+					"fieldname": frappe.scrub(dimension),
+					"width": 100,
+				}
+			)
 
 		for dim in get_accounting_dimensions(as_list=False):
 			columns.append(
@@ -858,6 +871,16 @@ def get_result_duckdb(filters, account_details, conn):
 	return get_result_as_list(data, filters)
 
 
+def _standard_dimension_selects():
+	return [
+		"project",
+		*(
+			dimension if frappe.db.has_column("GL Entry", dimension) else f"NULL AS {dimension}"
+			for dimension in ("department", "territory", "sales_person")
+		),
+	]
+
+
 def get_gl_entries_duckdb(filters, accounting_dimensions, conn):
 	currency_map = get_currency(filters)
 
@@ -871,6 +894,9 @@ def get_gl_entries_duckdb(filters, accounting_dimensions, conn):
 		"voucher_subtype",
 		"voucher_no",
 		"project",
+		"department",
+		"territory",
+		"sales_person",
 		"against_voucher_type",
 		"against_voucher",
 		"account_currency",
@@ -891,7 +917,7 @@ def get_gl_entries_duckdb(filters, accounting_dimensions, conn):
 		"voucher_type",
 		"voucher_subtype",
 		"voucher_no",
-		"project",
+		*_standard_dimension_selects(),
 		"against_voucher_type",
 		"against_voucher",
 		"account_currency",
@@ -1047,9 +1073,10 @@ def _build_gl_conditions_duckdb(filters):
 		conditions.append("posting_date <= ?")
 	params.append(filters.to_date)
 
-	if filters.get("project"):
-		conditions.append(f"project IN ({', '.join(['?'] * len(filters.project))})")
-		params.extend(filters.project)
+	for dimension in ("project", "department", "territory", "sales_person"):
+		if values := filters.get(dimension):
+			conditions.append(f"{dimension} IN ({', '.join(['?'] * len(values))})")
+			params.extend(values)
 
 	company_fb = filters.get("company_fb") or frappe.get_cached_value(
 		"Company", filters.company, "default_finance_book"

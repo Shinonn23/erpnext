@@ -15,7 +15,11 @@
   "party",
   "accounting_dimensions_section",
   "dimension_col_break",
+  "standard_dimensions_section",
   "project",
+  "department",
+  "territory",
+  "sales_person",
   "currency_section",
   "account_currency",
   "column_break_10",
@@ -196,6 +200,31 @@
    "options": "Project"
   },
   {
+   "fieldname": "department",
+   "fieldtype": "Link",
+   "label": "Department",
+   "options": "Department",
+   "reqd": 0,
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "territory",
+   "fieldtype": "Link",
+   "label": "Territory",
+   "options": "Territory",
+   "reqd": 0,
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "sales_person",
+   "fieldtype": "Link",
+   "label": "Sales Person",
+   "options": "Sales Person",
+   "read_only": 1,
+   "reqd": 0,
+   "allow_on_submit": 1
+  },
+  {
    "fieldname": "col_break3",
    "fieldtype": "Column Break"
   },
@@ -273,6 +302,11 @@
    "fieldtype": "Check",
    "label": "Is Tax Withholding Account",
    "read_only": 1
+  },
+  {
+   "fieldname": "standard_dimensions_section",
+   "fieldtype": "Section Break",
+   "label": "Standard Dimensions"
   }
  ],
  "idx": 1,

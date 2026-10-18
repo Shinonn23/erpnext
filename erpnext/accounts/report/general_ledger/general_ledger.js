@@ -161,6 +161,35 @@ frappe.query_reports["General Ledger"] = {
 			},
 		},
 		{
+			fieldname: "department",
+			label: __("Department"),
+			fieldtype: "MultiSelectList",
+			options: "Department",
+			get_data: function (txt) {
+				return frappe.db.get_link_options("Department", txt, {
+					company: frappe.query_report.get_filter_value("company"),
+				});
+			},
+		},
+		{
+			fieldname: "territory",
+			label: __("Territory"),
+			fieldtype: "MultiSelectList",
+			options: "Territory",
+			get_data: function (txt) {
+				return frappe.db.get_link_options("Territory", txt);
+			},
+		},
+		{
+			fieldname: "sales_person",
+			label: __("Sales Person"),
+			fieldtype: "MultiSelectList",
+			options: "Sales Person",
+			get_data: function (txt) {
+				return frappe.db.get_link_options("Sales Person", txt);
+			},
+		},
+		{
 			fieldname: "include_dimensions",
 			label: __("Consider Accounting Dimensions"),
 			fieldtype: "Check",
