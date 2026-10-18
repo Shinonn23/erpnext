@@ -30,6 +30,9 @@ def boot_session(bootinfo):
 		bootinfo.sysdefaults.disable_include_dimensions = cint(
 			frappe.get_single_value("Accounts Settings", "disable_include_dimensions")
 		)
+		bootinfo.sysdefaults.use_legacy_budget_controller = cint(
+			frappe.get_single_value("Accounts Settings", "use_legacy_budget_controller")
+		)
 
 		remove_disabled_price_list_defaults(bootinfo)
 
