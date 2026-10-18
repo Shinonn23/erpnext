@@ -104,35 +104,35 @@
 </style>
 
 {% var month_dict = {
-	"1": "มกราคม",
-	"2": "กุมภาพันธ์",
-	"3": "มีนาคม",
-	"4": "เมษายน",
-	"5": "พฤษภาคม",
-	"6": "มิถุนายน",
-	"7": "กรกฎาคม",
-	"8": "สิงหาคม",
-	"9": "กันยายน",
-	"10": "ตุลาคม",
-	"11": "พฤศจิกายน",
-	"12": "ธันวาคม",
+	"1": "January",
+	"2": "February",
+	"3": "March",
+	"4": "April",
+	"5": "May",
+	"6": "June",
+	"7": "July",
+	"8": "August",
+	"9": "September",
+	"10": "October",
+	"11": "November",
+	"12": "December",
 } %}
 <div id="header-html" class="hidden-pdf">
 	<p class="title text-center">
-		<strong>รายงานภาษีขาย</strong>
+		<strong>Sales Tax Report</strong>
 	</p>
 	<p class="month text-center">
-		<strong>เดือนภาษี {%= month_dict[filters.month] %} ปี {%= parseInt(filters.year) + 543 %}</strong>
+		<strong>Tax Month {%= month_dict[filters.month] %} Year (B.E.) {%= parseInt(filters.year) + 543 %}</strong>
 	</p>
 	<div class="row section-break">
 		<div class="col-xs-2">
-			ชื่อผู้ประกอบการ
+			Business Name
 		</div>
 		<div class="col-xs-4">
 			{%= data[0].company_name %}
 		</div>
 		<div class="col-xs-2">
-			เลขประจำตัวผู้เสียภาษีอากร
+			Tax ID
 		</div>
 		<div class="col-xs-4">
 			{%= data[0].company_tax_id %}
@@ -140,7 +140,7 @@
 	</div>
 	<div class="row section-break">
 		<div class="col-xs-2">
-			ชื่อสถานประกอบการ
+			Establishment Name
 		</div>
 		<div class="col-xs-4">
 			{%= data[0].company_name %}
@@ -151,24 +151,24 @@
 			{% } else { %}
 				<span class="uncheckbox"></span>
 			{% } %}
-			สำนักงานใหญ่ &nbsp;&nbsp;&nbsp;&nbsp;
+			Head Office &nbsp;&nbsp;&nbsp;&nbsp;
 			{% if (data[0].company_branch_code && data[0].company_branch_code != "-" && data[0].company_branch_code != "00000") { %}
 				<span class="checkbox"></span>
 			{% } else { %}
 				<span class="uncheckbox"></span>
 			{% } %}
-			สาขาที่
+			Branch No.
 			{% if (data[0].company_branch_code && data[0].company_branch_code != "-" && data[0].company_branch_code != "00000") { %}
 				{%= data[0].company_branch_code %}
 			{% } %}
 		</div>
 		<div class="col-xs-2 text-right">
-			{{ __("หน้าที่ {0} / {1}", [`<span class="page"></span>`, `<span class="topage"></span>`]) }}
+			{{ __("Page {0} / {1}", [`<span class="page"></span>`, `<span class="topage"></span>`]) }}
 		</div>
 	</div>
 	<div class="row section-break">
 		<div class="col-xs-2">
-			ที่อยู่
+			Address
 		</div>
 		<div class="col-xs-10">
 			{{ data[0].company_address_line1 }}
@@ -199,48 +199,48 @@
 		<thead>
 			<tr>
 				<th class="col-1 bg-grey text-center" rowspan="2">
-					<strong>ลำดับ</strong>
+					<strong>No.</strong>
 				</th>
 				<th class="bg-grey text-center" colspan="2">
-					<strong>ใบกำกับภาษี</strong>
+					<strong>Tax Invoice</strong>
 				</th>
 				<th class="col-4 bg-grey text-center" rowspan="2">
-					<strong>เลขที่เอกสาร</strong>
+					<strong>Document No.</strong>
 				</th>
 				<th class="col-5 bg-grey text-center" rowspan="2">
-					<strong>ชื่อผู้ซื้อสินค้า/ผู้รับบริการ</strong>
+					<strong>Buyer / Service Recipient</strong>
 				</th>
 				<th class="col-6 bg-grey text-center" rowspan="2">
-					<strong>เลขประจำตัวผู้เสียภาษีอากรของชื่อผู้ซื้อสินค้า/ผู้รับบริการ</strong>
+					<strong>Buyer / Service Recipient Tax ID</strong>
 				</th>
 				<th class="bg-grey text-center" colspan="2">
-					<strong>สถานประกอบการ</strong>
+					<strong>Establishment</strong>
 				</th>
 				<th class="col-12 bg-grey text-center" rowspan="2">
-					<strong>% ภาษี</strong>
+					<strong>Tax %</strong>
 				</th>
 				<th class="col-9 bg-grey text-center" rowspan="2">
-					<strong>มูลค่าสินค้าหรือบริการ</strong>
+					<strong>Goods / Services Value</strong>
 				</th>
 				<th class="col-10 bg-grey text-center" rowspan="2">
-					<strong>จำนวนเงินภาษีมูลค่าเพิ่ม</strong>
+					<strong>VAT Amount</strong>
 				</th>
 				<th class="col-11 bg-grey text-center" rowspan="2">
-					<strong>จำนวนเงินรวม</strong>
+					<strong>Total Amount</strong>
 				</th>
 			</tr>
 			<tr>
 				<th class="col-2 bg-grey text-center">
-					<strong>วันที่</strong>
+					<strong>Date</strong>
 				</th>
 				<th class="col-3 bg-grey text-center">
-					<strong>เลขที่</strong>
+					<strong>No.</strong>
 				</th>
 				<th class="col-7 bg-grey text-center">
-					<strong>สำนักงานใหญ่</strong>
+					<strong>Head Office</strong>
 				</th>
 				<th class="col-8 bg-grey text-center">
-					<strong>สาขาที่</strong>
+					<strong>Branch No.</strong>
 				</th>
 			</tr>
 		</thead>
@@ -305,7 +305,7 @@
 			<!-- Subtotal -->
 			<tr>
 				<td class="bg-grey text-center border" colspan="9">
-					<strong>รวมหน้า</strong>
+					<strong>Page Total</strong>
 				</td>
 				<td class="bg-grey text-right border">
 					{% var grand_tax_base = grand_tax_base + sum_tax_base %}
@@ -323,7 +323,7 @@
 			{% if (set_number == total_set) { %}
 				<tr>
 					<td class="bg-grey text-center border" colspan="9">
-						<strong>รวมทั้งสิ้น</strong>
+						<strong>Grand Total</strong>
 					</td>
 					<td class="bg-grey text-right border">
 						<strong>{%= grand_tax_base.toLocaleString("en-US", {minimumFractionDigits: 2, maximumFractionDigits: 2}) %}</strong>
@@ -346,7 +346,7 @@
 	{% for(var k = 0; k < tax_list.length; k++) { %}
 		<tr>
 			<td class="text-right col-sum-1" style="border: 0px !important;">
-				จำนวนเงินก่อนภาษีอัตรา {%= tax_list[k] %} %
+				Taxable Amount at {%= tax_list[k] %} %
 			</td>
 			<td class="text-right col-sum-2" style="border: 0px !important;">
 				{%= summary["amount_base"][tax_list[k]].toLocaleString("en-US", {minimumFractionDigits: 2, maximumFractionDigits: 2}) %}
@@ -355,7 +355,7 @@
 	{% } %}
 	<tr>
 		<td class="text-right col-sum-1" style="border: 0px !important;">
-			จำนวนเงินภาษีมูลค่าเพิ่มรวม
+			Total VAT
 		</td>
 		<td class="text-right col-sum-2" style="border: 0px !important;">
 			{%= summary["amount_tax"].toLocaleString("en-US", {minimumFractionDigits: 2, maximumFractionDigits: 2}) %}
@@ -363,7 +363,7 @@
 	</tr>
 	<tr>
 		<td class="text-right col-sum-1" style="border: 0px !important;">
-			ยอดเงินรวม
+			Total Amount
 		</td>
 		<td class="text-right col-sum-2" style="border: 0px !important;">
 			{%= summary["amount_total"].toLocaleString("en-US", {minimumFractionDigits: 2, maximumFractionDigits: 2}) %}

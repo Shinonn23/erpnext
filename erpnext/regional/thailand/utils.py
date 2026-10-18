@@ -1,6 +1,7 @@
 import csv
 import datetime
 import re
+from decimal import Decimal
 
 import frappe
 import requests
@@ -8,6 +9,7 @@ from frappe import _
 from frappe.defaults import get_user_default_as_list
 from lxml import etree
 from num2words import num2words
+from num2words.currency import parse_currency_parts
 
 
 def amount_in_bahttext(amount):
@@ -17,7 +19,11 @@ def amount_in_bahttext(amount):
 def amount_to_text(amount, currency=None, lang=None):
 	try:
 		currency = currency or frappe.defaults.get_global_default("currency")
-		lang = lang or ("th" if currency == "THB" else "en")
+		lang = lang or "en"
+		if currency == "THB" and lang == "en":
+			baht, satang, negative = parse_currency_parts(Decimal(str(amount)))
+			prefix = "minus " if negative else ""
+			return f"{prefix}{num2words(baht)} baht, {num2words(satang)} satang".title()
 		return num2words(amount, to="currency", lang=lang, currency=currency).title()
 	except Exception:
 		return ""
@@ -27,11 +33,11 @@ def full_thai_date(date_str):
 	if not date_str:
 		return ""
 	date = datetime.datetime.strptime(str(date_str), "%Y-%m-%d")
-	month_name = "x มกราคม กุมภาพันธ์ มีนาคม เมษายน พฤษภาคม มิถุนายน กรกฎาคม สิงหาคม กันยายน ตุลาคม พฤศจิกายน ธันวาคม".split()[
+	month_name = "x January February March April May June July August September October November December".split()[
 		date.month
 	]
 	thai_year = date.year + 543
-	return f"{date.day} {month_name} {thai_year}"  # 30 ตุลาคม 2560
+	return f"{date.day} {month_name} {thai_year}"  # 30 October 2560
 
 
 def get_prefix_for_address(data):
@@ -138,13 +144,13 @@ def finalize_address_dict(data):
 	prefix_thambol, prefix_amphur, prefix_province = get_prefix_for_address(data)
 
 	map = {
-		"vBuildingName": "อาคาร",
-		"vFloorNumber": "ชั้น",
-		"vVillageName": "หมู่บ้าน",
-		"vRoomNumber": "ห้อง",
-		"vMooNumber": "หมู่ที่",
-		"vSoiName": "ซอย",
-		"vStreetName": "ถนน",
+		"vBuildingName": "Building",
+		"vFloorNumber": "Floor",
+		"vVillageName": "Village",
+		"vRoomNumber": "Room",
+		"vMooNumber": "Moo",
+		"vSoiName": "Soi",
+		"vStreetName": "Road ",
 		"vThambol": prefix_thambol,
 		"vAmphur": prefix_amphur,
 		"vProvince": prefix_province,
