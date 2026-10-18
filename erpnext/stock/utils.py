@@ -144,8 +144,16 @@ def get_stock_balance(
 				extra_cond += f" and {field} = %({field})s"
 
 	last_entry = get_previous_sle(args, extra_cond=extra_cond)
-	if last_entry and inventory_dimensions_dict and any(
-		value not in (None, "") for value in inventory_dimensions_dict.values()
+	if inventory_dimensions_dict:
+		# Quantities can be counted by dimension; valuation remains warehouse-wide.
+		warehouse_entry = get_previous_sle(args)
+		if warehouse_entry:
+			last_entry = last_entry or frappe._dict(qty_after_transaction=0)
+			last_entry.valuation_rate = flt(warehouse_entry.get("valuation_rate"))
+	if (
+		last_entry
+		and inventory_dimensions_dict
+		and any(value not in (None, "") for value in inventory_dimensions_dict.values())
 	):
 		# Assigned dimensions post deltas; unassigned reconciliations can reset the warehouse balance.
 		args["posting_datetime"] = get_combine_datetime(posting_date, posting_time)

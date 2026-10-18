@@ -19,7 +19,8 @@ from erpnext.stock.doctype.serial_and_batch_bundle.serial_and_batch_bundle impor
 	get_serial_nos_based_on_posting_date,
 )
 from erpnext.stock.doctype.serial_no.serial_no import get_serial_nos
-from erpnext.stock.utils import _get_incoming_rate, get_stock_balance
+from erpnext.stock.utils import _get_incoming_rate, get_stock_balance, get_valuation_method
+from erpnext.stock.valuation import FIFOValuation, LIFOValuation
 
 
 class OpeningEntryAccountError(frappe.ValidationError):
@@ -75,6 +76,7 @@ class StockReconciliation(StockController):
 			)
 		self.validate_posting_time()
 		self.validate_storage_locations()
+		self.validate_inventory_dimension()
 		self.set_current_serial_and_batch_bundle()
 		self.set_new_serial_and_batch_bundle()
 		self.validate_duplicate_serial_and_batch_bundle("items")
@@ -90,7 +92,6 @@ class StockReconciliation(StockController):
 
 		validate_document_policy(self)
 		self.validate_putaway_capacity()
-		self.validate_inventory_dimension()
 		# Stock Reconciliation overrides validate() without calling super(), so the shared
 		# mandatory inventory dimension check must be invoked explicitly here.
 		self.validate_inventory_dimension_mandatory()
@@ -104,9 +105,46 @@ class StockReconciliation(StockController):
 		self.set_serial_and_batch_bundle(ignore_validate=True)
 
 	def validate_inventory_dimension(self):
-		# Inventory dimensions are valid for both opening balances and quantity adjustments.
-		# The stock ledger stores each dimensional balance independently.
-		return
+		# Warehouse revaluation must be a separate voucher from dimensional quantity counts.
+		scopes = {}
+		for row in self.items:
+			key = (row.item_code, row.warehouse)
+			scopes.setdefault(key, set()).add(bool(self.get_inventory_dimensions_dict(row)))
+			if len(scopes[key]) > 1:
+				frappe.throw(
+					_(
+						"Use separate Stock Reconciliations for dimensioned quantities and whole warehouse valuation of the same Item and Warehouse."
+					)
+				)
+
+	def is_warehouse_revaluation_row(self, row):
+		from erpnext.stock.stock_ledger import get_previous_sle
+
+		if (
+			self.purpose != "Stock Reconciliation"
+			or self.get_inventory_dimensions_dict(row)
+			or row.serial_and_batch_bundle
+			or row.batch_no
+			or row.serial_no
+			or row.valuation_rate in (None, "")
+			or frappe.get_cached_value("Item", row.item_code, "has_serial_no")
+			or frappe.get_cached_value("Item", row.item_code, "has_batch_no")
+		):
+			return False
+		previous = get_previous_sle(
+			{
+				"item_code": row.item_code,
+				"warehouse": row.warehouse,
+				"posting_date": self.posting_date,
+				"posting_time": self.posting_time,
+			}
+		)
+		return (
+			flt(row.qty) > 0
+			and flt(row.qty) == flt(previous.get("qty_after_transaction"))
+			and flt(row.valuation_rate, row.precision("valuation_rate"))
+			!= flt(previous.get("valuation_rate"), row.precision("valuation_rate"))
+		)
 
 	def get_inventory_dimensions_dict(self, row, include_empty=False):
 		dimensions = get_inventory_dimensions()
@@ -142,9 +180,26 @@ class StockReconciliation(StockController):
 	def on_submit(self):
 		self.make_bundle_for_current_qty()
 		self.make_bundle_using_old_serial_batch_fields()
+		expected_values = {row.name: flt(row.amount_difference) for row in self.items}
 		self.update_stock_ledger()
+		self.validate_posted_values(expected_values)
 		self.make_gl_entries()
 		self.repost_future_sle_and_gle()
+
+	def validate_posted_values(self, expected_values):
+		# Native warehouse costing must match the reviewed amount before creating GL entries.
+		for row in self.items:
+			if not self.get_inventory_dimensions_dict(row) or self.purpose == "Opening Stock":
+				continue
+			posted_value = get_row_stock_value_difference(self.doctype, self.name, row.name)
+			if flt(posted_value, row.precision("amount_difference")) != flt(
+				expected_values[row.name], row.precision("amount_difference")
+			):
+				frappe.throw(
+					_(
+						"Row #{0}: Posted stock value differs from the reviewed adjustment. Refresh the stock valuation and request approval again."
+					).format(row.idx)
+				)
 
 	def on_cancel(self):
 		self.validate_reserved_stock()
@@ -563,6 +618,7 @@ class StockReconciliation(StockController):
 	def remove_items_with_no_change(self):
 		"""Remove items if qty or rate is not changed"""
 		self.difference_amount = 0.0
+		count_balances = {}
 
 		def _changed(item):
 			if item.current_serial_and_batch_bundle:
@@ -597,13 +653,33 @@ class StockReconciliation(StockController):
 					return True
 
 			rate_precision = item.precision("valuation_rate")
+			if (
+				inventory_dimensions_dict
+				and self.purpose != "Opening Stock"
+				and not frappe.get_cached_value("Item", item.item_code, "has_batch_no")
+				and not frappe.get_cached_value("Item", item.item_code, "has_serial_no")
+			):
+				warehouse_rate = flt(item_dict.get("rate"), rate_precision)
+				if (
+					item.valuation_rate not in (None, "")
+					and flt(item.valuation_rate, rate_precision) != warehouse_rate
+				):
+					frappe.throw(
+						_(
+							"Row #{0}: A dimensioned stock count uses warehouse valuation. Revalue the whole warehouse in a separate Stock Reconciliation without inventory dimensions."
+						).format(item.idx)
+					)
+				item.flags.count_amount_difference = self.get_dimensioned_count_difference(
+					item, item_dict, count_balances
+				)
 			rate = flt(item_dict.get("rate"), rate_precision)
 			# an unset rate means "keep the current one", an explicit zero is a real revaluation
 			valuation_rate = (
 				flt(item.valuation_rate, rate_precision) if item.valuation_rate not in ("", None) else None
 			)
 			if (
-				(item.qty is None or item.qty == item_dict.get("qty"))
+				not (self.purpose == "Opening Stock" and inventory_dimensions_dict and item.qty)
+				and (item.qty is None or item.qty == item_dict.get("qty"))
 				and (valuation_rate is None or valuation_rate == rate)
 				and (not item.serial_no or (item.serial_no == item_dict.get("serial_nos")))
 			):
@@ -623,6 +699,8 @@ class StockReconciliation(StockController):
 
 				item.current_qty = item_dict.get("qty")
 				item.current_valuation_rate = item_dict.get("rate")
+				if inventory_dimensions_dict and self.purpose == "Opening Stock":
+					item.flags.count_amount_difference = flt(item.qty) * flt(item.valuation_rate)
 				self.calculate_difference_amount(item, item_dict)
 				return True
 
@@ -638,6 +716,43 @@ class StockReconciliation(StockController):
 			self.items = items
 			self.change_idx = True
 			frappe.msgprint(_("Removed items with no change in quantity or value."))
+
+	def get_dimensioned_count_difference(self, item, item_dict, balances):
+		from erpnext.stock.stock_ledger import get_previous_sle
+
+		key = (item.item_code, item.warehouse)
+		method = get_valuation_method(item.item_code, self.company)
+		if key not in balances:
+			previous = get_previous_sle(
+				{
+					"item_code": item.item_code,
+					"warehouse": item.warehouse,
+					"posting_date": self.posting_date,
+					"posting_time": self.posting_time,
+				}
+			)
+			balances[key] = frappe._dict(
+				qty=flt(previous.get("qty_after_transaction")),
+				value=flt(previous.get("stock_value")),
+				rate=flt(previous.get("valuation_rate")),
+				queue=(LIFOValuation if method == "LIFO" else FIFOValuation)(
+					json.loads(previous.get("stock_queue") or "[]")
+				),
+			)
+		state = balances[key]
+		qty = flt(item.qty if item.qty is not None else item_dict["qty"]) - flt(item_dict["qty"])
+		rate = flt(item_dict.get("rate")) if qty >= 0 else state.rate
+		if method in ("FIFO", "LIFO"):
+			if qty < 0:
+				consumed = state.queue.remove_stock(abs(qty), rate_generator=lambda: state.rate)
+				rate = sum(q * r for q, r in consumed) / abs(qty)
+			elif qty > 0:
+				state.queue.add_stock(qty, rate)
+		state.qty += qty
+		state.value += qty * rate
+		if state.qty:
+			state.rate = state.value / state.qty
+		return qty * rate
 
 	def calculate_difference_amount(self, item, item_dict):
 		qty_precision = item.precision("qty")
@@ -655,7 +770,11 @@ class StockReconciliation(StockController):
 		new_amount = flt(new_qty * new_valuation_rate, amount_precision)
 		current_amount = flt(current_qty * current_valuation_rate, amount_precision)
 
-		self.difference_amount += new_amount - current_amount
+		self.difference_amount += (
+			item.flags.count_amount_difference
+			if item.flags.count_amount_difference is not None
+			else new_amount - current_amount
+		)
 
 	def validate_data(self):
 		def _get_msg(row_num, msg):
@@ -848,6 +967,10 @@ class StockReconciliation(StockController):
 					)
 
 				previous_sle = self.get_previous_sle_for_row(row)
+				if self.get_inventory_dimensions_dict(row):
+					previous_sle = frappe._dict(
+						qty_after_transaction=row.current_qty, valuation_rate=row.current_valuation_rate
+					)
 
 				if previous_sle:
 					if row.qty in ("", None):
@@ -863,6 +986,7 @@ class StockReconciliation(StockController):
 
 				if (
 					previous_sle
+					and not (self.purpose == "Opening Stock" and self.get_inventory_dimensions_dict(row))
 					and row.qty == previous_sle.get("qty_after_transaction")
 					and (row.valuation_rate == previous_sle.get("valuation_rate") or row.qty == 0)
 				) or (not previous_sle and not row.qty):
@@ -1004,6 +1128,12 @@ class StockReconciliation(StockController):
 				data.valuation_rate = flt(row.current_valuation_rate)
 				data.stock_value = flt(row.current_amount)
 				data.stock_value_difference = -1 * flt(row.amount_difference)
+			elif has_dimensions and not (row.batch_no or row.serial_no or row.serial_and_batch_bundle):
+				data.actual_qty = (
+					flt(row.qty) if self.purpose == "Opening Stock" else flt(row.qty) - flt(row.current_qty)
+				)
+				data.qty_after_transaction = flt(row.current_qty)
+				data.stock_value_difference = -1 * flt(row.amount_difference)
 			elif row.current_qty and current_bundle:
 				data.actual_qty = -1 * row.current_qty
 				data.qty_after_transaction = flt(row.current_qty)
@@ -1033,7 +1163,12 @@ class StockReconciliation(StockController):
 		self.update_inventory_dimensions(row, data)
 		# Warehouse-wide reconciliation can reduce stock by resetting the balance
 		# while leaving actual_qty at zero. Validate its real quantity change too.
-		if self.docstatus == 1 and flt(row.qty) < flt(row.current_qty) and not self.is_adjustment_row(row):
+		if (
+			self.docstatus == 1
+			and self.purpose != "Opening Stock"
+			and flt(row.qty) < flt(row.current_qty)
+			and not self.is_adjustment_row(row)
+		):
 			from erpnext.stock.doctype.storage_location.storage_location import validate_storage_location
 
 			location_check = frappe._dict(data)
@@ -1133,8 +1268,16 @@ class StockReconciliation(StockController):
 				flt(d.current_qty) * flt(d.current_valuation_rate), d.precision("current_amount")
 			)
 
-			d.quantity_difference = flt(d.qty) - flt(d.current_qty)
-			d.amount_difference = flt(d.amount) - flt(d.current_amount)
+			d.quantity_difference = (
+				flt(d.qty)
+				if self.purpose == "Opening Stock" and self.get_inventory_dimensions_dict(d)
+				else flt(d.qty) - flt(d.current_qty)
+			)
+			d.amount_difference = (
+				flt(d.flags.count_amount_difference, d.precision("amount_difference"))
+				if d.flags.count_amount_difference is not None
+				else flt(d.amount) - flt(d.current_amount)
+			)
 
 	def recalculate_difference_amount_from_ledger(self):
 		"""Sync the displayed current qty/rate and difference amount with the (reposted) ledger.
@@ -1165,6 +1308,12 @@ class StockReconciliation(StockController):
 				if current_qty
 				else 0.0
 			)
+			if self.get_inventory_dimensions_dict(row) and not row.current_serial_and_batch_bundle:
+				previous = self.get_previous_ledger_entry(row) or frappe._dict()
+				current_valuation_rate = flt(
+					previous.get("valuation_rate"), row.precision("current_valuation_rate")
+				)
+				current_amount = flt(current_qty * current_valuation_rate, row.precision("current_amount"))
 
 			row.db_set(
 				{
@@ -1172,7 +1321,11 @@ class StockReconciliation(StockController):
 					"current_qty": current_qty,
 					"current_valuation_rate": current_valuation_rate,
 					"current_amount": current_amount,
-					"quantity_difference": flt(row.qty) - current_qty,
+					"quantity_difference": (
+						flt(row.qty)
+						if self.purpose == "Opening Stock" and self.get_inventory_dimensions_dict(row)
+						else flt(row.qty) - current_qty
+					),
 					"amount_difference": amount_difference,
 				},
 				update_modified=False,
@@ -1244,6 +1397,37 @@ class StockReconciliation(StockController):
 			)
 			return abs(flt(total_qty, row.precision("current_qty")))
 
+		dimensions = self.get_inventory_dimensions_dict(row, include_empty=bool(self.stock_count))
+		if dimensions:
+			entry = frappe.db.get_value(
+				"Stock Ledger Entry",
+				{
+					"voucher_type": self.doctype,
+					"voucher_no": self.name,
+					"voucher_detail_no": row.name,
+					"is_cancelled": 0,
+				},
+				["posting_datetime", "creation"],
+				as_dict=True,
+			)
+			if entry:
+				from erpnext.stock.stock_ledger import get_prior_ledger_condition
+
+				sle = frappe.qb.DocType("Stock Ledger Entry")
+				query = (
+					frappe.qb.from_(sle)
+					.select(Sum(sle.actual_qty))
+					.where(
+						(sle.item_code == row.item_code)
+						& (sle.warehouse == row.warehouse)
+						& (sle.is_cancelled == 0)
+						& get_prior_ledger_condition(sle, entry.posting_datetime, entry.creation)
+					)
+				)
+				for fieldname, value in dimensions.items():
+					field = sle[fieldname]
+					query = query.where(field.isnull() if value in (None, "") else field == value)
+				return flt(query.run()[0][0], row.precision("current_qty"))
 		previous_sle = self.get_previous_ledger_entry(row)
 		if previous_sle is None:
 			return flt(row.current_qty, row.precision("current_qty"))
@@ -1286,11 +1470,6 @@ class StockReconciliation(StockController):
 			.orderby(sle.creation, order=frappe.qb.desc)
 			.limit(1)
 		)
-		for fieldname, value in self.get_inventory_dimensions_dict(
-			row, include_empty=bool(self.stock_count)
-		).items():
-			field = sle[fieldname]
-			previous_sle = previous_sle.where(field.isnull() if value in (None, "") else field == value)
 		previous_sle = previous_sle.run(as_dict=True)
 
 		return previous_sle[0] if previous_sle else frappe._dict()

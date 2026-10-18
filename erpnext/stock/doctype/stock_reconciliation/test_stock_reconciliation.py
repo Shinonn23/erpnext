@@ -2117,7 +2117,8 @@ class TestStockReconciliation(ERPNextTestSuite, StockTestMixin):
 				"item_code": item.name,
 				"warehouse": warehouse,
 				"qty": 6,
-				"valuation_rate": 100,
+				"valuation_rate": 103.75,
+				# Quantity adjustments use the whole warehouse cost (5 * 100 + 3 * 110) / 8.
 				"id_plant": plant_a.name,
 			},
 		)

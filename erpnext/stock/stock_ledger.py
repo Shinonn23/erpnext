@@ -2063,21 +2063,6 @@ def get_previous_sle_of_current_voucher(args, operator="<", exclude_current_vouc
 
 	voucher_condition = ""
 	datetime_condition = f"posting_datetime {operator} %(posting_datetime)s"
-	dimension_conditions = []
-	if args.get("voucher_type") == "Stock Reconciliation":
-		dimensions = get_inventory_dimensions()
-		has_dimension_value = any(
-			args.get(dimension.get("fieldname")) not in (None, "") for dimension in dimensions
-		)
-		stock_count = frappe.db.get_value("Stock Reconciliation", args.get("voucher_no"), "stock_count")
-		if has_dimension_value or stock_count:
-			for dimension in dimensions:
-				fieldname = dimension.get("fieldname")
-				value = args.get(fieldname)
-				if value in (None, ""):
-					dimension_conditions.append(f"and {fieldname} is null")
-				else:
-					dimension_conditions.append(f"and {fieldname} = %({fieldname})s")
 	if exclude_current_voucher:
 		voucher_no = args.get("voucher_no")
 		voucher_condition = f"and voucher_no != '{voucher_no}'"
@@ -2094,11 +2079,6 @@ def get_previous_sle_of_current_voucher(args, operator="<", exclude_current_vouc
 		"posting_datetime": args.get("posting_datetime"),
 		"creation": args.get("creation"),
 	}
-	for dimension in get_inventory_dimensions() if dimension_conditions else []:
-		fieldname = dimension.get("fieldname")
-		value = args.get(fieldname)
-		if value not in (None, ""):
-			query_args[fieldname] = value
 
 	sle = frappe.db.sql(  # nosemgrep
 		f"""
@@ -2107,7 +2087,6 @@ def get_previous_sle_of_current_voucher(args, operator="<", exclude_current_vouc
 		where item_code = %(item_code)s
 			and warehouse = %(warehouse)s
 			and is_cancelled = 0
-			{" ".join(dimension_conditions)}
 			{voucher_condition}
 			and (
 				{datetime_condition}
@@ -2460,6 +2439,9 @@ def update_qty_in_future_sle(args, allow_negative_stock=False):
 
 
 def get_stock_reco_qty_shift(args):
+	# Dimensioned reconciliations post physical movements, not warehouse balance resets.
+	if any(args.get(d.fieldname) not in (None, "") for d in get_inventory_dimensions()):
+		return flt(args.actual_qty)
 	stock_reco_qty_shift = 0
 	if args.get("is_cancelled"):
 		if args.get("previous_qty_after_transaction"):

@@ -182,6 +182,7 @@
    "fieldtype": "Column Break"
   },
   {
+   "description": "When counting by Inventory Dimension, this amount is the actual warehouse-level receipt or issue cost under FIFO/LIFO or Moving Average. It may differ from Amount minus Current Amount. To adjust the valuation of the entire warehouse, create a separate Stock Reconciliation with unchanged total quantity and no Inventory Dimension.",
    "fieldname": "amount_difference",
    "fieldtype": "Currency",
    "label": "Amount Difference",

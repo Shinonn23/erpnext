@@ -5,6 +5,7 @@ import frappe
 from frappe import _
 from frappe.desk.reportview import get_match_cond
 from frappe.model.document import Document
+from frappe.utils import flt, get_time, getdate
 
 # Every active leaf Warehouse gets this location as its default, so stock rows are filled in.
 DEFAULT_LOCATION_CODE = "STAGING"
@@ -287,6 +288,8 @@ def set_default_storage_locations(doc, method=None):
 
 	for table in doc.meta.get_table_fields():
 		for row in doc.get(table.fieldname) or []:
+			if doc.doctype == "Stock Reconciliation" and doc.is_warehouse_revaluation_row(row):
+				continue
 			for fieldname, warehouse in get_storage_location_warehouses(doc, row).items():
 				if not warehouse or not row.meta.has_field(fieldname) or row.get(fieldname):
 					continue
@@ -297,10 +300,70 @@ def set_default_storage_locations(doc, method=None):
 					row.set(fieldname, location)
 
 
+def is_warehouse_revaluation_entry(entry):
+	"""Only a submitted, rate-only warehouse reconciliation may omit a physical location."""
+	from erpnext.stock.doctype.inventory_dimension.inventory_dimension import get_inventory_dimensions
+	from erpnext.stock.stock_ledger import get_previous_sle_of_current_voucher
+
+	if (
+		entry.get("voucher_type") != "Stock Reconciliation"
+		or flt(entry.get("actual_qty"))
+		or entry.get("serial_and_batch_bundle")
+		or entry.get("batch_no")
+		or entry.get("serial_no")
+		or any(entry.get(d.fieldname) not in (None, "") for d in get_inventory_dimensions())
+	):
+		return False
+	source = frappe.get_doc("Stock Reconciliation", entry.get("voucher_no"))
+	row = next((row for row in source.items if row.name == entry.get("voucher_detail_no")), None)
+	if (
+		source.docstatus != 1
+		or source.purpose != "Stock Reconciliation"
+		or source.company != entry.get("company")
+		or getdate(source.posting_date) != getdate(entry.get("posting_date"))
+		or get_time(source.posting_time) != get_time(entry.get("posting_time"))
+		or not row
+		or row.item_code != entry.get("item_code")
+		or row.warehouse != entry.get("warehouse")
+		or source.get_inventory_dimensions_dict(row)
+		or row.batch_no
+		or row.serial_no
+		or row.serial_and_batch_bundle
+		or frappe.get_cached_value("Item", row.item_code, "has_serial_no")
+		or frappe.get_cached_value("Item", row.item_code, "has_batch_no")
+	):
+		return False
+	previous = get_previous_sle_of_current_voucher(
+		frappe._dict(
+			{
+				field: entry.get(field)
+				for field in (
+					"item_code",
+					"warehouse",
+					"posting_date",
+					"posting_time",
+					"voucher_type",
+					"voucher_no",
+				)
+			}
+		),
+		"<=",
+		exclude_current_voucher=True,
+	)
+	return (
+		flt(row.qty) > 0
+		and flt(entry.get("qty_after_transaction")) == flt(row.qty)
+		and flt(entry.get("valuation_rate")) == flt(row.valuation_rate)
+		and flt(row.qty) == flt(previous.get("qty_after_transaction"))
+	)
+
+
 def validate_storage_location(ledger_entry):
 	"""Require a location for new ledger postings, while permitting historical reversals."""
 	location_name = ledger_entry.get("storage_location")
 	if not location_name:
+		if is_warehouse_revaluation_entry(ledger_entry):
+			return
 		if not ledger_entry.get("is_cancelled"):
 			frappe.throw(
 				_("Storage Location is required to post stock for Item {0} in Warehouse {1}.").format(
