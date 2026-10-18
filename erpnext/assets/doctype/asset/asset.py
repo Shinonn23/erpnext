@@ -1431,10 +1431,6 @@ def split_asset(asset_name, split_qty):
 	existing_asset.check_permission("write")
 	if existing_asset.docstatus != 1:
 		frappe.throw(_("Only a submitted Asset can be split."))
-	from erpnext.stock.stock_control import validate_asset_operation
-
-	operation = "sales" if asset_name in (frappe.flags.get("stock_control_asset_sale") or ()) else "manufacture"
-	validate_asset_operation(existing_asset, operation)
 	split_qty = cint(split_qty)
 
 	validate_split_quantity(existing_asset, split_qty)

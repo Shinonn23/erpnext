@@ -59,9 +59,6 @@ class SellingController(StockController):
 
 	def validate(self):
 		super().validate()
-		from erpnext.stock.stock_control_transactions import validate_selected_stock_control_sources
-
-		validate_selected_stock_control_sources(self)
 		self.set_territory_and_sales_person()
 		self.validate_items()
 		if not (self.get("is_debit_note") or self.get("is_return")):

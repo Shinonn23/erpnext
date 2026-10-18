@@ -20,10 +20,7 @@ class WarehouseType(Document):
 	# end: auto-generated types
 
 	def validate(self):
-		from erpnext.stock.stock_control import validate_stock_control_type
-
 		self.validate_policy_permission()
-		validate_stock_control_type(self)
 
 	def on_trash(self):
 		self.validate_policy_permission()

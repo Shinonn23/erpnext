@@ -14,10 +14,6 @@
   "cb_details",
   "is_container",
   "is_group",
-  "stock_control_section",
-  "location_type",
-  "stock_control_column",
-  "stock_control_change_reason",
   "sb_location_details",
   "latitude",
   "longitude",
@@ -181,34 +177,11 @@
    "no_copy": 1,
    "print_hide": 1,
    "read_only": 1
-  },
-  {
-   "fieldname": "location_type",
-   "fieldtype": "Link",
-   "label": "Location Type",
-   "options": "Location Type",
-   "search_index": 1,
-   "description": "Select a Location Type to define the permitted Asset operations."
-  },
-  {
-   "fieldname": "stock_control_change_reason",
-   "fieldtype": "Small Text",
-   "label": "Stock Control Change Reason",
-   "no_copy": 1
-  },
-  {
-   "fieldname": "stock_control_section",
-   "fieldtype": "Section Break",
-   "label": "Stock Control"
-  },
-  {
-   "fieldname": "stock_control_column",
-   "fieldtype": "Column Break"
   }
  ],
  "is_tree": 1,
  "links": [],
- "modified": "2026-10-05 04:10:00",
+ "modified": "2026-10-18 12:00:00",
  "modified_by": "Administrator",
  "module": "Assets",
  "name": "Location",

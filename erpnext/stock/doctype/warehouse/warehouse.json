@@ -25,7 +25,6 @@
   "stock_control_section",
   "warehouse_type",
   "column_break_qajx",
-  "stock_control_change_reason",
   "asset_location_section",
   "asset_location",
   "address_and_contact",
@@ -306,12 +305,6 @@
    "description": "Used for stock transactions when Storage Location is not specified."
   },
   {
-   "fieldname": "stock_control_change_reason",
-   "fieldtype": "Small Text",
-   "label": "Stock Control Change Reason",
-   "no_copy": 1
-  },
-  {
    "fieldname": "stock_control_section",
    "fieldtype": "Section Break",
    "label": "Stock Control"
@@ -322,7 +315,7 @@
  "idx": 1,
  "is_tree": 1,
  "links": [],
- "modified": "2026-09-16 11:42:07.000000",
+ "modified": "2026-10-18 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Warehouse",

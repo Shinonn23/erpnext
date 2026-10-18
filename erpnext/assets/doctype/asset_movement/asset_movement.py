@@ -65,7 +65,6 @@ class AssetMovement(Document):
 		self.lock_material_request()
 		if self.get("custody_loan"):
 			frappe.db.sql("select name from `tabCustody Loan` where name=%s for update", self.custody_loan)
-		self.lock_stock_control_assets()
 		self.lock_assets()
 		return super().submit()
 
@@ -81,118 +80,6 @@ class AssetMovement(Document):
 			self.validate_asset(d)
 			self.validate_movement(d)
 			self.validate_transaction_date(d)
-
-	def lock_stock_control_assets(self):
-		from erpnext.stock.stock_control import (
-			get_asset_stock_control_items,
-			is_stock_control_enabled,
-			lock_stock_control_items,
-			lock_stock_control_policies,
-		)
-
-		if not is_stock_control_enabled(self.company):
-			return
-		assets = [
-			frappe.get_doc("Asset", name) for name in sorted({row.asset for row in self.assets if row.asset})
-		]
-		locations = {asset.location for asset in assets}
-		locations.update(row.target_location for row in self.assets if row.target_location)
-		lock_stock_control_policies(location_names=locations)
-		item_codes = {item for asset in assets for item in get_asset_stock_control_items(asset)}
-		lock_stock_control_items(item_codes, [asset.name for asset in assets])
-
-	def before_submit(self):
-		from erpnext.stock.stock_control import (
-			get_stock_control_policy,
-			is_stock_control_enabled,
-			validate_asset_operation,
-		)
-
-		if not is_stock_control_enabled(self.company):
-			return
-		self.lock_material_request()
-		if self.get("custody_loan"):
-			frappe.db.sql("select name from `tabCustody Loan` where name=%s for update", self.custody_loan)
-		self.lock_stock_control_assets()
-		request_type = (
-			frappe.db.get_value("Material Request", self.material_request_name, "material_request_type")
-			if self.material_request_name
-			else None
-		)
-		for row in self.assets:
-			asset = frappe.get_doc("Asset", row.asset, for_update=True)
-			if self.purpose == "Receipt":
-				if row.to_employee and row.to_employee != asset.custodian:
-					validate_asset_operation(asset, "issue", lock=False)
-					continue
-				if row.target_location == asset.location and (
-					not asset.custodian
-					or row.to_employee == asset.custodian
-					or self.is_inbound_return(row, asset)
-				):
-					continue
-				policy = get_stock_control_policy("Location", asset.location, require_type=False)
-				if (not policy or policy.handling_category not in ("QA", "Quarantine")) and self.is_inbound_return(
-					row, asset
-				):
-					continue
-				operation = "internal_transfer"
-				validate_asset_operation(
-					asset,
-					operation,
-					target_location=row.target_location,
-					release_reason=self.get("stock_control_release_reason"),
-					lock=False,
-				)
-				continue
-			if self.purpose == "Reassignment" and not cint(row.change_custodian):
-				continue
-			if request_type == "Customer Demo":
-				operation = "demo"
-			elif request_type == "Customer Borrow / Loan":
-				operation = "loan"
-			elif self.purpose == "Transfer" and not self.get("recipient") and not self.customer:
-				operation = "internal_transfer"
-			else:
-				operation = "issue"
-			validate_asset_operation(
-				asset,
-				operation,
-				target_location=row.target_location,
-				release_reason=self.get("stock_control_release_reason"),
-				lock=False,
-			)
-
-	def is_inbound_return(self, row, asset):
-		if self.get("custody_loan"):
-			if self.get("custody_loan_source_doctype") != "Custody Loan Return":
-				return False
-			from erpnext.loan.doctype.custody_loan.custody_loan_core import (
-				validate_asset_movement_custody_loan,
-				validate_generated_transaction,
-			)
-
-			validate_asset_movement_custody_loan(self)
-			validate_generated_transaction(self)
-			loan = frappe.get_doc("Custody Loan", self.custody_loan)
-			loan_item = next((item for item in loan.items if item.name == row.custody_loan_item), None)
-			if not loan_item:
-				return False
-			if loan.borrower_type == "Employee":
-				if asset.custodian != loan.borrower:
-					return False
-			elif asset.location != loan_item.target_location:
-				return False
-			return_doc = frappe.get_doc("Custody Loan Return", self.custody_loan_source_name)
-			return bool(
-				return_doc.docstatus == 1
-				and return_doc.custody_loan == self.custody_loan
-				and any(
-					item.asset == asset.name and item.custody_loan_item == row.custody_loan_item
-					for item in return_doc.items
-				)
-			)
-		return bool(asset.custodian and row.from_employee == asset.custodian and not row.to_employee)
 
 	def validate_asset(self, d):
 		status, company = frappe.db.get_value("Asset", d.asset, ["status", "company"])

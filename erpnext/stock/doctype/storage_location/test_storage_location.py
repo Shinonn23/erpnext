@@ -8,9 +8,11 @@ from erpnext.stock.doctype.item.test_item import make_item
 from erpnext.stock.doctype.stock_entry.stock_entry_utils import make_stock_entry
 from erpnext.stock.doctype.stock_ledger_entry.stock_ledger_entry import InventoryDimensionNegativeStockError
 from erpnext.stock.doctype.storage_location.storage_location import (
+	get_default_storage_location,
 	setup_storage_location_dimension,
 	set_default_storage_locations,
 	validate_storage_location,
+	warehouse_query,
 )
 from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse
 from erpnext.stock.report.stock_balance.stock_balance import execute as stock_balance
@@ -23,12 +25,45 @@ class TestStorageLocation(ERPNextTestSuite):
 		setup_storage_location_dimension()
 		self.warehouse = create_warehouse("_Test Storage Location Warehouse")
 		self.other_warehouse = create_warehouse("_Test Storage Location Other Warehouse")
+		# These cases start from a Warehouse without the automatic STAGING default.
+		for warehouse in (self.warehouse, self.other_warehouse):
+			frappe.db.set_value("Warehouse", warehouse, "default_storage_location", None)
+			frappe.clear_document_cache("Warehouse", warehouse)
 		self.locations = []
 		for code in ("A-01", "A-02"):
 			self.locations.append(frappe.get_doc({
 				"doctype": "Storage Location", "warehouse": self.warehouse,
 				"location_code": code + frappe.generate_hash(length=6),
 			}).insert())
+
+	def test_staging_location_follows_the_warehouse(self):
+		name = create_warehouse("_Test Staging " + frappe.generate_hash(length=6))
+		self.assertEqual(
+			frappe.db.get_value("Warehouse", name, "default_storage_location"), f"{name} / STAGING"
+		)
+		renamed = frappe.rename_doc("Warehouse", name, name.replace("_Test Staging", "_Test Renamed"), force=True)
+		self.assertEqual(
+			frappe.db.get_value("Warehouse", renamed, "default_storage_location"), f"{renamed} / STAGING"
+		)
+		frappe.delete_doc("Warehouse", renamed)
+		self.assertFalse(frappe.db.exists("Storage Location", {"warehouse": renamed}))
+
+	def test_storage_condition_picks_a_compatible_location_and_warehouse(self):
+		suffix = frappe.generate_hash(length=6)
+		condition = frappe.get_doc({"doctype": "Storage Condition", "condition_name": "_Test Cold " + suffix}).insert()
+		item = make_item("_Test Cold Item " + suffix, {"storage_condition": condition.name})
+		cold = frappe.get_doc({
+			"doctype": "Storage Location", "warehouse": self.warehouse, "location_code": "COLD-" + suffix,
+			"supported_storage_conditions": [{"storage_condition": condition.name}],
+		}).insert()
+		self.assertEqual(get_default_storage_location(self.warehouse, item.name), cold.name)
+		with self.assertRaisesRegex(frappe.ValidationError, "has no Storage Location"):
+			get_default_storage_location(self.other_warehouse, item.name)
+		found = warehouse_query(
+			"Warehouse", "", "name", 0, 20,
+			{"storage_condition_item": item.name, "filters": {"company": "_Test Company"}},
+		)
+		self.assertEqual([row[0] for row in found], [self.warehouse])
 
 	def test_dimension_setup_preserves_settings(self):
 		dimension = frappe.get_doc("Inventory Dimension", "Storage Location")

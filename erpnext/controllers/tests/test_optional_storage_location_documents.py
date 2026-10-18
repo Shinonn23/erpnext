@@ -29,6 +29,9 @@ class TestOptionalStorageLocationDocuments(ERPNextTestSuite):
 			properties={"default_storage_location": None},
 			company=self.company,
 		)
+		# These documents start from a Warehouse without the automatic STAGING default.
+		frappe.db.set_value("Warehouse", self.warehouse, "default_storage_location", None)
+		frappe.clear_document_cache("Warehouse", self.warehouse)
 		self.item = (
 			frappe.get_doc(
 				{

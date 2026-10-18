@@ -37,24 +37,10 @@ class Location(NestedSet):
 
 	nsm_parent_field = "parent_location"
 
-	def _save(self, ignore_permissions=None, ignore_version=None):
-		from erpnext.stock.stock_control import lock_stock_control_assignment_types
-
-		lock_stock_control_assignment_types(self)
-		return super()._save(ignore_permissions=ignore_permissions, ignore_version=ignore_version)
-
-	def before_insert(self):
-		from erpnext.stock.stock_control import lock_stock_control_assignment_types
-
-		lock_stock_control_assignment_types(self)
-
 	def onload(self):
 		load_address_and_contact(self)
 
 	def validate(self):
-		from erpnext.stock.stock_control import validate_stock_control_assignment
-
-		validate_stock_control_assignment(self)
 		self.calculate_location_area()
 
 		if not self.is_new() and self.get("parent_location"):

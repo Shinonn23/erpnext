@@ -62,17 +62,6 @@ class Warehouse(NestedSet):
 
 		self.name = self.warehouse_name
 
-	def _save(self, ignore_permissions=None, ignore_version=None):
-		from erpnext.stock.stock_control import lock_stock_control_assignment_types
-
-		lock_stock_control_assignment_types(self)
-		return super()._save(ignore_permissions=ignore_permissions, ignore_version=ignore_version)
-
-	def before_insert(self):
-		from erpnext.stock.stock_control import lock_stock_control_assignment_types
-
-		lock_stock_control_assignment_types(self)
-
 	def onload(self):
 		if self.company and cint(frappe.db.get_value("Company", self.company, "enable_perpetual_inventory")):
 			account = self.account or get_warehouse_account(self, raise_error=False)
@@ -83,9 +72,6 @@ class Warehouse(NestedSet):
 		self.set_onload("stock_exists", self.check_if_sle_exists(non_cancelled_only=True))
 
 	def validate(self):
-		from erpnext.stock.stock_control import validate_stock_control_assignment
-
-		validate_stock_control_assignment(self)
 		if self.default_storage_location:
 			from erpnext.stock.doctype.storage_location.storage_location import (
 				validate_storage_location_warehouse,
@@ -129,7 +115,16 @@ class Warehouse(NestedSet):
 		get_warehouse_account(warehouse)
 
 	def on_update(self):
+		from erpnext.stock.doctype.storage_location.storage_location import ensure_default_storage_location
+
 		self.update_nsm_model()
+		ensure_default_storage_location(self)
+
+	def after_rename(self, olddn, newdn, merge=False):
+		from erpnext.stock.doctype.storage_location.storage_location import rename_storage_locations
+
+		super().after_rename(olddn, newdn, merge)
+		rename_storage_locations(newdn)
 
 	def update_nsm_model(self):
 		frappe.utils.nestedset.update_nsm(self)
@@ -158,6 +153,9 @@ class Warehouse(NestedSet):
 		if self.check_if_child_exists():
 			throw(_("Child warehouse exists for this warehouse. You can not delete this warehouse."))
 
+		from erpnext.stock.doctype.storage_location.storage_location import delete_storage_locations
+
+		delete_storage_locations(self.name)
 		frappe.db.delete("Bin", filters={"warehouse": self.name})
 		self.update_nsm_model()
 		self.unlink_from_items()
@@ -212,8 +210,13 @@ class Warehouse(NestedSet):
 		if self.check_if_sle_exists():
 			throw(_("Warehouses with existing transaction can not be converted to group."))
 		else:
+			from erpnext.stock.doctype.storage_location.storage_location import delete_storage_locations
+
+			# A group Warehouse holds no stock, so its unused Storage Locations go with the change.
 			self.is_group = 1
+			self.default_storage_location = None
 			self.save()
+			delete_storage_locations(self.name)
 			return 1
 
 	def unlink_from_items(self):

@@ -192,3 +192,70 @@ test("manufacturing output uses semi-finished Item, while raw-input defaults do 
     "Operation Cold"
   );
 });
+
+function link_control(locals) {
+  class ControlLink {
+    set_custom_query(args) {
+      args.filters = { company: "Company" };
+    }
+    get_filter_description(filters) {
+      return filters;
+    }
+  }
+  vm.runInNewContext(
+    fs.readFileSync(
+      new URL("../../public/js/storage_location.js", import.meta.url),
+      "utf8"
+    ),
+    {
+      erpnext: { queries: {} },
+      locals,
+      frappe: {
+        provide() {},
+        boot: { sysdefaults: {} },
+        ui: { form: { on() {}, ControlLink } },
+      },
+    }
+  );
+  return ControlLink;
+}
+
+test("Item row Warehouse search goes through the Storage Condition query", () => {
+  const ControlLink = link_control({
+    Row: { row: { parenttype: "Stock Entry", item_code: "Cold Item" } },
+  });
+  const control = Object.assign(new ControlLink(), { doctype: "Row", docname: "row" });
+  const args = { doctype: "Warehouse" };
+  control.set_custom_query(args);
+  assert.match(args.query, /storage_location\.warehouse_query$/);
+  assert.equal(args.filters.storage_condition_item, "Cold Item");
+  assert.deepEqual(JSON.parse(JSON.stringify(args.filters.filters)), { company: "Company" });
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(control.get_filter_description(args.filters))),
+    { company: "Company" }
+  );
+});
+
+test("Warehouse search keeps native queries outside Item rows and custom form queries", () => {
+  const ControlLink = link_control({
+    Header: { doc: { item_code: "Cold Item" } },
+    Row: { row: { parenttype: "Stock Entry" } },
+    ItemRow: { row: { parenttype: "Stock Entry", item_code: "Cold Item" } },
+  });
+  for (const [doctype, docname] of [
+    ["Header", "doc"],
+    ["Row", "row"],
+  ]) {
+    const control = Object.assign(new ControlLink(), { doctype, docname });
+    const args = { doctype: "Warehouse" };
+    control.set_custom_query(args);
+    assert.equal(args.query, undefined);
+  }
+  const row = Object.assign(new ControlLink(), { doctype: "ItemRow", docname: "row" });
+  const custom = { doctype: "Warehouse", query: "custom.query" };
+  row.set_custom_query(custom);
+  assert.equal(custom.query, "custom.query");
+  const other = { doctype: "Item" };
+  row.set_custom_query(other);
+  assert.equal(other.query, undefined);
+});

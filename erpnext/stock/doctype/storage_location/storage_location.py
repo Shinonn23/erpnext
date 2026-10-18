@@ -6,6 +6,9 @@ from frappe import _
 from frappe.desk.reportview import get_match_cond
 from frappe.model.document import Document
 
+# Every active leaf Warehouse gets this location as its default, so stock rows are filled in.
+DEFAULT_LOCATION_CODE = "STAGING"
+
 
 class StorageLocation(Document):
 	def validate(self):
@@ -171,6 +174,92 @@ def remove_loan_inventory_dimension_custom_fields():
 			frappe.clear_cache(doctype=doctype)
 
 
+def ensure_default_storage_location(warehouse):
+	"""Give an active leaf Warehouse a STAGING location and make it the default when none is set."""
+	if warehouse.is_group or warehouse.disabled or warehouse.default_storage_location:
+		return None
+	location = frappe.db.get_value(
+		"Storage Location",
+		{"warehouse": warehouse.name, "location_code": DEFAULT_LOCATION_CODE},
+		["name", "disabled"],
+		as_dict=True,
+	)
+	if location and location.disabled:
+		return None
+	if not location:
+		# Storage Location reads the Warehouse through the cache, which may still hold the group state.
+		frappe.clear_document_cache("Warehouse", warehouse.name)
+		location = frappe.get_doc(
+			{
+				"doctype": "Storage Location",
+				"warehouse": warehouse.name,
+				"location_code": DEFAULT_LOCATION_CODE,
+			}
+		).insert(ignore_permissions=True)
+	warehouse.db_set("default_storage_location", location.name, update_modified=False)
+	return location.name
+
+
+def delete_storage_locations(warehouse):
+	"""Delete a Warehouse's Storage Locations with it, including Item preferences that point to them."""
+	frappe.db.set_value("Warehouse", warehouse, "default_storage_location", None, update_modified=False)
+	locations = frappe.get_all("Storage Location", filters={"warehouse": warehouse}, pluck="name")
+	if locations:
+		frappe.db.delete("Item Storage Location", {"storage_location": ["in", locations]})
+	for location in locations:
+		frappe.delete_doc("Storage Location", location, ignore_permissions=True)
+
+
+def rename_storage_locations(warehouse):
+	"""Keep Storage Location names prefixed with their Warehouse after it is renamed or merged."""
+	for location in frappe.get_all(
+		"Storage Location", filters={"warehouse": warehouse}, fields=["name", "location_code"]
+	):
+		target = f"{warehouse} / {location.location_code}"
+		if location.name != target:
+			frappe.rename_doc(
+				"Storage Location",
+				location.name,
+				target,
+				force=True,
+				merge=bool(frappe.db.exists("Storage Location", target)),
+				show_alert=False,
+			)
+
+
+def get_default_storage_location(warehouse, item_code=None):
+	"""The Warehouse default, or its first location that meets the Item's Storage Condition."""
+	default = frappe.get_cached_value("Warehouse", warehouse, "default_storage_location")
+	condition = frappe.get_cached_value("Item", item_code, "storage_condition") if item_code else None
+	if not condition:
+		return default
+	location = frappe.db.sql(
+		"""select location.name
+		from `tabStorage Location` location
+		join `tabStorage Location Condition` supported
+			on supported.parent = location.name and supported.parenttype = 'Storage Location'
+			and supported.parentfield = 'supported_storage_conditions'
+		left join `tabItem Storage Location` preference
+			on preference.storage_location = location.name
+			and preference.parent = %(item_code)s and preference.parenttype = 'Item'
+			and preference.parentfield = 'preferred_storage_locations'
+		where location.warehouse = %(warehouse)s and location.disabled = 0
+			and supported.storage_condition = %(condition)s
+		order by location.name = %(default)s desc, case when preference.idx is null then 1 else 0 end,
+			preference.idx, location.name
+		limit 1""",
+		{"warehouse": warehouse, "item_code": item_code, "condition": condition, "default": default or ""},
+	)
+	if not location:
+		frappe.throw(
+			_("Warehouse {0} has no Storage Location that supports Storage Condition {1} required by Item {2}.").format(
+				warehouse, condition, item_code
+			),
+			title=_("Incompatible Storage Location"),
+		)
+	return location[0][0]
+
+
 def get_storage_location_warehouses(doc, row):
 	"""Warehouse owning each native location field on a stock voucher row."""
 	warehouses = {
@@ -201,11 +290,10 @@ def set_default_storage_locations(doc, method=None):
 			for fieldname, warehouse in get_storage_location_warehouses(doc, row).items():
 				if not warehouse or not row.meta.has_field(fieldname) or row.get(fieldname):
 					continue
-				location = frappe.get_cached_value("Warehouse", warehouse, "default_storage_location")
+				item_code = row.get("item_code") or row.get("rm_item_code")
+				location = get_default_storage_location(warehouse, item_code)
 				if location:
-					validate_storage_location_warehouse(
-						location, warehouse, item_code=row.get("item_code") or row.get("rm_item_code")
-					)
+					validate_storage_location_warehouse(location, warehouse, item_code=item_code)
 					row.set(fieldname, location)
 
 
@@ -339,4 +427,39 @@ def storage_location_query(doctype, txt, searchfield, start, page_len, filters):
 			"page_len": page_len,
 			"start": start,
 		},
+	)
+
+
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def warehouse_query(doctype, txt, searchfield, start, page_len, filters):
+	"""Warehouses for an item row: only those with a location that meets the Item's Storage Condition."""
+	from frappe.desk.search import search_widget
+
+	filters = frappe.parse_json(filters) or {}
+	item_code = filters.get("storage_condition_item")
+	base = filters.get("filters") or {}
+	condition = None
+	if item_code and frappe.db.exists("Item", item_code):
+		item = frappe.get_cached_doc("Item", item_code)
+		if frappe.has_permission("Item", "select", doc=item):
+			condition = item.get("storage_condition")
+	if condition:
+		if isinstance(base, dict):
+			base = [
+				["Warehouse", key, *(value if isinstance(value, list | tuple) else ["=", value])]
+				for key, value in base.items()
+			]
+		warehouses = frappe.db.sql_list(
+			"""select distinct location.warehouse
+			from `tabStorage Location` location
+			join `tabStorage Location Condition` supported
+				on supported.parent = location.name and supported.parenttype = 'Storage Location'
+				and supported.parentfield = 'supported_storage_conditions'
+			where location.disabled = 0 and supported.storage_condition = %s""",
+			condition,
+		)
+		base = [*base, ["Warehouse", "name", "in", warehouses or [""]]]
+	return search_widget(
+		"Warehouse", txt, searchfield=searchfield, start=start, page_length=page_len, filters=base
 	)

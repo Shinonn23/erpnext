@@ -117,3 +117,28 @@ for (const doctype of [
 		},
 	});
 }
+
+// Item rows only offer Warehouses with a location that meets the Item's Storage Condition.
+{
+	const ControlLink = frappe.ui.form.ControlLink;
+	if (ControlLink && !ControlLink.prototype.__storage_condition_query) {
+		const set_custom_query = ControlLink.prototype.set_custom_query;
+		ControlLink.prototype.set_custom_query = function (args) {
+			set_custom_query.call(this, args);
+			const row = this.doctype && this.docname ? locals[this.doctype]?.[this.docname] : null;
+			const item_code = row?.parenttype ? row.item_code || row.rm_item_code : null;
+			// A form's own server query keeps its rules; the Item's condition still applies on posting.
+			if (args.doctype !== "Warehouse" || args.query || !item_code) return;
+			args.query = "erpnext.stock.doctype.storage_location.storage_location.warehouse_query";
+			args.filters = { storage_condition_item: item_code, filters: args.filters || {} };
+		};
+		const get_filter_description = ControlLink.prototype.get_filter_description;
+		ControlLink.prototype.get_filter_description = function (filters) {
+			return get_filter_description.call(
+				this,
+				filters?.storage_condition_item ? filters.filters : filters
+			);
+		};
+		ControlLink.prototype.__storage_condition_query = true;
+	}
+}

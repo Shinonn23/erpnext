@@ -5,50 +5,23 @@
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
-  "stock_control_section",
   "description",
-  "handling_column",
-  "handling_category",
   "allowed_operations_section",
   "allow_receipt",
   "allow_sales",
-  "allow_demo",
   "allow_loan",
   "operations_column",
   "allow_issue",
-  "allow_manufacture",
-  "allow_disposal",
   "allow_reconciliation",
   "internal_transfer_section",
   "allow_transfer",
-  "freeze_stock",
-  "outgoing_role",
-  "policy_change_section",
-  "policy_change_reason"
+  "outgoing_role"
  ],
  "fields": [
-  {
-   "fieldname": "stock_control_section",
-   "fieldtype": "Section Break",
-   "label": "Handling"
-  },
   {
    "fieldname": "description",
    "fieldtype": "Small Text",
    "label": "Description"
-  },
-  {
-   "fieldname": "handling_column",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "handling_category",
-   "fieldtype": "Select",
-   "label": "Handling Category",
-   "options": "Normal\nQA\nQuarantine",
-   "default": "Normal",
-   "reqd": 1,
-   "description": "QA and Quarantine allow internal transfer only."
   },
   {
    "fieldname": "allowed_operations_section",
@@ -68,12 +41,6 @@
    "default": "1"
   },
   {
-   "fieldname": "allow_demo",
-   "fieldtype": "Check",
-   "label": "Allow Demo",
-   "default": "0"
-  },
-  {
    "fieldname": "allow_loan",
    "fieldtype": "Check",
    "label": "Allow Loan",
@@ -88,18 +55,6 @@
    "fieldtype": "Check",
    "label": "Allow Issue",
    "default": "1"
-  },
-  {
-   "fieldname": "allow_manufacture",
-   "fieldtype": "Check",
-   "label": "Allow Manufacture",
-   "default": "0"
-  },
-  {
-   "fieldname": "allow_disposal",
-   "fieldtype": "Check",
-   "label": "Allow Disposal",
-   "default": "0"
   },
   {
    "fieldname": "allow_reconciliation",
@@ -119,31 +74,14 @@
    "default": "1"
   },
   {
-   "fieldname": "freeze_stock",
-   "fieldtype": "Check",
-   "label": "Freeze Stock",
-   "default": "0"
-  },
-  {
    "fieldname": "outgoing_role",
    "fieldtype": "Link",
    "label": "Outgoing Role",
    "options": "Role"
-  },
-  {
-   "fieldname": "policy_change_section",
-   "fieldtype": "Section Break",
-   "label": "Policy Change"
-  },
-  {
-   "fieldname": "policy_change_reason",
-   "fieldtype": "Small Text",
-   "label": "Policy Change Reason",
-   "no_copy": 1
   }
  ],
  "links": [],
- "modified": "2024-03-27 13:10:59.427114",
+ "modified": "2026-10-18 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Warehouse Type",

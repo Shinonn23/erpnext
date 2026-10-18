@@ -35,8 +35,7 @@
   "customer_contact_email",
   "more_info_tab",
   "return_details_section",
-  "expected_return_date",
-  "stock_control_release_reason"
+  "expected_return_date"
  ],
  "fields": [
   {
@@ -256,19 +255,13 @@
    "fieldname": "more_info_tab",
    "fieldtype": "Tab Break",
    "label": "More Info"
-  },
-  {
-   "fieldname": "stock_control_release_reason",
-   "fieldtype": "Small Text",
-   "label": "Stock Control Release Reason",
-   "no_copy": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-10-08 22:57:14.840837",
+ "modified": "2026-10-18 12:00:00.000000",
  "modified_by": "arirat.ba@connectdiagnostics.com",
  "module": "Assets",
  "name": "Asset Movement",

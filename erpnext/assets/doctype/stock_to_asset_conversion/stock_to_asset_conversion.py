@@ -404,26 +404,6 @@ class StocktoAssetConversion(StockController):
 			frappe.throw(_("At least one Stock Item is required"))
 		if self.material_request:
 			self.lock_material_request_items()
-		from erpnext.stock.stock_control import (
-			is_stock_control_enabled,
-			lock_stock_control_items,
-			lock_stock_control_policies,
-		)
-
-		if is_stock_control_enabled(self.company):
-			item_codes = {row.item_code for row in self.stock_items if row.item_code}
-			item_codes.update(row.asset_item_code for row in self.stock_items if row.asset_item_code)
-			item_codes.update(row.asset_item_code for row in self.assets if row.asset_item_code)
-			locations = {self.asset_location}
-			locations.update(row.asset_location for row in self.assets if row.asset_location)
-			locations.update(
-				frappe.db.get_value("Asset", row.asset, "location") for row in self.assets if row.asset
-			)
-			lock_stock_control_policies(
-				warehouse_names=[row.warehouse for row in self.stock_items if row.warehouse],
-				location_names=locations,
-			)
-			lock_stock_control_items(item_codes, [row.asset for row in self.assets if row.asset])
 		self.sync_draft_assets()
 		if self.material_request:
 			self.validate_stock_items()

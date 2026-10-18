@@ -6,11 +6,6 @@ from frappe import _
 from frappe.utils import cint, flt
 
 from erpnext.accounts.doctype.pos_invoice_merge_log.pos_invoice_merge_log import is_verified_pos_consolidation
-from erpnext.stock.stock_control import (
-	_current_doc,
-	is_stock_control_enabled,
-	lock_stock_control_policies,
-)
 
 MOVEMENT_DOCTYPES = {
 	"Stock Entry",
@@ -27,6 +22,32 @@ MOVEMENT_DOCTYPES = {
 }
 
 
+def _current_doc(doctype, name):
+	"""Current (shared-lock) read, so a policy cannot change while the ledger is being posted."""
+	rows = frappe.db.multisql(
+		{
+			"mariadb": f"SELECT * FROM `tab{doctype}` WHERE name=%s LOCK IN SHARE MODE",
+			"postgres": f'SELECT * FROM "tab{doctype}" WHERE name=%s FOR SHARE',
+		},
+		(name,),
+		as_dict=True,
+	)
+	if not rows:
+		frappe.throw(_("{0} {1} does not exist.").format(doctype, name))
+	return frappe._dict(rows[0])
+
+
+def lock_warehouse_policies(warehouse_names):
+	# Warehouse rows precede type rows so incoming and outgoing movements share the same lock order.
+	types = set()
+	for name in sorted(set(filter(None, warehouse_names))):
+		row = _current_doc("Warehouse", name)
+		if row.get("warehouse_type"):
+			types.add(row.warehouse_type)
+	for name in sorted(types):
+		_current_doc("Warehouse Type", name)
+
+
 def validate_warehouse_operation(warehouse, operation, outgoing=False, cancellation=False, for_update=False):
 	if not warehouse:
 		return
@@ -40,8 +61,6 @@ def validate_warehouse_operation(warehouse, operation, outgoing=False, cancellat
 		if for_update
 		else frappe.get_doc("Warehouse Type", location.warehouse_type)
 	)
-	if cint(policy.freeze_stock):
-		frappe.throw(_("คลัง {0} ถูกระงับสต็อก กรุณายกเลิกการระงับก่อนทำรายการหรือยกเลิกเอกสาร").format(warehouse))
 	# Reversals restore the original transaction even if its type policy has since changed.
 	if cancellation:
 		return
@@ -92,14 +111,6 @@ def is_loan_movement(doc):
 
 
 def movement_operation(doc, outgoing, loan=False, row=None):
-	if outgoing and doc.get("company") and is_stock_control_enabled(doc.company):
-		from erpnext.stock.stock_control_transactions import get_stock_control_operation
-
-		operation = get_stock_control_operation(doc, row)
-		if operation:
-			if loan and operation != "demo":
-				return "loan"
-			return "transfer" if operation == "internal_transfer" else operation
 	if (
 		doc.doctype in ("Delivery Note", "Sales Invoice", "POS Invoice")
 		and doc.get("is_internal_customer")
@@ -179,7 +190,7 @@ def reconciliation_is_outgoing(row):
 
 
 def validate_stock_ledger_policy(entries, via_landed_cost_voucher=False):
-	lock_stock_control_policies(warehouse_names={entry.get("warehouse") for entry in entries})
+	lock_warehouse_policies({entry.get("warehouse") for entry in entries})
 	vouchers = {}
 	for entry in entries:
 		key = (entry.get("voucher_type"), entry.get("voucher_no"))

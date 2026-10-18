@@ -136,8 +136,6 @@
   "default_wip_warehouse",
   "default_fg_warehouse",
   "default_scrap_warehouse",
-  "stock_control_section",
-  "enable_stock_control",
   "customer_demo_loan_section",
   "customer_loan_warehouse",
   "customer_demo_return_lookahead_days",
@@ -1045,18 +1043,6 @@
   {
    "fieldname": "accounts_closing_section",
    "fieldtype": "Section Break"
-  },
-  {
-   "fieldname": "stock_control_section",
-   "fieldtype": "Section Break",
-   "label": "Stock Control"
-  },
-  {
-   "fieldname": "enable_stock_control",
-   "fieldtype": "Check",
-   "label": "Enable Stock Control",
-   "default": "0",
-   "description": "Require permitted Warehouse and Location Types and enforce active Stock Freezes."
   }
  ],
  "grid_page_length": 50,
@@ -1065,7 +1051,7 @@
  "image_field": "company_logo",
  "is_tree": 1,
  "links": [],
- "modified": "2026-10-05 04:00:00",
+ "modified": "2026-10-18 12:00:00",
  "modified_by": "Administrator",
  "module": "Setup",
  "name": "Company",
