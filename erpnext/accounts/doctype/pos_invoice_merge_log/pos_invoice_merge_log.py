@@ -354,6 +354,9 @@ class POSInvoiceMergeLog(Document):
 			invoice.flags.ignore_pos_profile = True
 			invoice.pos_profile = ""
 
+		# the merged invoices share one Territory and Sales Person (they are grouped by them)
+		invoice.flags.territory_stamp = (data[0].get("territory"), data[0].get("sales_person"))
+
 		# Unset Commission Section
 		invoice.set("sales_partner", None)
 		invoice.set("commission_rate", 0)
@@ -503,7 +506,10 @@ def split_invoices_by_accounting_dimension(pos_invoices):
 	for invoice in pos_invoices:
 		dimension_fields = [d.fieldname for d in get_checks_for_pl_and_bs_accounts()]
 		accounting_dimensions = frappe.db.get_value(
-			"POS Invoice", invoice.pos_invoice, [*dimension_fields, "project"], as_dict=1
+			"POS Invoice",
+			invoice.pos_invoice,
+			[*dimension_fields, "project", "territory", "sales_person"],
+			as_dict=1,
 		)
 
 		accounting_dimensions_dic_hash = hashlib.sha256(

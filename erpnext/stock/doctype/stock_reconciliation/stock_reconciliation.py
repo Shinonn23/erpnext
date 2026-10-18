@@ -45,6 +45,7 @@ class StockReconciliation(StockController):
 
 		amended_from: DF.Link | None
 		company: DF.Link
+		department: DF.Link | None
 		difference_amount: DF.Currency
 		expense_account: DF.Link | None
 		items: DF.Table[StockReconciliationItem]
@@ -66,6 +67,7 @@ class StockReconciliation(StockController):
 		self.head_row = ["Item Code", "Warehouse", "Quantity", "Valuation Rate"]
 
 	def validate(self):
+		self.set_department()
 		self.validate_items_exist()
 		if not self.expense_account:
 			self.expense_account = frappe.get_cached_value(

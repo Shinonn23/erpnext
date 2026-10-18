@@ -97,6 +97,7 @@ class Quotation(SellingController):
 		referral_sales_partner: DF.Link | None
 		rounded_total: DF.Currency
 		rounding_adjustment: DF.Currency
+		sales_person: DF.Link | None
 		scan_barcode: DF.Data | None
 		select_print_heading: DF.Link | None
 		selling_price_list: DF.Link

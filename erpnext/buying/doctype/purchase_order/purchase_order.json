@@ -26,6 +26,7 @@
   "accounting_dimensions_section",
   "dimension_col_break",
   "project",
+  "department",
   "currency_and_price_list",
   "currency",
   "conversion_rate",
@@ -1124,6 +1125,12 @@
    "fieldtype": "Link",
    "label": "Project",
    "options": "Project"
+  },
+  {
+   "fieldname": "department",
+   "fieldtype": "Link",
+   "label": "Department",
+   "options": "Department"
   },
   {
    "default": "0",

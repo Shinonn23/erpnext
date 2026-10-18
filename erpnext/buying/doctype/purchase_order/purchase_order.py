@@ -86,6 +86,7 @@ class PurchaseOrder(BuyingController):
 		customer_contact_mobile: DF.SmallText | None
 		customer_contact_person: DF.Link | None
 		customer_name: DF.Data | None
+		department: DF.Link | None
 		disable_rounded_total: DF.Check
 		discount_amount: DF.Currency
 		dispatch_address: DF.Link | None

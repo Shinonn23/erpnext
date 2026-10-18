@@ -56,6 +56,7 @@ class SubcontractingReceipt(SubcontractingController):
 		contact_email: DF.SmallText | None
 		contact_mobile: DF.SmallText | None
 		contact_person: DF.Link | None
+		department: DF.Link | None
 		distribute_additional_costs_based_on: DF.Literal["Qty", "Amount"]
 		in_words: DF.Data | None
 		instructions: DF.SmallText | None

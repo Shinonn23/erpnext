@@ -137,6 +137,7 @@ class StockEntry(StockController, SubcontractingInwardController):
 		additional_costs: DF.Table[LandedCostTaxesandCharges]
 		address_display: DF.TextEditor | None
 		amended_from: DF.Link | None
+		department: DF.Link | None
 		requires_shipment: DF.Check
 		shipment: DF.Link | None
 		shipment_destination_warehouse: DF.Link | None
@@ -310,6 +311,7 @@ class StockEntry(StockController, SubcontractingInwardController):
 		self.validate_bom()
 		self.set_process_loss_qty()
 		self.validate_purchase_order()
+		self.set_department()
 		self.validate_company_in_accounting_dimension()
 
 		if self.purpose in ("Manufacture", "Repack"):

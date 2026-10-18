@@ -105,6 +105,7 @@ class AssetValueAdjustment(Document):
 		entry_template = {
 			"reference_type": "Asset",
 			"reference_name": asset.name,
+			"department": asset.department,
 		}
 
 		if self.difference_amount < 0:

@@ -10,6 +10,9 @@
   "naming_series",
   "budget_against",
   "project",
+  "department",
+  "territory",
+  "sales_person",
   "company",
   "account",
   "column_break_3",
@@ -55,7 +58,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Budget Against",
-   "options": "\nProject",
+   "options": "\nProject\nDepartment\nTerritory\nSales Person",
    "read_only_depends_on": "eval: doc.revision_of",
    "reqd": 1
   },
@@ -66,6 +69,33 @@
    "label": "Project",
    "mandatory_depends_on": "eval:doc.budget_against == 'Project'",
    "options": "Project",
+   "read_only_depends_on": "eval: doc.revision_of"
+  },
+  {
+   "depends_on": "eval:doc.budget_against == 'Department'",
+   "fieldname": "department",
+   "fieldtype": "Link",
+   "label": "Department",
+   "mandatory_depends_on": "eval:doc.budget_against == 'Department'",
+   "options": "Department",
+   "read_only_depends_on": "eval: doc.revision_of"
+  },
+  {
+   "depends_on": "eval:doc.budget_against == 'Territory'",
+   "fieldname": "territory",
+   "fieldtype": "Link",
+   "label": "Territory",
+   "mandatory_depends_on": "eval:doc.budget_against == 'Territory'",
+   "options": "Territory",
+   "read_only_depends_on": "eval: doc.revision_of"
+  },
+  {
+   "depends_on": "eval:doc.budget_against == 'Sales Person'",
+   "fieldname": "sales_person",
+   "fieldtype": "Link",
+   "label": "Sales Person",
+   "mandatory_depends_on": "eval:doc.budget_against == 'Sales Person'",
+   "options": "Sales Person",
    "read_only_depends_on": "eval: doc.revision_of"
   },
   {

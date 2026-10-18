@@ -469,6 +469,7 @@
    "description": "Split commission credit across multiple sales persons.",
    "fieldname": "sales_team",
    "fieldtype": "Table",
+   "hidden": 1,
    "label": "Sales Team",
    "oldfieldname": "sales_team",
    "oldfieldtype": "Table",

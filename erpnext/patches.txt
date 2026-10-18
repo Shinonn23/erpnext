@@ -526,3 +526,5 @@ erpnext.patches.v16_0.remove_cost_center_doctypes
 erpnext.patches.v16_0.purge_cost_center_data
 erpnext.patches.v16_0.restore_budget_dimensions
 erpnext.patches.v16_0.add_stock_count_expiry_and_print
+erpnext.patches.v16_0.remove_standard_dimension_custom_fields
+erpnext.patches.v16_0.sync_standard_budget_dimensions

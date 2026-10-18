@@ -102,6 +102,7 @@
   "weight_uom",
   "accounting_dimensions_section",
   "project",
+  "department",
   "dimension_col_break",
   "more_info_section_break",
   "is_fixed_asset",
@@ -471,6 +472,13 @@
    "fieldtype": "Link",
    "label": "Project",
    "options": "Project",
+   "print_hide": 1
+  },
+  {
+   "fieldname": "department",
+   "fieldtype": "Link",
+   "label": "Department",
+   "options": "Department",
    "print_hide": 1
   },
   {

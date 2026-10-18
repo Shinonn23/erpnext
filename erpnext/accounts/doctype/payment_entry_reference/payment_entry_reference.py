@@ -34,6 +34,8 @@ class PaymentEntryReference(Document):
 		reconcile_effect_on: DF.Date | None
 		reference_doctype: DF.Link
 		reference_name: DF.DynamicLink
+		sales_person: DF.Link | None
+		territory: DF.Link | None
 		total_amount: DF.Currency
 	# end: auto-generated types
 

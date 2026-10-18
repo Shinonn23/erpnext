@@ -10,6 +10,7 @@
   "conversion_details",
   "naming_series",
   "company",
+  "department",
   "asset_location",
   "column_break_1",
   "posting_date",
@@ -52,6 +53,12 @@
    "label": "Company",
    "options": "Company",
    "reqd": 1
+  },
+  {
+   "fieldname": "department",
+   "fieldtype": "Link",
+   "label": "Department",
+   "options": "Department"
   },
   {
    "fieldname": "material_request",

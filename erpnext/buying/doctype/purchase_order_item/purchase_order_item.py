@@ -32,6 +32,7 @@ class PurchaseOrderItem(Document):
 		company_total_stock: DF.Float
 		conversion_factor: DF.Float
 		delivered_by_supplier: DF.Check
+		department: DF.Link | None
 		description: DF.TextEditor | None
 		discount_amount: DF.Currency
 		discount_percentage: DF.Percent

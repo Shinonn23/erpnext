@@ -44,6 +44,7 @@ class AssetRepair(AccountsController):
 		company: DF.Link | None
 		completion_date: DF.Datetime | None
 		consumed_items_cost: DF.Currency
+		department: DF.Link | None
 		description: DF.LongText | None
 		downtime: DF.Data | None
 		failure_date: DF.Datetime
@@ -58,6 +59,7 @@ class AssetRepair(AccountsController):
 	# end: auto-generated types
 
 	def validate(self):
+		self.set_department()
 		self.asset_doc = frappe.get_lazy_doc("Asset", self.asset)
 		self.validate_asset()
 		self.validate_dates()

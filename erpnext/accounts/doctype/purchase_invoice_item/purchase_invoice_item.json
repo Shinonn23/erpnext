@@ -123,6 +123,7 @@
   "weight_uom",
   "accounting_dimensions_section",
   "project",
+  "department",
   "dimension_col_break",
   "section_break_82",
   "page_break"
@@ -522,6 +523,14 @@
    "options": "Project",
    "print_hide": 1,
    "search_index": 1
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "department",
+   "fieldtype": "Link",
+   "label": "Department",
+   "options": "Department",
+   "print_hide": 1
   },
   {
    "collapsible": 1,

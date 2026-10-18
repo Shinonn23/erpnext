@@ -55,6 +55,7 @@ from erpnext.controllers.accounts_controller import (
 	get_supplier_block_status,
 	validate_taxes_and_charges,
 )
+from erpnext.setup.doctype.sales_person.sales_person import get_sales_person_stamp
 from erpnext.setup.utils import get_exchange_rate
 
 
@@ -139,6 +140,7 @@ class PaymentEntry(AccountsController):
 		reference_no: DF.Data | None
 		references: DF.Table[PaymentEntryReference]
 		remarks: DF.SmallText | None
+		sales_person: DF.Link | None
 		sales_taxes_and_charges_template: DF.Link | None
 		source_exchange_rate: DF.Float
 		status: DF.Literal["", "Draft", "Submitted", "Cancelled"]
@@ -148,6 +150,7 @@ class PaymentEntry(AccountsController):
 		tax_withholding_entries: DF.Table[TaxWithholdingEntry]
 		tax_withholding_group: DF.Link | None
 		taxes: DF.Table[AdvanceTaxesandCharges]
+		territory: DF.Link | None
 		title: DF.Data | None
 		total_allocated_amount: DF.Currency
 		total_taxes_and_charges: DF.Currency
@@ -194,6 +197,7 @@ class PaymentEntry(AccountsController):
 		self.set_unallocated_amount()
 		self.set_difference_amount()
 		self.clear_unallocated_reference_document_rows()
+		self.set_territory_and_sales_person()
 		self.validate_transaction_reference()
 		self.set_title()
 		self.set_remarks()
@@ -205,6 +209,28 @@ class PaymentEntry(AccountsController):
 		PaymentTaxWithholding(self).on_validate()
 		self.set_status()
 		self.set_total_in_words()
+
+	def set_territory_and_sales_person(self):
+		"""A payment from a customer is credited to that customer's Territory and Sales Person.
+		Each invoice it settles keeps that invoice's own stamp, so the payment ledger matches it."""
+		territory = None
+		if self.party_type == "Customer" and self.party:
+			territory = frappe.db.get_value("Customer", self.party, "territory")
+
+		self.territory = territory
+		self.sales_person = get_sales_person_stamp(territory, previous=self.get_doc_before_save())
+
+		for row in self.get("references"):
+			stamp = None
+			if row.reference_doctype in ("Sales Invoice", "Sales Order") and row.reference_name:
+				stamp = frappe.db.get_value(
+					row.reference_doctype, row.reference_name, ["territory", "sales_person"], as_dict=True
+				)
+
+			if stamp and stamp.territory:
+				row.territory, row.sales_person = stamp.territory, stamp.sales_person
+			else:
+				row.territory, row.sales_person = self.territory, self.sales_person
 
 	def on_submit(self):
 		if self.difference_amount:
@@ -1409,6 +1435,8 @@ class PaymentEntry(AccountsController):
 						"advance_voucher_type": d.advance_voucher_type,
 						"advance_voucher_no": d.advance_voucher_no,
 						"transaction_exchange_rate": self.target_exchange_rate,
+						"territory": d.get("territory"),
+						"sales_person": d.get("sales_person"),
 					},
 					item=self,
 				)
@@ -1529,6 +1557,8 @@ class PaymentEntry(AccountsController):
 			"voucher_type": "Payment Entry",
 			"voucher_no": self.name,
 			"voucher_detail_no": invoice.name,
+			"territory": invoice.get("territory"),
+			"sales_person": invoice.get("sales_person"),
 		}
 		if invoice.reconcile_effect_on:
 			posting_date = invoice.reconcile_effect_on

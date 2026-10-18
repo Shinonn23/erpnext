@@ -266,6 +266,10 @@ def get_credit_and_debit_entry(credit_account, depr_schedule, asset, debit_accou
 			debit_entry[dimension["fieldname"]] = asset.get(dimension["fieldname"]) or dimension.get(
 				"default_dimension"
 			)
+
+	# the cost lands where the asset is held (without overriding a default dimension set above)
+	if asset.get("department"):
+		credit_entry["department"] = debit_entry["department"] = asset.department
 	return credit_entry, debit_entry
 
 

@@ -24,7 +24,9 @@
   "payment_request",
   "payment_request_outstanding",
   "advance_voucher_type",
-  "advance_voucher_no"
+  "advance_voucher_no",
+  "territory",
+  "sales_person"
  ],
  "fields": [
   {
@@ -171,6 +173,26 @@
    "fieldtype": "Dynamic Link",
    "label": "Advance Voucher No",
    "options": "advance_voucher_type",
+   "read_only": 1
+  },
+  {
+   "fieldname": "territory",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Territory",
+   "no_copy": 1,
+   "options": "Territory",
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "sales_person",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Sales Person",
+   "no_copy": 1,
+   "options": "Sales Person",
+   "print_hide": 1,
    "read_only": 1
   }
  ],

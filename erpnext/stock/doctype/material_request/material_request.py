@@ -68,6 +68,7 @@ class MaterialRequest(BuyingController):
 		customer_contact_email: DF.Data | None
 		customer_loan_warehouse: DF.Link | None
 		customer_location: DF.Link | None
+		department: DF.Link | None
 		expected_return_date: DF.Date | None
 		items: DF.Table[MaterialRequestItem]
 		job_card: DF.Link | None

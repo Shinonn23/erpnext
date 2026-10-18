@@ -1449,3 +1449,35 @@ $.extend(erpnext.stock.utils, {
 		});
 	},
 });
+
+// A new purchase, stock or asset document starts in the Department of the employee opening it.
+// Rows pick it up on save; documents mapped from another one keep the Department they came with.
+erpnext.utils.set_department_of_user = function (frm) {
+	if (!frm.is_new() || frm.doc.department || !frm.fields_dict.department || !frm.doc.company) return;
+
+	frappe
+		.xcall("erpnext.setup.doctype.employee.employee.get_user_department", {
+			company: frm.doc.company,
+		})
+		.then((department) => {
+			if (department && !frm.doc.department) frm.set_value("department", department);
+		});
+};
+
+[
+	"Material Request",
+	"Purchase Order",
+	"Purchase Receipt",
+	"Purchase Invoice",
+	"Stock Entry",
+	"Subcontracting Receipt",
+	"Stock Reconciliation",
+	"Asset Capitalization",
+	"Asset Repair",
+	"Stock to Asset Conversion",
+].forEach((doctype) => {
+	frappe.ui.form.on(doctype, {
+		onload: erpnext.utils.set_department_of_user,
+		company: erpnext.utils.set_department_of_user,
+	});
+});

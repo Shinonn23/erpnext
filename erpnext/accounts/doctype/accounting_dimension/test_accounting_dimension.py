@@ -9,25 +9,38 @@ from erpnext.tests.utils import ERPNextTestSuite
 
 class TestAccountingDimension(ERPNextTestSuite):
 	def test_budget_options_follow_dimension_enablement(self):
-		dimension = frappe.get_doc("Accounting Dimension", "Department")
+		dimension = frappe.get_doc("Accounting Dimension", "Location")
 		dimension.disabled = 0
 		dimension.save()
 		options = frappe.get_meta("Budget").get_field("budget_against").options.split("\n")
-		self.assertEqual(options.count("Project"), 1)
-		self.assertEqual(options.count("Department"), 1)
+		self.assertEqual(options.count("Location"), 1)
 		self.assertEqual(frappe.get_meta("Budget").get_field("project").options, "Project")
 
 		dimension.disabled = 1
 		dimension.save()
 		options = frappe.get_meta("Budget").get_field("budget_against").options.split("\n")
-		self.assertIn("Project", options)
-		self.assertNotIn("Department", options)
+		self.assertNotIn("Location", options)
 
 		dimension.disabled = 0
 		dimension.save()
 		options = frappe.get_meta("Budget").get_field("budget_against").options.split("\n")
-		self.assertEqual(options.count("Project"), 1)
-		self.assertEqual(options.count("Department"), 1)
+		self.assertEqual(options.count("Location"), 1)
+
+	def test_standard_budget_dimensions_are_always_offered_once(self):
+		# Department is also an Accounting Dimension in the fixtures; it must not be listed twice
+		for enabled in (1, 0):
+			dimension = frappe.get_doc("Accounting Dimension", "Department")
+			dimension.disabled = 0 if enabled else 1
+			dimension.save()
+			options = frappe.get_meta("Budget").get_field("budget_against").options.split("\n")
+			for document_type in ("Project", "Department", "Territory", "Sales Person"):
+				self.assertEqual(options.count(document_type), 1, (document_type, enabled))
+		dimension.disabled = 0
+		dimension.save()
+
+	def test_department_dimension_does_not_duplicate_the_standard_budget_field(self):
+		self.assertFalse(frappe.db.exists("Custom Field", {"dt": "Budget", "fieldname": "department"}))
+		self.assertEqual(frappe.get_meta("Budget").get_field("department").options, "Department")
 
 	def test_project_is_a_builtin_budget_dimension(self):
 		dimension = frappe.get_doc({"doctype": "Accounting Dimension", "document_type": "Project"})

@@ -535,6 +535,22 @@ def on_doctype_update():
 	frappe.db.add_index("Employee", ["lft", "rgt"])
 
 
+def get_department_of_user(user, company):
+	"""Department of the active employee behind a user, when they belong to the company."""
+	employee = frappe.db.get_value(
+		"Employee", {"user_id": user, "status": "Active"}, ["department", "company"], as_dict=True
+	)
+	if employee and employee.department and employee.company == company:
+		return employee.department
+
+	return None
+
+
+@frappe.whitelist()
+def get_user_department(company: str):
+	return get_department_of_user(frappe.session.user, company)
+
+
 def has_user_permission_for_employee(user_name, employee_name):
 	return frappe.db.exists(
 		{

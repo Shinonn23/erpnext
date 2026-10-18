@@ -18,22 +18,21 @@ frappe.query_reports["Budget Variance Report"] = {
 	},
 };
 function get_filters() {
-	function get_dimensions() {
+	function get_budget_dimensions() {
 		let result = [];
 		frappe.call({
-			method: "erpnext.accounts.doctype.accounting_dimension.accounting_dimension.get_dimensions",
-			args: { with_project: true },
+			method: "erpnext.accounts.doctype.accounting_dimension.accounting_dimension.get_budget_dimensions",
 			async: false,
 			callback: function (r) {
 				if (!r.exc) {
-					result = r.message[0].map((elem) => elem.document_type);
+					result = r.message;
 				}
 			},
 		});
 		return result;
 	}
 
-	let budget_against_options = get_dimensions();
+	let budget_against_options = get_budget_dimensions();
 
 	let filters = [
 		{
@@ -97,9 +96,16 @@ function get_filters() {
 				let company = frappe.query_report.get_filter_value("company");
 				if (!budget_against) return;
 
-				const filters = budget_against !== "Branch" && company ? { company: company } : {};
-
-				return frappe.db.get_link_options(budget_against, txt, filters);
+				// Territory and Sales Person are not split by company
+				return new Promise((resolve) => {
+					frappe.model.with_doctype(budget_against, () => {
+						const filters =
+							frappe.meta.has_field(budget_against, "company") && company
+								? { company: company }
+								: {};
+						resolve(frappe.db.get_link_options(budget_against, txt, filters));
+					});
+				});
 			},
 		},
 		{

@@ -133,6 +133,7 @@
   "status",
   "customer_group",
   "territory",
+  "sales_person",
   "title",
   "column_break_108",
   "opportunity",
@@ -338,6 +339,15 @@
    "label": "Territory",
    "options": "Territory",
    "print_hide": 1
+  },
+  {
+   "fieldname": "sales_person",
+   "fieldtype": "Link",
+   "label": "Sales Person",
+   "no_copy": 1,
+   "options": "Sales Person",
+   "print_hide": 1,
+   "read_only": 1
   },
   {
    "collapsible": 1,

@@ -17,6 +17,7 @@ from frappe.utils import (
 )
 
 from erpnext.accounts.doctype.accounting_dimension.accounting_dimension import (
+	STANDARD_DIMENSIONS,
 	get_accounting_dimensions,
 )
 from erpnext.accounts.utils import get_account_currency
@@ -590,6 +591,11 @@ def book_revenue_via_journal_entry(
 
 		credit_entry.update({dimension: item.get(dimension)})
 
+	for dimension in STANDARD_DIMENSIONS:
+		value = item.get(dimension) or doc.get(dimension)
+		debit_entry[dimension] = credit_entry[dimension] = value
+
+	journal_entry.flags.preserve_dimension_stamps = True
 	journal_entry.append("accounts", debit_entry)
 	journal_entry.append("accounts", credit_entry)
 

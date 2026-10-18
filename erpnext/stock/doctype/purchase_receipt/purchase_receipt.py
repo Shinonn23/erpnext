@@ -75,6 +75,7 @@ class PurchaseReceipt(BuyingController):
 		contact_person: DF.Link | None
 		conversion_rate: DF.Float
 		currency: DF.Link
+		department: DF.Link | None
 		disable_rounded_total: DF.Check
 		discount_amount: DF.Currency
 		dispatch_address: DF.Link | None

@@ -12,7 +12,7 @@ from frappe.utils import add_months, flt, fmt_money, get_last_day, getdate, mont
 from frappe.utils.data import get_first_day, nowdate
 
 from erpnext.accounts.doctype.accounting_dimension.accounting_dimension import (
-	get_accounting_dimensions,
+	get_budget_dimension_fields,
 	get_budget_dimensions,
 )
 from erpnext.accounts.utils import get_fiscal_year
@@ -58,11 +58,15 @@ class Budget(Document):
 		budget_end_date: DF.Date | None
 		budget_start_date: DF.Date | None
 		company: DF.Link
+		department: DF.Link | None
 		distribute_equally: DF.Check
 		distribution_frequency: DF.Literal["Monthly", "Quarterly", "Half-Yearly", "Yearly"]
 		from_fiscal_year: DF.Link
 		naming_series: DF.Literal["BUDGET-.########"]
+		project: DF.Link | None
 		revision_of: DF.Data | None
+		sales_person: DF.Link | None
+		territory: DF.Link | None
 		to_fiscal_year: DF.Link
 	# end: auto-generated types
 
@@ -80,7 +84,12 @@ class Budget(Document):
 
 	def validate_budget_against(self):
 		if self.budget_against not in get_budget_dimensions():
-			frappe.throw(_("Budget Against must be Project or an enabled Accounting Dimension"))
+			frappe.throw(
+				_(
+					"Budget Against must be Project, Department, Territory, Sales Person "
+					"or an enabled Accounting Dimension"
+				)
+			)
 
 	def validate_budget_amount(self):
 		if self.budget_amount <= 0:
@@ -422,9 +431,7 @@ def validate_expense_against_budget(params, expense_amount=0):
 	if not params.account:
 		return
 
-	dimensions = get_accounting_dimensions(as_list=False)
-	dimensions.append({"fieldname": "project", "document_type": "Project"})
-	for dimension in dimensions:
+	for dimension in get_budget_dimension_fields():
 		budget_against = dimension.get("fieldname")
 
 		if (
@@ -672,7 +679,18 @@ def get_actions(params, budget):
 	return yearly_action, monthly_action
 
 
+def has_budget_dimension_column(doctype, params):
+	"""Material Request and Purchase Order rows only carry some of the budget dimensions."""
+	budget_against_field = params.get("budget_against_field")
+	if not (budget_against_field and params.get(budget_against_field)):
+		return True
+	return frappe.get_meta(doctype).has_field(budget_against_field)
+
+
 def get_requested_amount(params):
+	if not has_budget_dimension_column("Material Request Item", params):
+		return 0
+
 	item_code = params.get("item_code")
 	condition = get_other_condition(params, "Material Request")
 
@@ -689,6 +707,9 @@ def get_requested_amount(params):
 
 
 def get_ordered_amount(params):
+	if not has_budget_dimension_column("Purchase Order Item", params):
+		return 0
+
 	item_code = params.get("item_code")
 	condition = get_other_condition(params, "Purchase Order")
 

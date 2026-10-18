@@ -9,6 +9,7 @@
  "field_order": [
   "naming_series",
   "company",
+  "department",
   "purpose",
   "col1",
   "posting_date",
@@ -50,6 +51,12 @@
    "options": "Company",
    "remember_last_selected_value": 1,
    "reqd": 1
+  },
+  {
+   "fieldname": "department",
+   "fieldtype": "Link",
+   "label": "Department",
+   "options": "Department"
   },
   {
    "fieldname": "purpose",

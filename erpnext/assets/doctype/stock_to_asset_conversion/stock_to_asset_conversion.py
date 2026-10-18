@@ -38,6 +38,7 @@ class StocktoAssetConversion(StockController):
 		asset_location: DF.Link | None
 		assets: DF.Table[StocktoAssetConversionAsset]
 		company: DF.Link
+		department: DF.Link | None
 		material_request: DF.Link | None
 		naming_series: DF.Literal["ACC-STAC-.YYYY.-"]
 		pick_list: DF.Link | None
@@ -56,6 +57,7 @@ class StocktoAssetConversion(StockController):
 	)
 
 	def validate(self):
+		self.set_department()
 		self.validate_company_settings()
 		self.sync_pick_list_selections()
 		self.sync_material_request_rows()

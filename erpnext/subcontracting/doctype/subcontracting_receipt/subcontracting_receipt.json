@@ -22,6 +22,7 @@
   "accounting_dimensions_section",
   "dimension_col_break",
   "project",
+  "department",
   "sec_warehouse",
   "set_warehouse",
   "rejected_warehouse",
@@ -588,6 +589,12 @@
    "fieldtype": "Link",
    "label": "Project",
    "options": "Project"
+  },
+  {
+   "fieldname": "department",
+   "fieldtype": "Link",
+   "label": "Department",
+   "options": "Department"
   },
   {
    "depends_on": "eval:(doc.docstatus == 0 || doc.total_additional_costs)",

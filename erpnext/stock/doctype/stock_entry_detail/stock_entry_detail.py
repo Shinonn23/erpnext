@@ -30,6 +30,7 @@ class StockEntryDetail(Document):
 		conversion_factor: DF.Float
 		custody_loan_item: DF.Link | None
 		customer_provided_item_cost: DF.Currency
+		department: DF.Link | None
 		description: DF.TextEditor | None
 		expense_account: DF.Link | None
 		has_item_scanned: DF.Check

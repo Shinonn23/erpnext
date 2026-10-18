@@ -43,6 +43,7 @@
   "accounting_dimensions_section",
   "column_break_14",
   "project",
+  "department",
   "connection_tab"
  ],
  "fields": [
@@ -163,6 +164,12 @@
    "fieldtype": "Link",
    "label": "Project",
    "options": "Project"
+  },
+  {
+   "fieldname": "department",
+   "fieldtype": "Link",
+   "label": "Department",
+   "options": "Department"
   },
   {
    "fieldname": "column_break_14",

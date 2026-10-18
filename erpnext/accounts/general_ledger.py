@@ -12,6 +12,7 @@ from frappe.utils.dashboard import cache_source
 
 import erpnext
 from erpnext.accounts.doctype.accounting_dimension.accounting_dimension import (
+	STANDARD_DIMENSIONS,
 	get_accounting_dimensions,
 	get_checks_for_pl_and_bs_accounts,
 	get_dimensions,
@@ -584,6 +585,17 @@ def update_accounting_dimensions(round_off_gle):
 				and dimension.default_dimension
 			):
 				round_off_gle[dimension.fieldname] = dimension.default_dimension
+
+	standard_dimensions = [dimension for dimension in STANDARD_DIMENSIONS if meta.has_field(dimension)]
+	if standard_dimensions:
+		values = (
+			frappe.db.get_value(
+				round_off_gle["voucher_type"], round_off_gle["voucher_no"], standard_dimensions, as_dict=1
+			)
+			or {}
+		)
+		for dimension in standard_dimensions:
+			round_off_gle[dimension] = values.get(dimension)
 
 
 def get_round_off_account(company):

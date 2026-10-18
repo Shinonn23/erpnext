@@ -74,6 +74,7 @@
   "accounting_dimensions_section",
   "dimension_col_break",
   "project",
+  "department",
   "section_break_80",
   "page_break",
   "purchase_order",
@@ -451,6 +452,13 @@
    "fieldtype": "Link",
    "label": "Project",
    "options": "Project",
+   "print_hide": 1
+  },
+  {
+   "fieldname": "department",
+   "fieldtype": "Link",
+   "label": "Department",
+   "options": "Department",
    "print_hide": 1
   },
   {

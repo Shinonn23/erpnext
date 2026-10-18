@@ -128,6 +128,52 @@ def on_doctype_update():
 	frappe.db.add_index("Sales Person", ["lft", "rgt"])
 
 
+def get_territory_manager(territory):
+	"""The Sales Person who looks after a Territory; a disabled one counts as unassigned."""
+	if not territory:
+		return None
+
+	manager = frappe.get_cached_value("Territory", territory, "territory_manager")
+	if manager and frappe.get_cached_value("Sales Person", manager, "enabled"):
+		return manager
+
+	return None
+
+
+def get_sales_person_stamp(territory, previous=None, source=None):
+	"""Sales Person for a document in a Territory: the one it already holds, the one on the
+	document it continues, otherwise the Territory's manager. Never taken from the form."""
+	if not territory:
+		return None
+
+	for known in (previous, source):
+		if known and known.get("territory") == territory and known.get("sales_person"):
+			return known.get("sales_person")
+
+	return get_territory_manager(territory)
+
+
+def get_territory_of_user(user):
+	"""The single Territory managed by the Sales Person behind a user, if there is exactly one."""
+	employee = frappe.db.get_value("Employee", {"user_id": user, "status": "Active"})
+	if not employee:
+		return None
+
+	sales_person = frappe.db.get_value("Sales Person", {"employee": employee, "enabled": 1, "is_group": 0})
+	if not sales_person:
+		return None
+
+	territories = frappe.get_all(
+		"Territory", filters={"territory_manager": sales_person, "is_group": 0}, pluck="name", limit=2
+	)
+	return territories[0] if len(territories) == 1 else None
+
+
+@frappe.whitelist()
+def get_user_territory():
+	return get_territory_of_user(frappe.session.user)
+
+
 def get_timeline_data(doctype: str, name: str) -> dict[int, int]:
 	def _fetch_activity(doctype: str, date_field: str):
 		sales_team = frappe.qb.DocType("Sales Team")

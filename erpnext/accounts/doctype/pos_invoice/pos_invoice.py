@@ -136,6 +136,7 @@ class POSInvoice(SalesInvoice):
 		rounded_total: DF.Currency
 		rounding_adjustment: DF.Currency
 		sales_partner: DF.Link | None
+		sales_person: DF.Link | None
 		sales_team: DF.Table[SalesTeam]
 		scan_barcode: DF.Data | None
 		select_print_heading: DF.Link | None

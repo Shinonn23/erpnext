@@ -132,6 +132,7 @@
   "contact_mobile",
   "contact_email",
   "territory",
+  "sales_person",
   "col_break4",
   "shipping_address_name",
   "shipping_address",
@@ -452,6 +453,15 @@
    "label": "Territory",
    "options": "Territory",
    "print_hide": 1
+  },
+  {
+   "fieldname": "sales_person",
+   "fieldtype": "Link",
+   "label": "Sales Person",
+   "no_copy": 1,
+   "options": "Sales Person",
+   "print_hide": 1,
+   "read_only": 1
   },
   {
    "fieldname": "col_break4",
@@ -1436,7 +1446,8 @@
    "oldfieldname": "sales_team",
    "oldfieldtype": "Table",
    "options": "Sales Team",
-   "print_hide": 1
+   "print_hide": 1,
+   "read_only": 1
   },
   {
    "fieldname": "subscription_section",

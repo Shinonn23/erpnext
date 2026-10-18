@@ -17,6 +17,9 @@ from erpnext.accounts.doctype.repost_accounting_ledger.repost_accounting_ledger 
 	get_allowed_types_from_settings,
 )
 
+# Native dimensions that sit beside `project`; they are not Accounting Dimension records.
+STANDARD_DIMENSIONS = ("department", "territory", "sales_person")
+
 
 class AccountingDimension(Document):
 	# begin: auto-generated types
@@ -184,11 +187,43 @@ def add_dimension_to_budget_doctype(df, doc):
 	create_custom_field("Budget", df, ignore_validate=True)
 
 
+def get_standard_dimension_values(doctype, name):
+	"""Stored standard dimensions of a voucher, for entries created on its behalf."""
+	meta = frappe.get_meta(doctype) if doctype and name else None
+	fieldnames = [d for d in STANDARD_DIMENSIONS if meta and meta.has_field(d)]
+	if not fieldnames:
+		return {}
+
+	values = frappe.db.get_value(doctype, name, fieldnames, as_dict=True) or {}
+	return {fieldname: value for fieldname, value in values.items() if value}
+
+
+def get_budget_dimension_fields():
+	"""Fieldname and document type of everything a Budget can be set against."""
+	dimensions = [
+		frappe._dict(fieldname="project", document_type="Project"),
+		*(frappe._dict(fieldname=d, document_type=frappe.unscrub(d)) for d in STANDARD_DIMENSIONS),
+		*get_accounting_dimensions(as_list=False),
+	]
+	# an Accounting Dimension on Department must not be budgeted twice
+	by_fieldname = {}
+	for dimension in dimensions:
+		by_fieldname.setdefault(dimension.get("fieldname"), dimension)
+	return list(by_fieldname.values())
+
+
+@frappe.whitelist()
 def get_budget_dimensions(exclude_dimension=None):
 	filters = {"disabled": 0}
 	if exclude_dimension:
 		filters["name"] = ["!=", exclude_dimension]
-	return ["Project", *frappe.get_all("Accounting Dimension", filters=filters, pluck="document_type")]
+	dimensions = [
+		"Project",
+		*(frappe.unscrub(fieldname) for fieldname in STANDARD_DIMENSIONS),
+		*frappe.get_all("Accounting Dimension", filters=filters, pluck="document_type"),
+	]
+	# a Department Accounting Dimension must not list (or budget) the native one twice
+	return list(dict.fromkeys(dimensions))
 
 
 def sync_budget_dimensions(exclude_dimension=None):

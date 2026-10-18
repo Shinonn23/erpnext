@@ -13,7 +13,10 @@ from frappe.query_builder.functions import IfNull
 from frappe.utils import flt, fmt_money, get_link_to_form, getdate, nowdate, today
 
 import erpnext
-from erpnext.accounts.doctype.accounting_dimension.accounting_dimension import get_dimensions
+from erpnext.accounts.doctype.accounting_dimension.accounting_dimension import (
+	get_dimensions,
+	get_standard_dimension_values,
+)
 from erpnext.accounts.doctype.process_payment_reconciliation.process_payment_reconciliation import (
 	is_any_doc_running,
 )
@@ -889,9 +892,14 @@ def reconcile_dr_cr_note(dr_cr_notes, company, active_dimensions=None):
 			for dim in active_dimensions:
 				dimensions_dict[dim.fieldname] = inv.get(dim.fieldname)
 
-		jv.accounts[0].update(dimensions_dict)
-		jv.accounts[1].update(dimensions_dict)
+		# each row settles one voucher, so it carries that voucher's stored stamp
+		against_dimensions = get_standard_dimension_values(inv.against_voucher_type, inv.against_voucher)
+		jv.accounts[0].update({**dimensions_dict, **against_dimensions})
+		jv.accounts[1].update(
+			{**dimensions_dict, **get_standard_dimension_values(inv.voucher_type, inv.voucher_no)}
+		)
 
+		jv.flags.preserve_dimension_stamps = True
 		jv.flags.ignore_mandatory = True
 		jv.flags.ignore_exchange_rate = True
 		jv.remark = None
@@ -924,7 +932,7 @@ def reconcile_dr_cr_note(dr_cr_notes, company, active_dimensions=None):
 				inv.against_voucher_type,
 				inv.against_voucher,
 				None,
-				dimensions_dict,
+				{**dimensions_dict, **against_dimensions},
 			)
 
 

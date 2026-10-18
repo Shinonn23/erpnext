@@ -31,6 +31,7 @@ class PurchaseInvoiceItem(Document):
 		conversion_factor: DF.Float
 		deferred_expense_account: DF.Link | None
 		delivered_by_supplier: DF.Check
+		department: DF.Link | None
 		description: DF.TextEditor | None
 		discount_amount: DF.Currency
 		discount_percentage: DF.Percent

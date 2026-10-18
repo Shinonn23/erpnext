@@ -2,6 +2,20 @@
 // License: GNU General Public License v3. See license.txt
 
 frappe.ui.form.on("Customer", {
+	onload: function (frm) {
+		// a Sales Person registering a customer starts them in their own Territory
+		const default_territory = frappe.defaults.get_user_default("territory");
+		if (!frm.is_new() || (frm.doc.territory && frm.doc.territory !== default_territory)) return;
+
+		frappe
+			.xcall("erpnext.setup.doctype.sales_person.sales_person.get_user_territory")
+			.then((territory) => {
+				if (territory && (!frm.doc.territory || frm.doc.territory === default_territory)) {
+					frm.set_value("territory", territory);
+				}
+			});
+	},
+
 	setup: function (frm) {
 		frm.custom_make_buttons = {
 			Opportunity: "Opportunity",

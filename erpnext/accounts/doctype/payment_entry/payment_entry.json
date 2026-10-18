@@ -82,6 +82,8 @@
   "clearance_date",
   "accounting_dimensions_section",
   "project",
+  "territory",
+  "sales_person",
   "dimension_col_break",
   "section_break_12",
   "status",
@@ -449,6 +451,24 @@
    "label": "Project",
    "options": "Project",
    "print_hide": 1
+  },
+  {
+   "fieldname": "territory",
+   "fieldtype": "Link",
+   "label": "Territory",
+   "no_copy": 1,
+   "options": "Territory",
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "sales_person",
+   "fieldtype": "Link",
+   "label": "Sales Person",
+   "no_copy": 1,
+   "options": "Sales Person",
+   "print_hide": 1,
+   "read_only": 1
   },
   {
    "fieldname": "remarks",

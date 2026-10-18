@@ -38,7 +38,10 @@ import erpnext
 
 # imported to enable erpnext.accounts.utils.get_account_currency
 from erpnext.accounts.doctype.account.account import get_account_currency
-from erpnext.accounts.doctype.accounting_dimension.accounting_dimension import get_dimensions
+from erpnext.accounts.doctype.accounting_dimension.accounting_dimension import (
+	get_dimensions,
+	get_standard_dimension_values,
+)
 from erpnext.accounts.ledger_permissions import (
 	_ledger_query_permission_context,
 	check_ledger_voucher_permissions,
@@ -472,6 +475,12 @@ def _build_dimensions_dict_for_exc_gain_loss(
 		for dim in active_dimensions:
 			if entry_dimension := entry.get(dim.fieldname):
 				dimensions_dict[dim.fieldname] = entry_dimension
+
+	if entry:
+		# the gain or loss belongs to the voucher being settled, so it carries that voucher's stamp
+		dimensions_dict.update(
+			get_standard_dimension_values(entry.get("against_voucher_type"), entry.get("against_voucher"))
+		)
 	return dimensions_dict
 
 
@@ -690,6 +699,8 @@ def update_reference_in_journal_entry(d, journal_entry, do_not_save=False):
 		new_row.advance_voucher_type = jv_detail.get("reference_type")
 		new_row.advance_voucher_no = jv_detail.get("reference_name")
 
+	# the split row keeps the stamp of the row it came from
+	journal_entry.flags.preserve_dimension_stamps = True
 	# will work as update after submit
 	journal_entry.flags.ignore_validate_update_after_submit = True
 	# Ledgers will be reposted by Reconciliation tool
@@ -748,6 +759,13 @@ def update_reference_in_payment_entry(
 		new_row.docstatus = 1
 		new_row.update(reference_details)
 		row = new_row
+
+	# validate does not run on update after submit: stamp the new row from the invoice it settles
+	stamp = get_standard_dimension_values(d.against_voucher_type, d.against_voucher)
+	row.territory = stamp.get("territory") or payment_entry.get("territory")
+	row.sales_person = (
+		stamp.get("sales_person") if stamp.get("territory") else payment_entry.get("sales_person")
+	)
 
 	payment_entry.flags.ignore_validate_update_after_submit = True
 	payment_entry.clear_unallocated_reference_document_rows()
@@ -2462,6 +2480,7 @@ def create_gain_loss_journal(
 	journal_entry.company = company
 	journal_entry.posting_date = posting_date or nowdate()
 	journal_entry.multi_currency = 1
+	journal_entry.flags.preserve_dimension_stamps = True
 	journal_entry.mark_as_system_generated()
 
 	party_account_currency = frappe.get_cached_value("Account", party_account, "account_currency")

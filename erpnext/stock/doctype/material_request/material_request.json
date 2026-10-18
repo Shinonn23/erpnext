@@ -13,6 +13,7 @@
   "material_request_type",
   "customer",
   "company",
+  "department",
   "column_break_adou",
   "transaction_date",
   "expected_return_date",
@@ -141,6 +142,12 @@
    "reqd": 1,
    "search_index": 1,
    "width": "150px"
+  },
+  {
+   "fieldname": "department",
+   "fieldtype": "Link",
+   "label": "Department",
+   "options": "Department"
   },
   {
    "fieldname": "amended_from",

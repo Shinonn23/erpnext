@@ -32,6 +32,7 @@ class PurchaseReceiptItem(Document):
 		brand: DF.Link | None
 		conversion_factor: DF.Float
 		delivery_note_item: DF.Data | None
+		department: DF.Link | None
 		description: DF.TextEditor | None
 		discount_amount: DF.Currency
 		discount_percentage: DF.Percent

@@ -61,6 +61,7 @@
   "bom_no",
   "accounting_dimensions_section",
   "project",
+  "department",
   "dimension_col_break",
   "more_info",
   "lead_time_date",
@@ -350,6 +351,12 @@
    "fieldtype": "Link",
    "label": "Project",
    "options": "Project"
+  },
+  {
+   "fieldname": "department",
+   "fieldtype": "Link",
+   "label": "Department",
+   "options": "Department"
   },
   {
    "fieldname": "production_plan",

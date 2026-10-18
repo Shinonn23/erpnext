@@ -173,6 +173,7 @@
   "custody_loan_shipment",
   "customer_group",
   "territory",
+  "sales_person",
   "title",
   "column_break5",
   "excise_page",
@@ -1001,6 +1002,15 @@
    "print_hide": 1
   },
   {
+   "fieldname": "sales_person",
+   "fieldtype": "Link",
+   "label": "Sales Person",
+   "no_copy": 1,
+   "options": "Sales Person",
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
    "collapsible": 1,
    "fieldname": "printing_details",
    "fieldtype": "Section Break",
@@ -1196,7 +1206,8 @@
    "oldfieldname": "sales_team",
    "oldfieldtype": "Table",
    "options": "Sales Team",
-   "print_hide": 1
+   "print_hide": 1,
+   "read_only": 1
   },
   {
    "default": "0",

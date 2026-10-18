@@ -10,11 +10,14 @@ erpnext.sales_common = {
 				super.setup();
 				this.toggle_enable_for_stock_uom("allow_to_edit_stock_uom_qty_for_sales");
 				this.frm.email_field = "contact_email";
+				// the Sales Person is the manager of the Territory (the server keeps the saved one)
+				this.frm.add_fetch("territory", "territory_manager", "sales_person");
 			}
 
 			onload() {
 				super.onload();
 				this.setup_queries();
+				this.set_territory_of_user();
 				this.frm.set_query("shipping_rule", function (doc) {
 					return {
 						filters: {
@@ -33,6 +36,28 @@ erpnext.sales_common = {
 						},
 					};
 				});
+			}
+
+			set_territory_of_user() {
+				// a Sales Person opening a new document starts in their own Territory; a
+				// customer with a Territory of their own still takes over once chosen
+				const frm = this.frm;
+				const default_territory = frappe.defaults.get_user_default("territory");
+				if (
+					!frm.is_new() ||
+					!frm.fields_dict.territory ||
+					(frm.doc.territory && frm.doc.territory !== default_territory)
+				) {
+					return;
+				}
+
+				frappe
+					.xcall("erpnext.setup.doctype.sales_person.sales_person.get_user_territory")
+					.then((territory) => {
+						if (territory && (!frm.doc.territory || frm.doc.territory === default_territory)) {
+							frm.set_value("territory", territory);
+						}
+					});
 			}
 
 			setup_queries() {

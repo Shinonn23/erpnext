@@ -6,7 +6,9 @@ from frappe.query_builder import Criterion
 from frappe.query_builder.functions import IfNull, Sum
 from frappe.utils import flt, fmt_money, get_link_to_form
 
-from erpnext.accounts.doctype.accounting_dimension.accounting_dimension import get_accounting_dimensions
+from erpnext.accounts.doctype.accounting_dimension.accounting_dimension import (
+	get_budget_dimension_fields,
+)
 from erpnext.accounts.doctype.budget.budget import BudgetError, get_accumulated_monthly_budget
 from erpnext.accounts.utils import get_fiscal_year
 
@@ -151,8 +153,7 @@ class BudgetValidation:
 						self.item_map.setdefault(key, []).append(gl)
 
 	def get_dimensions(self):
-		self.dimensions = get_accounting_dimensions(as_list=False)
-		self.dimensions.append({"fieldname": "project", "document_type": "Project"})
+		self.dimensions = get_budget_dimension_fields()
 
 	def get_budget_records(self) -> list:
 		bud = qb.DocType("Budget")
@@ -202,7 +203,7 @@ class BudgetValidation:
 		return _budgets
 
 	def get_ordered_amount(self, key: tuple | None = None):
-		if key:
+		if key and frappe.get_meta("Purchase Order Item").has_field(key[0]):
 			po = qb.DocType("Purchase Order")
 			poi = qb.DocType("Purchase Order Item")
 
@@ -232,7 +233,7 @@ class BudgetValidation:
 				self.to_validate[key].ordered_amount = ordered_amount[0].amount or 0
 
 	def get_requested_amount(self, key: tuple | None = None):
-		if key:
+		if key and frappe.get_meta("Material Request Item").has_field(key[0]):
 			mr = qb.DocType("Material Request")
 			mri = qb.DocType("Material Request Item")
 

@@ -174,6 +174,7 @@ class TestWarehousePolicy(unittest.TestCase):
 				StocktoAssetConversion,
 			)
 		methods = (
+			"set_department",
 			"validate_company_settings",
 			"sync_pick_list_selections",
 			"sync_material_request_rows",

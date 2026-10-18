@@ -116,6 +116,7 @@ class PurchaseInvoice(BuyingController):
 		conversion_rate: DF.Float
 		credit_to: DF.Link
 		currency: DF.Link | None
+		department: DF.Link | None
 		disable_rounded_total: DF.Check
 		discount_amount: DF.Currency
 		dispatch_address: DF.Link | None

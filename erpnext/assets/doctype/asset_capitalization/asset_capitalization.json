@@ -44,6 +44,7 @@
   "accounting_dimensions_section",
   "dimension_col_break",
   "project",
+  "department",
   "target_fixed_asset_account"
  ],
  "fields": [
@@ -236,6 +237,12 @@
    "fieldtype": "Link",
    "label": "Project",
    "options": "Project"
+  },
+  {
+   "fieldname": "department",
+   "fieldtype": "Link",
+   "label": "Department",
+   "options": "Department"
   },
   {
    "fieldname": "dimension_col_break",

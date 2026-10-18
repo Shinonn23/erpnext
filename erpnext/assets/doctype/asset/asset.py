@@ -1303,6 +1303,7 @@ def make_journal_entry(asset_name):
 			"account": depreciation_expense_account,
 			"reference_type": "Asset",
 			"reference_name": asset.name,
+			"department": asset.department,
 		},
 	)
 
@@ -1312,6 +1313,7 @@ def make_journal_entry(asset_name):
 			"account": accumulated_depreciation_account,
 			"reference_type": "Asset",
 			"reference_name": asset.name,
+			"department": asset.department,
 		},
 	)
 

@@ -30,6 +30,7 @@ from frappe.utils import (
 
 import erpnext
 from erpnext.accounts.doctype.accounting_dimension.accounting_dimension import (
+	STANDARD_DIMENSIONS,
 	get_accounting_dimensions,
 	get_dimensions,
 )
@@ -105,6 +106,21 @@ force_item_fields = (
 	"weight_uom",
 	"total_weight",
 	"valuation_rate",
+)
+
+
+# Documents whose Department is the one bearing the cost, and is copied onto their rows
+DEPARTMENT_DOCUMENTS = (
+	"Material Request",
+	"Purchase Order",
+	"Purchase Receipt",
+	"Purchase Invoice",
+	"Stock Entry",
+	"Subcontracting Receipt",
+	"Stock Reconciliation",
+	"Asset Capitalization",
+	"Asset Repair",
+	"Stock to Asset Conversion",
 )
 
 
@@ -356,9 +372,32 @@ class AccountsController(TransactionBase):
 
 		self.set_total_in_words()
 		self.set_default_letter_head()
+		self.set_department()
 		self.validate_company_in_accounting_dimension()
 		self.validate_party_address_and_contact()
 		self.validate_company_linked_addresses()
+
+	def set_department(self):
+		"""The Department that bears the cost: the one on the document this continues (copied along
+		with it), otherwise the Department of the employee creating it. Rows default to it."""
+		if self.doctype not in DEPARTMENT_DOCUMENTS or not self.meta.has_field("department"):
+			return
+
+		if not self.get("department") and self.is_new():
+			from erpnext.setup.doctype.employee.employee import get_department_of_user
+
+			self.department = get_department_of_user(frappe.session.user, self.company)
+
+		if not self.get("department"):
+			return
+
+		for table in self.meta.get_table_fields():
+			if not frappe.get_meta(table.options).has_field("department"):
+				continue
+
+			for row in self.get(table.fieldname):
+				if not row.get("department"):
+					row.department = self.department
 
 	def validate_company_linked_addresses(self):
 		address_fields = []
@@ -1484,6 +1523,13 @@ class AccountsController(TransactionBase):
 		gl_dict.update(dimension_dict)
 		gl_dict.update(args)
 
+		# Only fill what the caller left empty: rows that pass their own value (Journal
+		# Entry, system-built entries) stay authoritative. Values are read from the stored
+		# document so reposting reproduces the original dimensions.
+		for dimension in STANDARD_DIMENSIONS:
+			if not gl_dict.get(dimension):
+				gl_dict[dimension] = (item.get(dimension) if item else None) or self.get(dimension)
+
 		if not account_currency:
 			account_currency = get_account_currency(gl_dict.account)
 
@@ -1847,6 +1893,12 @@ class AccountsController(TransactionBase):
 				active_dimensions = get_dimensions()[0]
 				for dim in active_dimensions:
 					dimensions_dict[dim.fieldname] = self.get(dim.fieldname)
+
+			# the entry settles this document, so it carries the document's stored stamp
+			dimensions_dict = frappe._dict(dimensions_dict)
+			for dimension in STANDARD_DIMENSIONS:
+				if not dimensions_dict.get(dimension) and self.get(dimension):
+					dimensions_dict[dimension] = self.get(dimension)
 
 			if self.get("doctype") == "Journal Entry":
 				# 'args' is populated with exchange gain/loss account and the amount to be booked.

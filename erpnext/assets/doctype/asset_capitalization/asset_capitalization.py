@@ -66,6 +66,7 @@ class AssetCapitalization(StockController):
 		asset_items: DF.Table[AssetCapitalizationAssetItem]
 		asset_items_total: DF.Currency
 		company: DF.Link
+		department: DF.Link | None
 		finance_book: DF.Link | None
 		naming_series: DF.Literal["ACC-ASC-.YYYY.-"]
 		posting_date: DF.Date
@@ -86,6 +87,7 @@ class AssetCapitalization(StockController):
 	# end: auto-generated types
 
 	def validate(self):
+		self.set_department()
 		self.validate_posting_time()
 		self.set_missing_values(for_validate=True)
 		self.validate_target_item()

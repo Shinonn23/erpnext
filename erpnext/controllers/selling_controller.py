@@ -10,9 +10,18 @@ from erpnext.accounts.party import render_address
 from erpnext.controllers.accounts_controller import get_taxes_and_charges
 from erpnext.controllers.sales_and_purchase_return import get_rate_for_return, is_batch_expired
 from erpnext.controllers.stock_controller import StockController
+from erpnext.setup.doctype.sales_person.sales_person import get_sales_person_stamp, get_territory_of_user
 from erpnext.stock.doctype.item.item import set_item_default
 from erpnext.stock.get_item_details import get_bin_details, get_conversion_factor
 from erpnext.stock.utils import _get_incoming_rate, get_combine_datetime, get_valuation_method
+
+# The document whose Territory and Sales Person a document continues, as (item field, doctype)
+STAMP_SOURCES = {
+	"Sales Invoice": (("sales_order", "Sales Order"), ("delivery_note", "Delivery Note")),
+	"POS Invoice": (("sales_order", "Sales Order"), ("delivery_note", "Delivery Note")),
+	"Delivery Note": (("against_sales_order", "Sales Order"),),
+	"Sales Order": (("prevdoc_docname", "Quotation"),),
+}
 
 
 class SellingController(StockController):
@@ -53,6 +62,7 @@ class SellingController(StockController):
 		from erpnext.stock.stock_control_transactions import validate_selected_stock_control_sources
 
 		validate_selected_stock_control_sources(self)
+		self.set_territory_and_sales_person()
 		self.validate_items()
 		if not (self.get("is_debit_note") or self.get("is_return")):
 			self.validate_max_discount()
@@ -109,6 +119,128 @@ class SellingController(StockController):
 		self.set_missing_lead_customer_details(for_validate=for_validate)
 		self.set_price_list_and_item_details(for_validate=for_validate)
 		self.set_company_contact_person()
+
+	def set_territory_and_sales_person(self):
+		"""Territory follows the party; the Sales Person is that Territory's manager, stamped once."""
+		if not self.meta.has_field("territory"):
+			return
+
+		territory_stamp = self.flags.get("territory_stamp")
+		if territory_stamp and territory_stamp[0]:
+			# a consolidated invoice keeps the stamp of the POS invoices it merges
+			self.territory, self.sales_person = territory_stamp
+			self.set_sales_team_from_sales_person()
+			return
+
+		if self.get("return_against"):
+			# a return reverses the attribution of the document it returns
+			original = frappe.db.get_value(
+				self.doctype, self.return_against, ["territory", "sales_person"], as_dict=True
+			)
+			if original:
+				self.territory = original.territory
+				if self.meta.has_field("sales_person"):
+					self.sales_person = original.sales_person
+					self.set_sales_team_from_sales_person()
+				return
+
+		party_territory = self.get_party_territory()
+		territory = party_territory or self.get("territory")
+		if not party_territory and (
+			not territory or territory == frappe.db.get_single_value("Selling Settings", "territory")
+		):
+			# the customer has none and nothing else is known (the default is not a choice): a
+			# Sales Person opening the document keeps it in their own Territory
+			territory = get_territory_of_user(frappe.session.user) or territory
+
+		if self.is_new() and party_territory:
+			own_territory = get_territory_of_user(frappe.session.user)
+			if own_territory and own_territory != party_territory:
+				frappe.msgprint(
+					_("{0} belongs to Territory {1}, not to your Territory {2}").format(
+						bold(self.get_territory_party()[1]), bold(party_territory), bold(own_territory)
+					),
+					indicator="orange",
+					alert=True,
+				)
+
+		self.territory = territory
+		if self.meta.has_field("sales_person"):
+			self.sales_person = self.get_territory_stamp(territory)
+			self.set_sales_team_from_sales_person()
+
+	def get_territory_party(self):
+		if self.get("customer"):
+			return "Customer", self.customer
+
+		if self.doctype == "Quotation" and self.get("party_name"):
+			return self.quotation_to, self.party_name
+
+		return None, None
+
+	def get_party_territory(self):
+		party_type, party = self.get_territory_party()
+		if party_type in ("Customer", "Lead", "Prospect") and party:
+			return frappe.db.get_value(party_type, party, "territory")
+
+	def get_territory_stamp(self, territory):
+		return get_sales_person_stamp(
+			territory,
+			previous=self.get_doc_before_save(),
+			source=self.get_stamp_source(territory),
+		)
+
+	def get_stamp_source(self, territory):
+		"""A document this one continues that carries a Sales Person for the same Territory."""
+		candidates = []
+		for fieldname in ("amended_from", "return_against"):
+			if name := self.get(fieldname):
+				candidates.append((self.doctype, name, False))
+
+		for item_field, doctype in STAMP_SOURCES.get(self.doctype, ()):
+			for item in self.get("items") or []:
+				if name := item.get(item_field):
+					candidates.append((doctype, name, doctype != "Quotation"))
+
+		checked = set()
+		for doctype, name, same_customer in candidates:
+			if (doctype, name) in checked:
+				continue
+			checked.add((doctype, name))
+
+			fields = ["territory", "sales_person", *(["customer"] if same_customer else [])]
+			source = frappe.db.get_value(doctype, name, fields, as_dict=True)
+			if not source or source.territory != territory or not source.sales_person:
+				continue
+
+			# a link to another customer's document is not a document this one continues
+			if same_customer and self.get("customer") and source.customer != self.customer:
+				continue
+
+			return source
+
+	def set_sales_team_from_sales_person(self):
+		"""One Sales Person looks after a customer, so the Sales Team is just that person."""
+		if not self.meta.has_field("sales_team"):
+			return
+
+		self.set("sales_team", [])
+		if self.sales_person:
+			self.append(
+				"sales_team",
+				{
+					"sales_person": self.sales_person,
+					"allocated_percentage": 100,
+					# fetched after validate, but the incentive is worked out now
+					"commission_rate": frappe.get_cached_value(
+						"Sales Person", self.sales_person, "commission_rate"
+					),
+				},
+			)
+
+		# the base validate priced the rows replaced above
+		if self.meta.has_field("amount_eligible_for_commission"):
+			self.calculate_contribution()
 
 	def set_missing_lead_customer_details(self, for_validate=False):
 		customer, lead = None, None

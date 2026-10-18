@@ -7,8 +7,8 @@ from frappe.query_builder import CustomFunction
 from frappe.utils import add_months, flt, formatdate
 
 from erpnext.accounts.doctype.accounting_dimension.accounting_dimension import (
+	get_budget_dimension_fields,
 	get_dimension_with_children,
-	get_dimensions,
 )
 from erpnext.accounts.utils import get_fiscal_year
 from erpnext.controllers.trends import get_period_date_ranges
@@ -42,10 +42,17 @@ def execute(filters=None):
 
 
 def set_default_budget_against(filters):
-	# The standard dashboard chart passes an empty "Budget Against"; use the
-	# same default as the report's filter instead of querying a blank DocType.
-	if not filters.get("budget_against"):
-		filters["budget_against"] = get_dimensions(with_project=True)[0][0].get("document_type")
+	# The standard dashboard chart passes an empty "Budget Against". Use the first dimension
+	# that has a submitted budget, so the chart is not blank while another dimension is budgeted.
+	if filters.get("budget_against"):
+		return
+
+	dimensions = [d.get("document_type") for d in get_budget_dimension_fields()]
+	budget_filters = {"docstatus": 1}
+	if filters.get("company"):
+		budget_filters["company"] = filters["company"]
+	budgeted = set(frappe.get_all("Budget", filters=budget_filters, pluck="budget_against"))
+	filters["budget_against"] = next((d for d in dimensions if d in budgeted), dimensions[0])
 
 
 def validate_filters(filters):
@@ -391,13 +398,11 @@ def get_budget_dimensions(filters):
 
 
 def validate_budget_dimensions(filters):
-	dimensions = [d.get("document_type") for d in get_dimensions(with_project=True)[0]]
+	dimensions = [d.get("document_type") for d in get_budget_dimension_fields()]
 	if filters.get("budget_against") and filters.get("budget_against") not in dimensions:
 		frappe.throw(
-			title=_("Invalid Accounting Dimension"),
-			msg=_("{0} is not a valid Accounting Dimension.").format(
-				frappe.bold(filters.get("budget_against"))
-			),
+			title=_("Invalid Budget Against"),
+			msg=_("{0} is not a valid Budget Against.").format(frappe.bold(filters.get("budget_against"))),
 		)
 
 

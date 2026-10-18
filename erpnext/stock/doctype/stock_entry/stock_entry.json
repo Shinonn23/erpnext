@@ -69,6 +69,7 @@
   "address_display",
   "accounting_dimensions_section",
   "project",
+  "department",
   "column_break_wgvc",
   "other_info_tab",
   "printing_settings",
@@ -666,6 +667,12 @@
    "label": "Project",
    "oldfieldtype": "Link",
    "options": "Project"
+  },
+  {
+   "fieldname": "department",
+   "fieldtype": "Link",
+   "label": "Department",
+   "options": "Department"
   },
   {
    "fieldname": "remarks",

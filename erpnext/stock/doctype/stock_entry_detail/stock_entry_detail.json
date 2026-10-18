@@ -66,6 +66,7 @@
   "expense_account",
   "accounting_dimensions_section",
   "project",
+  "department",
   "dimension_col_break",
   "more_info",
   "actual_qty",
@@ -550,6 +551,12 @@
    "fieldtype": "Link",
    "label": "Project",
    "options": "Project"
+  },
+  {
+   "fieldname": "department",
+   "fieldtype": "Link",
+   "label": "Department",
+   "options": "Department"
   },
   {
    "fieldname": "po_detail",
