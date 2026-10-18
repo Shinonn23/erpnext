@@ -3,6 +3,23 @@
 
 frappe.ui.form.on("Stock Count", {
 	setup(frm) {
+		frm.fields_dict.items.grid.on_row_upload = (row, fieldnames, values) => {
+			const counted_qty_index = fieldnames.indexOf("counted_qty");
+			if (counted_qty_index < 0) return;
+			const quantity = String(values[counted_qty_index] ?? "").trim();
+			// Blank quantities stay uncounted; an explicit zero is a completed count.
+			if (quantity) {
+				const parsed = Number(strip_number_groups(quantity));
+				if (!Number.isFinite(parsed) || parsed !== row.counted_qty) {
+					row.counted_qty = null;
+					row.is_counted = 0;
+					row.difference_qty = 0;
+					frappe.throw(__("Row {0}: Counted Qty must be a valid finite number.", [row.idx]));
+				}
+				row.is_counted = 1;
+			}
+			row.difference_qty = row.is_counted ? flt(row.counted_qty) - flt(row.system_qty) : 0;
+		};
 		frm.set_query("warehouse", () => ({
 			filters: {
 				company: frm.doc.company,
@@ -58,6 +75,7 @@ frappe.ui.form.on("Stock Count", {
 				if (frm.is_dirty()) await frm.save();
 				await frm.call("prepare_count");
 				await frm.reload_doc();
+				frm.scroll_to_field("items");
 				frappe.show_alert({ message: __("Stock snapshot created."), indicator: "green" });
 			});
 		}

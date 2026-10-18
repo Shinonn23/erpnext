@@ -6,37 +6,47 @@
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
-  "naming_series",
+  "setup_tab",
+  "count_details_section",
   "company",
-  "count_type",
-  "column_break_1",
   "warehouse",
-  "dimensions_section",
-  "dimensions",
+  "column_break_1",
+  "count_type",
+  "naming_series",
   "count_setup_section",
   "item_count",
+  "count_setup_column",
   "quarantine_warehouse",
   "quarantine_storage_location",
-  "count_status_section",
-  "snapshot_datetime",
-  "status",
+  "dimensions_section",
+  "dimensions",
+  "counting_tab",
   "scanning_section",
   "scan_storage_location",
+  "scanning_column",
   "scan_barcode",
   "items_section",
   "items",
+  "review_tab",
+  "count_status_section",
+  "status",
+  "count_status_column",
+  "snapshot_datetime",
   "references_section",
   "stock_entry",
+  "references_column",
   "stock_reconciliation"
  ],
  "fields": [
   {
-   "fieldname": "naming_series",
-   "fieldtype": "Select",
-   "label": "Series",
-   "options": "STOCK-COUNT-.YYYY.-",
-   "reqd": 1,
-   "set_only_once": 1
+   "fieldname": "setup_tab",
+   "fieldtype": "Tab Break",
+   "label": "Count Setup"
+  },
+  {
+   "fieldname": "count_details_section",
+   "fieldtype": "Section Break",
+   "label": "Count Details"
   },
   {
    "fieldname": "company",
@@ -47,17 +57,6 @@
    "remember_last_selected_value": 1
   },
   {
-   "fieldname": "count_type",
-   "fieldtype": "Select",
-   "label": "Count Type",
-   "options": "Monthly\nAnnual",
-   "reqd": 1
-  },
-  {
-   "fieldname": "column_break_1",
-   "fieldtype": "Column Break"
-  },
-  {
    "fieldname": "warehouse",
    "fieldtype": "Link",
    "label": "Warehouse",
@@ -65,16 +64,23 @@
    "reqd": 1
   },
   {
-   "fieldname": "dimensions_section",
-   "fieldtype": "Section Break",
-   "label": "Inventory Dimension Filters",
-   "collapsible": 1
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
   },
   {
-   "fieldname": "dimensions",
-   "fieldtype": "Table",
-   "label": "Inventory Dimensions",
-   "options": "Stock Count Dimension"
+   "fieldname": "count_type",
+   "fieldtype": "Select",
+   "label": "Count Type",
+   "options": "Monthly\nAnnual",
+   "reqd": 1
+  },
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "STOCK-COUNT-.YYYY.-",
+   "reqd": 1,
+   "set_only_once": 1
   },
   {
    "fieldname": "count_setup_section",
@@ -89,6 +95,10 @@
    "label": "Number of Item Codes to Sample",
    "default": "10",
    "mandatory_depends_on": "eval:doc.count_type == 'Monthly'"
+  },
+  {
+   "fieldname": "count_setup_column",
+   "fieldtype": "Column Break"
   },
   {
    "depends_on": "eval:doc.count_type == 'Monthly'",
@@ -107,27 +117,21 @@
    "description": "Optional destination location in the Quarantine Warehouse."
   },
   {
-   "fieldname": "count_status_section",
+   "fieldname": "dimensions_section",
    "fieldtype": "Section Break",
-   "label": "Count Status"
+   "label": "Inventory Dimension Filters",
+   "collapsible": 1
   },
   {
-   "fieldname": "snapshot_datetime",
-   "fieldtype": "Datetime",
-   "label": "Snapshot Datetime",
-   "read_only": 1,
-   "no_copy": 1
+   "fieldname": "dimensions",
+   "fieldtype": "Table",
+   "label": "Inventory Dimensions",
+   "options": "Stock Count Dimension"
   },
   {
-   "fieldname": "status",
-   "fieldtype": "Select",
-   "label": "Status",
-   "options": "Draft\nIn Progress\nCompleted",
-   "default": "Draft",
-   "read_only": 1,
-   "allow_on_submit": 1,
-   "no_copy": 1,
-   "in_list_view": 1
+   "fieldname": "counting_tab",
+   "fieldtype": "Tab Break",
+   "label": "Counting"
   },
   {
    "depends_on": "eval:doc.status == 'In Progress' && doc.docstatus == 0 && (!doc.workflow_state || doc.workflow_state == 'Stock Count Draft')",
@@ -144,6 +148,10 @@
    "print_hide": 1,
    "description": "Select the location being counted before scanning items stored in multiple locations.",
    "no_copy": 1
+  },
+  {
+   "fieldname": "scanning_column",
+   "fieldtype": "Column Break"
   },
   {
    "depends_on": "eval:doc.status == 'In Progress' && doc.docstatus == 0 && (!doc.workflow_state || doc.workflow_state == 'Stock Count Draft')",
@@ -169,6 +177,38 @@
    "no_copy": 1
   },
   {
+   "fieldname": "review_tab",
+   "fieldtype": "Tab Break",
+   "label": "Review"
+  },
+  {
+   "fieldname": "count_status_section",
+   "fieldtype": "Section Break",
+   "label": "Count Status"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Draft\nIn Progress\nCompleted",
+   "default": "Draft",
+   "read_only": 1,
+   "allow_on_submit": 1,
+   "no_copy": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "count_status_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "snapshot_datetime",
+   "fieldtype": "Datetime",
+   "label": "Snapshot Datetime",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
    "fieldname": "references_section",
    "fieldtype": "Section Break",
    "label": "Generated Documents"
@@ -180,6 +220,10 @@
    "options": "Stock Entry",
    "read_only": 1,
    "allow_on_submit": 1
+  },
+  {
+   "fieldname": "references_column",
+   "fieldtype": "Column Break"
   },
   {
    "fieldname": "stock_reconciliation",

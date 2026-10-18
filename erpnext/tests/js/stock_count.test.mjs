@@ -15,6 +15,7 @@ function setup(rows, scanned, location) {
   const displays = {};
   const properties = {};
   const frm = {
+    fields_dict: { items: { grid: { df: {} } } },
     doc: {
       items: rows,
       scan_barcode: "barcode",
@@ -223,6 +224,24 @@ test("requesting approval locks counting until the document returns for recount"
   assert.equal(fixture.properties["items.read_only"], false);
 });
 
+test("preparing a count opens the counting tab only after the snapshot reloads", async () => {
+  const fixture = setup([], {});
+  fixture.frm.doc.status = "Draft";
+  const events = [];
+  let prepare;
+  Object.assign(fixture.frm, {
+    is_new: () => false,
+    is_dirty: () => false,
+    add_custom_button: (label, callback) => { prepare = callback; },
+    call: async (method) => { events.push(method); },
+    reload_doc: async () => { events.push("reload"); },
+    scroll_to_field: (field) => { events.push(field); },
+  });
+  fixture.handlers.refresh(fixture.frm);
+  await prepare();
+  assert.deepEqual(events, ["prepare_count", "reload", "items"]);
+});
+
 test("native layout keeps counting controls outside Monthly Count Setup", () => {
   const layout = JSON.parse(
     fs.readFileSync(
@@ -232,11 +251,18 @@ test("native layout keeps counting controls outside Monthly Count Setup", () => 
   );
   const fields = Object.fromEntries(layout.fields.map((field) => [field.fieldname, field]));
   const ancestorSections = {};
+  const ancestorTabs = {};
   let section;
+  let tab;
   for (const fieldname of layout.field_order) {
     const field = fields[fieldname];
+    if (field.fieldtype === "Tab Break") {
+      tab = field;
+      section = undefined;
+    }
     if (field.fieldtype === "Section Break") section = field;
     ancestorSections[fieldname] = section ? [section] : [];
+    ancestorTabs[fieldname] = tab;
   }
   const visible = (fieldname, doc) =>
     [...ancestorSections[fieldname], fields[fieldname]].every(
@@ -274,4 +300,17 @@ test("native layout keeps counting controls outside Monthly Count Setup", () => 
   assert.equal(ancestorSections.scan_barcode[0].label, "Scan Items");
   assert.equal(ancestorSections.snapshot_datetime[0].label, "Count Status");
   assert.equal(ancestorSections.status[0].label, "Count Status");
+  assert.deepEqual(
+    layout.fields.filter((field) => field.fieldtype === "Tab Break").map((field) => field.label),
+    ["Count Setup", "Counting", "Review"]
+  );
+  for (const fieldname of ["company", "warehouse", "item_count", "dimensions"]) {
+    assert.equal(ancestorTabs[fieldname].label, "Count Setup");
+  }
+  for (const fieldname of ["scan_storage_location", "scan_barcode", "items"]) {
+    assert.equal(ancestorTabs[fieldname].label, "Counting");
+  }
+  for (const fieldname of ["status", "snapshot_datetime", "stock_entry", "stock_reconciliation"]) {
+    assert.equal(ancestorTabs[fieldname].label, "Review");
+  }
 });

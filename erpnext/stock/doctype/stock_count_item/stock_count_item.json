@@ -5,20 +5,28 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "item_details_section",
   "item_code",
   "item_name",
+  "column_break_1",
   "batch_no",
   "expiry_date",
   "serial_no",
-  "column_break_1",
-  "system_qty",
+  "quantity_section",
   "counted_qty",
-  "difference_qty",
   "is_counted",
+  "quantity_column",
+  "system_qty",
+  "difference_qty",
   "inventory_dimension",
   "storage_location"
  ],
  "fields": [
+  {
+   "fieldname": "item_details_section",
+   "fieldtype": "Section Break",
+   "label": "Item Details"
+  },
   {
    "columns": 3,
    "fieldname": "item_code",
@@ -36,6 +44,10 @@
    "fieldtype": "Data",
    "label": "Item Name",
    "read_only": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
   },
   {
    "fieldname": "batch_no",
@@ -61,15 +73,26 @@
    "read_only": 1
   },
   {
-   "fieldname": "storage_location",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Storage Location",
-   "options": "Storage Location",
-   "read_only": 1
+   "fieldname": "quantity_section",
+   "fieldtype": "Section Break",
+   "label": "Count Results"
   },
   {
-   "fieldname": "column_break_1",
+   "columns": 2,
+   "fieldname": "counted_qty",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Counted Qty"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_counted",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Counted"
+  },
+  {
+   "fieldname": "quantity_column",
    "fieldtype": "Column Break"
   },
   {
@@ -83,13 +106,6 @@
   },
   {
    "columns": 2,
-   "fieldname": "counted_qty",
-   "fieldtype": "Float",
-   "in_list_view": 1,
-   "label": "Counted Qty"
-  },
-  {
-   "columns": 2,
    "fieldname": "difference_qty",
    "fieldtype": "Float",
    "in_list_view": 1,
@@ -97,17 +113,18 @@
    "read_only": 1
   },
   {
-   "default": "0",
-   "fieldname": "is_counted",
-   "fieldtype": "Check",
-   "in_list_view": 1,
-   "label": "Counted"
-  },
-  {
    "fieldname": "inventory_dimension",
    "fieldtype": "Section Break",
    "label": "Inventory Dimension",
    "collapsible": 1
+  },
+  {
+   "fieldname": "storage_location",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Storage Location",
+   "options": "Storage Location",
+   "read_only": 1
   }
  ],
  "istable": 1,
