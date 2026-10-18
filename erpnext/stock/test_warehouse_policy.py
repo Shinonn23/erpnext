@@ -87,6 +87,127 @@ class TestWarehousePolicy(unittest.TestCase):
 		with patch.object(frappe, "get_roles", return_value=["Stock Manager"]):
 			warehouse_policy.validate_warehouse_operation("WH", "transfer", outgoing=True)
 
+	def workflow_review_documents(self, **changes):
+		def document(values, children=()):
+			doc = Mock(**values)
+			doc.get = lambda field, default=None: values.get(field, default)
+			doc.get_valid_dict.return_value = {
+				key: value for key, value in values.items() if key not in {"items", "_action"}
+			}
+			doc.get_all_children.return_value = children
+			return doc
+
+		row_values = dict(item_code="Item", s_warehouse="WH", qty=1, basic_rate=100)
+		previous_row = document(row_values)
+		row = document(row_values | changes.pop("row_changes", {}))
+		values = dict(
+			doctype="Stock Entry",
+			name="SE",
+			docstatus=0,
+			purpose="Material Transfer",
+			owner="stock",
+			workflow_state="Pending Quality Review",
+			items=[previous_row],
+		)
+		previous = document(values, [previous_row])
+		doc = document(
+			values | dict(workflow_state="Pending Stock Review", items=[row], _action="save") | changes,
+			[row],
+		)
+		doc.get_doc_before_save.return_value = previous
+		return previous, doc
+
+	def test_unchanged_draft_review_does_not_require_dispatch_role(self):
+		from frappe.model import workflow
+
+		previous, doc = self.workflow_review_documents()
+		self.policy.outgoing_role = "Stock Manager"
+		with (
+			patch.object(frappe, "get_cached_value", return_value=1),
+			patch.object(frappe, "session", frappe._dict(user="quality")),
+			patch.object(workflow, "get_workflow_name", return_value="Workflow"),
+			patch.object(workflow, "get_workflow", return_value=frappe._dict(workflow_state_field="workflow_state")),
+			patch.object(workflow, "get_transitions", return_value=[frappe._dict(next_state="Pending Stock Review")]),
+		):
+			warehouse_policy.validate_document_policy(doc)
+			self.policy.allow_transfer = 0
+			with self.assertRaises(frappe.ValidationError):
+				warehouse_policy.validate_document_policy(doc)
+
+	def test_review_allows_automatic_posting_time_but_keeps_explicit_time_locked(self):
+		from frappe.model import workflow
+
+		previous, doc = self.workflow_review_documents(posting_time="12:00:00")
+		with (
+			patch.object(frappe, "session", frappe._dict(user="quality")),
+			patch.object(workflow, "get_workflow_name", return_value="Workflow"),
+			patch.object(workflow, "get_workflow", return_value=frappe._dict(workflow_state_field="workflow_state")),
+			patch.object(workflow, "get_transitions", return_value=[frappe._dict(next_state="Pending Stock Review")]),
+		):
+			self.assertTrue(warehouse_policy._is_unchanged_draft_workflow_transition(doc))
+			previous.get_valid_dict.return_value["set_posting_time"] = 1
+			doc.get_valid_dict.return_value["set_posting_time"] = 1
+			previous_get, current_get = previous.get, doc.get
+			previous.get = lambda field, default=None: (
+				1 if field == "set_posting_time" else previous_get(field, default)
+			)
+			doc.get = lambda field, default=None: 1 if field == "set_posting_time" else current_get(field, default)
+			self.assertFalse(warehouse_policy._is_unchanged_draft_workflow_transition(doc))
+
+	def test_draft_review_cannot_bypass_dispatch_role_for_edits_or_submission(self):
+		from frappe.model import workflow
+
+		self.policy.outgoing_role = "Stock Manager"
+		with (
+			patch.object(frappe, "get_cached_value", return_value=1),
+			patch.object(frappe, "session", frappe._dict(user="quality")),
+			patch.object(workflow, "get_workflow_name", return_value="Workflow"),
+			patch.object(workflow, "get_workflow", return_value=frappe._dict(workflow_state_field="workflow_state")),
+			patch.object(workflow, "get_transitions", return_value=[frappe._dict(next_state="Pending Stock Review")]),
+		):
+			for changes in (
+				{"row_changes": {"qty": 2}},
+				{"row_changes": {"s_warehouse": "OTHER"}},
+				{"row_changes": {"basic_rate": 200}},
+				{"remarks": "Changed during approval"},
+				{"owner": "quality"},
+				{"workflow_state": "Pending Quality Review"},
+				{"docstatus": 1, "_action": "submit"},
+			):
+				with self.subTest(changes=changes):
+					previous, doc = self.workflow_review_documents(**changes)
+					with self.assertRaises(frappe.PermissionError):
+						warehouse_policy.validate_document_policy(doc)
+			previous, doc = self.workflow_review_documents()
+			doc.get_doc_before_save.return_value = None
+			with self.assertRaises(frappe.PermissionError):
+				warehouse_policy.validate_document_policy(doc)
+			doc.get_doc_before_save.return_value = {"docstatus": 0}
+			with self.assertRaises(frappe.PermissionError):
+				warehouse_policy.validate_document_policy(doc)
+
+	def test_draft_review_still_requires_workflow_and_self_approval_access(self):
+		from frappe.model import workflow
+
+		previous, doc = self.workflow_review_documents()
+		self.policy.outgoing_role = "Stock Manager"
+		with (
+			patch.object(frappe, "get_cached_value", return_value=1),
+			patch.object(frappe, "session", frappe._dict(user="quality")),
+			patch.object(workflow, "get_workflow_name", return_value="Workflow"),
+			patch.object(workflow, "get_workflow", return_value=frappe._dict(workflow_state_field="workflow_state")),
+			patch.object(workflow, "get_transitions", return_value=[]) as transitions,
+		):
+			with self.assertRaises(frappe.PermissionError):
+				warehouse_policy.validate_document_policy(doc)
+			transitions.return_value = [frappe._dict(next_state="Other State")]
+			with self.assertRaises(frappe.PermissionError):
+				warehouse_policy.validate_document_policy(doc)
+			transitions.return_value = [frappe._dict(next_state="Pending Stock Review")]
+			with patch.object(frappe, "session", frappe._dict(user="stock")):
+				with self.assertRaises(frappe.PermissionError):
+					warehouse_policy.validate_document_policy(doc)
+
 	def test_linked_loan_transit_leg_uses_transfer_policy(self):
 		self.warehouse.warehouse_type = "Transit"
 		self.policy.allow_loan = 0

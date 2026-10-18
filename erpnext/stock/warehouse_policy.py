@@ -53,7 +53,7 @@ def validate_warehouse_operation(warehouse, operation, outgoing=False, cancellat
 		return
 	location = _current_doc("Warehouse", warehouse) if for_update else frappe.get_doc("Warehouse", warehouse)
 	if location.is_group:
-		frappe.throw(_("คลังกลุ่ม {0} ไม่สามารถทำรายการสต็อกได้ กรุณาเลือกคลังย่อย").format(warehouse))
+		frappe.throw(_("Group warehouse {0} cannot be used for stock transactions. Please select a child warehouse.").format(warehouse))
 	if not location.warehouse_type:
 		return
 	policy = (
@@ -68,13 +68,13 @@ def validate_warehouse_operation(warehouse, operation, outgoing=False, cancellat
 		operation = "transfer"
 	if not cint(policy.get(f"allow_{operation}")):
 		frappe.throw(
-			_("คลัง {0} ประเภท {1} ไม่อนุญาตรายการ {2} กรุณาเลือกคลังที่เหมาะสม").format(
+			_("Warehouse {0} of type {1} does not allow {2} transactions. Please select a suitable warehouse.").format(
 				warehouse, policy.name, _(operation)
 			)
 		)
 	if outgoing and policy.outgoing_role and policy.outgoing_role not in frappe.get_roles():
 		frappe.throw(
-			_("การนำสต็อกออกจากคลัง {0} ต้องมีบทบาท {1}").format(warehouse, policy.outgoing_role),
+			_("Moving stock out of warehouse {0} requires the {1} role.").format(warehouse, policy.outgoing_role),
 			frappe.PermissionError,
 		)
 
@@ -95,7 +95,7 @@ def is_loan_movement(doc):
 			doc.get("custody_loan_source_doctype") != "Custody Loan Adjustment"
 			or doc.purpose != "Material Issue"
 		):
-			frappe.throw(_("คลังยืมรับเฉพาะรายการที่สร้างจากเอกสารยืม คืน หรือปรับปรุงการยืมที่เชื่อมโยงถูกต้อง"))
+			frappe.throw(_("Loan warehouses only accept transactions generated from correctly linked loan, return or loan adjustment documents."))
 		loan = frappe.get_doc("Custody Loan", doc.custody_loan)
 		adjustment = frappe.get_doc("Custody Loan Adjustment", doc.custody_loan_source_name)
 		if (
@@ -106,7 +106,7 @@ def is_loan_movement(doc):
 				row.s_warehouse != loan.customer_loan_warehouse or row.t_warehouse for row in doc.get("items")
 			)
 		):
-			frappe.throw(_("รายการปรับปรุงคลังยืมต้องตรงกับเอกสารปรับปรุงการยืมและคลังยืมของลูกค้า"))
+			frappe.throw(_("Loan warehouse adjustments must match the loan adjustment document and the customer's loan warehouse."))
 	return True
 
 
@@ -146,6 +146,7 @@ def validate_document_policy(doc):
 	if doc.doctype in ("Sales Invoice", "Purchase Invoice", "POS Invoice") and not doc.get("update_stock"):
 		return
 	cancellation = doc.docstatus == 2
+	review_only = _is_unchanged_draft_workflow_transition(doc)
 	verified_pos = is_verified_pos_consolidation(doc, check_packed=False)
 	loan = False if cancellation else is_loan_movement(doc)
 	for table in ("items", "packed_items", "supplied_items", "locations", "stock_items"):
@@ -178,9 +179,47 @@ def validate_document_policy(doc):
 				validate_warehouse_operation(
 					warehouse,
 					movement_operation(doc, outgoing, loan, row),
-					outgoing,
+					outgoing and not review_only,
 					cancellation or verified_pos,
 				)
+
+
+def _is_unchanged_draft_workflow_transition(doc):
+	if doc.docstatus != 0 or doc.get("_action") != "save":
+		return False
+	previous = doc.get_doc_before_save()
+	if not previous or getattr(previous, "docstatus", None) != 0:
+		return False
+	from frappe.model.workflow import get_transitions, get_workflow, get_workflow_name, has_approval_access
+
+	if not get_workflow_name(doc.doctype):
+		return False
+	workflow = get_workflow(doc.doctype)
+	state_field = workflow.workflow_state_field
+	if previous.get(state_field) == doc.get(state_field):
+		return False
+
+	# Reviewing a draft does not dispatch stock; any business edit still needs the outgoing role.
+	def values(document):
+		parent_exclusions = {state_field}
+		# Stock controllers refresh the posting time on save unless it was explicitly fixed.
+		if not document.get("set_posting_time"):
+			parent_exclusions.add("posting_time")
+		return [
+			{
+				key: value
+				for key, value in row.get_valid_dict(convert_dates_to_str=True, ignore_virtual=True).items()
+				if key not in {"modified", "modified_by"}
+				and not (row is document and key in parent_exclusions)
+			}
+			for row in [document, *document.get_all_children()]
+		]
+
+	return values(doc) == values(previous) and any(
+		transition.next_state == doc.get(state_field)
+		and has_approval_access(frappe.session.user, previous, transition)
+		for transition in get_transitions(previous, workflow)
+	)
 
 
 def reconciliation_is_outgoing(row):

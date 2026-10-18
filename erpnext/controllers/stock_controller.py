@@ -804,8 +804,6 @@ class StockController(AccountsController):
 
 						sle_rounding_diff += flt(sle.stock_value_difference)
 
-						self.check_expense_account(item_row)
-
 						# expense account/ target_warehouse / source_warehouse
 						if item_row.get("target_warehouse"):
 							_target_wh_inv_dict = self.get_inventory_account_dict(
@@ -813,6 +811,7 @@ class StockController(AccountsController):
 							)
 							expense_account = _target_wh_inv_dict["account"]
 						else:
+							self.check_expense_account(item_row)
 							expense_account = item_row.expense_account
 
 						gl_list.append(
