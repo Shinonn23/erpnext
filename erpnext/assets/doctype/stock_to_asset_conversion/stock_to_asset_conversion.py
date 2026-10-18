@@ -148,6 +148,7 @@ class StocktoAssetConversion(StockController):
 				frappe.throw(_("Row {0}: Target Item must be a non-stock Fixed Asset Item").format(row.idx))
 			if not target.asset_category:
 				frappe.throw(_("Row {0}: Set an Asset Category on target Item {1}").format(row.idx, target.name))
+			self.validate_demo_category(row, target)
 			if flt(row.qty) <= 0 or flt(row.qty) % 1:
 				frappe.throw(_("Row {0}: Qty must be a positive whole number").format(row.idx))
 			warehouse_company = frappe.db.get_value("Warehouse", row.warehouse, "company")
@@ -197,6 +198,20 @@ class StocktoAssetConversion(StockController):
 				(request_item, self.material_request, self.name or ""),
 			)[0][0]
 		)
+
+	def validate_demo_category(self, row, target):
+		"""Demo Assets are told apart by their Asset Category, so a Customer Demo request must produce one."""
+		if not self.material_request:
+			return
+		request_type = frappe.db.get_value("Material Request", self.material_request, "material_request_type")
+		if request_type == "Customer Demo" and not frappe.get_cached_value(
+			"Asset Category", target.asset_category, "is_demo_category"
+		):
+			frappe.throw(
+				_("Row {0}: Target Item {1} must be in an Asset Category marked as a Demo Category for a Customer Demo request").format(
+					row.idx, target.name
+				)
+			)
 
 	def validate_bundle(self, row, item):
 		bundle = frappe.get_doc("Serial and Batch Bundle", row.serial_and_batch_bundle)
@@ -701,7 +716,6 @@ class StocktoAssetConversion(StockController):
 			asset.source_serial_no = output.source_serial_no
 			asset.source_batch_no = output.source_batch_no
 			asset.material_request = self.material_request
-			asset.is_demo_asset = int(bool(self.material_request and frappe.db.get_value("Material Request", self.material_request, "material_request_type") == "Customer Demo"))
 			asset.net_purchase_amount = output.asset_value
 			asset.purchase_date = self.posting_date
 			asset.available_for_use_date = self.posting_date
@@ -811,7 +825,7 @@ def create_immediate_depreciation_entry(asset, posting_date):
 	conversion = frappe.get_doc("Stock to Asset Conversion", asset.stock_to_asset_conversion)
 	if conversion.docstatus != 1 or conversion.company != asset.company:
 		frappe.throw(_("Immediate depreciation requires a submitted Stock to Asset Conversion"))
-	journal_entry.is_system_generated = 1
+	journal_entry.mark_as_system_generated()
 	journal_entry.journal_entry_reason = _("Immediate depreciation from approved conversion {0}").format(conversion.name)
 	journal_entry.posting_date = posting_date
 	journal_entry.accounts[0].debit = amount

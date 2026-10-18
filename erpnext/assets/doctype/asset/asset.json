@@ -8,23 +8,30 @@
  "document_type": "Document",
  "engine": "InnoDB",
  "field_order": [
+  "asset_details_section",
   "naming_series",
   "item_code",
   "item_name",
   "asset_name",
-  "location",
-  "custodian",
-  "department",
+  "asset_serial_number",
+  "asset_category",
+  "asset_type",
+  "asset_owner",
+  "asset_owner_company",
+  "supplier",
+  "customer",
   "image",
   "column_break_3",
   "company",
-  "asset_category",
-  "asset_type",
+  "location",
+  "custodian",
+  "department",
   "maintenance_required",
+  "is_demo_asset",
+  "demo_loan_status",
   "calculate_depreciation",
   "tracking_details_section",
   "source_serial_no",
-  "asset_serial_number",
   "material_request",
   "stock_to_asset_conversion",
   "stock_to_asset_conversion_item",
@@ -32,8 +39,6 @@
   "column_break_ocrc",
   "source_batch_no",
   "source_warehouse",
-  "demo_loan_status",
-  "is_demo_asset",
   "purchase_details_section",
   "purchase_receipt",
   "purchase_receipt_item",
@@ -47,9 +52,6 @@
   "purchase_amount",
   "asset_quantity",
   "additional_asset_cost",
-  "section_break_uiyd",
-  "column_break_bbwr",
-  "column_break_bfkm",
   "total_asset_cost",
   "depreciation_tab",
   "column_break_wqzi",
@@ -69,12 +71,6 @@
   "depreciation_schedule_sb",
   "depreciation_schedule_view",
   "other_info_tab",
-  "asset_owner_section",
-  "asset_owner",
-  "column_break_yeds",
-  "asset_owner_company",
-  "customer",
-  "supplier",
   "insurance_section",
   "policy_number",
   "insurer",
@@ -138,27 +134,29 @@
    "default": "Company",
    "fieldname": "asset_owner",
    "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "Asset Owner",
    "options": "\nCompany\nSupplier\nCustomer"
   },
   {
-   "depends_on": "eval:doc.asset_owner == \"Company\"",
    "fieldname": "asset_owner_company",
    "fieldtype": "Link",
+   "hidden": 1,
    "label": "Asset Owner Company",
    "options": "Company"
   },
   {
-   "depends_on": "eval:doc.asset_owner == \"Supplier\"",
    "fieldname": "supplier",
    "fieldtype": "Link",
+   "hidden": 1,
    "label": "Supplier",
    "options": "Supplier"
   },
   {
-   "depends_on": "eval:doc.asset_owner == \"Customer\"",
    "fieldname": "customer",
    "fieldtype": "Link",
+   "hidden": 1,
    "label": "Customer",
    "options": "Customer"
   },
@@ -249,7 +247,7 @@
   {
    "fieldname": "tracking_details_section",
    "fieldtype": "Section Break",
-   "label": "Tracking Details"
+   "label": "Source & Traceability"
   },
   {
    "fieldname": "asset_serial_number",
@@ -279,13 +277,16 @@
   },
   {
    "default": "0",
+   "fetch_from": "asset_category.is_demo_category",
    "fieldname": "is_demo_asset",
    "fieldtype": "Check",
-   "in_list_view": 1,
-   "label": "Is Demo Asset"
+   "hidden": 1,
+   "label": "Is Demo Asset",
+   "read_only": 1
   },
   {
    "default": "Available",
+   "depends_on": "eval:doc.is_demo_asset",
    "fieldname": "demo_loan_status",
    "fieldtype": "Select",
    "in_list_view": 1,
@@ -649,18 +650,6 @@
    "label": "Insurance"
   },
   {
-   "fieldname": "section_break_uiyd",
-   "fieldtype": "Section Break"
-  },
-  {
-   "fieldname": "column_break_bbwr",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "column_break_bfkm",
-   "fieldtype": "Column Break"
-  },
-  {
    "fetch_from": "item_code.item_name",
    "fetch_if_empty": 1,
    "fieldname": "item_name",
@@ -669,13 +658,9 @@
    "label": "Item Name"
   },
   {
-   "fieldname": "asset_owner_section",
+   "fieldname": "asset_details_section",
    "fieldtype": "Section Break",
-   "label": "Ownership"
-  },
-  {
-   "fieldname": "column_break_yeds",
-   "fieldtype": "Column Break"
+   "label": "Asset Details"
   },
   {
    "fieldname": "column_break_ocrc",
@@ -731,7 +716,7 @@
    "table_fieldname": "assets"
   }
  ],
- "modified": "2026-10-10 01:29:25.044953",
+ "modified": "2026-10-18 16:00:00.000000",
  "modified_by": "Administrator",
  "module": "Assets",
  "name": "Asset",

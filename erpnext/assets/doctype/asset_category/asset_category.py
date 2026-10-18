@@ -24,6 +24,7 @@ class AssetCategory(Document):
 		asset_category_name: DF.Data
 		enable_cwip_accounting: DF.Check
 		finance_books: DF.Table[AssetFinanceBook]
+		is_demo_category: DF.Check
 		non_depreciable_category: DF.Check
 	# end: auto-generated types
 

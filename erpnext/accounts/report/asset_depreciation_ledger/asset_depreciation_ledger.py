@@ -29,6 +29,14 @@ def get_data(filters):
 		["is_cancelled", "=", 0],
 	]
 
+	filters_data.append(
+		[
+			"against_voucher",
+			"not in",
+			frappe.get_all("Asset", filters={"asset_owner": "DKSH"}, pluck="name"),
+		]
+	)
+
 	if filters.get("asset"):
 		filters_data.append(["against_voucher", "=", filters.get("asset")])
 
@@ -71,11 +79,12 @@ def get_data(filters):
 
 	assets = [d.against_voucher for d in gl_entries]
 	assets_details = get_assets_details(assets)
+	opening_depreciation = None
 
 	for d in gl_entries:
 		asset_data = assets_details.get(d.against_voucher)
 		if asset_data:
-			if not asset_data.get("accumulated_depreciation_amount"):
+			if "accumulated_depreciation_amount" not in asset_data:
 				AssetDepreciationSchedule = DocType("Asset Depreciation Schedule")
 				DepreciationSchedule = DocType("Depreciation Schedule")
 				query = (
@@ -89,9 +98,27 @@ def get_data(filters):
 						& (DepreciationSchedule.schedule_date == d.posting_date)
 					)
 				).run(as_dict=True)
-				asset_data.accumulated_depreciation_amount = (
-					query[0]["accumulated_depreciation_amount"] if query else 0
-				)
+				if query:
+					asset_data.accumulated_depreciation_amount = query[0]["accumulated_depreciation_amount"]
+				else:
+					if opening_depreciation is None:
+						opening_filters = [row for row in filters_data if row[0] != "posting_date"]
+						opening_filters.append(["posting_date", "<", filters.get("from_date")])
+						opening_depreciation = {
+							row.against_voucher: row.depreciation
+							for row in frappe.get_all(
+								"GL Entry",
+								filters=opening_filters,
+								or_filters=or_filters_data,
+								fields=["against_voucher", {"SUM": "debit_in_account_currency", "as": "depreciation"}],
+								group_by="against_voucher",
+							)
+						}
+					asset_data.accumulated_depreciation_amount = (
+						flt(asset_data.opening_accumulated_depreciation)
+						+ flt(opening_depreciation.get(d.against_voucher))
+						+ d.debit
+					)
 
 			else:
 				asset_data.accumulated_depreciation_amount += d.debit

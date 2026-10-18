@@ -162,6 +162,8 @@ def get_asset_categories_for_grouped_by_category(filters):
 		.groupby(asset.asset_category)
 	)
 
+	query = query.where(IfNull(asset.asset_owner, "") != "DKSH")
+
 	if filters.get("asset_category"):
 		query = query.where(asset.asset_category == filters.get("asset_category"))
 
@@ -315,6 +317,10 @@ def get_assets_for_grouped_by_category(filters):
 			asset.asset_category == filters.get("asset_category")
 		)
 
+	condition = IfNull(asset.asset_owner, "") != "DKSH"
+	from_gl_entries_query = from_gl_entries_query.where(condition)
+	from_opening_depreciation_query = from_opening_depreciation_query.where(condition)
+
 	if assets_with_finance_book is not None:
 		from_gl_entries_query = from_gl_entries_query.where(
 			IfNull(gl_entry.finance_book, "") == filters.get("finance_book")
@@ -402,7 +408,11 @@ def get_asset_value_adjustment_map_by_category(filters):
 		.where(gl_entry.account == asset_category_account.fixed_asset_account)
 		.where(gl_entry.is_opening == "No")
 		.groupby(asset.asset_category)
-	).run(as_dict=True)
+	)
+
+	asset_value_adjustments = asset_value_adjustments.where(IfNull(asset.asset_owner, "") != "DKSH")
+
+	asset_value_adjustments = asset_value_adjustments.run(as_dict=True)
 
 	category_value_adjustment_map = {}
 
@@ -551,6 +561,8 @@ def get_asset_details_for_grouped_by_category(filters):
 		.where(asset.name.notin(capitalized_before_from_date))
 		.groupby(asset.name)
 	)
+
+	query = query.where(IfNull(asset.asset_owner, "") != "DKSH")
 
 	if filters.get("asset"):
 		query = query.where(asset.name == filters.get("asset"))
@@ -703,6 +715,10 @@ def get_assets_for_grouped_by_asset(filters):
 			asset.name == filters.get("asset")
 		)
 
+	condition = IfNull(asset.asset_owner, "") != "DKSH"
+	from_gl_entries_query = from_gl_entries_query.where(condition)
+	from_opening_depreciation_query = from_opening_depreciation_query.where(condition)
+
 	if assets_with_finance_book is not None:
 		from_gl_entries_query = from_gl_entries_query.where(
 			IfNull(gl_entry.finance_book, "") == filters.get("finance_book")
@@ -790,7 +806,11 @@ def get_asset_value_adjustment_map(filters):
 		.where(gl_entry.account == asset_category_account.fixed_asset_account)
 		.where(gl_entry.is_opening == "No")
 		.groupby(asset.name)
-	).run(as_dict=True)
+	)
+
+	asset_with_value_adjustments = asset_with_value_adjustments.where(IfNull(asset.asset_owner, "") != "DKSH")
+
+	asset_with_value_adjustments = asset_with_value_adjustments.run(as_dict=True)
 
 	asset_value_adjustment_map = {}
 

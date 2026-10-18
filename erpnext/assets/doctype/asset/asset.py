@@ -151,11 +151,20 @@ class Asset(AccountsController):
 		self.total_asset_cost = self.net_purchase_amount + self.additional_asset_cost
 		self.status = self.get_status()
 
+	def _is_zero_value_composite_draft(self):
+		return (
+			self.asset_type == "Composite Asset"
+			and self.docstatus == 0
+			and self.status in (None, "", "Draft", "Work In Progress")
+			and not flt(self.net_purchase_amount)
+			and not flt(self.additional_asset_cost)
+		)
+
 	def create_asset_depreciation_schedule(self):
 		# Maintain this Asset's own schedules as part of its authorized lifecycle.
 		self.set_depr_rate_and_value_after_depreciation()
 
-		if self.split_from or not self.calculate_depreciation:
+		if self.split_from or not self.calculate_depreciation or self._is_zero_value_composite_draft():
 			return
 
 		created_schedules = []
@@ -401,6 +410,12 @@ class Asset(AccountsController):
 		if not self.asset_category:
 			self.asset_category = frappe.get_cached_value("Item", self.item_code, "asset_category")
 
+		if self.docstatus == 0 and self.asset_category:
+			# Demo equipment is grouped by Asset Category; a submitted Asset keeps the value it was created with.
+			self.is_demo_asset = cint(
+				frappe.get_cached_value("Asset Category", self.asset_category, "is_demo_category")
+			)
+
 		if self.item_code and not self.get("finance_books"):
 			finance_books = get_item_details(self.item_code, self.asset_category, self.net_purchase_amount)
 			self.set("finance_books", finance_books)
@@ -612,7 +627,8 @@ class Asset(AccountsController):
 	def set_depreciation_rate(self):
 		for d in self.get("finance_books"):
 			self.validate_asset_finance_books(d)
-			d.rate_of_depreciation = self.get_depreciation_rate(d, on_validate=True)
+			if not self._is_zero_value_composite_draft():
+				d.rate_of_depreciation = self.get_depreciation_rate(d, on_validate=True)
 
 	def validate_asset_finance_books(self, row):
 		row.expected_value_after_useful_life = flt(
@@ -621,7 +637,9 @@ class Asset(AccountsController):
 
 		if flt(row.expected_value_after_useful_life) < 0:
 			frappe.throw(_("Row {0}: Expected Value After Useful Life cannot be negative").format(row.idx))
-		if flt(row.expected_value_after_useful_life) >= flt(self.net_purchase_amount):
+		if flt(row.expected_value_after_useful_life) >= flt(self.net_purchase_amount) and not (
+			self._is_zero_value_composite_draft() and not flt(row.expected_value_after_useful_life)
+		):
 			frappe.throw(
 				_("Row {0}: Expected Value After Useful Life must be less than Net Purchase Amount").format(
 					row.idx
@@ -860,6 +878,10 @@ class Asset(AccountsController):
 
 	@frappe.whitelist()
 	def get_manual_depreciation_entries(self):
+		if not self.asset_category:
+			# No category means no depreciation accounts, so there can be no manual depreciation entries.
+			return []
+
 		(_, _, depreciation_expense_account) = get_depreciation_accounts(self.asset_category, self.company)
 
 		gle = frappe.qb.DocType("GL Entry")

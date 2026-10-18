@@ -55,7 +55,7 @@ class TestStockToAssetConversion(unittest.TestCase):
 		make_journal.assert_called_once_with("Asset")
 		get_doc.assert_called_once_with("Stock to Asset Conversion", "Conversion")
 		self.assertIs(result, journal)
-		self.assertEqual(journal.is_system_generated, 1)
+		journal.mark_as_system_generated.assert_called_once_with()
 		self.assertIn("Conversion", journal.journal_entry_reason)
 		self.assertEqual(journal.posting_date, "2026-10-12")
 		self.assertEqual(journal.accounts[0].debit, 120)

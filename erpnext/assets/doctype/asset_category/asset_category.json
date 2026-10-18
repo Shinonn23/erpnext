@@ -13,6 +13,7 @@
   "depreciation_options",
   "enable_cwip_accounting",
   "non_depreciable_category",
+  "is_demo_category",
   "finance_book_detail",
   "finance_books",
   "section_break_2",
@@ -70,10 +71,17 @@
    "fieldname": "non_depreciable_category",
    "fieldtype": "Check",
    "label": "Non Depreciable Category"
+  },
+  {
+   "default": "0",
+   "description": "Equipment in this category is lent to customers for demos. Customer Demo requests accept only Assets from these categories.",
+   "fieldname": "is_demo_category",
+   "fieldtype": "Check",
+   "label": "Is Demo Category"
   }
  ],
  "links": [],
- "modified": "2026-09-16 11:42:07.000000",
+ "modified": "2026-10-18 16:00:00.000000",
  "modified_by": "Administrator",
  "module": "Assets",
  "name": "Asset Category",

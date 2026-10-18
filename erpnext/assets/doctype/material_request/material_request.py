@@ -366,7 +366,7 @@ class CustomerMaterialRequest(MaterialRequest):
 			if self.has_active_asset_request(row.asset):
 				frappe.throw(_("Row {0}: Asset is already reserved by another active Material Request").format(row.idx))
 			if purpose == "Customer Demo" and not frappe.db.get_value("Asset", row.asset, "is_demo_asset"):
-				frappe.throw(_("Row {0}: Customer Demo requires an Asset marked as a Demo Asset").format(row.idx))
+				frappe.throw(_("Row {0}: Customer Demo requires an Asset from a Demo Asset Category").format(row.idx))
 
 			row.item_code = asset.item_code
 			row.asset_name = frappe.db.get_value("Asset", row.asset, "asset_name")

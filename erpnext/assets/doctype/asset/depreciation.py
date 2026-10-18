@@ -239,6 +239,8 @@ def setup_journal_entry_metadata(je, depr_schedule_doc, depr_series, depr_schedu
 	je.remark = _("Depreciation Entry against {0} worth {1}").format(
 		asset.name, depr_schedule.depreciation_amount
 	)
+	if je.meta.has_field("journal_entry_reason") and not je.get("journal_entry_reason"):
+		je.journal_entry_reason = je.remark
 
 
 def get_credit_and_debit_entry(credit_account, depr_schedule, asset, debit_account, dimensions):

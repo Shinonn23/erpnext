@@ -266,6 +266,10 @@ frappe.ui.form.on("Asset", {
 			return false;
 		}
 
+		if (!frm.doc.asset_category) {
+			return false;
+		}
+
 		if (
 			!frm.doc.purchase_receipt &&
 			!frm.doc.purchase_invoice &&
@@ -453,7 +457,8 @@ frappe.ui.form.on("Asset", {
 	},
 
 	setup_chart_and_depr_schedule_view: async function (frm) {
-		if (frm.doc.finance_books.length > 1) {
+		// Without an Asset Category there are no depreciation accounts to chart (e.g. supplier-owned equipment).
+		if (!frm.doc.asset_category || frm.doc.finance_books.length > 1) {
 			return;
 		}
 
