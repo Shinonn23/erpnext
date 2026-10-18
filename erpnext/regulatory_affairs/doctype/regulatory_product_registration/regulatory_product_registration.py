@@ -12,13 +12,12 @@ from frappe.utils import add_days, date_diff, getdate, now_datetime, today
 from erpnext.regulatory_affairs import coverage
 from erpnext.regulatory_affairs.constants import (
 	ACTIVE,
-	ASSESSMENT_FIELD,
-	ASSESSMENT_REQUIRED,
 	CANCELLED,
 	DRAFT,
 	EXPIRED,
 	EXPIRY_SPECIFIED,
 	IN_FORCE_STATUSES,
+	ITEM_CATEGORY_FIELD,
 	MEDICAL_DEVICE,
 	OTHER_CATEGORY,
 	PRODUCT_CATEGORIES,
@@ -184,12 +183,12 @@ class RegulatoryProductRegistration(Document):
 			items = frappe.get_all(
 				"Item",
 				filters={"name": ("in", list(item_codes))},
-				fields=["name", "item_name", ASSESSMENT_FIELD],
+				fields=["name", "item_name", ITEM_CATEGORY_FIELD],
 			)
 			item_names = {item.name: item for item in items}
 
 		seen = set()
-		unflagged = set()
+		uncategorized = set()
 		for row in rows:
 			row.line_no = row.idx
 			key = (row.item_code, row.effective_from, row.effective_to)
@@ -213,8 +212,8 @@ class RegulatoryProductRegistration(Document):
 			if row.item_code:
 				item = item_names.get(row.item_code)
 				row.item_name_at_registration = item.item_name if item else ""
-				if item and item.get(ASSESSMENT_FIELD) != ASSESSMENT_REQUIRED:
-					unflagged.add(row.item_code)
+				if item and not item.get(ITEM_CATEGORY_FIELD):
+					uncategorized.add(row.item_code)
 
 		active_rows = [row for row in rows if row.item_code and row.line_status == "Active"]
 		for index, row in enumerate(active_rows):
@@ -225,11 +224,11 @@ class RegulatoryProductRegistration(Document):
 							row.idx, other.idx, frappe.bold(row.item_code)
 						)
 					)
-		if unflagged:
+		if uncategorized:
 			frappe.msgprint(
 				_(
-					"Items {0} are not marked Registration Required. Set Thai FDA Assessment Status on the Item so transactions are validated against this registration."
-				).format(", ".join(frappe.bold(item) for item in sorted(unflagged))),
+					"Items {0} have no Product Category. Set it on the Item's Regulatory tab so transactions are validated against this registration."
+				).format(", ".join(frappe.bold(item) for item in sorted(uncategorized))),
 				indicator="orange",
 				alert=True,
 			)

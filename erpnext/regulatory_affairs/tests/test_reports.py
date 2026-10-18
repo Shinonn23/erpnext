@@ -91,16 +91,13 @@ def line(parent, item_code, newcode=None, status="Active", **extra):
 	)
 
 
-REQUIRED, EXEMPT, NOT_ASSESSED = "Registration Required", "Not Required / Exempt", "Not Assessed"
-
-
-def item(name, status=REQUIRED, note=None, **extra):
+def item(name, category="Drug", **extra):
+	"""An Item row; a Product Category makes it regulated, ``None`` leaves it out of scope."""
 	return frappe._dict(
 		{
 			"name": name,
 			"item_name": f"{name} name",
-			"custom_thai_fda_applicability": status,
-			"custom_thai_fda_assessment_note": note,
+			constants.ITEM_CATEGORY_FIELD: category,
 			**extra,
 		}
 	)
@@ -396,7 +393,6 @@ class TestGapDetectors(unittest.TestCase):
 			line("OK", "I-FUTURE", effective_from="2027-01-01"),
 			line("TWIN-1", "I-TWIN"),
 			line("TWIN-2", "I-TWIN"),
-			line("OK", "I-EXEMPT"),
 		]
 		items = [
 			item("I-OK"),
@@ -408,8 +404,7 @@ class TestGapDetectors(unittest.TestCase):
 			item("I-FUTURE"),
 			item("I-NONE", regulatory_owner="item.owner@example.com"),
 			item("I-TWIN"),
-			item("I-EXEMPT", EXEMPT, "ok"),
-			item("I-NA", NOT_ASSESSED),
+			item("I-UNREGULATED", None),
 		]
 		gaps = reporting.detect_required_items_without_coverage(
 			items, registrations, lines, TODAY, default_owner="default@example.com"
@@ -652,48 +647,29 @@ class TestGapDetectors(unittest.TestCase):
 		self.assertEqual((first["registration"], first["owner"]), ("R", "owner@example.com"))
 		self.assertIn("LOA D-EXPIRED-NO of registration R expired on 2026-10-17", first["detail"])
 
-	def test_items_not_assessed(self):
-		items = [
-			item("NA", NOT_ASSESSED, regulatory_product_category="Drug", regulatory_owner="o@example.com"),
-			item("BLANK", None),
-			item("REQ", REQUIRED),
-			item("EXE", EXEMPT, "why"),
-		]
-		gaps = reporting.detect_items_not_assessed(items, "def@example.com")
-		self.assertEqual([gap["subject"] for gap in gaps], ["NA", "BLANK"])
-		self.assertEqual([gap["owner"] for gap in gaps], ["o@example.com", "def@example.com"])
-		self.assertEqual([gap["product_category"] for gap in gaps], ["Drug", None])
-		self.assertEqual({gap["gap_type"] for gap in gaps}, {reporting.GAP_NOT_ASSESSED})
-		self.assertEqual({gap["severity"] for gap in gaps}, {"Info"})
-		self.assertEqual({gap["subject_type"] for gap in gaps}, {"Item"})
-
-	def test_required_gap_ignores_other_statuses_and_carries_the_category(self):
+	def test_required_gap_skips_items_without_a_category_and_carries_it(self):
 		registrations = [registration("OK")]
-		lines = [line("OK", "COVERED")]
+		lines = [line("OK", "COVERED"), line("OK", "COVERED-PLAIN")]
 		items = [
 			item("COVERED"),
-			item("MISSING", regulatory_product_category="Cosmetic"),
-			item("NA", NOT_ASSESSED),
-			item("EXE", EXEMPT, "why"),
+			item("MISSING", "Cosmetic"),
+			item("PLAIN", None),
+			item("BLANK", ""),
+			item("COVERED-PLAIN", None),
 		]
 		gaps = reporting.detect_required_items_without_coverage(items, registrations, lines, TODAY)
 		self.assertEqual(
 			[(gap["subject"], gap["product_category"]) for gap in gaps], [("MISSING", "Cosmetic")]
 		)
 
-	def test_exempt_item_without_reason(self):
-		items = [
-			item("E-BLANK", EXEMPT),
-			item("E-SPACES", EXEMPT, "   ", regulatory_owner="o@example.com"),
-			item("E-OK", EXEMPT, "Class I accessory"),
-			item("REQ", REQUIRED),
-			item("NA", NOT_ASSESSED),
-		]
-		gaps = reporting.detect_exempt_items_without_reason(items, "def@example.com")
-		self.assertEqual([gap["subject"] for gap in gaps], ["E-BLANK", "E-SPACES"])
-		self.assertEqual([gap["owner"] for gap in gaps], ["def@example.com", "o@example.com"])
-		self.assertEqual({gap["gap_type"] for gap in gaps}, {reporting.GAP_EXEMPT_NO_REASON})
-		self.assertEqual({gap["severity"] for gap in gaps}, {"Warning"})
+	def test_uncovered_item_is_a_gap_only_once_it_has_a_category(self):
+		def gaps_for(category):
+			return reporting.detect_required_items_without_coverage([item("I", category)], [], [], TODAY)
+
+		self.assertEqual(gaps_for(None), [])
+		regulated = gaps_for("Medical Device")
+		self.assertEqual([gap["gap_type"] for gap in regulated], [reporting.GAP_REQUIRED_ITEM])
+		self.assertEqual(regulated[0]["product_category"], "Medical Device")
 
 	def test_detectors_never_query_the_database(self):
 		class ForbiddenDatabase:
@@ -718,8 +694,7 @@ class TestGapDetectors(unittest.TestCase):
 class TestGapAssembly(unittest.TestCase):
 	def sample_data(self):
 		return {
-			"items": [item("I-NONE"), item("I-EXEMPT", EXEMPT)],
-			"items_not_assessed": [item("I-NA", NOT_ASSESSED, regulatory_product_category="Food")],
+			"items": [item("I-NONE", "Food"), item("I-PLAIN", None)],
 			"registrations": [
 				registration("R-UNC", basis="Unconfirmed", expiry=None, product_category="Drug")
 			],
@@ -730,41 +705,27 @@ class TestGapAssembly(unittest.TestCase):
 
 	def test_build_gaps_runs_only_selected_types(self):
 		data = self.sample_data()
-		only_exempt = reporting.build_gaps(data, [reporting.GAP_EXEMPT_NO_REASON], TODAY)
-		self.assertEqual([gap["subject"] for gap in only_exempt], ["I-EXEMPT"])
+		only_required = reporting.build_gaps(data, [reporting.GAP_REQUIRED_ITEM], TODAY)
+		self.assertEqual([gap["subject"] for gap in only_required], ["I-NONE"])
 		everything = reporting.build_gaps(data, list(reporting.GAP_SEVERITY), TODAY)
 		self.assertEqual(
 			{gap["gap_type"] for gap in everything},
-			{
-				reporting.GAP_REQUIRED_ITEM,
-				reporting.GAP_NO_CERTIFICATE,
-				reporting.GAP_UNCONFIRMED_EXPIRY,
-				reporting.GAP_EXEMPT_NO_REASON,
-				reporting.GAP_NOT_ASSESSED,
-			},
+			{reporting.GAP_REQUIRED_ITEM, reporting.GAP_NO_CERTIFICATE, reporting.GAP_UNCONFIRMED_EXPIRY},
 		)
 
 	def test_sort_gaps_orders_by_severity_then_gap_type_then_subject(self):
 		gaps = reporting.build_gaps(self.sample_data(), list(reporting.GAP_SEVERITY), TODAY)
 		ordered = reporting.sort_gaps(list(reversed(gaps)))
-		self.assertEqual(
-			[gap["severity"] for gap in ordered], ["Critical", "Critical", "Warning", "Warning", "Info"]
-		)
+		self.assertEqual([gap["severity"] for gap in ordered], ["Critical", "Critical", "Warning"])
 		self.assertEqual(
 			[gap["gap_type"] for gap in ordered],
-			[
-				reporting.GAP_REQUIRED_ITEM,
-				reporting.GAP_NO_CERTIFICATE,
-				reporting.GAP_UNCONFIRMED_EXPIRY,
-				reporting.GAP_EXEMPT_NO_REASON,
-				reporting.GAP_NOT_ASSESSED,
-			],
+			[reporting.GAP_REQUIRED_ITEM, reporting.GAP_NO_CERTIFICATE, reporting.GAP_UNCONFIRMED_EXPIRY],
 		)
 
 	def test_severity_catalogue(self):
 		self.assertEqual(set(reporting.GAP_SEVERITY.values()), {"Critical", "Warning", "Info"})
-		self.assertEqual(len(reporting.GAP_SEVERITY), 9)
-		self.assertEqual(reporting.GAP_SEVERITY[reporting.GAP_NOT_ASSESSED], "Info")
+		self.assertEqual(len(reporting.GAP_SEVERITY), 7)
+		self.assertEqual(reporting.GAP_SEVERITY[reporting.GAP_LINE_WITHOUT_ITEM], "Info")
 		self.assertEqual(set(reporting.GAP_DATASETS), set(reporting.GAP_SEVERITY))
 
 	def test_gap_filters(self):
@@ -775,57 +736,34 @@ class TestGapAssembly(unittest.TestCase):
 			cleaned = reporting.clean_filters(filters)
 			return sorted(gap["subject"] for gap in gaps if reporting.gap_matches_filters(gap, cleaned))
 
-		self.assertEqual(subjects(), ["I-EXEMPT", "I-NA", "I-NONE", "R-UNC", "R-UNC"])
-		self.assertEqual(subjects(severity="Info"), ["I-NA"])
-		self.assertEqual(subjects(gap_type=reporting.GAP_NOT_ASSESSED), ["I-NA"])
-		self.assertEqual(subjects(product_category="Food"), ["I-NA"])
+		self.assertEqual(subjects(), ["I-NONE", "R-UNC", "R-UNC"])
+		self.assertEqual(subjects(severity="Info"), [])
+		self.assertEqual(subjects(gap_type=reporting.GAP_REQUIRED_ITEM), ["I-NONE"])
+		self.assertEqual(subjects(product_category="Food"), ["I-NONE"])
 		self.assertEqual(subjects(product_category="Drug"), ["R-UNC", "R-UNC"])
 		self.assertEqual(subjects(product_category="Cosmetic"), [])
-		self.assertEqual(subjects(severity="Warning"), ["I-EXEMPT", "R-UNC"])
-		self.assertEqual(subjects(gap_type=reporting.GAP_EXEMPT_NO_REASON), ["I-EXEMPT"])
+		self.assertEqual(subjects(severity="Warning"), ["R-UNC"])
+		self.assertEqual(subjects(gap_type=reporting.GAP_UNCONFIRMED_EXPIRY), ["R-UNC"])
 		self.assertEqual(subjects(registration="R-UNC"), ["R-UNC", "R-UNC"])
 		self.assertEqual(subjects(item="I-NONE"), ["I-NONE"])
 		self.assertEqual(subjects(item="I-A"), ["R-UNC", "R-UNC"])
 		self.assertEqual(subjects(responsible_user="owner@example.com"), ["R-UNC", "R-UNC"])
-		self.assertEqual(subjects(responsible_user="def@example.com"), ["I-EXEMPT", "I-NA", "I-NONE"])
+		self.assertEqual(subjects(responsible_user="def@example.com"), ["I-NONE"])
 		self.assertEqual(subjects(responsible_user="nobody@example.com"), [])
 		self.assertEqual(subjects(item="UNKNOWN"), [])
 
-	def test_dataset_selection_loads_unassessed_items_only_for_their_gap(self):
+	def test_default_run_selects_every_gap_type(self):
+		for filters in (frappe._dict(), frappe._dict(gap_type=""), frappe._dict(gap_type=None)):
+			self.assertEqual(reporting.selected_gap_types(filters), list(reporting.GAP_SEVERITY))
 		self.assertEqual(
-			reporting.required_datasets([reporting.GAP_NOT_ASSESSED], frappe._dict()), {"items_not_assessed"}
+			reporting.required_datasets(reporting.selected_gap_types(frappe._dict()), frappe._dict()),
+			set().union(*reporting.GAP_DATASETS.values()),
 		)
-		for gap_type in reporting.GAP_SEVERITY:
-			if gap_type != reporting.GAP_NOT_ASSESSED:
-				self.assertNotIn("items_not_assessed", reporting.GAP_DATASETS[gap_type], gap_type)
-		default = reporting.required_datasets(reporting.selected_gap_types(frappe._dict()), frappe._dict())
-		self.assertNotIn("items_not_assessed", default)
-		explicit = reporting.selected_gap_types(frappe._dict(gap_type=reporting.GAP_NOT_ASSESSED))
-		self.assertEqual(explicit, [reporting.GAP_NOT_ASSESSED])
-
-	def test_default_run_excludes_the_not_assessed_gap_but_it_stays_selectable(self):
-		default = reporting.selected_gap_types(frappe._dict())
-		self.assertNotIn(reporting.GAP_NOT_ASSESSED, default)
-		self.assertEqual(len(default), len(reporting.GAP_SEVERITY) - 1)
-		data = self.sample_data()
-		gaps = reporting.build_gaps(data, default, TODAY)
-		self.assertNotIn(reporting.GAP_NOT_ASSESSED, {gap["gap_type"] for gap in gaps})
-		picked = reporting.build_gaps(data, [reporting.GAP_NOT_ASSESSED], TODAY)
-		self.assertEqual([gap["subject"] for gap in picked], ["I-NA"])
-		cleaned = reporting.clean_filters(
-			{"gap_type": reporting.GAP_NOT_ASSESSED, "product_category": "Food"}
-		)
-		self.assertEqual(
-			[g["subject"] for g in picked if reporting.gap_matches_filters(g, cleaned)], ["I-NA"]
-		)
-		cleaned = reporting.clean_filters(
-			{"gap_type": reporting.GAP_NOT_ASSESSED, "product_category": "Drug"}
-		)
-		self.assertEqual([g for g in picked if reporting.gap_matches_filters(g, cleaned)], [])
 
 	def test_dataset_selection(self):
 		self.assertEqual(
-			reporting.required_datasets([reporting.GAP_EXEMPT_NO_REASON], frappe._dict()), {"items"}
+			reporting.required_datasets([reporting.GAP_REQUIRED_ITEM], frappe._dict()),
+			{"items", "registrations", "lines"},
 		)
 		self.assertEqual(
 			reporting.required_datasets([reporting.GAP_UNCONFIRMED_EXPIRY], frappe._dict(item="I-A")),
@@ -850,40 +788,23 @@ class TestGapLoader(unittest.TestCase):
 			data = reporting.load_gap_data(datasets, TODAY)
 		return data, get_all
 
-	def test_classified_items_are_fetched_with_filters_and_only_needed_columns(self):
+	def test_regulated_items_are_fetched_with_filters_and_only_needed_columns(self):
 		data, get_all = self.load({"items"})
 		self.assertEqual(data["items"], [])
-		self.assertNotIn("items_not_assessed", data)
 		get_all.assert_called_once()
 		self.assertEqual(get_all.call_args.args[0], "Item")
 		kwargs = get_all.call_args.kwargs
+		self.assertEqual(kwargs["filters"], {"disabled": 0, "regulatory_product_category": ["is", "set"]})
 		self.assertEqual(
-			kwargs["filters"],
-			{"disabled": 0, "custom_thai_fda_applicability": ["in", [REQUIRED, EXEMPT]]},
+			kwargs["fields"], ["name", "item_name", "regulatory_product_category", "regulatory_owner"]
 		)
-		self.assertEqual(
-			set(kwargs["fields"]),
-			{
-				"name",
-				"item_name",
-				"custom_thai_fda_applicability",
-				"custom_thai_fda_assessment_note",
-				"regulatory_product_category",
-				"regulatory_owner",
-			},
-		)
+		self.assertEqual(kwargs["limit_page_length"], 0)
+		self.assertNotIn("or_filters", kwargs)
 
-	def test_unassessed_items_are_loaded_only_when_that_dataset_is_requested(self):
-		data, get_all = self.load({"items_not_assessed"})
-		self.assertIn("items_not_assessed", data)
-		self.assertNotIn("items", data)
-		kwargs = get_all.call_args.kwargs
-		self.assertEqual(kwargs["filters"], {"disabled": 0})
-		self.assertIn(["custom_thai_fda_applicability", "is", "not set"], kwargs["or_filters"])
-		self.assertIn(["custom_thai_fda_applicability", "=", NOT_ASSESSED], kwargs["or_filters"])
-		none_loaded, get_all = self.load({"documents"})
+	def test_items_are_loaded_only_when_that_dataset_is_requested(self):
+		data, get_all = self.load({"documents"})
 		get_all.assert_not_called()
-		self.assertNotIn("items_not_assessed", none_loaded)
+		self.assertNotIn("items", data)
 
 
 class TestRenewalWorkbench(unittest.TestCase):
@@ -1266,8 +1187,7 @@ class TestExecuteWiring(unittest.TestCase):
 
 	def test_compliance_gap_pipeline(self):
 		data = {
-			"items": [item("I-NONE"), item("I-EXEMPT", EXEMPT)],
-			"items_not_assessed": [item("I-NA", NOT_ASSESSED, regulatory_product_category="Food")],
+			"items": [item("I-NONE", "Food"), item("I-PLAIN", None)],
 			"registrations": [
 				registration("R-UNC", basis="Unconfirmed", expiry=None, product_category="Drug")
 			],
@@ -1286,19 +1206,20 @@ class TestExecuteWiring(unittest.TestCase):
 				("Critical", reporting.GAP_REQUIRED_ITEM, "I-NONE"),
 				("Critical", reporting.GAP_NO_CERTIFICATE, "R-UNC"),
 				("Warning", reporting.GAP_UNCONFIRMED_EXPIRY, "R-UNC"),
-				("Warning", reporting.GAP_EXEMPT_NO_REASON, "I-EXEMPT"),
 			],
 		)
 		self.assertEqual([row["gap_type"] for row in filtered], [reporting.GAP_UNCONFIRMED_EXPIRY])
 		with patch.object(reporting, "load_gap_data", return_value=data) as load_gap_data:
-			_columns, worklist = self.run_with_today(
-				compliance_gap, {"gap_type": reporting.GAP_NOT_ASSESSED, "product_category": "Food"}
+			_columns, food = self.run_with_today(
+				compliance_gap, {"gap_type": reporting.GAP_REQUIRED_ITEM, "product_category": "Food"}
 			)
-			self.assertEqual(load_gap_data.call_args.args[0], {"items_not_assessed"})
+			self.assertEqual(
+				load_gap_data.call_args.args[0], reporting.GAP_DATASETS[reporting.GAP_REQUIRED_ITEM]
+			)
 			_columns, other = self.run_with_today(
-				compliance_gap, {"gap_type": reporting.GAP_NOT_ASSESSED, "product_category": "Drug"}
+				compliance_gap, {"gap_type": reporting.GAP_REQUIRED_ITEM, "product_category": "Drug"}
 			)
-		self.assertEqual([row["subject"] for row in worklist], ["I-NA"])
+		self.assertEqual([row["subject"] for row in food], ["I-NONE"])
 		self.assertEqual(other, [])
 
 	def test_renewal_workbench_pipeline(self):

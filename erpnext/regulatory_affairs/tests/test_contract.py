@@ -13,8 +13,6 @@ from erpnext import hooks
 from erpnext.regulatory_affairs import constants
 from erpnext.regulatory_affairs.custom_fields import CUSTOM_FIELDS, SNAPSHOT_FIELDNAMES
 
-ITEM_ASSESSMENT_FIELDNAMES = (constants.ASSESSMENT_FIELD, constants.ASSESSMENT_NOTE_FIELD)
-
 APP = Path(__file__).resolve().parents[2]  # .../erpnext (the python package directory)
 RA = APP / "regulatory_affairs"
 KNOWN_ROLES = {
@@ -168,54 +166,39 @@ class TestCustomFields(unittest.TestCase):
 			native, combined = simulate_layout(doctype)
 			self.assertEqual([name for name in combined if name in set(native)], native, doctype)
 			custom = [spec["fieldname"] for spec in CUSTOM_FIELDS[doctype]]
-			if doctype == "Item":
-				# The assessment pair is a separate chain anchored on the native `item_group`.
-				self.assertEqual(custom[:2], list(ITEM_ASSESSMENT_FIELDNAMES))
-				self.assertEqual(
-					combined[combined.index("item_group") + 1 :][:2],
-					list(ITEM_ASSESSMENT_FIELDNAMES),
-					"Item: the assessment pair does not follow item_group",
-				)
-				custom = custom[2:]
 			start = combined.index(custom[0])
 			self.assertEqual(
 				combined[start : start + len(custom)], custom, f"{doctype}: custom block is not contiguous"
 			)
 
-	def test_item_classification_fields_replace_the_retired_device_pair(self):
+	def test_item_product_category_replaces_the_retired_classification_fields(self):
 		specs = {spec["fieldname"]: spec for spec in CUSTOM_FIELDS["Item"]}
 		retired_fields = (
 			"is_medical_device",
 			"regulatory_registration_requirement",
 			"regulatory_exemption_reason",
+			# The Thai FDA Assessment Status pair: the Product Category alone now classifies an Item.
+			"custom_thai_fda_applicability",
+			"custom_thai_fda_assessment_note",
 		)
 		for retired in retired_fields:
 			self.assertNotIn(retired, specs)
-		status = specs[constants.ASSESSMENT_FIELD]
-		self.assertEqual(status["fieldtype"], "Select")
-		self.assertEqual(status["label"], "Thai FDA Assessment Status")
-		self.assertEqual(status["options"].split("\n"), list(constants.ASSESSMENT_STATUSES))
-		self.assertEqual(status["default"], constants.ASSESSMENT_NOT_ASSESSED)
-		self.assertEqual((status["in_list_view"], status["in_standard_filter"]), (1, 1))
-		self.assertEqual(status["insert_after"], "item_group")
-		note = specs[constants.ASSESSMENT_NOTE_FIELD]
-		self.assertEqual(note["fieldtype"], "Small Text")
-		self.assertEqual(note["label"], "Thai FDA Assessment Reason / Notes")
-		self.assertEqual(note["insert_after"], constants.ASSESSMENT_FIELD)
-		for key in ("depends_on", "mandatory_depends_on"):
-			self.assertIn("Not Required / Exempt", note[key])
-		category = specs["regulatory_product_category"]
+		category = specs[constants.ITEM_CATEGORY_FIELD]
+		self.assertEqual(category["fieldtype"], "Select")
 		self.assertEqual(category["options"].split("\n"), ["", *constants.PRODUCT_CATEGORIES])
+		self.assertEqual(category["insert_after"], "regulatory_tab")
+		self.assertNotIn("default", category)
+		self.assertIn("only Items with a Product Category are validated", category["description"])
 		self.assertIn("Other", specs["regulatory_other_category"]["depends_on"])
 		self.assertEqual(specs["regulatory_other_category"]["fieldtype"], "Data")
 		self.assertIn("Medical Device", specs["medical_device_category"]["depends_on"])
 		self.assertNotIn("depends_on", specs["regulatory_owner"])
-		self.assertIn("Registration Required", specs["regulatory_current_section"]["depends_on"])
+		self.assertEqual(
+			specs["regulatory_current_section"]["depends_on"], "eval:doc.regulatory_product_category"
+		)
 
 	def test_regulatory_tab_chain_starts_from_a_native_last_field(self):
-		chain = [
-			spec for spec in CUSTOM_FIELDS["Item"] if spec["fieldname"] not in ITEM_ASSESSMENT_FIELDNAMES
-		]
+		chain = CUSTOM_FIELDS["Item"]
 		known = {spec["fieldname"] for spec in chain}
 		self.assertEqual(chain[0]["insert_after"], "quality_inspection_template")
 		for spec in chain[1:]:

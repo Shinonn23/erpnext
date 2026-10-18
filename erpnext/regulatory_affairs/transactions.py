@@ -11,11 +11,10 @@ from frappe.utils import escape_html, getdate, today
 
 from erpnext.regulatory_affairs.constants import (
 	ACTIVE,
-	ASSESSMENT_FIELD,
-	ASSESSMENT_REQUIRED,
 	EXPIRED,
 	EXPIRY_SPECIFIED,
 	IN_FORCE_STATUSES,
+	ITEM_CATEGORY_FIELD,
 	OUTBOUND_DOCTYPES,
 	REGULATORY_OVERRIDE,
 	REVOKED,
@@ -212,7 +211,7 @@ def is_delivery_linked(doctype, row):
 
 
 def get_items_in_scope(item_codes):
-	"""Item codes whose assessment status is Registration Required, from one query for the document."""
+	"""Item codes that have a Product Category (regulated Items), from one query for the document."""
 	item_codes = sorted({item_code for item_code in item_codes if item_code})
 	if not item_codes:
 		return set()
@@ -221,7 +220,7 @@ def get_items_in_scope(item_codes):
 			"Item",
 			filters={
 				"name": ("in", item_codes),
-				ASSESSMENT_FIELD: ASSESSMENT_REQUIRED,
+				ITEM_CATEGORY_FIELD: ("is", "set"),
 			},
 			pluck="name",
 		)

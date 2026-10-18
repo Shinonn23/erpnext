@@ -354,7 +354,7 @@ class TestRegistrationCategory(unittest.TestCase):
 		self.assertEqual(fields["legacy_renewal_history"]["options"], "Regulatory Renewal History")
 		self.assertEqual(fields["legacy_thai_fda_records"]["read_only"], 1)
 
-	def test_registered_rows_warn_for_items_not_marked_required(self):
+	def test_registered_rows_warn_for_items_without_a_product_category(self):
 		rows = [
 			frappe._dict(
 				idx=i + 1,
@@ -365,27 +365,29 @@ class TestRegistrationCategory(unittest.TestCase):
 				newcode="N",
 				identifier=None,
 			)
-			for i, code in enumerate(("REQ", "EXEMPT"))
+			for i, code in enumerate(("REG", "UNCAT"))
 		]
 		doc = bare(registration_module.RegulatoryProductRegistration, registered_products=rows)
 		doc.get = lambda key, default=None: getattr(doc, key, default)
 		items = [
-			frappe._dict(name="REQ", item_name="Req", custom_thai_fda_applicability="Registration Required"),
-			frappe._dict(
-				name="EXEMPT", item_name="Ex", custom_thai_fda_applicability="Not Required / Exempt"
-			),
+			frappe._dict(name="REG", item_name="Reg", regulatory_product_category="Medical Device"),
+			frappe._dict(name="UNCAT", item_name="Uncat", regulatory_product_category=None),
 		]
 		with (
-			patch.object(frappe, "get_all", return_value=items),
+			patch.object(frappe, "get_all", return_value=items) as get_all,
 			patch.object(frappe, "msgprint") as msgprint,
 			patch.object(registration_module, "get_other_lines", return_value=[]),
 		):
 			doc._validate_registered_product_rows()
+		self.assertEqual(
+			get_all.call_args.kwargs["fields"], ["name", "item_name", "regulatory_product_category"]
+		)
 		msgprint.assert_called_once()
 		message = msgprint.call_args.args[0]
-		self.assertIn("EXEMPT", message)
-		self.assertNotIn("REQ</b>", message)
-		self.assertIn("Registration Required", message)
+		self.assertIn(frappe.bold("UNCAT"), message)
+		self.assertNotIn(frappe.bold("REG"), message)
+		self.assertIn("have no Product Category", message)
+		self.assertEqual(msgprint.call_args.kwargs, {"indicator": "orange", "alert": True})
 
 
 class TestSettingsRecipients(unittest.TestCase):

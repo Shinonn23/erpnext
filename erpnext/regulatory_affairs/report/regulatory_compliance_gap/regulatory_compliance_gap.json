@@ -9,7 +9,7 @@
    "fieldname": "gap_type",
    "fieldtype": "Select",
    "label": "Gap Type",
-   "options": "\nRequired Item Without Coverage\nActive Registration Without Valid Certificate\nExpired Registration With Stock\nEstablishment Not Active\nUnconfirmed Expiry\nSupporting Document Expired\nExempt Item Without Reason\nMapped Line Without Item\nItem Not Assessed"
+   "options": "\nRequired Item Without Coverage\nActive Registration Without Valid Certificate\nExpired Registration With Stock\nEstablishment Not Active\nUnconfirmed Expiry\nSupporting Document Expired\nMapped Line Without Item"
   },
   {
    "fieldname": "severity",
@@ -43,7 +43,7 @@
   }
  ],
  "is_standard": "Yes",
- "modified": "2026-10-18 12:00:00.000000",
+ "modified": "2026-10-18 18:29:14.000000",
  "modified_by": "Administrator",
  "module": "Regulatory Affairs",
  "name": "Regulatory Compliance Gap",

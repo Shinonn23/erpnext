@@ -44,7 +44,12 @@ REGULATORY_DOCUMENT = "Regulatory Document"
 CONFLICT_TITLE = "Thai FDA to RA migration conflicts"
 EXECUTE_PATH = "erpnext.patches.v16_0.merge_thai_fda_into_regulatory_affairs.execute"
 SETTINGS_MARKER = "regulatory_legacy_settings_merged"
+CATEGORIES_MARKER = "regulatory_legacy_item_categories_copied"
 UNSPECIFIED_CATEGORY = "Not specified (legacy)"
+# The retired Item assessment status (`remove_thai_fda_assessment_status` deletes its Custom Field; the
+# column and its values stay in `tabItem`).
+LEGACY_ASSESSMENT_FIELD = "custom_thai_fda_applicability"
+LEGACY_EXEMPT = "Not Required / Exempt"
 
 STATUS_MAP = {
 	"Pending Approval": "Draft",
@@ -96,6 +101,12 @@ def translate(doctype: str, fieldname: str, value: Any) -> str:
 	"""Return the English option value for a legacy select value (English values pass through)."""
 	text = clean(value)
 	return SELECT_TRANSLATIONS.get(doctype, {}).get(fieldname, {}).get(text, text)
+
+
+def legacy_assessment_values(status: str) -> tuple[str, ...]:
+	"""A legacy Item assessment status in English and in its Thai spelling (for SQL `in`)."""
+	translations = SELECT_TRANSLATIONS["Item"][LEGACY_ASSESSMENT_FIELD]
+	return (status, *sorted(thai for thai, english in translations.items() if english == status))
 
 
 def is_placeholder(row: dict) -> bool:
@@ -734,9 +745,13 @@ def run(dry_run: bool = False) -> dict:
 		for warning in result["warnings"]
 	)
 
-	# Recomputed on every run from the merged registrations, so a missed copy is repaired by a re-run.
+	# Until a copy succeeds every merged registration counts, so a re-run repairs a failed copy. After that
+	# only the registrations this run created count: a category makes an Item regulated, and a re-run must
+	# not give one back to an Item whose category was cleared on purpose.
 	try:
-		apply_item_categories(choose_item_categories(read_merged_lines()))
+		numbers = set(result["created"]) if frappe.db.get_default(CATEGORIES_MARKER) else None
+		apply_item_categories(choose_item_categories(read_merged_lines(numbers)))
+		frappe.db.set_default(CATEGORIES_MARKER, "1")
 	except Exception:
 		frappe.db.rollback()
 		message = f"Item category copy failed: {frappe.get_traceback(with_context=False)}"
@@ -811,11 +826,17 @@ def restamp(doctype: str, name: str, stamps: dict) -> None:
 		frappe.db.set_value(doctype, name, values, update_modified=False)
 
 
-def read_merged_lines() -> list[dict]:
-	"""Item lines of the merged registrations (those listing legacy records) with their category."""
+def read_merged_lines(numbers: set[str] | None = None) -> list[dict]:
+	"""Item lines of the merged registrations (those listing legacy records) with their category.
+
+	`numbers` limits them to the registrations with those registration numbers; None reads all of them.
+	"""
 	line_table = "Regulatory Registered Product"
+	if numbers is not None and not numbers:
+		return []
 	if not all(frappe.db.table_exists(table) for table in (PRODUCT_REGISTRATION, line_table)):
 		return []
+	number_filter = "" if numbers is None else " and registration.registration_number in %(numbers)s"
 	return (
 		frappe.db.sql(
 			f"""select registration.name, registration.product_category, registration.other_category,
@@ -824,16 +845,34 @@ def read_merged_lines() -> list[dict]:
 			inner join `tab{line_table}` line
 				on line.parent = registration.name and line.parenttype = %(parenttype)s
 			where ifnull(registration.legacy_thai_fda_records, '') != ''
-				and ifnull(line.item_code, '') != ''""",
-			{"parenttype": PRODUCT_REGISTRATION},
+				and ifnull(line.item_code, '') != ''{number_filter}""",
+			{"parenttype": PRODUCT_REGISTRATION, "numbers": tuple(sorted(numbers or ()))},
 			as_dict=True,
 		)
 		or []
 	)
 
 
+def read_legacy_exempt_items(item_codes: set[str]) -> set[str]:
+	"""The Items among `item_codes` whose legacy assessment says Not Required / Exempt."""
+	if not item_codes or not frappe.db.has_column("Item", LEGACY_ASSESSMENT_FIELD):
+		return set()
+	rows = frappe.db.sql(
+		f"select name from `tabItem` where name in %(items)s and `{LEGACY_ASSESSMENT_FIELD}` in %(exempt)s",
+		{"items": tuple(item_codes), "exempt": legacy_assessment_values(LEGACY_EXEMPT)},
+		as_dict=True,
+	)
+	return {row["name"] for row in rows}
+
+
 def apply_item_categories(categories: dict[str, tuple[str, str | None]]) -> None:
-	"""Copy the category to Items that have none, then refresh the stored coverage of every mapped Item."""
+	"""Copy the category to Items that have none, then refresh the stored coverage of those Items.
+
+	A Product Category makes an Item regulated (checked on transactions), so Items the legacy assessment
+	marked Not Required / Exempt get none.
+	"""
+	exempt = read_legacy_exempt_items(set(categories))
+	categories = {item: value for item, value in categories.items() if item not in exempt}
 	if not categories:
 		return
 	for item, (category, other_category) in categories.items():

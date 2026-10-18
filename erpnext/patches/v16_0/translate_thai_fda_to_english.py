@@ -65,7 +65,8 @@ def execute():
 	"""Translate Thai select values in place.
 
 	The legacy Thai FDA DocTypes are retired (their tables are only read by the merge patch), so this only
-	updates rows of tables that still exist; the Item field definition is owned by Regulatory Affairs.
+	updates rows of tables that still exist. The Item assessment values are read by the merge patch and
+	by `remove_thai_fda_assessment_status`, which run next.
 	"""
 	for doctype, fields in SELECT_TRANSLATIONS.items():
 		if not frappe.db.table_exists(doctype):

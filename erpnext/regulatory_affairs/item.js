@@ -3,7 +3,7 @@
 
 frappe.ui.form.on("Item", {
 	refresh(frm) {
-		if (frm.is_new() || frm.doc.custom_thai_fda_applicability !== "Registration Required") return;
+		if (frm.is_new() || !frm.doc.regulatory_product_category) return;
 
 		frm.add_custom_button(
 			__("Coverage Matrix"),

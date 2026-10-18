@@ -528,6 +528,7 @@ erpnext.patches.v16_0.restore_budget_dimensions
 erpnext.patches.v16_0.add_stock_count_expiry_and_print
 erpnext.patches.v16_0.translate_thai_fda_to_english
 erpnext.patches.v16_0.merge_thai_fda_into_regulatory_affairs
+erpnext.patches.v16_0.remove_thai_fda_assessment_status
 erpnext.patches.v16_0.remove_thai_tax_workspace
 erpnext.patches.v16_0.remove_standard_dimension_custom_fields
 erpnext.patches.v16_0.sync_standard_budget_dimensions

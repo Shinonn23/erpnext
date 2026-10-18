@@ -335,6 +335,72 @@ class TestItemCategories(unittest.TestCase):
 		with patch.object(merge.frappe, "db", db):
 			self.assertEqual(merge.read_merged_lines(), [])
 
+	def test_read_merged_lines_can_be_limited_to_registration_numbers(self):
+		db = MagicMock()
+		db.table_exists.return_value = True
+		db.sql.return_value = [{"item_code": "ITEM-1"}]
+		with patch.object(merge.frappe, "db", db):
+			self.assertEqual(merge.read_merged_lines({"FDA-2", "FDA-1"}), [{"item_code": "ITEM-1"}])
+			query, params = db.sql.call_args.args
+			self.assertIn("registration.registration_number in %(numbers)s", query)
+			self.assertEqual(params["numbers"], ("FDA-1", "FDA-2"))
+			merge.read_merged_lines()
+			self.assertNotIn("%(numbers)s", db.sql.call_args.args[0])
+			db.sql.reset_mock()
+			self.assertEqual(merge.read_merged_lines(set()), [])
+		db.sql.assert_not_called()
+
+	def test_legacy_assessment_values_include_the_thai_spelling(self):
+		self.assertEqual(
+			merge.legacy_assessment_values("Not Required / Exempt"),
+			("Not Required / Exempt", "ไม่ต้องมี/ได้รับยกเว้น"),
+		)
+		self.assertEqual(
+			merge.legacy_assessment_values("Registration Required"), ("Registration Required", "ต้องมีทะเบียน")
+		)
+
+	def test_read_legacy_exempt_items_queries_only_the_given_items(self):
+		db = MagicMock()
+		db.has_column.return_value = True
+		db.sql.return_value = [{"name": "ITEM-2"}]
+		with patch.object(merge.frappe, "db", db):
+			self.assertEqual(merge.read_legacy_exempt_items({"ITEM-1", "ITEM-2"}), {"ITEM-2"})
+		query, params = db.sql.call_args.args
+		self.assertIn("`custom_thai_fda_applicability` in %(exempt)s", query)
+		self.assertEqual(set(params["items"]), {"ITEM-1", "ITEM-2"})
+		self.assertEqual(params["exempt"], merge.legacy_assessment_values("Not Required / Exempt"))
+
+	def test_read_legacy_exempt_items_without_the_column_or_items_reads_nothing(self):
+		db = MagicMock()
+		db.has_column.return_value = False
+		with patch.object(merge.frappe, "db", db):
+			self.assertEqual(merge.read_legacy_exempt_items({"ITEM-1"}), set())
+			self.assertEqual(merge.read_legacy_exempt_items(set()), set())
+		db.sql.assert_not_called()
+
+	def apply(self, categories, exempt):
+		db = MagicMock()
+		with (
+			patch.object(merge, "read_legacy_exempt_items", return_value=exempt) as read_exempt,
+			patch.object(merge.frappe, "db", db),
+			patch.object(coverage, "refresh_item_coverage_for_items") as refresh,
+		):
+			merge.apply_item_categories(categories)
+		return read_exempt, db, refresh
+
+	def test_legacy_exempt_items_get_no_category(self):
+		read_exempt, db, refresh = self.apply(
+			{"ITEM-1": ("Food", None), "ITEM-2": ("Drug", None)}, {"ITEM-2"}
+		)
+		read_exempt.assert_called_once_with({"ITEM-1", "ITEM-2"})
+		self.assertEqual([call.args[1] for call in db.sql.call_args_list], [("Food", None, "ITEM-1")])
+		refresh.assert_called_once_with({"ITEM-1"})
+
+	def test_only_exempt_items_write_nothing(self):
+		_, db, refresh = self.apply({"ITEM-2": ("Drug", None)}, {"ITEM-2"})
+		db.sql.assert_not_called()
+		refresh.assert_not_called()
+
 
 class TestOverlapResolution(unittest.TestCase):
 	def plan(self, rows, existing_lines=None):
@@ -678,8 +744,11 @@ class TestRun(unittest.TestCase):
 
 		return record if effect is not None or order is not None else None
 
-	def make_db(self, order):
+	def make_db(self, order, categories_copied=False):
 		db = MagicMock()
+		db.get_default.side_effect = lambda key: (
+			"1" if categories_copied and key == merge.CATEGORIES_MARKER else None
+		)
 		if order is not None:
 			db.commit.side_effect = lambda: order.append("commit")
 			db.rollback.side_effect = lambda: order.append("rollback")
@@ -697,6 +766,7 @@ class TestRun(unittest.TestCase):
 		merged_lines=None,
 		categories_effect=None,
 		order=None,
+		categories_copied=False,
 	):
 		if merged_lines is None:
 			merged_lines = [
@@ -718,7 +788,7 @@ class TestRun(unittest.TestCase):
 			patch.object(merge, "read_existing_numbers", return_value={}),
 			patch.object(merge, "read_existing_items", return_value={"ITEM-1"}),
 			patch.object(merge, "read_existing_lines", return_value=[]),
-			patch.object(merge, "read_merged_lines", return_value=merged_lines),
+			patch.object(merge, "read_merged_lines", return_value=merged_lines) as read_merged_lines,
 			patch.object(merge, "insert_group", side_effect=insert_effect) as insert_group,
 			patch.object(
 				merge,
@@ -732,7 +802,7 @@ class TestRun(unittest.TestCase):
 				return_value=settings_result or [],
 			) as merge_settings,
 			patch("erpnext.regulatory_affairs.install.ensure_configuration") as ensure_configuration,
-			patch.object(merge.frappe, "db", self.make_db(order)) as db,
+			patch.object(merge.frappe, "db", self.make_db(order, categories_copied)) as db,
 			patch.object(merge.frappe, "log_error") as log_error,
 			patch.object(merge.frappe, "get_traceback", return_value="Traceback\nValueError: boom"),
 			patch.object(merge, "today", return_value=TODAY),
@@ -742,6 +812,7 @@ class TestRun(unittest.TestCase):
 		self.printed = "\n".join(str(call.args[0]) for call in printed.call_args_list if call.args)
 		return result, {
 			"insert_group": insert_group,
+			"read_merged_lines": read_merged_lines,
 			"apply_item_categories": apply_item_categories,
 			"merge_settings": merge_settings,
 			"ensure_configuration": ensure_configuration,
@@ -885,10 +956,26 @@ class TestRun(unittest.TestCase):
 		return result, {"db": db, "log_error": log_error}
 
 	def test_rerun_repairs_a_missed_category_copy(self):
-		# every group is already merged (skip_merged) but the categories are still applied from the database
+		# every group is already merged (skip_merged) but no copy succeeded yet: all merged registrations count
 		result, mocks = self.run_patch(dry_run=False, merged={"T-1"})
 		self.assertEqual(result["created"], [])
+		mocks["read_merged_lines"].assert_called_once_with(None)
 		mocks["apply_item_categories"].assert_called_once_with({"ITEM-1": ("Food", None)})
+		mocks["db"].set_default.assert_called_once_with(merge.CATEGORIES_MARKER, "1")
+
+	def test_after_a_successful_copy_only_new_registrations_give_categories(self):
+		# an Item whose category was cleared after the first run must not be categorised (regulated) again
+		result, mocks = self.run_patch(dry_run=False, categories_copied=True)
+		self.assertEqual(result["created"], ["FDA-123"])
+		mocks["read_merged_lines"].assert_called_once_with({"FDA-123"})
+		_, mocks = self.run_patch(dry_run=False, merged={"T-1"}, categories_copied=True)
+		mocks["read_merged_lines"].assert_called_once_with(set())
+
+	def test_a_failed_category_copy_does_not_set_the_marker(self):
+		_, mocks = self.run_patch(dry_run=False, categories_effect=RuntimeError("x"))
+		self.assertNotIn(
+			merge.CATEGORIES_MARKER, [call.args[0] for call in mocks["db"].set_default.call_args_list]
+		)
 
 	def test_settings_failure_does_not_lose_the_categories(self):
 		order = []

@@ -2,17 +2,10 @@
 
 Layout rules (see the DKSH notes on `insert_after`): every chain starts from a native field that is the
 LAST field of its tab or row form, so no native section is swallowed by a new Section/Tab Break.
-The two Item assessment fields are the one exception to the "Regulatory tab chain": they are plain fields
-anchored on `item_group` (native, in the Item header) and do not start a Tab/Section Break.
 """
 
 from erpnext.regulatory_affairs.constants import (
-	ASSESSMENT_EXEMPT,
-	ASSESSMENT_FIELD,
-	ASSESSMENT_NOT_ASSESSED,
-	ASSESSMENT_NOTE_FIELD,
-	ASSESSMENT_REQUIRED,
-	ASSESSMENT_STATUSES,
+	ITEM_CATEGORY_FIELD,
 	MEDICAL_DEVICE,
 	MODULE,
 	OTHER_CATEGORY,
@@ -60,43 +53,23 @@ def _field(fieldname, fieldtype, label, insert_after, **kwargs):
 
 def item_fields():
 	return [
-		# The classification pair is not part of the Regulatory tab chain: it sits in the Item header
-		# next to the Item Group, exactly where the original Thai FDA assessment fields were placed.
-		_field(
-			ASSESSMENT_FIELD,
-			"Select",
-			"Thai FDA Assessment Status",
-			"item_group",
-			options="\n".join(ASSESSMENT_STATUSES),
-			default=ASSESSMENT_NOT_ASSESSED,
-			in_standard_filter=1,
-			in_list_view=1,
-			description="Registration Required: transactions are validated against FDA registrations.",
-		),
-		_field(
-			ASSESSMENT_NOTE_FIELD,
-			"Small Text",
-			"Thai FDA Assessment Reason / Notes",
-			ASSESSMENT_FIELD,
-			depends_on=f"eval:doc.{ASSESSMENT_FIELD} == '{ASSESSMENT_EXEMPT}'",
-			mandatory_depends_on=f"eval:doc.{ASSESSMENT_FIELD} == '{ASSESSMENT_EXEMPT}'",
-		),
 		_field("regulatory_tab", "Tab Break", "Regulatory", "quality_inspection_template"),
 		_field(
-			"regulatory_product_category",
+			ITEM_CATEGORY_FIELD,
 			"Select",
 			"Product Category",
 			"regulatory_tab",
 			options="\n" + "\n".join(PRODUCT_CATEGORIES),
 			in_standard_filter=1,
-			description="The Thai FDA product group of this Item.",
+			description="The Thai FDA product group of this Item. Leave it blank for an Item that needs no "
+			"FDA registration: only Items with a Product Category are validated on transactions.",
 		),
 		_field(
 			"regulatory_other_category",
 			"Data",
 			"Other Category",
-			"regulatory_product_category",
-			depends_on=f"eval:doc.regulatory_product_category == '{OTHER_CATEGORY}'",
+			ITEM_CATEGORY_FIELD,
+			depends_on=f"eval:doc.{ITEM_CATEGORY_FIELD} == '{OTHER_CATEGORY}'",
 		),
 		_field(
 			"medical_device_category",
@@ -104,7 +77,7 @@ def item_fields():
 			"Medical Device Category",
 			"regulatory_other_category",
 			options="\nIVD\nNon-IVD\nOther",
-			depends_on=f"eval:doc.regulatory_product_category == '{MEDICAL_DEVICE}'",
+			depends_on=f"eval:doc.{ITEM_CATEGORY_FIELD} == '{MEDICAL_DEVICE}'",
 		),
 		_field(
 			"regulatory_owner",
@@ -118,7 +91,7 @@ def item_fields():
 			"Section Break",
 			"Current Regulatory Coverage",
 			"regulatory_owner",
-			depends_on=f"eval:doc.{ASSESSMENT_FIELD} == '{ASSESSMENT_REQUIRED}'",
+			depends_on=f"eval:doc.{ITEM_CATEGORY_FIELD}",
 		),
 		_field(
 			"current_regulatory_registration",

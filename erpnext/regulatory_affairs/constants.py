@@ -69,15 +69,9 @@ PRODUCT_CATEGORIES = (
 )
 OTHER_CATEGORY = "Other"
 
-# Item classification: the assessment status Custom Field that already exists on Item holds the
-# decision whether the Item needs an FDA registration (it replaces the former "Is Medical Device" +
-# "Registration Requirement" pair).
-ASSESSMENT_FIELD = "custom_thai_fda_applicability"
-ASSESSMENT_NOTE_FIELD = "custom_thai_fda_assessment_note"
-ASSESSMENT_NOT_ASSESSED = "Not Assessed"
-ASSESSMENT_REQUIRED = "Registration Required"
-ASSESSMENT_EXEMPT = "Not Required / Exempt"
-ASSESSMENT_STATUSES = (ASSESSMENT_NOT_ASSESSED, ASSESSMENT_REQUIRED, ASSESSMENT_EXEMPT)
+# Item classification: an Item with a Product Category is regulated, so transactions validate it against
+# its FDA registrations; an Item without one is not checked.
+ITEM_CATEGORY_FIELD = "regulatory_product_category"
 
 ITEM_COVERAGE_FIELDS = (
 	"current_regulatory_registration",

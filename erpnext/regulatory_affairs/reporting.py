@@ -18,16 +18,12 @@ from frappe.utils import cint, flt, get_datetime, getdate
 
 from erpnext.regulatory_affairs.constants import (
 	ACTIVE,
-	ASSESSMENT_EXEMPT,
-	ASSESSMENT_FIELD,
-	ASSESSMENT_NOT_ASSESSED,
-	ASSESSMENT_NOTE_FIELD,
-	ASSESSMENT_REQUIRED,
 	CLOSED_STAGES,
 	DRAFT,
 	ESTABLISHMENT_REGISTRATION,
 	EXPIRED,
 	EXPIRY_UNCONFIRMED,
+	ITEM_CATEGORY_FIELD,
 	PRODUCT_REGISTRATION,
 	REGISTERED_PRODUCT,
 	REGULATORY_DOCUMENT,
@@ -80,9 +76,7 @@ GAP_EXPIRED_WITH_STOCK = "Expired Registration With Stock"
 GAP_ESTABLISHMENT = "Establishment Not Active"
 GAP_UNCONFIRMED_EXPIRY = "Unconfirmed Expiry"
 GAP_DOCUMENT_EXPIRED = "Supporting Document Expired"
-GAP_EXEMPT_NO_REASON = "Exempt Item Without Reason"
 GAP_LINE_WITHOUT_ITEM = "Mapped Line Without Item"
-GAP_NOT_ASSESSED = "Item Not Assessed"
 
 GAP_SEVERITY = {
 	GAP_REQUIRED_ITEM: "Critical",
@@ -91,12 +85,8 @@ GAP_SEVERITY = {
 	GAP_ESTABLISHMENT: "Critical",
 	GAP_UNCONFIRMED_EXPIRY: "Warning",
 	GAP_DOCUMENT_EXPIRED: "Warning",
-	GAP_EXEMPT_NO_REASON: "Warning",
 	GAP_LINE_WITHOUT_ITEM: "Info",
-	GAP_NOT_ASSESSED: "Info",
 }
-# Gaps that run only when chosen in the Gap Type filter.
-OPT_IN_GAPS = frozenset({GAP_NOT_ASSESSED})
 GAP_ORDER = {gap_type: index for index, gap_type in enumerate(GAP_SEVERITY)}
 SEVERITY_ORDER = {"Critical": 0, "Warning": 1, "Info": 2}
 
@@ -108,9 +98,7 @@ GAP_DATASETS = {
 	GAP_ESTABLISHMENT: {"registrations", "establishments"},
 	GAP_UNCONFIRMED_EXPIRY: {"registrations"},
 	GAP_DOCUMENT_EXPIRED: {"registrations", "documents"},
-	GAP_EXEMPT_NO_REASON: {"items"},
 	GAP_LINE_WITHOUT_ITEM: {"registrations", "lines"},
-	GAP_NOT_ASSESSED: {"items_not_assessed"},
 }
 
 
@@ -668,12 +656,12 @@ def detect_required_items_without_coverage(
 	today_date: date,
 	default_owner: str | None = None,
 ) -> list[dict]:
-	"""Items marked Registration Required that have no Active, in-force coverage today."""
+	"""Items with a Product Category (regulated Items) that have no Active, in-force coverage today."""
 	registrations_by_name = {registration.get("name"): registration for registration in registrations}
 	candidates = build_mapping_candidates(lines, registrations_by_name, today_date)
 	gaps = []
 	for item in items:
-		if item.get(ASSESSMENT_FIELD) != ASSESSMENT_REQUIRED:
+		if not item.get(ITEM_CATEGORY_FIELD):
 			continue
 		mapping, ambiguous = resolve_item_mapping(candidates.get(item.get("name"), []), today_date)
 		reason = coverage_gap_reason(mapping, ambiguous, today_date)
@@ -688,7 +676,7 @@ def detect_required_items_without_coverage(
 					item=item.get("name"),
 					item_name=item.get("item_name"),
 					registration=mapping["registration"] if mapping else None,
-					product_category=item.get("regulatory_product_category"),
+					product_category=item.get(ITEM_CATEGORY_FIELD),
 				)
 			)
 	return gaps
@@ -938,43 +926,6 @@ def detect_expired_supporting_documents(
 	return gaps
 
 
-def detect_exempt_items_without_reason(items: list[Any], default_owner: str | None = None) -> list[dict]:
-	"""Items marked Not Required / Exempt that do not record why."""
-	return [
-		make_gap(
-			GAP_EXEMPT_NO_REASON,
-			"Item",
-			item.get("name"),
-			_("The Item is marked Not Required / Exempt but no reason is recorded."),
-			item_owner(item, default_owner),
-			item=item.get("name"),
-			item_name=item.get("item_name"),
-			product_category=item.get("regulatory_product_category"),
-		)
-		for item in items
-		if item.get(ASSESSMENT_FIELD) == ASSESSMENT_EXEMPT
-		and not (item.get(ASSESSMENT_NOTE_FIELD) or "").strip()
-	]
-
-
-def detect_items_not_assessed(items: list[Any], default_owner: str | None = None) -> list[dict]:
-	"""Items still Not Assessed (a blank status counts): the classification worklist."""
-	return [
-		make_gap(
-			GAP_NOT_ASSESSED,
-			"Item",
-			item.get("name"),
-			_("The Item has not been assessed for FDA registration yet."),
-			item_owner(item, default_owner),
-			item=item.get("name"),
-			item_name=item.get("item_name"),
-			product_category=item.get("regulatory_product_category"),
-		)
-		for item in items
-		if (item.get(ASSESSMENT_FIELD) or ASSESSMENT_NOT_ASSESSED) == ASSESSMENT_NOT_ASSESSED
-	]
-
-
 def group_by_registration(documents: list[Any]) -> dict[str, list[Any]]:
 	"""Documents keyed by their registration."""
 	grouped: dict[str, list[Any]] = defaultdict(list)
@@ -1012,12 +963,8 @@ def build_gaps(data: dict[str, Any], gap_types: list[str], today_date: date) -> 
 		gaps += detect_unconfirmed_expiry(registrations, default_owner)
 	if GAP_DOCUMENT_EXPIRED in gap_types:
 		gaps += detect_expired_supporting_documents(registrations, documents, today_date, default_owner)
-	if GAP_EXEMPT_NO_REASON in gap_types:
-		gaps += detect_exempt_items_without_reason(items, default_owner)
 	if GAP_LINE_WITHOUT_ITEM in gap_types:
 		gaps += detect_lines_without_item(registrations, lines, default_owner)
-	if GAP_NOT_ASSESSED in gap_types:
-		gaps += detect_items_not_assessed(data.get("items_not_assessed") or [], default_owner)
 	return gaps
 
 
@@ -1059,14 +1006,11 @@ def sort_gaps(gaps: list[dict]) -> list[dict]:
 
 
 def selected_gap_types(filters: Any) -> list[str]:
-	"""The gap types to run: the filtered one or all but the opt-in worklist gap.
-
-	``Item Not Assessed`` lists every unclassified Item, so it runs only when selected explicitly.
-	"""
+	"""The gap types to run: the filtered one or all of them."""
 	gap_type = filters.get("gap_type")
 	if gap_type in GAP_SEVERITY:
 		return [gap_type]
-	return [name for name in GAP_SEVERITY if name not in OPT_IN_GAPS]
+	return list(GAP_SEVERITY)
 
 
 def required_datasets(gap_types: list[str], filters: Any) -> set[str]:
@@ -1077,32 +1021,14 @@ def required_datasets(gap_types: list[str], filters: Any) -> set[str]:
 	return datasets
 
 
-ITEM_GAP_FIELDS = (
-	"name",
-	"item_name",
-	ASSESSMENT_FIELD,
-	ASSESSMENT_NOTE_FIELD,
-	"regulatory_product_category",
-	"regulatory_owner",
-)
+ITEM_GAP_FIELDS = ("name", "item_name", ITEM_CATEGORY_FIELD, "regulatory_owner")
 
 
-def fetch_classified_items() -> list[frappe._dict]:
-	"""Enabled Items marked Registration Required or Not Required / Exempt (only the columns the gaps use)."""
+def fetch_regulated_items() -> list[frappe._dict]:
+	"""Enabled Items with a Product Category (only the columns the gaps use)."""
 	return frappe.get_all(
 		"Item",
-		filters={"disabled": 0, ASSESSMENT_FIELD: ["in", [ASSESSMENT_REQUIRED, ASSESSMENT_EXEMPT]]},
-		fields=list(ITEM_GAP_FIELDS),
-		limit_page_length=0,
-	)
-
-
-def fetch_unassessed_items() -> list[frappe._dict]:
-	"""Enabled Items still Not Assessed; a blank status counts as Not Assessed."""
-	return frappe.get_all(
-		"Item",
-		filters={"disabled": 0},
-		or_filters=[[ASSESSMENT_FIELD, "is", "not set"], [ASSESSMENT_FIELD, "=", ASSESSMENT_NOT_ASSESSED]],
+		filters={"disabled": 0, ITEM_CATEGORY_FIELD: ["is", "set"]},
 		fields=list(ITEM_GAP_FIELDS),
 		limit_page_length=0,
 	)
@@ -1112,9 +1038,7 @@ def load_gap_data(datasets: set[str], today_date: date) -> dict[str, Any]:
 	"""Fetch each required dataset once; every query is batched, none runs per row."""
 	data: dict[str, Any] = {"default_owner": frappe.db.get_single_value(SETTINGS, "default_regulatory_owner")}
 	if "items" in datasets:
-		data["items"] = fetch_classified_items()
-	if "items_not_assessed" in datasets:
-		data["items_not_assessed"] = fetch_unassessed_items()
+		data["items"] = fetch_regulated_items()
 	registrations: list[Any] = []
 	if "registrations" in datasets:
 		registrations = get_registrations({})

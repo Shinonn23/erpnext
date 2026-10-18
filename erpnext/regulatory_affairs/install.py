@@ -1,4 +1,4 @@
-"""Idempotent RA setup: roles, Custom Fields, the Item assessment default and seed alert rules.
+"""Idempotent RA setup: roles, Custom Fields and seed alert rules.
 
 Runs after install and on every migrate; it never assigns users or owners.
 """
@@ -6,12 +6,7 @@ Runs after install and on every migrate; it never assigns users or owners.
 import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
-from erpnext.regulatory_affairs.constants import (
-	ASSESSMENT_FIELD,
-	ASSESSMENT_NOT_ASSESSED,
-	MANAGED_ROLES,
-	SETTINGS,
-)
+from erpnext.regulatory_affairs.constants import MANAGED_ROLES, SETTINGS
 from erpnext.regulatory_affairs.custom_fields import CUSTOM_FIELDS
 
 DEFAULT_ALERT_RULES = (
@@ -37,7 +32,6 @@ def after_migrate():
 def ensure_configuration():
 	ensure_roles()
 	ensure_custom_fields()
-	ensure_item_assessment_default()
 	ensure_settings()
 
 
@@ -56,19 +50,6 @@ def ensure_roles():
 
 def ensure_custom_fields():
 	create_custom_fields(CUSTOM_FIELDS, ignore_validate=True)
-
-
-def ensure_item_assessment_default():
-	"""Items without an assessment status (created before the field existed) are Not Assessed.
-
-	One UPDATE; idempotent because only blank or NULL values match.
-	"""
-	if not frappe.db.has_column("Item", ASSESSMENT_FIELD):
-		return
-	frappe.db.sql(
-		f"update `tabItem` set `{ASSESSMENT_FIELD}` = %s where ifnull(`{ASSESSMENT_FIELD}`, '') = ''",
-		(ASSESSMENT_NOT_ASSESSED,),
-	)
 
 
 def ensure_settings():

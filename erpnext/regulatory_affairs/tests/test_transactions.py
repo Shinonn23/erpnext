@@ -273,7 +273,7 @@ class TestPolicyHelpers(unittest.TestCase):
 			"Item",
 			filters={
 				"name": ("in", ["A", "B"]),
-				"custom_thai_fda_applicability": "Registration Required",
+				"regulatory_product_category": ("is", "set"),
 			},
 			pluck="name",
 		)

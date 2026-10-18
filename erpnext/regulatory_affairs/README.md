@@ -36,21 +36,20 @@ Type), `activity_type` (Import, Manufacture, Sale, Product Registration, Other),
 
 ### Item classification
 
-Every Item is classified by one field, **Thai FDA Assessment Status** (`custom_thai_fda_applicability`, in the Item list view and
-filters, default *Not Assessed*) with `custom_thai_fda_assessment_note` (reason, shown and mandatory only for *Not Required /
-Exempt*):
+An Item is **regulated** when its **Product Category** (`regulatory_product_category`, Regulatory tab, standard filter) is set.
+Transactions are validated against a regulated Item's coverage, and only a regulated Item shows the *Current Regulatory Coverage*
+section with the read-only coverage fields (`current_regulatory_registration`, `current_newcode`, `current_registration_expiry`,
+`current_registration_status`), the red/orange headline alerts and the *Coverage Matrix* button. An Item without a Product Category
+is not checked; saving it clears its coverage fields (saving a registration still stores coverage on every Item it maps, hidden on
+unregulated ones). There is no separate assessment status, exemption reason or Not Assessed state: an Item that needs no FDA
+registration simply has no Product Category.
 
-| Status | Meaning |
-|---|---|
-| Not Assessed | Nobody decided yet. The *Compliance Gap* report lists these when *Gap Type = Item Not Assessed* is selected (severity Info): this is the classification worklist. |
-| Registration Required | The Item needs a registration. Transactions are validated against its coverage; the read-only coverage fields (`current_regulatory_registration`, `current_newcode`, `current_registration_expiry`, `current_registration_status`) and the red/orange headline alerts show on the Item. Other statuses clear those fields. |
-| Not Required / Exempt | Exempt; a non-blank reason is mandatory. |
-
-The **Regulatory** tab also has `regulatory_product_category` (+ `regulatory_other_category` for Other), `medical_device_category`
-(only for Medical Device) and `regulatory_owner`; these need no Approver. The six guarded transactions get
-`regulatory_override_ref` (Link) and each item row gets a collapsed, read-only **Regulatory Snapshot** section (`regulatory_*`
-fields listed in `custom_fields.SNAPSHOT_FIELDNAMES`). Custom Field definitions live in `custom_fields.py` (RA is their only owner;
-the Regional Thailand setup no longer defines the two assessment fields).
+The **Regulatory** tab also has `regulatory_other_category` (for Other), `medical_device_category` (only for Medical Device) and
+`regulatory_owner`. The six guarded transactions get `regulatory_override_ref` (Link) and each item row gets a collapsed, read-only
+**Regulatory Snapshot** section (`regulatory_*` fields listed in `custom_fields.SNAPSHOT_FIELDNAMES`). Custom Field definitions live
+in `custom_fields.py` (RA is their only owner). The legacy Item fields *Thai FDA Assessment Status* (`custom_thai_fda_applicability`)
+and *Thai FDA Assessment Reason / Notes* (`custom_thai_fda_assessment_note`) are retired by the patch described under
+[Retiring the Thai FDA Assessment Status](#retiring-the-thai-fda-assessment-status).
 
 ## Roles
 
@@ -60,11 +59,9 @@ Users of the guarded documents (Stock, Sales, Purchase and Accounts roles) get *
 
 Approver-only operations: changing a registration's official status, verifying/rejecting a document (any change to a verified document
 voids the verification), approving an override (never by its requester; audit stamps cannot be edited), editing settings, changing the
-issue date, expiry date or expiry basis of a registration that is no longer Draft, and **loosening an Item's classification**.
-The Item rule is asymmetric ("tighten freely, loosen only via Approver"): a user who is not a Regulatory Approver may leave the
-Assessment Status and note unchanged or set the status to *Registration Required*; moving to *Not Assessed* or *Not Required /
-Exempt*, leaving *Registration Required*, or editing the note of an exempt Item needs an Approver. System, import, patch and install
-writes are not restricted. Operators otherwise create and edit registrations, product lines, documents and actions.
+issue date, expiry date or expiry basis of a registration that is no longer Draft. System, import, patch and install writes are not
+restricted. Operators otherwise create and edit registrations, product lines, documents and actions. An Item's Product Category is
+not guarded: anyone who may edit the Item may set or clear it.
 
 ## Registration lifecycle
 
@@ -110,7 +107,8 @@ Hooks: PO and SO `validate` -> `validate_warning_transaction`; `before_submit` o
 Note and Sales Invoice -> `capture_transaction_snapshot`; `before_submit` of Purchase Receipt, Stock Entry, Delivery Note and Sales
 Invoice additionally -> `validate_transaction` (run first).
 
-* Only rows whose Item has Thai FDA Assessment Status *Registration Required* are checked (any product category).
+* Only rows whose Item has a Product Category are checked (any category). Saving a registration that maps an Item without one shows
+  an orange alert asking to set it.
 * A document type is skipped when its `validate_on_*` setting is off. **Returns** (`is_return`) are never validated (they still get a
   snapshot). **Stock Entry** is validated and snapshotted only for purpose *Material Receipt* so transfers, issues and
   write-offs of non-compliant stock stay possible. **Sales Invoice** rows linked to a Delivery Note (`dn_detail` or `delivery_note`)
@@ -161,9 +159,8 @@ Daily `run_daily_expiry_processing`, weekly `send_weekly_regulatory_digest`.
 Regulatory Registration Expiry Summary, Regulatory Expiring Registration Affected Business, Regulatory Item Coverage
 Matrix, Regulatory Compliance Gap, Regulatory Renewal Workbench. Product category is a filter on the Expiry Summary, Affected
 Business, Compliance Gap and Renewal Workbench reports and a column on the Expiry Summary and Renewal Workbench. Compliance Gap
-lists required Items without coverage, exempt Items without a reason and the other data gaps; the *Item Not Assessed* gap (Info, the
-classification worklist) is **not** part of the default run and appears only when *Gap Type = Item Not Assessed* is selected. All read-only; they never act as a second
-policy engine. Roles: Regulatory Viewer/Operator/Approver, System Manager. All five use an RA DocType as `ref_doctype`, so RA users
+lists regulated Items (with a Product Category) without coverage (*Required Item Without Coverage*) and the other data gaps. All
+read-only; they never act as a second policy engine. Roles: Regulatory Viewer/Operator/Approver, System Manager. All five use an RA DocType as `ref_doctype`, so RA users
 need no Item permission. *Affected* Items are those with an Active product line that has not ended. Stock and open PO/SO quantities
 are shown to every RA role; stock **value** only to users who can read Bin.
 
@@ -174,7 +171,7 @@ are shown to every RA role; stock **value** only to users who can read Bin.
   `new_expiry_date`, supersede predecessors and close their lines; later renewal cycles create new actions.
 * Alerts catch up after a missed run, repeat after expiry, retry failures, skip dead registrations, also cover establishment licences
   and FDA Query due dates, and use system notifications as well as email.
-* Returns, non-receipt stock entries and invoices of already-delivered goods are not blocked; Item exemptions carry a mandatory reason;
+* Returns, non-receipt stock entries and invoices of already-delivered goods are not blocked;
   all Thai FDA product categories are covered, not only medical devices;
   `expiry_basis` models certificates without an expiry.
 * Verification is stamped once (not on every save) and restricted to Regulatory Approvers.
@@ -220,12 +217,14 @@ tables with SQL only, is a no-op when they do not exist, and is idempotent. It n
   conflicts*. Review them and fix the registrations by hand.
 * Idempotency: groups whose legacy names are already in some registration's `legacy_thai_fda_records` are skipped, so the patch can be
   re-run.
-* Items: on **every** run the category is recomputed from the merged registrations in the database (those listing legacy records) and
-  copied to `regulatory_product_category` (and `regulatory_other_category`) of Items where it is blank. An Active line of an Active
-  registration decides first, then Expired/Superseded, then Draft or other registrations; ties go to the newest `modified`. The copy runs
-  in its own step that is committed before the settings step, and a failure is recorded in the run result, so a re-run repairs a missed
-  copy. The assessment status field is the legacy field itself, so nothing is converted. Stored Item coverage is refreshed for all mapped Items. Existing Items with
-  a blank status are set to *Not Assessed* by `ensure_configuration`.
+* Items: the category of the merged registrations (those listing legacy records) is copied to `regulatory_product_category` (and
+  `regulatory_other_category`) of Items where it is blank, which makes those Items regulated. Items whose legacy assessment status (the
+  `custom_thai_fda_applicability` column) says *Not Required / Exempt* get no category, so they stay unchecked. An Active line of an
+  Active registration decides first, then Expired/Superseded, then Draft or other registrations; ties go to the newest `modified`. The
+  copy runs in its own step that is committed before the settings step, and a failure is recorded in the run result. Until a copy
+  succeeds every run recomputes it from all merged registrations, so a re-run repairs a missed copy; once one succeeds (a `DefaultValue`
+  row with the key `regulatory_legacy_item_categories_copied`), a re-run copies only from the registrations it creates itself, so a
+  category somebody cleared on purpose is not given back. Stored Item coverage is refreshed for the Items that got a category.
 * Settings (only if the legacy settings exist): `enabled` -> `enable_expiry_alerts`, `overdue_repeat_days`,
   `send_system_notification`, `send_email` are copied once (a `DefaultValue` row with the key `regulatory_legacy_settings_merged` marks it done, so later edits are not overwritten); every legacy reminder day missing from the expiry alert rules is added
   (>= 120 days Info, 60-119 Warning, below 60 Critical, action *Reminder*); legacy recipients are added to *Alert Recipients*.
@@ -245,20 +244,51 @@ bench --site <site> execute erpnext.patches.v16_0.merge_thai_fda_into_regulatory
 `bench migrate` deletes the orphaned legacy DocType *records*, but the tables `tabThai FDA Registration`, `tabThai FDA Renewal Log`,
 `tabThai FDA Reminder Log`, `tabThai FDA Reminder Recipient` and the `Thai FDA Settings` rows in `tabSingles` stay untouched. After
 verifying the migrated data you may drop the four tables manually (`DROP TABLE` on a backed-up site) and delete the `Thai FDA Settings`
-rows in `tabSingles`; nothing in the code requires it. Take a backup before the first run.
+rows in `tabSingles`; nothing in the code requires it. The Item columns `custom_thai_fda_applicability` and
+`custom_thai_fda_assessment_note` also stay (see below). Take a backup before the first run.
+
+## Retiring the Thai FDA Assessment Status
+
+`erpnext.patches.v16_0.remove_thai_fda_assessment_status` runs in `[post_model_sync]` right after the merge patch, so the categories
+copied from the merged registrations come first.
+
+* While the Custom Field `custom_thai_fda_applicability` (and its column) still exists, it creates the RA Custom Fields if they are
+  missing (the merge patch does so only when it has legacy registrations) and gives every Item assessed *Registration Required*
+  (English or Thai value) that still has no Product Category the category **Other** with Other Category **Not specified (legacy)**, so
+  it stays checked on transactions. It prints that count, and the count of Items assessed *Not Required / Exempt* that already have a
+  Product Category (only possible when categories were set before this patch): those are checked from now on unless the category is
+  cleared. Filter Items by Other Category = *Not specified (legacy)* and set their real category.
+* It then deletes the Custom Fields `custom_thai_fda_applicability` and `custom_thai_fda_assessment_note` of Item (with their property
+  setters). The columns and their values stay in `tabItem`; nothing is dropped. Items assessed *Not Required / Exempt* or *Not
+  Assessed* without a category become unchecked Items; the exemption reasons remain only in the `custom_thai_fda_assessment_note`
+  column.
+* Re-running converts nothing because the status Custom Field is already gone, so a category cleared on purpose stays cleared.
+* The two columns are no longer in the Item meta, so `bench trim-tables` would drop them with the old statuses and reasons. Export them
+  first if you may need them; a later merge re-run without the status column also no longer recognises the exempt Items.
 
 ## Deploying
 
-Nothing in this change has been migrated anywhere. On a site designated for it, take a backup, run the dry run above against a copy if
-possible, then `bench --site <site> migrate`, which will
+On a site designated for it, take a backup, run the dry run above against a copy if possible, and list site-only customisations that still use the retired Item fields (they need updating; the property setters of the
+two fields themselves are deleted with them):
+
+```sql
+select 'Custom Field', name from `tabCustom Field` where concat_ws(' ', insert_after, depends_on, mandatory_depends_on,
+	read_only_depends_on, fetch_from, `options`) like '%custom_thai_fda%'
+union all select 'Property Setter', name from `tabProperty Setter` where concat_ws(' ', field_name, `value`) like '%custom_thai_fda%'
+union all select 'Client Script', name from `tabClient Script` where script like '%custom_thai_fda%'
+union all select 'Server Script', name from `tabServer Script` where script like '%custom_thai_fda%'
+union all select 'Report', name from `tabReport` where concat_ws(' ', `json`, `query`, report_script) like '%custom_thai_fda%'
+union all select 'Notification', name from `tabNotification` where concat_ws(' ', `condition`, message) like '%custom_thai_fda%';
+```
+
+Then run `bench --site <site> migrate`, which will
 
 1. sync the RA DocTypes, reports and the workspace (the *Regulatory Affairs* Module Def and the three roles are created by the
    DocType sync itself);
 2. run the post-model-sync patches: `translate_thai_fda_to_english`, then the merge patch (which calls
-   `install.ensure_configuration`);
+   `install.ensure_configuration`), then `remove_thai_fda_assessment_status`;
 3. run `erpnext.regulatory_affairs.install.after_migrate`: ensures the roles, creates the Custom Fields on Item, the six transactions and
-   their item rows, fills a blank assessment status with *Not Assessed* and seeds the expiry alert rules once (only when the settings
-   have never been saved).
+   their item rows, and seeds the expiry alert rules once (only when the settings have never been saved).
 
 **Warning: first scheduler run.** The migrated registrations are new RA records, so the first daily run after migrating treats every
 one inside the renewal window as new work: with *Auto Create Renewal Action* on (renewal window default 365 days) it creates a Renewal
@@ -269,15 +299,16 @@ Settings before the first scheduler run (and, if needed, *Enable Expiry Alerts*)
 Fresh installs call the same setup from `erpnext.setup.install.after_install`. Restart the web/worker processes afterwards when they run
 with `--preload`. Roll back by removing the hooks; the Custom Fields and DocTypes stay until deleted explicitly.
 
-Suggested rollout: assign the roles; in Settings set every *Violation Policy* field to **Warning**; work through the *Item Not
-Assessed* list (Compliance Gap with Gap Type = Item Not Assessed) and classify the Items; review the migrated registrations (conflicts log, Draft/Expired ones, missing
-verified Certificates); watch the Compliance Gap report; then switch the policy fields to **Block**.
+Suggested rollout: assign the roles; in Settings set every *Violation Policy* field to **Warning**; set the Product Category of the
+Items that need a registration (first the ones with Other Category *Not specified (legacy)*); review the migrated registrations
+(conflicts log, Draft/Expired ones, missing verified Certificates); watch the Compliance Gap report; then switch the policy fields to
+**Block**. Every Item mapped on a merged legacy registration is regulated from the start (unless it was assessed Not Required / Exempt),
+so with the default **Block** policies an expired or suspended legacy registration blocks its Items right after the migration.
 
 ## Acceptance scenarios (run on a designated test site)
 
-1. Set an Item (any product category) to *Registration Required*; a Purchase Receipt for it is blocked (no registration) and passes
-   once a registration covers it. An Operator can set *Registration Required* but cannot set *Not Required / Exempt* or move back to
-   *Not Assessed*; an Approver can (exempt needs a reason).
+1. Set a Product Category on an Item; a Purchase Receipt for it is blocked (no registration) and passes once a registration covers
+   it. Clear the category again: the Purchase Receipt is not checked and the Item's coverage fields are empty after saving it.
 2. Draft registration cannot be activated without a Verified Certificate and an Active product line; an Operator cannot verify the
    Certificate or activate; an Approver can.
 3. Two Active registrations covering the same Item over overlapping dates are rejected; a renewed successor with a later issue date is
@@ -294,7 +325,9 @@ verified Certificates); watch the Compliance Gap report; then switch the policy 
 8. Legacy data: on a copy of a site with Thai FDA Registration records, the dry run lists one registration per distinct number and the
    conflicts; the real run creates them (Active ones with a past expiry as Expired, legacy numbers kept, renewal log in *Renewal
    History*, certificate documents attached), shows the Items as covered, copies legacy reminder days and recipients into Settings, and a
-   second run creates nothing new. Compliance Gap with Gap Type = Item Not Assessed lists Items still *Not Assessed*.
+   second run creates nothing new. Mapped Items get the registration's Product Category except those assessed *Not Required /
+   Exempt*; Items assessed *Registration Required* without a registration get Other / *Not specified (legacy)*; the Item form no longer
+   shows *Thai FDA Assessment Status* and the `tabItem` columns still hold the old values.
 
 ## Known limits
 
@@ -304,10 +337,12 @@ verified Certificates); watch the Compliance Gap report; then switch the policy 
 * Purchase Invoice, Subcontracting and Stock Reconciliation are not guarded; Purchase Order and Sales Order only warn.
 * Overrides are requested from the Override form (or API); the transactions have no shortcut button yet.
 * Product lines of a live registration can still be edited by an Operator (history is kept by version tracking); the issue/expiry
-  dates and the Item classification cannot.
+  dates cannot.
+* An Item's Product Category is not guarded: any user who may edit the Item can clear it and so take the Item out of the transaction
+  checks (the change is kept in the Item's version history).
 * The new code assumes `bench migrate` has run: submitting a guarded document on a site where the Settings DocType and the Item
   columns do not exist yet fails, like any other schema-dependent ERPNext change.
-* **Never executed on a site.** The DocTypes, patches and reports have only been checked by unit tests with mocks; run the dry run and
+* **Not verified end to end.** The DocTypes, patches and reports are checked by unit tests with mocks; run the dry run and
   the whole scenario list on a designated test site before production.
 * The merge validates nothing: overlapping mappings, duplicate numbers across groups or missing certificates in migrated data are
   surfaced by the reports and the conflicts log, not rejected. Partially merged groups and numbers already present in RA are skipped, not
