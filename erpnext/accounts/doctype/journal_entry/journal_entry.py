@@ -1339,7 +1339,6 @@ class JournalEntry(AccountsController):
 						"accounts",
 						{
 							"account": difference_account,
-
 						},
 					)
 
@@ -1622,7 +1621,6 @@ def get_payment_entry(ref_doc, args):
 			bank_account["account_currency"],
 			ref_doc.company,
 		)
-
 
 	amount = args.get("debit_in_account_currency") or args.get("amount")
 
