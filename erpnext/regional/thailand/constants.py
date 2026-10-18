@@ -1,24 +1,4 @@
 ERP_CUSTOM_FIELDS = {
-	"Item": [
-		{
-			"fieldname": "custom_thai_fda_applicability",
-			"fieldtype": "Select",
-			"label": "สถานะการประเมิน อย.",
-			"options": "ยังไม่ประเมิน\nต้องมีทะเบียน\nไม่ต้องมี/ได้รับยกเว้น",
-			"default": "ยังไม่ประเมิน",
-			"insert_after": "item_group",
-			"in_standard_filter": 1,
-			"in_list_view": 1,
-		},
-		{
-			"fieldname": "custom_thai_fda_assessment_note",
-			"fieldtype": "Small Text",
-			"label": "เหตุผล/หมายเหตุการประเมิน อย.",
-			"insert_after": "custom_thai_fda_applicability",
-			"depends_on": "eval:doc.custom_thai_fda_applicability == 'ไม่ต้องมี/ได้รับยกเว้น'",
-			"mandatory_depends_on": "eval:doc.custom_thai_fda_applicability == 'ไม่ต้องมี/ได้รับยกเว้น'",
-		},
-	],
 	"Tax Withholding Category": [
 		{
 			"fieldname": "thai_income_tax_form",

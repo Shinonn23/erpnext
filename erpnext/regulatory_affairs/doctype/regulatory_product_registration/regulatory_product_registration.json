@@ -1,0 +1,472 @@
+{
+ "actions": [],
+ "allow_import": 1,
+ "allow_rename": 1,
+ "autoname": "field:registration_number",
+ "creation": "2026-10-18 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "registration_tab",
+  "identity_section",
+  "registration_number",
+  "product_category",
+  "other_category",
+  "certificate_type",
+  "activity_type",
+  "identity_column",
+  "official_status",
+  "registration_number_normalized",
+  "issuing_authority",
+  "holder_name",
+  "source_url",
+  "status_control_section",
+  "status_reason",
+  "status_control_column",
+  "status_changed_on",
+  "status_changed_by",
+  "classification_section",
+  "device_category",
+  "risk_class",
+  "classification_column",
+  "grouping_type",
+  "product_family_name",
+  "description_section",
+  "device_description",
+  "intended_use",
+  "parties_section",
+  "establishment_registration",
+  "registration_holder",
+  "parties_column",
+  "product_owner",
+  "manufacturer_country",
+  "validity_section",
+  "issue_date",
+  "expiry_basis",
+  "validity_column",
+  "expiry_date",
+  "days_to_expiry",
+  "renewal_status",
+  "lifecycle_section",
+  "previous_registration",
+  "last_verified_on",
+  "lifecycle_column",
+  "superseded_by",
+  "responsible_user",
+  "legacy_section",
+  "legacy_thai_fda_records",
+  "legacy_renewal_history",
+  "products_tab",
+  "registered_products",
+  "connections_tab"
+ ],
+ "fields": [
+  {
+   "fieldname": "registration_tab",
+   "fieldtype": "Tab Break",
+   "label": "Registration"
+  },
+  {
+   "fieldname": "identity_section",
+   "fieldtype": "Section Break",
+   "label": "Registration Identity"
+  },
+  {
+   "fieldname": "registration_number",
+   "fieldtype": "Data",
+   "in_global_search": 1,
+   "in_list_view": 1,
+   "label": "Registration Number",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "default": "Medical Device",
+   "fieldname": "product_category",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Product Category",
+   "options": "Medical Device\nFood\nDrug\nCosmetic\nHazardous Substance\nHerbal Product\nOther",
+   "reqd": 1
+  },
+  {
+   "depends_on": "eval:doc.product_category == 'Other'",
+   "fieldname": "other_category",
+   "fieldtype": "Data",
+   "label": "Other Category",
+   "mandatory_depends_on": "eval:doc.product_category == 'Other'"
+  },
+  {
+   "fieldname": "certificate_type",
+   "fieldtype": "Data",
+   "label": "License / Certificate Type"
+  },
+  {
+   "fieldname": "activity_type",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Activity Type",
+   "options": "\nImport\nManufacture\nSale\nProduct Registration\nOther"
+  },
+  {
+   "fieldname": "identity_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Draft",
+   "description": "Changed with the status buttons on the form (Regulatory Approver only); Expired is set automatically.",
+   "fieldname": "official_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Official Status",
+   "no_copy": 1,
+   "options": "Draft\nActive\nSuspended\nRevoked\nCancelled\nExpired\nSuperseded",
+   "read_only": 1
+  },
+  {
+   "fieldname": "registration_number_normalized",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Normalized Registration Number",
+   "no_copy": 1,
+   "read_only": 1,
+   "unique": 1
+  },
+  {
+   "default": "Thai FDA",
+   "fieldname": "issuing_authority",
+   "fieldtype": "Data",
+   "label": "Issuing Authority"
+  },
+  {
+   "fieldname": "holder_name",
+   "fieldtype": "Data",
+   "label": "Holder Name (as on document)"
+  },
+  {
+   "fieldname": "source_url",
+   "fieldtype": "Data",
+   "label": "Verification Source URL",
+   "options": "URL"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "status_control_section",
+   "fieldtype": "Section Break",
+   "label": "Status History"
+  },
+  {
+   "fieldname": "status_reason",
+   "fieldtype": "Small Text",
+   "label": "Last Status Reason",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "status_control_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "status_changed_on",
+   "fieldtype": "Datetime",
+   "label": "Status Changed On",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "status_changed_by",
+   "fieldtype": "Link",
+   "label": "Status Changed By",
+   "no_copy": 1,
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.product_category == 'Medical Device'",
+   "fieldname": "classification_section",
+   "fieldtype": "Section Break",
+   "label": "Device Classification"
+  },
+  {
+   "depends_on": "eval:doc.product_category == 'Medical Device'",
+   "fieldname": "device_category",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Device Category",
+   "options": "\nIVD\nNon-IVD\nOther"
+  },
+  {
+   "depends_on": "eval:doc.product_category == 'Medical Device'",
+   "fieldname": "risk_class",
+   "fieldtype": "Data",
+   "label": "Risk Class"
+  },
+  {
+   "fieldname": "classification_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:doc.product_category == 'Medical Device'",
+   "fieldname": "grouping_type",
+   "fieldtype": "Data",
+   "label": "Grouping Type"
+  },
+  {
+   "fieldname": "product_family_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Product Family Name"
+  },
+  {
+   "collapsible": 1,
+   "depends_on": "eval:doc.product_category == 'Medical Device'",
+   "fieldname": "description_section",
+   "fieldtype": "Section Break",
+   "label": "Description"
+  },
+  {
+   "depends_on": "eval:doc.product_category == 'Medical Device'",
+   "fieldname": "device_description",
+   "fieldtype": "Text Editor",
+   "label": "Device Description"
+  },
+  {
+   "depends_on": "eval:doc.product_category == 'Medical Device'",
+   "fieldname": "intended_use",
+   "fieldtype": "Text Editor",
+   "label": "Intended Use"
+  },
+  {
+   "fieldname": "parties_section",
+   "fieldtype": "Section Break",
+   "label": "Parties and Establishment"
+  },
+  {
+   "fieldname": "establishment_registration",
+   "fieldtype": "Link",
+   "label": "Establishment Registration",
+   "options": "Regulatory Establishment Registration"
+  },
+  {
+   "fieldname": "registration_holder",
+   "fieldtype": "Link",
+   "label": "Registration Holder",
+   "options": "Company"
+  },
+  {
+   "fieldname": "parties_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "product_owner",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Product Owner / Manufacturer",
+   "options": "Manufacturer"
+  },
+  {
+   "fieldname": "manufacturer_country",
+   "fieldtype": "Link",
+   "label": "Manufacturer Country",
+   "options": "Country"
+  },
+  {
+   "fieldname": "validity_section",
+   "fieldtype": "Section Break",
+   "label": "Validity and Renewal"
+  },
+  {
+   "fieldname": "issue_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Issue Date"
+  },
+  {
+   "default": "Expiry Date Specified",
+   "description": "Use No Expiry Date Specified when the certificate states none; Unconfirmed is flagged in the Compliance Gap report.",
+   "fieldname": "expiry_basis",
+   "fieldtype": "Select",
+   "label": "Expiry Date Basis",
+   "options": "Expiry Date Specified\nNo Expiry Date Specified\nUnconfirmed",
+   "reqd": 1
+  },
+  {
+   "fieldname": "validity_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:doc.expiry_basis == 'Expiry Date Specified'",
+   "fieldname": "expiry_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Expiry Date",
+   "mandatory_depends_on": "eval:doc.expiry_basis == 'Expiry Date Specified'"
+  },
+  {
+   "fieldname": "days_to_expiry",
+   "fieldtype": "Int",
+   "label": "Days to Expiry",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "default": "Not Started",
+   "description": "Kept in sync by Renewal Actions; set Not Renewing to stop renewal reminders.",
+   "fieldname": "renewal_status",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Renewal Status",
+   "options": "Not Started\nPreparing\nInternal Review\nSubmitted\nFDA Query\nApproved\nNot Renewing"
+  },
+  {
+   "fieldname": "lifecycle_section",
+   "fieldtype": "Section Break",
+   "label": "Lifecycle and Ownership"
+  },
+  {
+   "fieldname": "previous_registration",
+   "fieldtype": "Link",
+   "label": "Previous Registration",
+   "no_copy": 1,
+   "options": "Regulatory Product Registration"
+  },
+  {
+   "fieldname": "last_verified_on",
+   "fieldtype": "Date",
+   "label": "Last Verified On"
+  },
+  {
+   "fieldname": "lifecycle_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "superseded_by",
+   "fieldtype": "Link",
+   "label": "Superseded By",
+   "no_copy": 1,
+   "options": "Regulatory Product Registration",
+   "read_only": 1
+  },
+  {
+   "fieldname": "responsible_user",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Responsible User",
+   "options": "User"
+  },
+  {
+   "collapsible": 1,
+   "depends_on": "eval:doc.legacy_thai_fda_records || (doc.legacy_renewal_history && doc.legacy_renewal_history.length)",
+   "fieldname": "legacy_section",
+   "fieldtype": "Section Break",
+   "label": "Legacy Thai FDA Records"
+  },
+  {
+   "description": "Names of the former Thai FDA Registration records merged into this registration.",
+   "fieldname": "legacy_thai_fda_records",
+   "fieldtype": "Small Text",
+   "label": "Merged Legacy Thai FDA Registrations",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "legacy_renewal_history",
+   "fieldtype": "Table",
+   "label": "Legacy Renewal History",
+   "no_copy": 1,
+   "options": "Regulatory Renewal History",
+   "read_only": 1
+  },
+  {
+   "fieldname": "products_tab",
+   "fieldtype": "Tab Break",
+   "label": "Registered Products / NEWCODE"
+  },
+  {
+   "fieldname": "registered_products",
+   "fieldtype": "Table",
+   "label": "Registered Products / NEWCODE",
+   "options": "Regulatory Registered Product"
+  },
+  {
+   "fieldname": "connections_tab",
+   "fieldtype": "Tab Break",
+   "label": "Connections"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [
+  {
+   "link_doctype": "Regulatory Document",
+   "link_fieldname": "registration"
+  },
+  {
+   "link_doctype": "Regulatory Registration Action",
+   "link_fieldname": "registration"
+  },
+  {
+   "link_doctype": "Regulatory Alert Log",
+   "link_fieldname": "registration"
+  }
+ ],
+ "modified": "2026-10-18 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Regulatory Affairs",
+ "name": "Regulatory Product Registration",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Regulatory Viewer"
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Regulatory Operator",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Regulatory Approver",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "search_fields": "registration_number,product_family_name,product_owner,product_category",
+ "show_title_field_in_link": 0,
+ "sort_field": "expiry_date",
+ "sort_order": "ASC",
+ "title_field": "registration_number",
+ "track_changes": 1
+}

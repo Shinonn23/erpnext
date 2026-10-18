@@ -17,11 +17,6 @@ def transfer_thailand_module_ownership():
 	from erpnext.regional.thailand.install import make_custom_fields, make_property_setters
 
 	make_custom_fields()
-	frappe.db.sql(
-		"""update `tabItem`
-		set custom_thai_fda_applicability = 'ยังไม่ประเมิน'
-		where ifnull(custom_thai_fda_applicability, '') = ''"""
-	)
 	make_property_setters()
 	remove_duplicate_withholding_fields()
 

@@ -1,0 +1,229 @@
+{
+ "actions": [],
+ "allow_import": 1,
+ "allow_rename": 1,
+ "autoname": "field:establishment_registration_no",
+ "creation": "2026-10-18 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "establishment_section",
+  "company",
+  "establishment_name",
+  "establishment_address",
+  "establishment_column",
+  "establishment_registration_no",
+  "registration_type",
+  "official_status",
+  "validity_section",
+  "issue_date",
+  "expiry_basis",
+  "validity_column",
+  "expiry_date",
+  "days_to_expiry",
+  "renewal_status",
+  "ownership_section",
+  "responsible_user",
+  "ownership_column",
+  "certificate_file",
+  "remarks_section",
+  "remarks"
+ ],
+ "fields": [
+  {
+   "fieldname": "establishment_section",
+   "fieldtype": "Section Break",
+   "label": "Establishment"
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1
+  },
+  {
+   "fieldname": "establishment_name",
+   "fieldtype": "Data",
+   "label": "Establishment Name",
+   "reqd": 1
+  },
+  {
+   "fieldname": "establishment_address",
+   "fieldtype": "Link",
+   "label": "Establishment Address",
+   "options": "Address"
+  },
+  {
+   "fieldname": "establishment_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "establishment_registration_no",
+   "fieldtype": "Data",
+   "in_global_search": 1,
+   "in_list_view": 1,
+   "label": "Establishment Registration Number",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "registration_type",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Registration Type",
+   "options": "Import\nManufacture\nSale",
+   "reqd": 1
+  },
+  {
+   "default": "Active",
+   "fieldname": "official_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Official Status",
+   "options": "Active\nExpired\nSuspended\nCancelled"
+  },
+  {
+   "fieldname": "validity_section",
+   "fieldtype": "Section Break",
+   "label": "Validity and Renewal"
+  },
+  {
+   "fieldname": "issue_date",
+   "fieldtype": "Date",
+   "label": "Issue Date"
+  },
+  {
+   "default": "Expiry Date Specified",
+   "fieldname": "expiry_basis",
+   "fieldtype": "Select",
+   "label": "Expiry Date Basis",
+   "options": "Expiry Date Specified\nNo Expiry Date Specified\nUnconfirmed",
+   "reqd": 1
+  },
+  {
+   "fieldname": "validity_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:doc.expiry_basis == 'Expiry Date Specified'",
+   "fieldname": "expiry_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Expiry Date",
+   "mandatory_depends_on": "eval:doc.expiry_basis == 'Expiry Date Specified'"
+  },
+  {
+   "fieldname": "days_to_expiry",
+   "fieldtype": "Int",
+   "label": "Days to Expiry",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "default": "Not Started",
+   "fieldname": "renewal_status",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Renewal Status",
+   "options": "Not Started\nPreparing\nInternal Review\nSubmitted\nFDA Query\nApproved\nNot Renewing"
+  },
+  {
+   "fieldname": "ownership_section",
+   "fieldtype": "Section Break",
+   "label": "Owner and Certificate"
+  },
+  {
+   "fieldname": "responsible_user",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Responsible User",
+   "options": "User"
+  },
+  {
+   "fieldname": "ownership_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "certificate_file",
+   "fieldtype": "Attach",
+   "label": "Certificate File"
+  },
+  {
+   "fieldname": "remarks_section",
+   "fieldtype": "Section Break",
+   "label": "Remarks"
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Small Text",
+   "label": "Remarks"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [
+  {
+   "link_doctype": "Regulatory Product Registration",
+   "link_fieldname": "establishment_registration"
+  }
+ ],
+ "modified": "2026-10-18 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Regulatory Affairs",
+ "name": "Regulatory Establishment Registration",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Regulatory Viewer"
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Regulatory Operator",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Regulatory Approver",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "search_fields": "establishment_registration_no,establishment_name,company",
+ "sort_field": "expiry_date",
+ "sort_order": "ASC",
+ "title_field": "establishment_name",
+ "track_changes": 1
+}

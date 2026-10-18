@@ -1,0 +1,114 @@
+{
+ "actions": [],
+ "creation": "2026-10-18 12:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "event_date",
+  "stage",
+  "application_number",
+  "previous_registration_number",
+  "new_registration_number",
+  "previous_issue_date",
+  "new_issue_date",
+  "previous_expiry_date",
+  "new_expiry_date",
+  "previous_document",
+  "new_document",
+  "notes"
+ ],
+ "fields": [
+  {
+   "columns": 2,
+   "fieldname": "event_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Event Date",
+   "read_only": 1
+  },
+  {
+   "columns": 2,
+   "fieldname": "stage",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Stage",
+   "read_only": 1
+  },
+  {
+   "fieldname": "application_number",
+   "fieldtype": "Data",
+   "label": "Application Number",
+   "read_only": 1
+  },
+  {
+   "columns": 2,
+   "fieldname": "previous_registration_number",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Previous Registration Number",
+   "read_only": 1
+  },
+  {
+   "columns": 2,
+   "fieldname": "new_registration_number",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "New Registration Number",
+   "read_only": 1
+  },
+  {
+   "fieldname": "previous_issue_date",
+   "fieldtype": "Date",
+   "label": "Previous Issue Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "new_issue_date",
+   "fieldtype": "Date",
+   "label": "New Issue Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "previous_expiry_date",
+   "fieldtype": "Date",
+   "label": "Previous Expiry Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "new_expiry_date",
+   "fieldtype": "Date",
+   "label": "New Expiry Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "previous_document",
+   "fieldtype": "Attach",
+   "label": "Previous Document",
+   "read_only": 1
+  },
+  {
+   "fieldname": "new_document",
+   "fieldtype": "Attach",
+   "label": "New Document",
+   "read_only": 1
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "modified": "2026-10-18 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Regulatory Affairs",
+ "name": "Regulatory Renewal History",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "ASC"
+}

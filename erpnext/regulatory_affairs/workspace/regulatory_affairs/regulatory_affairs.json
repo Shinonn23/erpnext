@@ -1,0 +1,247 @@
+{
+ "app": "erpnext",
+ "charts": [],
+ "content": "[{\"id\": \"raHdrShort\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Your Shortcuts</b></span>\", \"col\": 12}}, {\"id\": \"raSc1\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Product Registrations\", \"col\": 3}}, {\"id\": \"raSc2\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Registration Actions\", \"col\": 3}}, {\"id\": \"raSc3\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Compliance Gaps\", \"col\": 3}}, {\"id\": \"raSc4\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Expiry Summary\", \"col\": 3}}, {\"id\": \"raHdrRep\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Reports &amp; Masters</b></span>\", \"col\": 12}}, {\"id\": \"raCard0\", \"type\": \"card\", \"data\": {\"card_name\": \"Registrations\", \"col\": 4}}, {\"id\": \"raCard1\", \"type\": \"card\", \"data\": {\"card_name\": \"Compliance Control\", \"col\": 4}}, {\"id\": \"raCard2\", \"type\": \"card\", \"data\": {\"card_name\": \"Reports\", \"col\": 4}}, {\"id\": \"raCard3\", \"type\": \"card\", \"data\": {\"card_name\": \"Settings\", \"col\": 4}}]",
+ "creation": "2026-10-18 12:00:00.000000",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "for_user": "",
+ "hide_custom": 0,
+ "icon": "shield-check",
+ "idx": 0,
+ "is_hidden": 0,
+ "label": "Regulatory Affairs",
+ "links": [
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Registrations",
+   "link_count": 4,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Product Registration",
+   "link_count": 0,
+   "link_to": "Regulatory Product Registration",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Establishment Registration",
+   "link_count": 0,
+   "link_to": "Regulatory Establishment Registration",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Regulatory Document",
+   "link_count": 0,
+   "link_to": "Regulatory Document",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Registration Action",
+   "link_count": 0,
+   "link_to": "Regulatory Registration Action",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Compliance Control",
+   "link_count": 2,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Override",
+   "link_count": 0,
+   "link_to": "Regulatory Override",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Alert Log",
+   "link_count": 0,
+   "link_to": "Regulatory Alert Log",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Reports",
+   "link_count": 5,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Expiry Summary",
+   "link_count": 0,
+   "link_to": "Regulatory Registration Expiry Summary",
+   "link_type": "Report",
+   "onboard": 0,
+   "report_ref_doctype": "Regulatory Product Registration",
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Affected Business",
+   "link_count": 0,
+   "link_to": "Regulatory Expiring Registration Affected Business",
+   "link_type": "Report",
+   "onboard": 0,
+   "report_ref_doctype": "Regulatory Product Registration",
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Coverage Matrix",
+   "link_count": 0,
+   "link_to": "Regulatory Item Coverage Matrix",
+   "link_type": "Report",
+   "onboard": 0,
+   "report_ref_doctype": "Regulatory Product Registration",
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Compliance Gaps",
+   "link_count": 0,
+   "link_to": "Regulatory Compliance Gap",
+   "link_type": "Report",
+   "onboard": 0,
+   "report_ref_doctype": "Regulatory Product Registration",
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Renewal Workbench",
+   "link_count": 0,
+   "link_to": "Regulatory Renewal Workbench",
+   "link_type": "Report",
+   "onboard": 0,
+   "report_ref_doctype": "Regulatory Registration Action",
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Settings",
+   "link_count": 1,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Regulatory Settings",
+   "link_count": 0,
+   "link_to": "Regulatory Settings",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  }
+ ],
+ "modified": "2026-10-18 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Regulatory Affairs",
+ "name": "Regulatory Affairs",
+ "number_cards": [],
+ "owner": "Administrator",
+ "parent_page": "",
+ "public": 1,
+ "quick_lists": [],
+ "restrict_to_domain": "",
+ "roles": [
+  {
+   "role": "Regulatory Viewer"
+  },
+  {
+   "role": "Regulatory Operator"
+  },
+  {
+   "role": "Regulatory Approver"
+  },
+  {
+   "role": "System Manager"
+  }
+ ],
+ "sequence_id": 10.0,
+ "shortcuts": [
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Product Registrations",
+   "link_to": "Regulatory Product Registration",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Registration Actions",
+   "link_to": "Regulatory Registration Action",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Compliance Gaps",
+   "link_to": "Regulatory Compliance Gap",
+   "stats_filter": "[]",
+   "type": "Report"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Expiry Summary",
+   "link_to": "Regulatory Registration Expiry Summary",
+   "stats_filter": "[]",
+   "type": "Report"
+  }
+ ],
+ "title": "Regulatory Affairs",
+ "type": "Workspace"
+}

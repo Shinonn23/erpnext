@@ -1,0 +1,41 @@
+{
+ "actions": [],
+ "creation": "2026-10-18 12:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "user",
+  "enabled"
+ ],
+ "fields": [
+  {
+   "columns": 6,
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "User",
+   "options": "User",
+   "reqd": 1
+  },
+  {
+   "columns": 2,
+   "default": "1",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Enabled"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "modified": "2026-10-18 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Regulatory Affairs",
+ "name": "Regulatory Alert Recipient",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "ASC"
+}

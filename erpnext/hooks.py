@@ -43,6 +43,7 @@ web_include_icons = [
 
 doctype_js = {
 	"Address": "public/js/address.js",
+	"Item": "regulatory_affairs/item.js",
 	"Material Request": "assets/doctype/material_request/material_request.js",
 	"Asset Movement": "assets/doctype/asset_movement/asset_movement.js",
 	"Custody Loan": "loan/doctype/custody_loan/custody_loan.js",
@@ -96,6 +97,7 @@ setup_wizard_stages = "erpnext.setup.setup_wizard.setup_wizard.get_setup_stages"
 after_install = "erpnext.setup.install.after_install"
 after_migrate = [
 	"erpnext.stock.doctype.storage_location.storage_location.setup_storage_location_dimension",
+	"erpnext.regulatory_affairs.install.after_migrate",
 ]
 
 after_app_install = "erpnext.setup.install.after_app_install"
@@ -207,6 +209,27 @@ _thailand_doc_events = {
 	"Address": {"on_update": "erpnext.regional.thailand.custom.address.update_tax_info_in_linked_doc"},
 	"Item": {"validate": "erpnext.regional.thailand.custom.item.validate_deposit_item"},
 	"Currency": {"on_update": "erpnext.regional.thailand.custom.currency_exchange_bot_api.clear_exchange_rate_cache"},
+}
+
+_regulatory_affairs_doc_events = {
+	"Item": {"validate": "erpnext.regulatory_affairs.item.validate"},
+	"Purchase Order": {
+		"validate": "erpnext.regulatory_affairs.transactions.validate_warning_transaction",
+		"before_submit": "erpnext.regulatory_affairs.transactions.capture_transaction_snapshot",
+	},
+	"Sales Order": {
+		"validate": "erpnext.regulatory_affairs.transactions.validate_warning_transaction",
+		"before_submit": "erpnext.regulatory_affairs.transactions.capture_transaction_snapshot",
+	},
+	**{
+		_doctype: {
+			"before_submit": [
+				"erpnext.regulatory_affairs.transactions.validate_transaction",
+				"erpnext.regulatory_affairs.transactions.capture_transaction_snapshot",
+			]
+		}
+		for _doctype in ("Purchase Receipt", "Stock Entry", "Delivery Note", "Sales Invoice")
+	},
 }
 
 auto_cancel_exempted_doctypes = ["Payment Entry", "Sales Tax Invoice", "Purchase Tax Invoice"]
@@ -600,7 +623,9 @@ scheduler_events = {
 		"erpnext.utilities.doctype.video.video.update_youtube_data",
 		"erpnext.accounts.doctype.bank_transaction_rule.bank_transaction_rule.scheduler_run_rule_evaluation",
 	],
-	"daily": ["erpnext.regional.doctype.thai_fda_registration.reminders.send_expiry_reminders"],
+	"daily": [
+		"erpnext.regulatory_affairs.alerts.run_daily_expiry_processing",
+	],
 	"daily_long": [],
 	"daily_maintenance": [
 		"erpnext.support.doctype.issue.issue.auto_close_tickets",
@@ -636,6 +661,7 @@ scheduler_events = {
 	"weekly": [
 		"erpnext.accounts.utils.auto_create_exchange_rate_revaluation_weekly",
 		"erpnext.stock.doctype.stock_reposting_settings.stock_reposting_settings.repost_incorrect_valuation_entries",
+		"erpnext.regulatory_affairs.alerts.send_weekly_regulatory_digest",
 	],
 	"monthly_long": [
 		"erpnext.accounts.deferred_revenue.process_deferred_accounting",
@@ -881,9 +907,9 @@ fixtures = [
 	},
 ]
 
-# Thailand localization hooks are merged after the standard hook declarations so
-# they augment ERPNext's existing events instead of replacing them.
-for _doctype, _events in _thailand_doc_events.items():
+# Thailand localization and Regulatory Affairs hooks are merged after the standard hook
+# declarations so they augment ERPNext's existing events instead of replacing them.
+for _doctype, _events in [*_thailand_doc_events.items(), *_regulatory_affairs_doc_events.items()]:
 	_doc_events = doc_events.setdefault(_doctype, {})
 	for _event, _handler in _events.items():
 		_existing = _doc_events.get(_event)

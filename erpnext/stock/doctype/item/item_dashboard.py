@@ -13,7 +13,6 @@ def get_data():
 			"Product Bundle": "new_item_code",
 			"BOM": "item",
 			"Batch": "item",
-			"Thai FDA Registration": "item",
 		},
 		"transactions": [
 			{"label": _("Groups"), "items": ["BOM", "Product Bundle", "Item Alternative"]},
@@ -32,7 +31,6 @@ def get_data():
 			},
 			{"label": _("Manufacture"), "items": ["Production Plan", "Work Order", "Item Manufacturer"]},
 			{"label": _("Traceability"), "items": ["Serial No", "Batch"]},
-			{"label": _("ทะเบียน อย."), "items": ["Thai FDA Registration"]},
 			{"label": _("Stock Movement"), "items": ["Stock Entry", "Stock Reconciliation"]},
 			{"label": _("Lead Time"), "items": ["Item Lead Time"]},
 		],

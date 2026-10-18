@@ -1,0 +1,63 @@
+{
+ "add_total_row": 0,
+ "columns": [],
+ "creation": "2026-10-18 12:00:00.000000",
+ "disabled": 0,
+ "doctype": "Report",
+ "filters": [
+  {
+   "fieldname": "item",
+   "fieldtype": "Link",
+   "label": "Item",
+   "options": "Item"
+  },
+  {
+   "fieldname": "registration",
+   "fieldtype": "Link",
+   "label": "Registration",
+   "options": "Regulatory Product Registration"
+  },
+  {
+   "fieldname": "official_status",
+   "fieldtype": "Select",
+   "label": "Registration Status",
+   "options": "\nDraft\nActive\nSuspended\nRevoked\nCancelled\nExpired\nSuperseded"
+  },
+  {
+   "default": "Active",
+   "fieldname": "line_status",
+   "fieldtype": "Select",
+   "label": "Line Status",
+   "options": "Active\nRemoved\nSuperseded\nAll"
+  },
+  {
+   "fieldname": "only_with_stock",
+   "fieldtype": "Check",
+   "label": "Only Items With Stock"
+  }
+ ],
+ "is_standard": "Yes",
+ "modified": "2026-10-18 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Regulatory Affairs",
+ "name": "Regulatory Item Coverage Matrix",
+ "owner": "Administrator",
+ "prepared_report": 0,
+ "ref_doctype": "Regulatory Product Registration",
+ "report_name": "Regulatory Item Coverage Matrix",
+ "report_type": "Script Report",
+ "roles": [
+  {
+   "role": "Regulatory Viewer"
+  },
+  {
+   "role": "Regulatory Operator"
+  },
+  {
+   "role": "Regulatory Approver"
+  },
+  {
+   "role": "System Manager"
+  }
+ ]
+}

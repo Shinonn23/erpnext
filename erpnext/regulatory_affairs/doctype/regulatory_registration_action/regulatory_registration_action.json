@@ -1,0 +1,230 @@
+{
+ "actions": [],
+ "allow_import": 1,
+ "autoname": "ACT-.#####",
+ "creation": "2026-10-18 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "action_section",
+  "registration",
+  "action_type",
+  "current_stage",
+  "action_column",
+  "assigned_to",
+  "fda_application_number",
+  "submitted_date",
+  "query_section",
+  "fda_query_date",
+  "query_column",
+  "response_due_date",
+  "outcome_section",
+  "approval_date",
+  "new_expiry_date",
+  "outcome_column",
+  "resulting_registration",
+  "previous_expiry_date",
+  "applied_on",
+  "attachment_section",
+  "attachment",
+  "attachment_column",
+  "remarks"
+ ],
+ "fields": [
+  {
+   "fieldname": "action_section",
+   "fieldtype": "Section Break",
+   "label": "Action"
+  },
+  {
+   "fieldname": "registration",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Registration",
+   "options": "Regulatory Product Registration",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "action_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Action Type",
+   "options": "New Registration\nRenewal\nVariation\nAdd Product\nRemove Product\nCancel\nNot Renew",
+   "reqd": 1
+  },
+  {
+   "default": "Preparing",
+   "fieldname": "current_stage",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Current Stage",
+   "options": "Preparing\nInternal Review\nSubmitted\nFDA Query\nApproved\nRejected\nCancelled"
+  },
+  {
+   "fieldname": "action_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "assigned_to",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Assigned To",
+   "options": "User"
+  },
+  {
+   "fieldname": "fda_application_number",
+   "fieldtype": "Data",
+   "label": "FDA Application Number"
+  },
+  {
+   "fieldname": "submitted_date",
+   "fieldtype": "Date",
+   "label": "Submitted Date"
+  },
+  {
+   "depends_on": "eval:doc.current_stage == 'FDA Query' || doc.fda_query_date || doc.response_due_date",
+   "fieldname": "query_section",
+   "fieldtype": "Section Break",
+   "label": "FDA Query"
+  },
+  {
+   "fieldname": "fda_query_date",
+   "fieldtype": "Date",
+   "label": "FDA Query Date"
+  },
+  {
+   "fieldname": "query_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "response_due_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Response Due Date",
+   "mandatory_depends_on": "eval:doc.current_stage == 'FDA Query'"
+  },
+  {
+   "depends_on": "eval:doc.current_stage == 'Approved' || doc.approval_date",
+   "fieldname": "outcome_section",
+   "fieldtype": "Section Break",
+   "label": "Outcome"
+  },
+  {
+   "fieldname": "approval_date",
+   "fieldtype": "Date",
+   "label": "Approval Date",
+   "mandatory_depends_on": "eval:doc.current_stage == 'Approved'"
+  },
+  {
+   "description": "For a renewal under the same registration number; applied to the registration on approval.",
+   "fieldname": "new_expiry_date",
+   "fieldtype": "Date",
+   "label": "New Expiry Date"
+  },
+  {
+   "fieldname": "outcome_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "For a renewal or new registration issued under a new number; links and supersedes the current registration.",
+   "fieldname": "resulting_registration",
+   "fieldtype": "Link",
+   "label": "Resulting Registration",
+   "options": "Regulatory Product Registration"
+  },
+  {
+   "fieldname": "previous_expiry_date",
+   "fieldtype": "Date",
+   "label": "Previous Expiry Date",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "applied_on",
+   "fieldtype": "Datetime",
+   "label": "Applied On",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "attachment_section",
+   "fieldtype": "Section Break",
+   "label": "Attachment and Remarks"
+  },
+  {
+   "fieldname": "attachment",
+   "fieldtype": "Attach",
+   "label": "Attachment"
+  },
+  {
+   "fieldname": "attachment_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Small Text",
+   "label": "Remarks"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "modified": "2026-10-18 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Regulatory Affairs",
+ "name": "Regulatory Registration Action",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Regulatory Viewer"
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Regulatory Operator",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Regulatory Approver",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "search_fields": "registration,action_type,fda_application_number",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "title_field": "registration",
+ "track_changes": 1
+}

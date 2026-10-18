@@ -1,0 +1,165 @@
+{
+ "actions": [],
+ "creation": "2026-10-18 12:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "line_no",
+  "newcode",
+  "product_name",
+  "identifier",
+  "item_code",
+  "item_name_at_registration",
+  "effective_from",
+  "effective_to",
+  "line_status",
+  "manufacturer_section",
+  "physical_manufacturer",
+  "manufacturer_country",
+  "pack_column",
+  "pack_quantity",
+  "pack_uom",
+  "details_section",
+  "other_details",
+  "label_verified",
+  "details_column",
+  "remarks"
+ ],
+ "fields": [
+  {
+   "fieldname": "line_no",
+   "fieldtype": "Int",
+   "label": "Line Number",
+   "read_only": 1
+  },
+  {
+   "columns": 2,
+   "fieldname": "newcode",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "NEWCODE",
+   "search_index": 1
+  },
+  {
+   "columns": 2,
+   "fieldname": "product_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Product Name",
+   "reqd": 1
+  },
+  {
+   "columns": 1,
+   "fieldname": "identifier",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Identifier / Model / Catalogue No."
+  },
+  {
+   "columns": 2,
+   "fieldname": "item_code",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "ERPNext Item",
+   "options": "Item",
+   "search_index": 1
+  },
+  {
+   "fieldname": "item_name_at_registration",
+   "fieldtype": "Data",
+   "label": "Item Name at Registration",
+   "read_only": 1
+  },
+  {
+   "columns": 1,
+   "fieldname": "effective_from",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Effective From"
+  },
+  {
+   "columns": 1,
+   "fieldname": "effective_to",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Effective To"
+  },
+  {
+   "columns": 1,
+   "default": "Active",
+   "fieldname": "line_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Line Status",
+   "options": "Active\nRemoved\nSuperseded"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "manufacturer_section",
+   "fieldtype": "Section Break",
+   "label": "Manufacturer and Pack"
+  },
+  {
+   "fieldname": "physical_manufacturer",
+   "fieldtype": "Link",
+   "label": "Physical Manufacturer",
+   "options": "Manufacturer"
+  },
+  {
+   "fieldname": "manufacturer_country",
+   "fieldtype": "Link",
+   "label": "Manufacturer Country",
+   "options": "Country"
+  },
+  {
+   "fieldname": "pack_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "pack_quantity",
+   "fieldtype": "Float",
+   "label": "Pack Quantity"
+  },
+  {
+   "fieldname": "pack_uom",
+   "fieldtype": "Link",
+   "label": "Pack UOM",
+   "options": "UOM"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "details_section",
+   "fieldtype": "Section Break",
+   "label": "Details"
+  },
+  {
+   "fieldname": "other_details",
+   "fieldtype": "Small Text",
+   "label": "Other Details"
+  },
+  {
+   "fieldname": "label_verified",
+   "fieldtype": "Check",
+   "label": "Label Verified"
+  },
+  {
+   "fieldname": "details_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Small Text",
+   "label": "Remarks"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "modified": "2026-10-18 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Regulatory Affairs",
+ "name": "Regulatory Registered Product",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic"
+}

@@ -1,0 +1,309 @@
+{
+ "actions": [],
+ "creation": "2026-10-18 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "ownership_section",
+  "default_regulatory_owner",
+  "ownership_column",
+  "default_regulatory_department",
+  "validation_section",
+  "validate_on_purchase_order",
+  "validate_on_purchase_receipt",
+  "validate_on_stock_entry",
+  "validation_column",
+  "validate_on_sales_order",
+  "validate_on_delivery_note",
+  "validate_on_sales_invoice",
+  "policy_section",
+  "missing_registration_action",
+  "expired_registration_action",
+  "suspended_registration_action",
+  "revoked_registration_action",
+  "policy_column",
+  "missing_newcode_action",
+  "manufacturer_mismatch_action",
+  "expired_registration_existing_stock_policy",
+  "renewal_section",
+  "auto_create_renewal_action",
+  "renewal_column",
+  "renewal_start_days_before_expiry",
+  "alert_section",
+  "enable_expiry_alerts",
+  "send_system_notification",
+  "send_email",
+  "alert_column",
+  "overdue_repeat_days",
+  "fda_query_alert_days",
+  "send_weekly_digest",
+  "rules_section",
+  "expiry_alert_rules",
+  "recipients_section",
+  "recipients"
+ ],
+ "fields": [
+  {
+   "fieldname": "ownership_section",
+   "fieldtype": "Section Break",
+   "label": "Ownership"
+  },
+  {
+   "description": "Fallback owner for renewal actions and alerts when a registration has no responsible user.",
+   "fieldname": "default_regulatory_owner",
+   "fieldtype": "Link",
+   "label": "Default Regulatory Owner",
+   "options": "User"
+  },
+  {
+   "fieldname": "ownership_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "default_regulatory_department",
+   "fieldtype": "Link",
+   "label": "Default Regulatory Department",
+   "options": "Department"
+  },
+  {
+   "fieldname": "validation_section",
+   "fieldtype": "Section Break",
+   "label": "Transaction Validation"
+  },
+  {
+   "default": "1",
+   "description": "Purchase Orders and Sales Orders are warning-only on save; the policy below applies on submit of the other documents.",
+   "fieldname": "validate_on_purchase_order",
+   "fieldtype": "Check",
+   "label": "Validate on Purchase Order"
+  },
+  {
+   "default": "1",
+   "fieldname": "validate_on_purchase_receipt",
+   "fieldtype": "Check",
+   "label": "Validate on Purchase Receipt"
+  },
+  {
+   "default": "1",
+   "description": "Only Material Receipt entries are checked. Transfers, issues and manufacturing stay open so non-compliant stock can be quarantined or written off.",
+   "fieldname": "validate_on_stock_entry",
+   "fieldtype": "Check",
+   "label": "Validate on Stock Entry (Material Receipt)"
+  },
+  {
+   "fieldname": "validation_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "fieldname": "validate_on_sales_order",
+   "fieldtype": "Check",
+   "label": "Validate on Sales Order"
+  },
+  {
+   "default": "1",
+   "fieldname": "validate_on_delivery_note",
+   "fieldtype": "Check",
+   "label": "Validate on Delivery Note"
+  },
+  {
+   "default": "1",
+   "description": "Invoice rows that come from a Delivery Note inherit its regulatory snapshot and are not validated again. Returns are never blocked.",
+   "fieldname": "validate_on_sales_invoice",
+   "fieldtype": "Check",
+   "label": "Validate on Sales Invoice"
+  },
+  {
+   "fieldname": "policy_section",
+   "fieldtype": "Section Break",
+   "label": "Violation Policy"
+  },
+  {
+   "default": "Block",
+   "fieldname": "missing_registration_action",
+   "fieldtype": "Select",
+   "label": "Missing Registration Action",
+   "options": "Ignore\nWarning\nBlock"
+  },
+  {
+   "default": "Block",
+   "fieldname": "expired_registration_action",
+   "fieldtype": "Select",
+   "label": "Expired Registration Action",
+   "options": "Ignore\nWarning\nBlock"
+  },
+  {
+   "default": "Block",
+   "fieldname": "suspended_registration_action",
+   "fieldtype": "Select",
+   "label": "Suspended Registration Action",
+   "options": "Ignore\nWarning\nBlock"
+  },
+  {
+   "default": "Block",
+   "fieldname": "revoked_registration_action",
+   "fieldtype": "Select",
+   "label": "Revoked Registration Action",
+   "options": "Ignore\nWarning\nBlock"
+  },
+  {
+   "fieldname": "policy_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Block",
+   "fieldname": "missing_newcode_action",
+   "fieldtype": "Select",
+   "label": "Missing NEWCODE / Identifier Action",
+   "options": "Ignore\nWarning\nBlock"
+  },
+  {
+   "default": "Warning",
+   "fieldname": "manufacturer_mismatch_action",
+   "fieldtype": "Select",
+   "label": "Manufacturer Mismatch Action",
+   "options": "Ignore\nWarning\nBlock"
+  },
+  {
+   "default": "Warning",
+   "description": "Applies to outbound documents (Delivery Note, Sales Invoice) when the registration has expired.",
+   "fieldname": "expired_registration_existing_stock_policy",
+   "fieldtype": "Select",
+   "label": "Expired Registration Existing Stock Policy",
+   "options": "Block\nWarning\nAllow Existing Compliant Stock"
+  },
+  {
+   "fieldname": "renewal_section",
+   "fieldtype": "Section Break",
+   "label": "Renewal Planning"
+  },
+  {
+   "default": "1",
+   "fieldname": "auto_create_renewal_action",
+   "fieldtype": "Check",
+   "label": "Auto Create Renewal Action"
+  },
+  {
+   "fieldname": "renewal_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "365",
+   "depends_on": "auto_create_renewal_action",
+   "fieldname": "renewal_start_days_before_expiry",
+   "fieldtype": "Int",
+   "label": "Renewal Start Days Before Expiry"
+  },
+  {
+   "fieldname": "alert_section",
+   "fieldtype": "Section Break",
+   "label": "Expiry Alerts"
+  },
+  {
+   "default": "1",
+   "fieldname": "enable_expiry_alerts",
+   "fieldtype": "Check",
+   "label": "Enable Expiry Alerts"
+  },
+  {
+   "default": "1",
+   "fieldname": "send_system_notification",
+   "fieldtype": "Check",
+   "label": "Send System Notification"
+  },
+  {
+   "default": "1",
+   "fieldname": "send_email",
+   "fieldtype": "Check",
+   "label": "Send Email"
+  },
+  {
+   "fieldname": "alert_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "7",
+   "description": "After expiry, repeat the reminder on the first day and then at this interval.",
+   "fieldname": "overdue_repeat_days",
+   "fieldtype": "Int",
+   "label": "Overdue Reminder Interval (Days)"
+  },
+  {
+   "default": "7,3,1,0",
+   "description": "Comma-separated days before an FDA Query response due date.",
+   "fieldname": "fda_query_alert_days",
+   "fieldtype": "Data",
+   "label": "FDA Query Alert Days"
+  },
+  {
+   "default": "1",
+   "fieldname": "send_weekly_digest",
+   "fieldtype": "Check",
+   "label": "Send Weekly Digest"
+  },
+  {
+   "fieldname": "rules_section",
+   "fieldtype": "Section Break",
+   "label": "Expiry Alert Rules"
+  },
+  {
+   "fieldname": "expiry_alert_rules",
+   "fieldtype": "Table",
+   "label": "Expiry Alert Rules",
+   "options": "Regulatory Expiry Alert Rule"
+  },
+  {
+   "fieldname": "recipients_section",
+   "fieldtype": "Section Break",
+   "label": "Additional Alert Recipients"
+  },
+  {
+   "description": "These users receive every expiry and FDA query alert and the weekly digest, in addition to the recipients of each alert rule.",
+   "fieldname": "recipients",
+   "fieldtype": "Table",
+   "label": "Additional Recipients",
+   "options": "Regulatory Alert Recipient"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "issingle": 1,
+ "modified": "2026-10-18 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Regulatory Affairs",
+ "name": "Regulatory Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Regulatory Viewer"
+  },
+  {
+   "read": 1,
+   "role": "Regulatory Operator"
+  },
+  {
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Regulatory Approver",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "track_changes": 1
+}

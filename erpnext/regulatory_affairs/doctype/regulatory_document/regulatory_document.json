@@ -1,0 +1,197 @@
+{
+ "actions": [],
+ "allow_import": 1,
+ "autoname": "DOC-.#####",
+ "creation": "2026-10-18 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "document_section",
+  "registration",
+  "document_type",
+  "document_number",
+  "version",
+  "document_column",
+  "issuer",
+  "issue_date",
+  "expiry_date",
+  "applicable_newcode",
+  "evidence_section",
+  "file",
+  "verification_status",
+  "evidence_column",
+  "verified_by",
+  "verified_on",
+  "remarks_section",
+  "remarks"
+ ],
+ "fields": [
+  {
+   "fieldname": "document_section",
+   "fieldtype": "Section Break",
+   "label": "Document"
+  },
+  {
+   "fieldname": "registration",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Registration",
+   "options": "Regulatory Product Registration",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "document_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Document Type",
+   "options": "Certificate\nAnnex\nLabel\nIFU\nLOA\nISO\nGMP\nDeclaration of Conformity\nProduct Specification\nRisk Analysis\nClinical Evidence\nOther",
+   "reqd": 1
+  },
+  {
+   "fieldname": "document_number",
+   "fieldtype": "Data",
+   "label": "Document Number"
+  },
+  {
+   "fieldname": "version",
+   "fieldtype": "Data",
+   "label": "Version"
+  },
+  {
+   "fieldname": "document_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "issuer",
+   "fieldtype": "Data",
+   "label": "Issuer"
+  },
+  {
+   "fieldname": "issue_date",
+   "fieldtype": "Date",
+   "label": "Issue Date"
+  },
+  {
+   "description": "Independent from the registration's expiry.",
+   "fieldname": "expiry_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Expiry Date"
+  },
+  {
+   "fieldname": "applicable_newcode",
+   "fieldtype": "Data",
+   "label": "Applicable NEWCODE"
+  },
+  {
+   "fieldname": "evidence_section",
+   "fieldtype": "Section Break",
+   "label": "Evidence and Verification"
+  },
+  {
+   "fieldname": "file",
+   "fieldtype": "Attach",
+   "label": "File",
+   "reqd": 1
+  },
+  {
+   "default": "Pending",
+   "description": "Only a Regulatory Approver can verify or reject a document.",
+   "fieldname": "verification_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Verification Status",
+   "options": "Pending\nVerified\nRejected\nExpired"
+  },
+  {
+   "fieldname": "evidence_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "verified_by",
+   "fieldtype": "Link",
+   "label": "Verified By",
+   "no_copy": 1,
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "verified_on",
+   "fieldtype": "Date",
+   "label": "Verified On",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "remarks_section",
+   "fieldtype": "Section Break",
+   "label": "Remarks"
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Small Text",
+   "label": "Remarks"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "modified": "2026-10-18 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Regulatory Affairs",
+ "name": "Regulatory Document",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Regulatory Viewer"
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Regulatory Operator",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Regulatory Approver",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "search_fields": "registration,document_type,document_number",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "title_field": "document_type",
+ "track_changes": 1
+}

@@ -45,6 +45,10 @@ def after_install():
 	from erpnext.regional.thailand.install import after_install as thailand_after_install
 
 	thailand_after_install()
+
+	from erpnext.regulatory_affairs.install import after_install as regulatory_affairs_after_install
+
+	regulatory_affairs_after_install()
 	frappe.db.commit()
 
 

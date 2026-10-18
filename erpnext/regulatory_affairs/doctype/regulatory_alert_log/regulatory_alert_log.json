@@ -1,0 +1,205 @@
+{
+ "actions": [],
+ "autoname": "REG-ALERT-.#####",
+ "creation": "2026-10-18 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "alert_section",
+  "alert_kind",
+  "reference_doctype",
+  "reference_name",
+  "registration",
+  "regulatory_document",
+  "alert_column",
+  "threshold_days",
+  "expiry_date",
+  "severity",
+  "dedupe_key",
+  "delivery_section",
+  "status",
+  "alerted_on",
+  "retry_count",
+  "delivery_column",
+  "system_sent",
+  "email_sent",
+  "recipient_summary",
+  "delivery_note"
+ ],
+ "fields": [
+  {
+   "fieldname": "alert_section",
+   "fieldtype": "Section Break",
+   "label": "Alert"
+  },
+  {
+   "fieldname": "alert_kind",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Alert Kind",
+   "options": "Registration Expiry\nEstablishment Expiry\nSupporting Document Expiry\nFDA Query Due",
+   "reqd": 1
+  },
+  {
+   "fieldname": "reference_doctype",
+   "fieldtype": "Link",
+   "label": "Reference DocType",
+   "options": "DocType",
+   "reqd": 1
+  },
+  {
+   "fieldname": "reference_name",
+   "fieldtype": "Dynamic Link",
+   "in_list_view": 1,
+   "label": "Reference",
+   "options": "reference_doctype",
+   "reqd": 1
+  },
+  {
+   "fieldname": "registration",
+   "fieldtype": "Link",
+   "label": "Registration",
+   "options": "Regulatory Product Registration",
+   "search_index": 1
+  },
+  {
+   "fieldname": "regulatory_document",
+   "fieldtype": "Link",
+   "label": "Regulatory Document",
+   "options": "Regulatory Document"
+  },
+  {
+   "fieldname": "alert_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Negative values are overdue days.",
+   "fieldname": "threshold_days",
+   "fieldtype": "Int",
+   "label": "Threshold Days",
+   "reqd": 1
+  },
+  {
+   "fieldname": "expiry_date",
+   "fieldtype": "Date",
+   "label": "Due / Expiry Date"
+  },
+  {
+   "fieldname": "severity",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Severity",
+   "options": "Info\nWarning\nCritical\nExpired"
+  },
+  {
+   "fieldname": "dedupe_key",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Idempotency Key",
+   "no_copy": 1,
+   "read_only": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "delivery_section",
+   "fieldtype": "Section Break",
+   "label": "Delivery"
+  },
+  {
+   "default": "Queued",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Queued\nSent\nNo Recipients\nFailed",
+   "read_only": 1
+  },
+  {
+   "fieldname": "alerted_on",
+   "fieldtype": "Datetime",
+   "label": "Alerted On",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "retry_count",
+   "fieldtype": "Int",
+   "label": "Retry Count",
+   "read_only": 1
+  },
+  {
+   "fieldname": "delivery_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "system_sent",
+   "fieldtype": "Check",
+   "label": "System Notification Sent",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "email_sent",
+   "fieldtype": "Check",
+   "label": "Email Sent",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "recipient_summary",
+   "fieldtype": "Small Text",
+   "label": "Recipients",
+   "read_only": 1
+  },
+  {
+   "fieldname": "delivery_note",
+   "fieldtype": "Small Text",
+   "label": "Delivery Details",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "modified": "2026-10-18 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Regulatory Affairs",
+ "name": "Regulatory Alert Log",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Regulatory Viewer"
+  },
+  {
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Regulatory Operator"
+  },
+  {
+   "delete": 1,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Regulatory Approver"
+  },
+  {
+   "delete": 1,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager"
+  }
+ ],
+ "row_format": "Dynamic",
+ "search_fields": "alert_kind,reference_name,registration",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "title_field": "reference_name",
+ "track_changes": 0
+}

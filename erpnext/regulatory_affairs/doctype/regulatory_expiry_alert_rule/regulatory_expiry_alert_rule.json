@@ -1,0 +1,66 @@
+{
+ "actions": [],
+ "creation": "2026-10-18 12:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "days_before_expiry",
+  "severity",
+  "action",
+  "recipient_role",
+  "recipient_user"
+ ],
+ "fields": [
+  {
+   "columns": 2,
+   "fieldname": "days_before_expiry",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Days Before Expiry",
+   "reqd": 1
+  },
+  {
+   "columns": 2,
+   "fieldname": "severity",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Severity",
+   "options": "Info\nWarning\nCritical\nExpired",
+   "reqd": 1
+  },
+  {
+   "columns": 3,
+   "fieldname": "action",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Action",
+   "reqd": 1
+  },
+  {
+   "columns": 2,
+   "fieldname": "recipient_role",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Recipient Role",
+   "options": "Role"
+  },
+  {
+   "columns": 2,
+   "fieldname": "recipient_user",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Recipient User",
+   "options": "User"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "modified": "2026-10-18 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Regulatory Affairs",
+ "name": "Regulatory Expiry Alert Rule",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic"
+}
