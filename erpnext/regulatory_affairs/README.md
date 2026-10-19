@@ -288,7 +288,7 @@ union all select 'Notification', name from `tabNotification` where concat_ws(' '
 Then run `bench --site <site> migrate`, which will
 
 1. sync the RA DocTypes, reports and the workspace (the *Regulatory Affairs* Module Def and the three roles are created by the
-   DocType sync itself);
+   DocType sync itself; `install.ensure_module_def` also creates the Module Def if the sync did not, because the Custom Fields name it);
 2. run the post-model-sync patches: `translate_thai_fda_to_english`, then the merge patch (which calls
    `install.ensure_configuration`), then `remove_thai_fda_assessment_status`;
 3. run `erpnext.regulatory_affairs.install.after_migrate`: ensures the roles, creates the Custom Fields on Item, the six transactions and

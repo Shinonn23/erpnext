@@ -120,7 +120,10 @@ never_skip_patches = [
 	"erpnext.patches.v16_0.purge_customer_use_legacy_columns",
 ]
 
-before_migrate = "erpnext.patches.v16_0.remove_customer_use_request_doctypes.assert_no_legacy_data"
+before_migrate = [
+	"erpnext.regulatory_affairs.install.before_migrate",
+	"erpnext.patches.v16_0.remove_customer_use_request_doctypes.assert_no_legacy_data",
+]
 
 boot_session = "erpnext.startup.boot.boot_session"
 notification_config = "erpnext.startup.notifications.get_notification_config"

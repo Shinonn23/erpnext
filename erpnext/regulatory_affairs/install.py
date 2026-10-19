@@ -4,9 +4,10 @@ Runs after install and on every migrate; it never assigns users or owners.
 """
 
 import frappe
+from frappe.cache_manager import clear_global_cache
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
-from erpnext.regulatory_affairs.constants import MANAGED_ROLES, SETTINGS
+from erpnext.regulatory_affairs.constants import MANAGED_ROLES, MODULE, SETTINGS
 from erpnext.regulatory_affairs.custom_fields import CUSTOM_FIELDS
 
 DEFAULT_ALERT_RULES = (
@@ -21,6 +22,16 @@ DEFAULT_ALERT_RULES = (
 )
 
 
+def before_migrate():
+	"""Rebuild the module map so model sync sees a module added by the code just pulled.
+
+	`bench migrate` loads the module map from the Redis cache in `frappe.init`, and `frappe.clear_cache()` does
+	not rebuild it. After a pull that adds this module the map is stale, model sync skips the module and no
+	DocType of it is created.
+	"""
+	clear_global_cache()
+
+
 def after_install():
 	ensure_configuration()
 
@@ -30,9 +41,19 @@ def after_migrate():
 
 
 def ensure_configuration():
+	ensure_module_def()
 	ensure_roles()
 	ensure_custom_fields()
 	ensure_settings()
+
+
+def ensure_module_def():
+	"""Custom Fields name this module, so its Module Def must exist even when DocType sync has not made it."""
+	if frappe.db.exists("Module Def", MODULE):
+		return
+	frappe.get_doc({"doctype": "Module Def", "module_name": MODULE, "app_name": "erpnext"}).insert(
+		ignore_permissions=True
+	)
 
 
 def ensure_roles():
