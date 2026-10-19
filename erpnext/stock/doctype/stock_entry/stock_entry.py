@@ -4810,6 +4810,9 @@ def make_stock_in_entry(source_name, target_doc=None):
 				target_doc.t_warehouse = warehouse
 
 		target_doc.s_warehouse = source_doc.t_warehouse
+		# The goods now sit in the transit warehouse's location; the tester picks the final location.
+		target_doc.storage_location = source_doc.get("to_storage_location")
+		target_doc.to_storage_location = None
 		target_doc.qty = get_remaining_transfer_qty(source_doc) / flt(source_doc.conversion_factor)
 
 	doclist = get_mapped_doc(

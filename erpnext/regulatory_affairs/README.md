@@ -49,7 +49,11 @@ The **Regulatory** tab also has `regulatory_other_category` (for Other), `medica
 **Regulatory Snapshot** section (`regulatory_*` fields listed in `custom_fields.SNAPSHOT_FIELDNAMES`). Custom Field definitions live
 in `custom_fields.py` (RA is their only owner). The legacy Item fields *Thai FDA Assessment Status* (`custom_thai_fda_applicability`)
 and *Thai FDA Assessment Reason / Notes* (`custom_thai_fda_assessment_note`) are retired by the patch described under
-[Retiring the Thai FDA Assessment Status](#retiring-the-thai-fda-assessment-status).
+[Retiring the Thai FDA Assessment Status](#retiring-the-thai-fda-assessment-status). Sites installed before the module was
+renamed from "Medical Device" also kept Item `is_medical_device`, `regulatory_registration_requirement`,
+`regulatory_exemption_reason`, `current_medical_device_registration` and a `medical_device_regulatory_override` Link on the six
+guarded transactions; `erpnext.patches.v16_0.remove_retired_medical_device_fields` deletes those Custom Fields (columns and values
+stay) and clears the old `depends_on` of `regulatory_owner`.
 
 ## Roles
 

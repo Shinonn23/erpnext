@@ -737,6 +737,8 @@ class StocktoAssetConversion(StockController):
 			asset.flags.from_stock_to_asset_conversion = True
 			asset.flags.stock_conversion_token = _GENERATED_ASSET_TOKEN
 			asset.flags.stock_conversion_source = self.name
+			# The conversion approver decided; the generated Asset is submitted by the system, as it was inserted.
+			asset.flags.ignore_permissions = True
 			asset.submit()
 			if output.source_serial_no:
 				frappe.db.set_value("Serial No", output.source_serial_no, "asset", asset.name)

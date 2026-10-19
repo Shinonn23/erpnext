@@ -69,6 +69,8 @@ class StockCount(Document):
 
 		if self.docstatus == 0 and self.status == "In Progress" and not self.snapshot_datetime:
 			frappe.throw(_("Prepare the count to create its stock snapshot."))
+		if self.docstatus == 0 and self.snapshot_datetime:
+			self.keep_snapshot_rows()
 
 		if getattr(self, "_action", None) == "submit":
 			if self.status != "In Progress" or not self.snapshot_datetime:
@@ -142,7 +144,7 @@ class StockCount(Document):
 
 	def validate_dimensions(self):
 		if self.warehouse:
-			dimensions, _ = self.get_dimension_filters()
+			dimensions, _filters = self.get_dimension_filters()
 			storage_location_dimension = next(
 				(dimension for dimension in dimensions if dimension.dimension_name == "Storage Location"),
 				None,
@@ -167,6 +169,41 @@ class StockCount(Document):
 					or location.warehouse != self.warehouse
 				):
 					frappe.throw(_("Storage Location must be active and belong to the selected Warehouse."))
+
+	def keep_snapshot_rows(self):
+		"""The snapshot owns the rows and their System Qty; an edited or uploaded Items table changes only counts."""
+		before = self.get_doc_before_save()
+		if not before or not before.get("snapshot_datetime") or not before.get("items"):
+			return
+		fields = sorted({dimension.source_fieldname for dimension in self.get_countable_dimensions()})
+
+		def key(row):
+			return (
+				row.item_code,
+				row.batch_no or "",
+				row.serial_no or "",
+				tuple(row.get(fieldname) or "" for fieldname in fields),
+			)
+
+		stored = {key(row): flt(row.system_qty) for row in before.get("items")}
+		present = set()
+		for row in self.get("items"):
+			row_key = key(row)
+			if row_key not in stored:
+				frappe.throw(
+					_(
+						"Row {0}: Stock Count items are generated from the stock snapshot. Do not add items manually."
+					).format(row.idx)
+				)
+			row.system_qty = stored[row_key]
+			present.add(row_key)
+		missing = [row_key for row_key in stored if row_key not in present]
+		if missing:
+			frappe.throw(
+				_(
+					"Item {0} from the stock snapshot is missing. Keep every snapshot row and count zero when nothing is found."
+				).format(missing[0][0])
+			)
 
 	def validate_count_lines(self):
 		seen = set()
@@ -357,7 +394,7 @@ class StockCount(Document):
 	def append_snapshot_rows(self, item_code, snapshot):
 		item = frappe.get_cached_doc("Item", item_code)
 		posting_datetime = get_datetime(snapshot)
-		dimensions, _ = self.get_dimension_filters()
+		dimensions, _filters = self.get_dimension_filters()
 		groups = [
 			row
 			for row in self.get_stock_ledger_groups(posting_datetime, item_code)

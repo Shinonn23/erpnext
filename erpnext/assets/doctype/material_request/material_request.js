@@ -300,15 +300,16 @@ frappe.ui.form.on("Material Request", {
 			const actions = r.message || {};
 			if (actions.stock_custody_loan || actions.asset_custody_loan) {
 				const loan_type = actions.stock_custody_loan ? "Stock" : "Asset";
+				// By name, not with the whole document: a document call on a submitted request needs its submit right.
 				frm.add_custom_button(__("Loan Order"), () =>
-					frm.call("make_custody_loan", { loan_type }).then((r) => open_generated_doc(r.message)),
+					run_request_method(frm, "make_custody_loan", { loan_type }).then((r) => open_generated_doc(r.message)),
 					__("Create"),
 					"Custody Loan"
 				);
 			}
 			if (actions.asset_movement) {
 				frm.add_custom_button(__("Asset Movement"), () =>
-					frm.call("make_asset_movement").then((response) => open_generated_doc(response.message)), __("Create")
+					run_request_method(frm, "make_asset_movement").then((response) => open_generated_doc(response.message)), __("Create")
 				);
 			}
 		}).finally(remove_standard_status_actions);
@@ -369,6 +370,14 @@ frappe.ui.form.on("Material Request Item", {
 		});
 	},
 });
+
+function run_request_method(frm, method, args) {
+	return frappe.call({
+		method: "run_doc_method",
+		args: { dt: frm.doc.doctype, dn: frm.doc.name, method, args: JSON.stringify(args || {}) },
+		freeze: true,
+	});
+}
 
 function open_generated_doc(doc) {
 	if (!doc) return;
