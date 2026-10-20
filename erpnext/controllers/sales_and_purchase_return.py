@@ -130,7 +130,8 @@ def validate_returned_items(doc):
 				key = (d.item_code, d.get(field))
 				raise_exception = True
 		elif doc.doctype == "Delivery Note":
-			key = (d.item_code, d.dn_detail) if d.get("dn_detail") else d.item_code
+			# Every return row must reverse its original Delivery Note row; a row without dn_detail is refused.
+			key = (d.item_code, d.get("dn_detail"))
 			raise_exception = True
 
 		if d.item_code and (flt(d.qty) <= 0 or flt(d.get("received_qty")) <= 0):
