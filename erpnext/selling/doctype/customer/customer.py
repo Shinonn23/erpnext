@@ -848,7 +848,7 @@ def get_customer_outstanding(customer, company, ignore_outstanding_sales_order=F
 		select sum(debit) - sum(credit)
 		from `tabGL Entry` where party_type = 'Customer'
 		and is_cancelled = 0 and party = %s
-		and company=%s""",
+		and company=%s {cond}""",
 		(customer, company),
 	)
 

@@ -4,7 +4,7 @@ import unittest
 
 import frappe
 from frappe.client import submit
-from frappe.utils import add_days, add_months, flt, get_first_day, get_last_day, getdate, now_datetime, nowdate
+from frappe.utils import add_days, add_months, flt, get_first_day, get_last_day, getdate, nowdate
 
 from erpnext.accounts.doctype.budget.budget import (
 	BudgetError,
