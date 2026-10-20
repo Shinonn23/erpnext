@@ -1,5 +1,9 @@
 frappe.ui.form.on("Stock to Asset Conversion", {
 	setup(frm) {
+		// Cancelling the conversion reverses the Assets it created (and their receipt movements) after checking they
+		// have no later transactions. Frappe's "Cancel All Documents" dialog offered to cancel them first instead,
+		// which skipped those checks and did not match the Cancel → Yes the user expects.
+		frm.ignore_doctypes_on_cancel_all = ["Asset", "Asset Movement", "Serial and Batch Bundle"];
 		frm.set_query("material_request", () => ({ filters: { docstatus: 1 } }));
 		frm.set_query("pick_list", () => ({
 			filters: { docstatus: 1, purpose: "Material Transfer", company: frm.doc.company },

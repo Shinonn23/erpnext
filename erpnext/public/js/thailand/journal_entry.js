@@ -54,3 +54,61 @@ frappe.ui.form.on("Journal Entry Account", {
 		frappe.model.set_value(cdt, cdn, "petty_cash_holder_name", "");
 	},
 });
+
+frappe.ui.form.on("Journal Entry", {
+	refresh(frm) {
+		// A Journal Entry that withheld (Consider for Tax Withholding) issues its certificate like a payment does
+		if (frm.doc.docstatus == 1 && (frm.doc.tax_withholding_entries || []).length) {
+			const supplier = (frm.doc.accounts || []).find((row) => row.party_type == "Supplier" && row.party);
+			frm.add_custom_button(
+				__("Create Withholding Tax Cert"),
+				() => erpnext.regional.thailand.tax_popups.create_withholding_tax_cert(frm, supplier && supplier.party),
+				undefined,
+				"Withholding Tax Cert"
+			);
+		}
+	},
+
+	apply_tds(frm) {
+		// Ask what is withheld: the category sets the rate and the PND3/PND53 line
+		if (!frm.doc.apply_tds) return;
+		erpnext.regional.thailand.tax_popups.ask_withholding_category(frm, {
+			date: frm.doc.posting_date,
+			current: frm.doc.tax_withholding_category,
+			on_cancel: () => frm.set_value("apply_tds", 0),
+			on_pick: (choice) => frm.set_value("tax_withholding_category", choice.name),
+		});
+	},
+
+	validate(frm) {
+		// Input VAT rows need the supplier's tax invoice: ask for it, tick Create Tax Invoice
+		if (frm.doc.docstatus != 0) return;
+		return erpnext.regional.thailand.tax_popups.get_tax_accounts(frm.doc.company).then((accounts) => {
+			const rows = (frm.doc.accounts || []).filter(
+				(row) =>
+					accounts.purchase_tax_account &&
+					row.account == accounts.purchase_tax_account &&
+					flt(row.debit_in_account_currency) > 0 &&
+					!(row.tax_invoice_number && row.tax_invoice_date)
+			);
+			if (!rows.length) return;
+			const row = rows[0];
+			const party = (frm.doc.accounts || []).find((r) => r.party_type == "Supplier" && r.party);
+			frappe.validated = false;
+			// a Journal Entry may have no supplier row: the popup asks who issued the tax invoice
+			erpnext.regional.thailand.tax_popups.ask_tax_invoice(frm, {
+				vat_amount: row.debit,
+				ask_supplier: true,
+				defaults: {
+					supplier: row.supplier || (party && party.party),
+					tax_invoice_number: row.tax_invoice_number,
+					tax_invoice_date: row.tax_invoice_date || frm.doc.posting_date,
+				},
+				apply: async (values) => {
+					await frappe.model.set_value(row.doctype, row.name, values);
+					await frm.set_value("create_tax_invoice", 1);
+				},
+			});
+		});
+	},
+});

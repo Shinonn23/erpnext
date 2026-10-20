@@ -20,6 +20,56 @@ def get_thai_tax_settings(company):
 	return accounts[0]
 
 
+@frappe.whitelist()
+def get_thai_tax_accounts(company):
+	"""The company's VAT accounts from Thai Tax Settings, for the form popups ({} when not set up)."""
+	settings = frappe.get_cached_doc("Thai Tax Settings")
+	row = next((x for x in settings.company_accounts if x.company == company), None)
+	if not row:
+		return {}
+	return {
+		field: row.get(field)
+		for field in (
+			"sales_tax_account",
+			"sales_tax_account_undue",
+			"purchase_tax_account",
+			"purchase_tax_account_undue",
+		)
+	}
+
+
+@frappe.whitelist()
+def get_withholding_category_choices(company, date=None):
+	"""Withholding categories with an account for the company, the rate valid on the date and the Thai type of
+	income (the PND3/PND53 line), for the "what is withheld" popup."""
+	date = frappe.utils.getdate(date or frappe.utils.today())
+	choices = []
+	for category in frappe.get_all(
+		"Tax Withholding Category",
+		fields=["name", "category_name", "thai_type_of_income", "thai_income_tax_form"],
+		order_by="name",
+	):
+		if not frappe.db.exists("Tax Withholding Account", {"parent": category.name, "company": company}):
+			continue
+		rate = frappe.db.get_value(
+			"Tax Withholding Rate",
+			{"parent": category.name, "from_date": ["<=", date], "to_date": [">=", date]},
+			"tax_withholding_rate",
+		)
+		if rate is None:
+			continue
+		choices.append(
+			{
+				"name": category.name,
+				"label": f"{category.category_name or category.name} {flt(rate):g}%",
+				"rate": flt(rate),
+				"type_of_income": category.thai_type_of_income,
+				"income_tax_form": category.thai_income_tax_form,
+			}
+		)
+	return choices
+
+
 def create_tax_invoice_on_gl_tax(doc, method):
 	if doc.flags.from_repost:
 		return
@@ -261,15 +311,26 @@ def update_voucher_tinv(doctype, voucher, tinv, split_tax_invoice=False):
 	return tinv
 
 
+def get_company_tax_address(company):
+	"""The company's own address: its Billing address, else its only address (e.g. the head office, type Office)."""
+	addresses = frappe.db.get_all(
+		"Address",
+		filters=[
+			["is_your_company_address", "=", 1],
+			["Dynamic Link", "link_doctype", "=", "Company"],
+			["Dynamic Link", "link_name", "=", company],
+		],
+		fields=["name", "address_type"],
+		distinct=True,
+	)
+	billing = [a for a in addresses if a.address_type == "Billing"]
+	candidates = billing or addresses
+	return candidates[0]["name"] if len(candidates) == 1 else None
+
+
 def validate_company_address(doc, method):
 	if not doc.company_tax_address:
-		addresses = frappe.db.get_all(
-			"Address",
-			filters={"is_your_company_address": 1, "address_type": "Billing"},
-			fields=["name", "address_type"],
-		)
-		if len(addresses) == 1:
-			doc.company_tax_address = addresses[0]["name"]
+		doc.company_tax_address = get_company_tax_address(doc.company)
 
 
 def validate_tax_invoice(doc, method):
@@ -570,10 +631,8 @@ def prepare_journal_entry_tax_invoice_detail(doc, method):
 			tax_base_amount = tax_line.tax_base_amount or (
 				tax_rate > 0 and tax_amount * 100 / tax_rate or 0
 			)
-			company_tax_address = doc.company_tax_address
-			if not company_tax_address:
-				addrs = frappe.get_all("Address", {"is_your_company_address": 1}, pluck="name")
-				company_tax_address = len(addrs) == 1 and addrs[0] or ""
+			# the entry's company address, not "the only company address" (each company has its own)
+			company_tax_address = doc.company_tax_address or get_company_tax_address(doc.company) or ""
 			party_name = ""
 			if tax_line.customer:
 				party_name = frappe.get_doc("Customer", tax_line.customer).customer_name

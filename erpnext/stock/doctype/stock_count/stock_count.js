@@ -63,6 +63,9 @@ frappe.ui.form.on("Stock Count", {
 		frm.toggle_display("scan_barcode", can_count);
 		frm.toggle_display("scan_storage_location", can_count);
 		frm.set_df_property("items", "read_only", !can_count);
+		// set_df_property redraws only when the stored value changes: after Prepare Count reloads the form the
+		// table kept its read-only drawing until the page was reloaded, so the counter could not type counts.
+		frm.refresh_field("items");
 		frm.set_df_property("dimensions", "read_only", frm.doc.status !== "Draft");
 		frm.set_df_property("warehouse", "read_only", frm.doc.status !== "Draft");
 		frm.set_df_property("count_type", "read_only", frm.doc.status !== "Draft");

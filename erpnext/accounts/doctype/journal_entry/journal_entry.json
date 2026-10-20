@@ -518,7 +518,7 @@
   },
   {
    "default": "0",
-   "depends_on": "eval:['Credit Note', 'Debit Note'].includes(doc.voucher_type)",
+   "depends_on": "eval:['Credit Note', 'Debit Note', 'Journal Entry'].includes(doc.voucher_type)",
    "fieldname": "apply_tds",
    "fieldtype": "Check",
    "label": "Consider for Tax Withholding "
@@ -673,7 +673,7 @@
    "table_fieldname": "payment_entries"
   }
  ],
- "modified": "2026-04-08 14:19:30.870894",
+ "modified": "2026-10-19 13:30:00.000000",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Journal Entry",

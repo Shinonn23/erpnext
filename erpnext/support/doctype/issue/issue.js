@@ -2,6 +2,10 @@ frappe.ui.form.on("Issue", {
 	onload: function (frm) {
 		frm.email_field = "raised_by";
 
+		// People who work on Issues without access to Support Settings (e.g. a Quality Manager) got a
+		// "No permission for Support Settings" popup on every Issue, which then hid later error messages.
+		if (!frappe.model.can_read("Support Settings")) return;
+
 		frappe.db.get_value(
 			"Support Settings",
 			{ name: "Support Settings" },

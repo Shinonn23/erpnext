@@ -92,24 +92,45 @@ def get_payment_entry_for_employee(
 	return pe
 
 
+def _linked_address(link_doctype, link_name, own=False):
+	"""The only (or the Billing) address linked to a party or company; None when it is ambiguous."""
+	filters = [["Dynamic Link", "link_doctype", "=", link_doctype], ["Dynamic Link", "link_name", "=", link_name]]
+	if own:
+		filters.append(["is_your_company_address", "=", 1])
+	addresses = frappe.get_all("Address", filters=filters, fields=["name", "address_type"], distinct=True)
+	billing = [a for a in addresses if a.address_type == "Billing"]
+	candidates = billing or addresses
+	return candidates[0].name if len(candidates) == 1 else None
+
+
 @frappe.whitelist()
 def make_withholding_tax_cert(filters, doc):
 	filters = frappe.parse_json(filters)
 	pay = frappe.parse_json(doc)
-	frappe.get_doc("Payment Entry", pay.get("name")).check_permission("read")
+	# a Payment Entry, or a Journal Entry that withholds (Consider for Tax Withholding)
+	voucher_type = pay.get("doctype") if pay.get("doctype") in ("Payment Entry", "Journal Entry") else "Payment Entry"
+	frappe.get_doc(voucher_type, pay.get("name")).check_permission("read")
 	frappe.has_permission("Withholding Tax Cert", "create", throw=True)
 	cert = frappe.new_doc("Withholding Tax Cert")
-	cert.supplier = pay.get("party_type") == "Supplier" and pay.get("party") or ""
+	if voucher_type == "Journal Entry":
+		party = next((r for r in pay.get("accounts") or [] if r.get("party_type") == "Supplier" and r.get("party")), {})
+		cert.supplier = party.get("party") or ""
+	else:
+		cert.supplier = pay.get("party_type") == "Supplier" and pay.get("party") or ""
 	if cert.supplier:
 		supplier = frappe.get_doc("Supplier", cert.supplier)
 		cert.supplier_name = supplier.supplier_name
-		cert.supplier_address = supplier.supplier_primary_address
-	cert.voucher_type = "Payment Entry"
+		# the primary address, else the supplier's own address (suppliers often have one address not marked primary)
+		cert.supplier_address = supplier.supplier_primary_address or _linked_address("Supplier", cert.supplier)
+	cert.voucher_type = voucher_type
 	cert.voucher_no = pay.get("name")
 	cert.company = pay.get("company")
-	cert.company_address = filters.get("company_address")
-	cert.income_tax_form = filters.get("income_tax_form")
-	cert.date = filters.get("date")
+	cert.company_address = filters.get("company_address") or _linked_address("Company", cert.company, own=True)
+	cert.income_tax_form = filters.get("income_tax_form") or (
+		cert.supplier
+		and ("PND3" if frappe.db.get_value("Supplier", cert.supplier, "supplier_type") == "Individual" else "PND53")
+	)
+	cert.date = filters.get("date") or pay.get("posting_date")
 	category_forms = set()
 	income_totals = {}
 	for entry in pay.get("tax_withholding_entries") or []:
@@ -133,9 +154,15 @@ def make_withholding_tax_cert(filters, doc):
 		amount = abs(entry.get("withholding_amount") or 0)
 		if not amount:
 			continue
-		income_totals.setdefault(income_type, {"tax_base": 0, "tax_amount": 0})
-		income_totals[income_type]["tax_base"] += abs(entry.get("taxable_amount") or 0)
-		income_totals[income_type]["tax_amount"] += amount
+		# one certificate line per type of income and rate: advertising 2% and services 3% are both type 5 but
+		# are separate lines on PND53, each with its own rate
+		key = (income_type, frappe.utils.flt(entry.get("tax_rate")))
+		line = income_totals.setdefault(key, {"tax_base": 0, "tax_amount": 0, "kinds": []})
+		line["tax_base"] += abs(entry.get("taxable_amount") or 0)
+		line["tax_amount"] += amount
+		kind = frappe.db.get_value("Tax Withholding Category", category, "category_name") or category
+		if kind not in line["kinds"]:
+			line["kinds"].append(kind)
 	if len(category_forms) > 1:
 		frappe.throw(_("All withholding categories on one certificate must use the same Thai tax form."))
 	if category_forms:
@@ -143,18 +170,37 @@ def make_withholding_tax_cert(filters, doc):
 		if cert.income_tax_form and cert.income_tax_form != category_form:
 			frappe.throw(_("The selected income tax form does not match the withholding category."))
 		cert.income_tax_form = category_form
-	for income_type, amounts in income_totals.items():
+	for (income_type, rate), amounts in income_totals.items():
 		base = amounts["tax_base"]
 		cert.append(
 			"withholding_tax_items",
 			{
 				"type_of_income": income_type,
+				"description": ", ".join(amounts["kinds"]),
 				"tax_base": base,
-				"tax_rate": amounts["tax_amount"] / base * 100 if base else 0,
+				"tax_rate": rate or (amounts["tax_amount"] / base * 100 if base else 0),
 				"tax_amount": amounts["tax_amount"],
 			},
 		)
 	return cert
+
+
+@frappe.whitelist()
+def get_payment_withholding_base(doc):
+	"""Withholding base of a payment to a supplier, before VAT: each Purchase Invoice paid contributes its net total
+	(company currency) times the share allocated; an unallocated (advance) amount counts as it is."""
+	payment = frappe.parse_json(doc)
+	base = 0
+	for reference in payment.get("references") or []:
+		if reference.get("reference_doctype") != "Purchase Invoice" or not reference.get("reference_name"):
+			continue
+		invoice = frappe.get_doc("Purchase Invoice", reference.get("reference_name"))
+		invoice.check_permission("read")
+		total = frappe.utils.flt(invoice.grand_total)
+		if total:
+			base += invoice.base_net_total * abs(frappe.utils.flt(reference.get("allocated_amount")) / total)
+	base += frappe.utils.flt(payment.get("unallocated_amount")) * frappe.utils.flt(payment.get("target_exchange_rate") or 1)
+	return frappe.utils.flt(base, 2)
 
 
 @frappe.whitelist()

@@ -23,62 +23,45 @@ frappe.ui.form.on("Payment Entry", {
 				__("Tax Withholding")
 			);
 		}
-		// Create Clear Undue VAT Journal Entry
-		if (frm.doc.docstatus == 1) {
+		// Create Clear Undue VAT Journal Entry. Only for users who can create a Journal Entry: for an approver without
+		// that right the check was refused ("Not permitted"), and closing the message left the submitted payment.
+		if (frm.doc.docstatus == 1 && frappe.model.can_create("Journal Entry")) {
 			frm.trigger("add_create_undue_vat_journal_entry_button");
 		}
 	},
 
 	add_create_withholding_tax_cert_button: function (frm) {
-		frm.add_custom_button(__("Create Withholding Tax Cert"), async function () {
-			let income_tax_form = "";
-			if (frm.doc.party_type == "Supplier") {
-				supplier_type = (
-					await frappe.db.get_value(frm.doc.party_type, frm.doc.party, "supplier_type")
-				).message.supplier_type;
-				if (supplier_type == "Individual") {
-					income_tax_form = "PND3";
-				} else {
-					income_tax_form = "PND53";
-				}
-			}
-			const fields = [
-				{
-					fieldtype: "Date",
-					label: __("Date"),
-					fieldname: "date",
-					reqd: 1,
-				},
-				{
-					fieldtype: "Select",
-					label: __("Income Tax Form"),
-					fieldname: "income_tax_form",
-					options: "PND3\nPND53",
-					default: income_tax_form,
-				},
-				{
-					fieldtype: "Link",
-					label: __("Company Address"),
-					fieldname: "company_address",
-					options: "Address",
-					get_query: () => {
-						return {
-							filters: {
-								is_your_company_address: 1,
-							},
-						};
-					},
-				},
-			];
-			frappe.prompt(
-				fields,
-				function (filters) {
-					frm.events.make_withholding_tax_cert(frm, filters);
-				},
-				__("Withholding Tax Cert"),
-				__("Create Withholding Tax Cert")
-			);
-		}, undefined, "Withholding Tax Cert");
+		frm.add_custom_button(
+			__("Create Withholding Tax Cert"),
+			() =>
+				erpnext.regional.thailand.tax_popups.create_withholding_tax_cert(
+					frm,
+					frm.doc.party_type == "Supplier" ? frm.doc.party : null
+				),
+			undefined,
+			"Withholding Tax Cert"
+		);
+	},
+
+	apply_tds: function (frm) {
+		// Ask what is withheld; the base is the paid invoices before VAT (the core handler has cleared the table)
+		if (!frm.doc.apply_tds || frm.doc.payment_type != "Pay" || frm.doc.party_type != "Supplier") return;
+		erpnext.regional.thailand.tax_popups.ask_withholding_category(frm, {
+			date: frm.doc.posting_date,
+			current: frm.doc.tax_withholding_category,
+			on_cancel: () => frm.set_value("apply_tds", 0),
+			on_pick: async (choice) => {
+				const { message: base } = await frappe.call({
+					method: "erpnext.regional.thailand.custom.payment_entry.get_payment_withholding_base",
+					args: { doc: frm.doc },
+				});
+				frm.set_value("tax_withholding_category", choice.name);
+				frm.clear_table("tax_withholding_categories");
+				frm.add_child("tax_withholding_categories", { tax_withholding_category: choice.name, taxable_amount: base });
+				frm.clear_table("tax_withholding_entries");
+				frm.refresh_field("tax_withholding_categories");
+			},
+		});
 	},
 
 	load_tax_withholding_categories: function (frm) {
@@ -112,20 +95,6 @@ frappe.ui.form.on("Payment Entry", {
 						frm.trigger("make_clear_vat_journal_entry");
 					}, undefined, "Journal Entry");
 				}
-			},
-		});
-	},
-
-	make_withholding_tax_cert: function (frm, filters) {
-		return frappe.call({
-			method: "erpnext.regional.thailand.custom.payment_entry.make_withholding_tax_cert",
-			args: {
-				filters: filters,
-				doc: frm.doc,
-			},
-			callback: function (r) {
-				var doclist = frappe.model.sync(r.message);
-				frappe.set_route("Form", doclist[0].doctype, doclist[0].name);
 			},
 		});
 	},

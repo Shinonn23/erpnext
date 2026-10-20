@@ -1,5 +1,8 @@
 frappe.ui.form.on("Custody Loan Return", {
 	setup(frm) {
+		// before_cancel reverses the receipt, its inspections and shipment itself; without this the form asks the
+		// user to cancel them first ("Cancel All Documents") and stops when the user may not cancel them.
+		frm.ignore_doctypes_on_cancel_all = ["Delivery Note", "Asset Movement", "Quality Inspection", "Shipment"];
 		frm.set_query("custody_loan", () => ({
 			filters: { docstatus: 1, status: ["in", ["Active", "Partially Returned"]] },
 		}));

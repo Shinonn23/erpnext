@@ -150,6 +150,7 @@
 		{% if annual %}
 		<tr><th>{{ _("Accounts Approval / Date and Time") }}</th><td>{{ actor_details("accounts_approved_by", "accounts_approved_on", true) }}</td></tr>
 		<tr><th>{{ _("Final Approval / Date and Time") }}</th><td>{{ actor_details("final_approved_by", "final_approved_on", true) }}</td></tr>
+		<tr><th>{{ _("CEO Acknowledgement / Date and Time") }}</th><td>{% if doc.get("ceo_acknowledged_by") %}{{ actor_details("ceo_acknowledged_by", "ceo_acknowledged_on") }}{% elif doc.docstatus < 2 %}{{ _("Pending") }}{% endif %}</td></tr>
 		{% endif %}
 	</table>
 	<div class="auditor-signature">

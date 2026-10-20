@@ -1,5 +1,8 @@
 frappe.ui.form.on("Custody Loan Adjustment", {
 	setup(frm) {
+		// before_cancel reverses the adjustment's Stock Entry itself; without this the form asks the user to cancel it
+		// first ("Cancel All Documents") and stops when the user may not cancel it.
+		frm.ignore_doctypes_on_cancel_all = ["Stock Entry"];
 		frm.set_query("custody_loan", () => ({
 			filters: {
 				docstatus: 1,

@@ -1452,15 +1452,21 @@ $.extend(erpnext.stock.utils, {
 
 // A new purchase, stock or asset document starts in the Department of the employee opening it.
 // Rows pick it up on save; documents mapped from another one keep the Department they came with.
+// The Department this default filled in follows a change of Company (an employee has no Department in another
+// company, and the save refused "Department ... does not belong to the Company"); one the user chose is kept.
 erpnext.utils.set_department_of_user = function (frm) {
-	if (!frm.is_new() || frm.doc.department || !frm.fields_dict.department || !frm.doc.company) return;
+	if (!frm.is_new() || !frm.fields_dict.department || !frm.doc.company) return;
+	if (frm.doc.department && frm.doc.department !== frm.department_of_user) return;
 
+	const company = frm.doc.company;
 	frappe
-		.xcall("erpnext.setup.doctype.employee.employee.get_user_department", {
-			company: frm.doc.company,
-		})
+		.xcall("erpnext.setup.doctype.employee.employee.get_user_department", { company })
 		.then((department) => {
-			if (department && !frm.doc.department) frm.set_value("department", department);
+			// a reply for a Company the user has since changed must not overwrite the newer one
+			if (frm.doc.company !== company) return;
+			if (frm.doc.department && frm.doc.department !== frm.department_of_user) return;
+			frm.department_of_user = department || null;
+			if ((frm.doc.department || null) !== frm.department_of_user) frm.set_value("department", department || "");
 		});
 };
 

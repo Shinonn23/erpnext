@@ -26,12 +26,15 @@ frappe.ui.form.on("Regulatory Product Registration", {
 					registration: frm.doc.name,
 					action_type: "Renewal",
 				}),
-			__("Create")
+			__("Create"),
+			// the label is not the doctype name, so name the target for the Create-permission check
+			"Regulatory Registration Action"
 		);
 		frm.add_custom_button(
 			__("Regulatory Document"),
 			() => frappe.new_doc("Regulatory Document", { registration: frm.doc.name }),
-			__("Create")
+			__("Create"),
+			"Regulatory Document"
 		);
 		frm.add_custom_button(
 			__("Item Coverage"),

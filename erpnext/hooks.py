@@ -29,6 +29,7 @@ app_include_js = [
 	"/assets/erpnext/js/thailand/address.js",
 	"/assets/erpnext/js/thailand/print_format.js",
 	"/assets/erpnext/js/thailand/deposit_utils.js",
+	"/assets/erpnext/js/thailand/tax_popups.js",
 ]
 app_include_css = "erpnext.bundle.css"
 web_include_css = "erpnext-web.bundle.css"

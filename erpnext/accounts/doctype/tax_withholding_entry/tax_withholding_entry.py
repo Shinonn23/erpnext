@@ -1323,7 +1323,8 @@ class JournalTaxWithholding(TaxWithholdingController):
 		self._recalculate_totals()
 
 	def _should_apply_tds(self):
-		return self.doc.apply_tds and self.doc.voucher_type in ("Debit Note", "Credit Note")
+		# Thai accounting books supplier expenses and adjustments as plain Journal Entries and withholds there too
+		return self.doc.apply_tds and self.doc.voucher_type in ("Debit Note", "Credit Note", "Journal Entry")
 
 	def _reset_existing_tds(self):
 		for row in self.existing_tds_rows:

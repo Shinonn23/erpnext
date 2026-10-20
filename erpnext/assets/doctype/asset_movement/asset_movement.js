@@ -134,7 +134,8 @@ frappe.ui.form.on("Asset Movement", {
 			const values = {
 				change_custodian: 0,
 				change_department: 0,
-				to_employee: null,
+				// a Transfer keeps the custodian unless the user names a new one (see the asset event)
+				to_employee: frm.doc.purpose === "Transfer" ? row.from_employee || null : null,
 				target_department: null,
 			};
 			frappe.model.set_value(row.doctype, row.name, values);
@@ -203,7 +204,7 @@ frappe.ui.form.on("Asset Movement", {
 			has_material_request_recipient
 		);
 		const fields_by_purpose = {
-			Transfer: ["source_location", "target_location"],
+			Transfer: ["source_location", "target_location", "to_employee"],
 			Receipt: ["target_location", "to_employee"],
 			Issue: ["to_employee"],
 			"Transfer and Issue": [
@@ -252,7 +253,7 @@ frappe.ui.form.on("Asset Movement", {
 				target_location: { read_only: 0, reqd: 1 },
 				source_location: { read_only: 1, reqd: 1 },
 				from_employee: { read_only: 1, reqd: 0 },
-				to_employee: { read_only: 1, reqd: 0 },
+				to_employee: { read_only: 0, reqd: 0 },
 			};
 		} else if (frm.doc.purpose === "Receipt") {
 			fieldnames_to_be_altered = {
@@ -340,6 +341,11 @@ frappe.ui.form.on("Asset Movement Item", {
 						from_employee: asset_doc.custodian || null,
 						source_department: asset_doc.department || null,
 					};
+					// The asset's custodian becomes the To Employee of its latest movement, so an empty one on a
+					// Transfer would clear it on submit; the user may name a new custodian (required when none).
+					if (frm.doc.purpose === "Transfer" && !locals[cdt][cdn].to_employee) {
+						values.to_employee = asset_doc.custodian || null;
+					}
 					if (locals[cdt][cdn].asset !== asset_name) return;
 					frappe.model.set_value(cdt, cdn, values);
 				})

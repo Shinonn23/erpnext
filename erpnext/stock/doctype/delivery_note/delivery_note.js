@@ -14,7 +14,9 @@ erpnext.accounts.taxes.setup_tax_validations("Delivery Note");
 erpnext.sales_common.setup_selling_controller();
 
 frappe.ui.form.on("Delivery Note", {
-	refresh(frm) {
+	// Called from refresh below: this object also defines refresh, and a second key of an object literal
+	// replaces the first, so a loan Delivery Note never showed its loan buttons.
+	custody_loan_refresh(frm) {
 		if (frm.doc.is_custody_loan_transaction) {
 			frm.remove_custom_button(__("Shipment"), __("Create"));
 			if (frm.doc.requires_shipment && frm.doc.custody_loan_shipment && frappe.model.can_read("Shipment")) {
@@ -120,6 +122,7 @@ frappe.ui.form.on("Delivery Note", {
 	},
 
 	refresh: function (frm) {
+		frm.trigger("custody_loan_refresh");
 		if (frm.doc.is_custody_loan_transaction) return;
 
 		if (
@@ -286,7 +289,9 @@ erpnext.stock.DeliveryNoteController = class DeliveryNoteController extends (
 		}
 
 		if (!doc.is_return && doc.status != "Closed") {
-			if (doc.docstatus == 1 && frappe.model.can_create("Shipment")) {
+			// A loan Delivery Note ships through Create Loan Shipment; this handler runs after the form.on ones,
+			// so custody_loan_refresh cannot remove the button.
+			if (doc.docstatus == 1 && !doc.is_custody_loan_transaction && frappe.model.can_create("Shipment")) {
 				this.frm.add_custom_button(
 					__("Shipment"),
 					function () {

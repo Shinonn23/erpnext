@@ -1,5 +1,9 @@
 frappe.ui.form.on("Custody Loan", {
 	setup(frm) {
+		// before_cancel reverses these generated documents itself and the request stays (on_cancel updates its
+		// status); without this the form asks the user to cancel them first ("Cancel All Documents") and stops
+		// when the user may not cancel them.
+		frm.ignore_doctypes_on_cancel_all = ["Delivery Note", "Pick List", "Asset Movement", "Shipment", "Material Request"];
 		frm.set_query("material_request", () => ({
 			filters: {
 				docstatus: 1,
