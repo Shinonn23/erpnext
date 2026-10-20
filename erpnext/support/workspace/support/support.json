@@ -8,7 +8,7 @@
  "doctype": "Workspace",
  "for_user": "",
  "hide_custom": 0,
- "icon": "support",
+ "icon": "headset",
  "idx": 0,
  "is_hidden": 0,
  "label": "Support",
@@ -17,7 +17,7 @@
    "hidden": 0,
    "is_query_report": 0,
    "label": "Issues",
-   "link_count": 0,
+   "link_count": 3,
    "onboard": 0,
    "type": "Card Break"
   },
@@ -58,7 +58,7 @@
    "hidden": 0,
    "is_query_report": 0,
    "label": "Maintenance",
-   "link_count": 0,
+   "link_count": 2,
    "onboard": 0,
    "type": "Card Break"
   },
@@ -88,7 +88,7 @@
    "hidden": 0,
    "is_query_report": 0,
    "label": "Service Level Agreement",
-   "link_count": 0,
+   "link_count": 1,
    "onboard": 0,
    "type": "Card Break"
   },
@@ -107,7 +107,7 @@
    "hidden": 0,
    "is_query_report": 0,
    "label": "Warranty",
-   "link_count": 0,
+   "link_count": 2,
    "onboard": 0,
    "type": "Card Break"
   },
@@ -137,7 +137,7 @@
    "hidden": 0,
    "is_query_report": 0,
    "label": "Settings",
-   "link_count": 0,
+   "link_count": 1,
    "onboard": 0,
    "type": "Card Break"
   },
@@ -156,7 +156,7 @@
    "hidden": 0,
    "is_query_report": 0,
    "label": "Reports",
-   "link_count": 0,
+   "link_count": 1,
    "onboard": 0,
    "type": "Card Break"
   },
@@ -268,7 +268,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-10-18 22:00:00.000000",
+ "modified": "2026-10-18 22:00:01.000000",
  "modified_by": "Administrator",
  "module": "Support",
  "name": "Support",
@@ -322,5 +322,6 @@
   }
  ],
  "title": "Support",
- "type": "Workspace"
+ "type": "Workspace",
+ "standard": 1
 }

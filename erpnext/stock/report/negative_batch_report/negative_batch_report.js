@@ -38,6 +38,7 @@ frappe.query_reports["Negative Batch Report"] = {
 				return {
 					filters: {
 						is_group: 0,
+						disabled: 0,
 						company: frappe.query_report.get_filter_value("company"),
 					},
 				};

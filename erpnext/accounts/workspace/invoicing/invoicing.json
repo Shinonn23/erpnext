@@ -13,7 +13,7 @@
  "doctype": "Workspace",
  "for_user": "",
  "hide_custom": 0,
- "icon": "accounting",
+ "icon": "wallet",
  "idx": 4,
  "indicator_color": "",
  "is_hidden": 0,
@@ -155,6 +155,15 @@
    "link_type": "Report",
    "onboard": 0,
    "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Budgeting",
+   "link_count": 3,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
   },
   {
    "dependencies": "",
@@ -658,7 +667,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-10-05 14:06:48.287823",
+ "modified": "2026-10-05 14:06:49.287823",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Invoicing",
@@ -689,5 +698,7 @@
  "sequence_id": 2.0,
  "shortcuts": [],
  "title": "Invoicing",
- "type": "Workspace"
+ "type": "Workspace",
+ "module_onboarding": "Accounting Onboarding",
+ "standard": 1
 }

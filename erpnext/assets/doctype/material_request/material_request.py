@@ -487,7 +487,7 @@ class CustomerMaterialRequest(MaterialRequest):
 			"Item Default", {"parent": item_code, "company": self.company}, "default_warehouse"
 		)
 		if not warehouse:
-			warehouse = frappe.db.get_single_value("Stock Settings", "default_warehouse")
+			warehouse = frappe.get_cached_value("Company", self.company, "default_warehouse")
 		if warehouse and frappe.db.get_value("Warehouse", warehouse, "company") == self.company:
 			return warehouse
 		return None

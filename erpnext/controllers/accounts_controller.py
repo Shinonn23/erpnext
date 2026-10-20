@@ -6,8 +6,10 @@ import json
 from collections import defaultdict
 
 import frappe
-from frappe import _, bold, qb, throw
+from frappe import _, _dict, bold, qb, throw
+from frappe.automation.doctype.auto_repeat.auto_repeat import month_map
 from frappe.contacts.doctype.address.address import get_address_display
+from frappe.model.document import Document
 from frappe.model.workflow import get_workflow_name
 from frappe.query_builder import Criterion, DocType
 from frappe.query_builder.custom import ConstantColumn
@@ -17,18 +19,20 @@ from frappe.utils import (
 	add_months,
 	cint,
 	comma_and,
+	cstr,
+	date_diff,
 	flt,
 	fmt_money,
 	formatdate,
 	get_last_day,
 	get_link_to_form,
 	getdate,
-	nowdate,
 	parse_json,
 	today,
 )
 
 import erpnext
+from erpnext import _refuse, require_permission
 from erpnext.accounts.doctype.accounting_dimension.accounting_dimension import (
 	STANDARD_DIMENSIONS,
 	get_accounting_dimensions,
@@ -64,18 +68,18 @@ from erpnext.controllers.print_settings import (
 )
 from erpnext.controllers.sales_and_purchase_return import validate_return
 from erpnext.exceptions import InvalidCurrency
-from erpnext.selling.doctype.party_specific_item.party_specific_item import get_party_item_restrictions
+from erpnext.selling.doctype.party_specific_item.party_specific_item import get_restricted_items_condition
 from erpnext.setup.utils import get_exchange_rate
 from erpnext.stock.doctype.item.item import get_uom_conv_factor
 from erpnext.stock.doctype.packed_item.packed_item import make_packing_list
 from erpnext.stock.get_item_details import (
 	NOT_APPLICABLE_TAX,
 	ItemDetailsCtx,
+	_get_item_details,
 	_get_item_tax_template,
 	_get_item_tax_template_from_item_group,
 	get_bin_details,
 	get_conversion_factor,
-	get_item_details,
 	get_item_tax_map,
 	get_item_warehouse_,
 )
@@ -123,6 +127,15 @@ DEPARTMENT_DOCUMENTS = (
 	"Asset Repair",
 	"Stock to Asset Conversion",
 )
+
+COUNTERPART_REFERENCE = {
+	"Sales Invoice": ("inter_company_invoice_reference", "Purchase Invoice"),
+	"Purchase Invoice": ("inter_company_invoice_reference", "Sales Invoice"),
+	"Sales Order": ("inter_company_order_reference", "Purchase Order"),
+	"Purchase Order": ("inter_company_order_reference", "Sales Order"),
+	"Delivery Note": ("inter_company_reference", "Purchase Receipt"),
+	"Purchase Receipt": ("inter_company_reference", "Delivery Note"),
+}
 
 
 class AccountsController(TransactionBase):
@@ -200,23 +213,39 @@ class AccountsController(TransactionBase):
 			self.remove_serial_and_batch_bundle()
 
 	def ensure_supplier_is_not_blocked(self):
-		is_supplier_payment = self.doctype == "Payment Entry" and self.party_type == "Supplier"
-		is_buying_invoice = self.doctype in ["Purchase Invoice", "Purchase Order"]
-		supplier_name = self.supplier if is_buying_invoice else self.party if is_supplier_payment else None
-		supplier = None
+		if self.meta.has_field("is_return") and self.is_return:
+			return
 
-		if supplier_name:
-			supplier = frappe.get_lazy_doc("Supplier", supplier_name)
+		hold_type, suppliers = self.get_supplier_hold_scope()
+		for supplier in {supplier for supplier in suppliers if supplier}:
+			if frappe.get_lazy_doc("Supplier", supplier).is_blocked_for(hold_type):
+				frappe.msgprint(
+					_("{0} is blocked so this transaction cannot proceed").format(supplier),
+					raise_exception=1,
+				)
 
-		if supplier and supplier.on_hold:
-			if (is_buying_invoice and supplier.hold_type in ["All", "Invoices"]) or (
-				is_supplier_payment and supplier.hold_type in ["All", "Payments"]
-			):
-				if not supplier.release_date or getdate(nowdate()) <= supplier.release_date:
-					frappe.msgprint(
-						_("{0} is blocked so this transaction cannot proceed").format(supplier_name),
-						raise_exception=1,
-					)
+	def get_supplier_hold_scope(self) -> tuple[str | None, list[str]]:
+		"""Return the Hold Type that blocks this document and the suppliers it applies to."""
+		if self.doctype in ("Purchase Order", "Purchase Invoice"):
+			return "Invoices", [self.supplier]
+		if self.doctype in ("Purchase Receipt", "Supplier Quotation"):
+			return "All", [self.supplier]
+		if self.doctype == "Request for Quotation":
+			return "All", [row.supplier for row in self.suppliers]
+		if self.doctype == "Payment Entry" and self.party_type == "Supplier":
+			return "Payments", [self.party]
+		if self.doctype == "Journal Entry" and any(
+			flt(row.credit_in_account_currency) - flt(row.debit_in_account_currency) > 0
+			and frappe.get_cached_value("Account", row.account, "account_type") in ("Bank", "Cash")
+			for row in self.accounts
+		):
+			return "Payments", [
+				row.party
+				for row in self.accounts
+				if row.party_type == "Supplier"
+				and flt(row.debit_in_account_currency) - flt(row.credit_in_account_currency) > 0
+			]
+		return None, []
 
 	def validate_against_voucher_outstanding(self):
 		from frappe.model.meta import get_meta
@@ -307,6 +336,7 @@ class AccountsController(TransactionBase):
 				self.validate_deferred_start_and_end_date()
 
 		self.validate_inter_company_reference()
+		self.validate_inter_company_currency()
 		# validate inter  company transaction rate
 		self.validate_internal_transaction()
 
@@ -830,6 +860,52 @@ class AccountsController(TransactionBase):
 		elif self.doctype in ("Quotation", "Purchase Order", "Sales Order"):
 			self.validate_non_invoice_documents_schedule()
 
+	def shift_service_dates(self, reference_doc, auto_repeat_doc):
+		"""Move item service dates into the new invoice period (used by Auto Repeat)."""
+		if not (self.from_date and self.to_date and reference_doc.from_date and reference_doc.to_date):
+			return
+
+		from_date = getdate(self.from_date)
+		reference_from_date = getdate(reference_doc.from_date)
+		months = (
+			(from_date.year - reference_from_date.year) * 12 + from_date.month - reference_from_date.month
+		)
+		days = date_diff(from_date, reference_from_date)
+		shift_by_months = auto_repeat_doc.frequency in month_map
+
+		reference_to_date = getdate(reference_doc.to_date)
+		to_date = getdate(self.to_date)
+
+		def shift(date):
+			# Keep the period end aligned, e.g. 1-28 Feb becomes 1-31 Mar.
+			if getdate(date) == reference_to_date:
+				return to_date
+			if not shift_by_months:
+				return add_days(date, days)
+			# Whole months never reverse a period, e.g. 29-31 Jan becomes 28-28 Feb.
+			shifted_date = getdate(add_months(date, months))
+			# Month ends stay month ends, e.g. 1-28 Feb becomes 1-31 Mar.
+			if getdate(date) == get_last_day(date):
+				shifted_date = get_last_day(shifted_date)
+			# Dates inside the reference period stay inside the new period, which can end earlier in the month.
+			if getdate(date) < reference_to_date:
+				return min(shifted_date, to_date)
+			return shifted_date
+
+		for item, reference_item in zip(self.items, reference_doc.items, strict=True):
+			if reference_item.service_start_date:
+				item.service_start_date = shift(reference_item.service_start_date)
+			if reference_item.service_end_date:
+				item.service_end_date = shift(reference_item.service_end_date)
+			# The new period can end later in the month, e.g. 30 Jan-26 Feb becomes 27 Feb-29 Mar.
+			# A start date moved to the period end can then pass the end date, so move the end date after it.
+			if (
+				item.service_start_date
+				and item.service_end_date
+				and getdate(item.service_end_date) < getdate(item.service_start_date)
+			):
+				item.service_end_date = add_days(to_date, 1)
+
 	def before_print(self, settings=None):
 		self.set_missing_terms()
 
@@ -986,6 +1062,23 @@ class AccountsController(TransactionBase):
 				if not row.get(field):
 					msg = f"At Row {row.idx}: The field {bold(label)} is mandatory for internal transfer"
 					frappe.throw(_(msg), title=_("Internal Transfer Reference Missing"))
+
+	def validate_inter_company_currency(self):
+		if self.doctype not in COUNTERPART_REFERENCE:
+			return
+
+		reference_field, counterpart_doctype = COUNTERPART_REFERENCE[self.doctype]
+		counterpart = self.get(reference_field)
+		if not counterpart:
+			return
+
+		currency = frappe.db.get_value(counterpart_doctype, counterpart, "currency")
+		if currency and self.currency != currency:
+			frappe.throw(
+				_("Currency must be {0} to match {1} {2}").format(
+					bold(currency), counterpart_doctype, bold(counterpart)
+				)
+			)
 
 	def validate_internal_transaction(self):
 		if not cint(frappe.get_single_value("Accounts Settings", "maintain_same_internal_transaction_rate")):
@@ -1159,17 +1252,6 @@ class AccountsController(TransactionBase):
 					self.currency, self.company_currency, transaction_date, args
 				)
 
-			if (
-				self.currency
-				and buying_or_selling == "Buying"
-				and frappe.db.get_single_value("Buying Settings", "use_transaction_date_exchange_rate")
-				and self.doctype == "Purchase Invoice"
-			):
-				self.use_transaction_date_exchange_rate = True
-				self.conversion_rate = get_exchange_rate(
-					self.currency, self.company_currency, transaction_date, args
-				)
-
 	def set_missing_item_details(self, for_validate=False):
 		"""set missing item values"""
 		from erpnext.stock.doctype.serial_no.serial_no import get_serial_nos
@@ -1216,7 +1298,7 @@ class AccountsController(TransactionBase):
 					if self.get("is_subcontracted"):
 						ctx.is_subcontracted = self.is_subcontracted
 
-					ret = get_item_details(ctx, self, for_validate=for_validate, overwrite_warehouse=False)
+					ret = _get_item_details(ctx, self, for_validate=for_validate, overwrite_warehouse=False)
 					for fieldname, value in ret.items():
 						if item.meta.get_field(fieldname) and value is not None:
 							if (
@@ -1409,7 +1491,7 @@ class AccountsController(TransactionBase):
 		if self.get("taxes_and_charges"):
 			if not tax_master_doctype:
 				tax_master_doctype = self.meta.get_field("taxes_and_charges").options
-			self.extend("taxes", get_taxes_and_charges(tax_master_doctype, self.get("taxes_and_charges")))
+			self.extend("taxes", _get_taxes_and_charges(tax_master_doctype, self.get("taxes_and_charges")))
 
 	def append_taxes_from_item_tax_template(self):
 		if not frappe.get_single_value("Accounts Settings", "add_taxes_from_item_tax_template"):
@@ -1509,7 +1591,7 @@ class AccountsController(TransactionBase):
 		update_gl_dict_with_app_based_fields(self, gl_dict)
 
 		accounting_dimensions = get_accounting_dimensions()
-		_, default_dimensions = get_dimensions()
+		default_dimensions = get_dimensions()[1]
 		company_defaults = default_dimensions.get(self.company, {})
 		dimension_dict = frappe._dict()
 
@@ -2582,16 +2664,18 @@ class AccountsController(TransactionBase):
 		if not party:
 			return
 
-		restrictions = get_party_item_restrictions(party_type, party)
-		rows = self.get_rows_for_item_restrictions() if restrictions else []
+		restricted_items_condition = get_restricted_items_condition(party_type, party)
+		rows = self.get_rows_for_item_restrictions() if restricted_items_condition is not None else []
 		if not rows:
 			return
 
-		restricted_items = frappe.get_all(
-			"Item",
-			filters={"name": ("in", list({row.item_code for row in rows}))},
-			or_filters={field: ("in", list(values)) for field, values in restrictions.items()},
-			pluck="name",
+		item = frappe.qb.DocType("Item")
+		restricted_items = (
+			frappe.qb.from_(item)
+			.select(item.name)
+			.where(item.name.isin(list({row.item_code for row in rows})))
+			.where(restricted_items_condition)
+			.run(pluck=True)
 		)
 		for row in rows:
 			if row.item_code in restricted_items:
@@ -2800,7 +2884,7 @@ class AccountsController(TransactionBase):
 				if self.get("payment_terms_template"):
 					self.ignore_default_payment_terms_template = 1
 			elif self.get("payment_terms_template"):
-				data = get_payment_terms(
+				data = _get_payment_terms(
 					self.payment_terms_template, posting_date, grand_total, base_grand_total
 				)
 				for item in data:
@@ -3234,7 +3318,6 @@ class AccountsController(TransactionBase):
 
 		return False
 
-	@frappe.whitelist()
 	def repost_accounting_entries(self):
 		repost_ledger = frappe.new_doc("Repost Accounting Ledger")
 		repost_ledger.company = self.company
@@ -3372,6 +3455,13 @@ def validate_tax_master(master_doctype, master_name=None):
 
 @frappe.whitelist()
 def get_default_taxes_and_charges(master_doctype, tax_template=None, company=None):
+	default = _get_default_taxes_and_charges(master_doctype, tax_template, company)
+	if default and default.get("taxes_and_charges"):
+		require_permission(master_doctype, default["taxes_and_charges"], "select")
+	return default
+
+
+def _get_default_taxes_and_charges(master_doctype, tax_template=None, company=None):
 	if not company:
 		return {}
 
@@ -3386,12 +3476,18 @@ def get_default_taxes_and_charges(master_doctype, tax_template=None, company=Non
 
 	return {
 		"taxes_and_charges": default_tax,
-		"taxes": get_taxes_and_charges(master_doctype, default_tax),
+		"taxes": _get_taxes_and_charges(master_doctype, default_tax),
 	}
 
 
 @frappe.whitelist()
 def get_taxes_and_charges(master_doctype, master_name):
+	if master_name:
+		require_permission(master_doctype, master_name, "select")
+	return _get_taxes_and_charges(master_doctype, master_name)
+
+
+def _get_taxes_and_charges(master_doctype, master_name):
 	if not master_name:
 		return
 
@@ -3798,6 +3894,23 @@ def update_invoice_status():
 
 @frappe.whitelist()
 def get_payment_terms(
+	terms_template: str | None,
+	posting_date: str | None = None,
+	grand_total: float | int | str | None = None,
+	base_grand_total: float | int | str | None = None,
+	bill_date: str | None = None,
+):
+	if not terms_template:
+		return
+
+	terms_template = cstr(terms_template)
+	if not frappe.has_permission("Payment Terms Template", "read", doc=terms_template):
+		_refuse()
+
+	return _get_payment_terms(terms_template, posting_date, grand_total, base_grand_total, bill_date)
+
+
+def _get_payment_terms(
 	terms_template, posting_date=None, grand_total=None, base_grand_total=None, bill_date=None
 ):
 	if not terms_template:
@@ -3815,11 +3928,19 @@ def get_payment_terms(
 
 @frappe.whitelist()
 def get_payment_term_details(
-	term, posting_date=None, grand_total=None, base_grand_total=None, bill_date=None
+	term: str | _dict | Document,
+	posting_date: str | None = None,
+	grand_total: float | int | str | None = None,
+	base_grand_total: float | int | str | None = None,
+	bill_date: str | None = None,
 ):
 	term_details = frappe._dict()
 	if isinstance(term, str):
+		if not term or not frappe.has_permission("Payment Term", "select", doc=term):
+			_refuse()
 		term = frappe.get_doc("Payment Term", term)
+	elif not hasattr(term, "payment_term"):
+		_refuse()
 	else:
 		term_details.payment_term = term.payment_term
 
@@ -4002,7 +4123,7 @@ def get_new_child_item_warehouse(p_doc, item, trans_item: dict, child_doctype: s
 		if is_warehouse_required_for_new_child_item(child_doctype, item, trans_item):
 			frappe.throw(
 				_(
-					"Cannot find a default warehouse for item {0}. Please select one in the Update Items dialog, or set a default in the Item Master or in Stock Settings."
+					"Cannot find a default warehouse for item {0}. Please select one in the Update Items dialog, or set a default in the Item Master or in the Company."
 				).format(frappe.bold(item.item_code))
 			)
 		return None
@@ -4134,6 +4255,14 @@ def update_child_qty_rate(
 				title=_("Insufficient Permissions"),
 			)
 
+	def validate_parent_status(doc):
+		if doc.doctype == "Purchase Order" and doc.status in ("Closed", "On Hold", "Delivered"):
+			frappe.throw(
+				_("Cannot update items of Purchase Order {0} because it is {1}.").format(
+					doc.name, _(doc.status)
+				)
+			)
+
 	def validate_workflow_conditions(doc):
 		workflow = get_workflow_name(doc.doctype)
 		if not workflow:
@@ -4213,6 +4342,23 @@ def update_child_qty_rate(
 				if flt(new_data.get("qty")) < qty_to_check:
 					frappe.throw(_("Cannot reduce quantity than ordered or purchased quantity"))
 
+	def validate_uom_unchanged_after_fulfilment(child_item, new_data):
+		fulfilled_qty_field = {"Sales Order": "delivered_qty", "Purchase Order": "received_qty"}.get(
+			parent_doctype
+		)
+		if not fulfilled_qty_field or not flt(child_item.get(fulfilled_qty_field)):
+			return
+
+		uom_changed = new_data.get("uom") not in (None, child_item.uom)
+		factor_changed = flt(new_data.get("conversion_factor")) not in (0, flt(child_item.conversion_factor))
+		if uom_changed or factor_changed:
+			frappe.throw(
+				_(
+					"Row #{0}: Cannot change the UOM or conversion factor of Item {1} after part of it was received or delivered."
+				).format(child_item.idx, frappe.bold(child_item.item_code)),
+				title=_("Invalid UOM"),
+			)
+
 	def should_update_supplied_items(doc) -> bool:
 		"""Subcontracted PO can allow following changes *after submit*:
 
@@ -4260,13 +4406,16 @@ def update_child_qty_rate(
 	any_conversion_factor_changed = False
 
 	parent = frappe.get_doc(parent_doctype, parent_doctype_name)
+	rfqs_before_update = set()
 
 	check_doc_permissions(parent, "write")
+	validate_parent_status(parent)
 
 	if parent_doctype == "Quotation":
 		ordered_items = get_ordered_items(parent.name)
 		_removed_items = validate_and_delete_children(parent, data, ordered_items)
 	elif parent_doctype == "Supplier Quotation":
+		rfqs_before_update = parent.get_request_for_quotations()
 		purchased_items = get_purchased_items(parent.name)
 		_removed_items = validate_and_delete_children(parent, data, purchased_items)
 	else:
@@ -4329,6 +4478,8 @@ def update_child_qty_rate(
 				continue
 
 		validate_quantity_and_rate(child_item, d)
+		if not new_child_flag:
+			validate_uom_unchanged_after_fulfilment(child_item, d)
 
 		if flt(child_item.get("qty")) != flt(d.get("qty")):
 			any_qty_changed = True
@@ -4499,6 +4650,9 @@ def update_child_qty_rate(
 		parent.update_prevdoc_status("submit")
 		parent.update_delivery_status()
 
+	elif parent_doctype == "Supplier Quotation":
+		parent.update_rfq_supplier_status(parent.docstatus.is_submitted(), rfqs_before_update)
+
 	parent.reload()
 	validate_workflow_conditions(parent)
 
@@ -4600,14 +4754,12 @@ def update_gl_dict_with_app_based_fields(doc, gl_dict):
 
 
 @frappe.whitelist()
-def get_missing_company_details(doctype, docname):
+def get_missing_company_details(doctype: str, docname: str):
 	from frappe.contacts.doctype.address.address import get_address_display_list
 
 	company = frappe.db.get_value(doctype, docname, "company")
-	if doctype in ["Purchase Order", "Purchase Invoice"]:
+	if doctype in ["Purchase Order", "Purchase Invoice", "Request for Quotation"]:
 		company_address = frappe.db.get_value(doctype, docname, "billing_address")
-	elif doctype in ["Request for Quotation"]:
-		company_address = frappe.db.get_value(doctype, docname, "shipping_address")
 	else:
 		company_address = frappe.db.get_value(doctype, docname, "company_address")
 
@@ -4736,7 +4888,7 @@ def update_doc_company_address(current_doctype, docname, company_address, detail
 		"Delivery Note": ("company_address", "company_address_display"),
 		"POS Invoice": ("company_address", "company_address_display"),
 		"Quotation": ("company_address", "company_address_display"),
-		"Request for Quotation": ("shipping_address", "shipping_address_display"),
+		"Request for Quotation": ("billing_address", "billing_address_display"),
 	}
 
 	address_field, display_field = address_field_map.get(

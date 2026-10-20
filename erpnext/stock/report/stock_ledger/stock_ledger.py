@@ -13,8 +13,6 @@ from pypika import Order
 from pypika.analytics import RowNumber
 
 from erpnext.stock.doctype.inventory_dimension.inventory_dimension import get_inventory_dimensions
-from erpnext.stock.doctype.serial_no.serial_no import get_serial_nos
-from erpnext.stock.doctype.stock_reconciliation.stock_reconciliation import get_stock_balance_for
 from erpnext.stock.doctype.warehouse.warehouse import apply_warehouse_filter
 from erpnext.stock.report.storage_location_utils import set_location_ledger_balances, show_location_wise_stock
 from erpnext.stock.utils import (
@@ -28,6 +26,9 @@ def execute(filters=None):
 	include_uom = filters.get("include_uom")
 	columns = get_columns(filters)
 	items = get_items(filters)
+	if items == []:
+		return columns, []
+
 	sl_entries = get_stock_ledger_entries(filters, items)
 	item_details = get_item_details(items, sl_entries, include_uom)
 
@@ -65,8 +66,6 @@ def execute(filters=None):
 	if opening_rows:
 		actual_qty = opening_rows[0].get("qty_after_transaction", 0)
 		stock_value = opening_rows[0].get("stock_value", 0)
-
-	available_serial_nos = {}
 
 	batch_balance_dict = frappe._dict({})
 	if actual_qty and filters.get("batch_no"):
@@ -109,9 +108,6 @@ def execute(filters=None):
 			sle.update({"qty_after_transaction": actual_qty, "stock_value": stock_value})
 
 		sle.update({"in_qty": max(sle.actual_qty, 0), "out_qty": min(sle.actual_qty, 0)})
-
-		if sle.serial_no:
-			update_available_serial_nos(available_serial_nos, sle)
 
 		if sle.actual_qty < 0:
 			sle["in_out_rate"] = flt(sle.stock_value_difference / sle.actual_qty, precision)
@@ -262,32 +258,6 @@ def get_serial_batch_bundle_details(sl_entries, filters=None):
 	return _bundle_details
 
 
-def update_available_serial_nos(available_serial_nos, sle):
-	serial_nos = get_serial_nos(sle.serial_no)
-	key = (sle.item_code, sle.warehouse)
-	if key not in available_serial_nos:
-		stock_balance = get_stock_balance_for(
-			sle.item_code, sle.warehouse, sle.posting_date, sle.posting_time
-		)
-		serials = get_serial_nos(stock_balance["serial_nos"]) if stock_balance["serial_nos"] else []
-		available_serial_nos.setdefault(key, serials)
-
-	existing_serial_no = available_serial_nos[key]
-	for sn in serial_nos:
-		if sle.actual_qty > 0:
-			if sn in existing_serial_no:
-				existing_serial_no.remove(sn)
-			else:
-				existing_serial_no.append(sn)
-		else:
-			if sn in existing_serial_no:
-				existing_serial_no.remove(sn)
-			else:
-				existing_serial_no.append(sn)
-
-	sle.balance_serial_no = "\n".join(existing_serial_no)
-
-
 def get_columns(filters):
 	columns = [
 		{"label": _("Date"), "fieldname": "date", "fieldtype": "Datetime", "width": 150},
@@ -408,7 +378,13 @@ def get_columns(filters):
 				"width": 110,
 				"options": "Company:company:default_currency",
 			},
-			{"label": _("Voucher Type"), "fieldname": "voucher_type", "width": 110},
+			{
+				"label": _("Voucher Type"),
+				"fieldname": "voucher_type",
+				"fieldtype": "Link",
+				"options": "DocType",
+				"width": 110,
+			},
 			{
 				"label": _("Voucher #"),
 				"fieldname": "voucher_no",
@@ -555,14 +531,15 @@ def get_items(filters):
 
 	else:
 		if brand := filters.get("brand"):
-			conditions.append(item.brand == brand)
+			condition = item.brand.isin(brand) if isinstance(brand, list) else item.brand == brand
+			conditions.append(condition)
 
 		if filters.get("item_group") and (
 			condition := get_item_group_condition(filters.get("item_group"), item)
 		):
 			conditions.append(condition)
 
-	items = []
+	items = None
 	if conditions:
 		for condition in conditions:
 			query = query.where(condition)

@@ -13,7 +13,7 @@
  "doctype": "Workspace",
  "for_user": "",
  "hide_custom": 0,
- "icon": "buying",
+ "icon": "shopping-cart",
  "idx": 0,
  "is_hidden": 0,
  "label": "Buying",
@@ -22,7 +22,7 @@
    "hidden": 0,
    "is_query_report": 0,
    "label": "Buying",
-   "link_count": 5,
+   "link_count": 6,
    "link_type": "DocType",
    "onboard": 0,
    "type": "Card Break"
@@ -78,6 +78,16 @@
    "label": "Supplier Quotation",
    "link_count": 0,
    "link_to": "Supplier Quotation",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Blanket Order",
+   "link_count": 0,
+   "link_to": "Blanket Order",
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
@@ -395,7 +405,7 @@
    "hidden": 0,
    "is_query_report": 0,
    "label": "Other Reports",
-   "link_count": 9,
+   "link_count": 17,
    "link_type": "DocType",
    "onboard": 0,
    "type": "Card Break"
@@ -501,6 +511,86 @@
   },
   {
    "hidden": 0,
+   "is_query_report": 1,
+   "label": "Purchase Register",
+   "link_count": 0,
+   "link_to": "Purchase Register",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Item-wise Purchase Register",
+   "link_count": 0,
+   "link_to": "Item-wise Purchase Register",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Received Items To Be Billed",
+   "link_count": 0,
+   "link_to": "Received Items To Be Billed",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Billed Items To Be Received",
+   "link_count": 0,
+   "link_to": "Billed Items To Be Received",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Accounts Payable",
+   "link_count": 0,
+   "link_to": "Accounts Payable",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Accounts Payable Summary",
+   "link_count": 0,
+   "link_to": "Accounts Payable Summary",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Supplier Ledger Summary",
+   "link_count": 0,
+   "link_to": "Supplier Ledger Summary",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Subcontract Order Summary",
+   "link_count": 0,
+   "link_to": "Subcontract Order Summary",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
    "is_query_report": 0,
    "label": "Thailand Purchasing & Tax",
    "link_count": 4,
@@ -550,7 +640,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-10-05 14:06:48.517503",
+ "modified": "2026-10-05 14:06:49.517503",
  "modified_by": "Administrator",
  "module": "Buying",
  "name": "Buying",
@@ -577,5 +667,7 @@
  "sequence_id": 5.0,
  "shortcuts": [],
  "title": "Buying",
- "type": "Workspace"
+ "type": "Workspace",
+ "module_onboarding": "Buying Onboarding",
+ "standard": 1
 }

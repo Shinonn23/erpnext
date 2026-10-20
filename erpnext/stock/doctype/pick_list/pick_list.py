@@ -7,6 +7,7 @@ from itertools import groupby
 
 import frappe
 from frappe import _, bold
+from frappe.model.document import Document
 from frappe.model.mapper import map_child_doc
 from frappe.query_builder import Case
 from frappe.query_builder.custom import GROUP_CONCAT
@@ -1020,6 +1021,9 @@ class PickList(TransactionBase):
 			)
 			serial_no = [x for x in item_data.serial_no.split("\n") if x] if item_data.serial_no else None
 
+			if item_data.item_code not in picked_items:
+				picked_items[item_data.item_code] = {}
+
 			if item_data.serial_and_batch_bundle:
 				if not serial_no:
 					serial_no = get_serial_nos_from_bundle(item_data.serial_and_batch_bundle)
@@ -1032,17 +1036,11 @@ class PickList(TransactionBase):
 						key = get_picked_items_key(
 							item_data.warehouse, item_data.storage_location, batch_no
 						)
-						if item_data.item_code not in picked_items:
-							picked_items[item_data.item_code] = {key: {"picked_qty": batch_qty}}
-						else:
-							picked_items[item_data.item_code].setdefault(
-								key, frappe._dict({"picked_qty": 0})
-							)["picked_qty"] += batch_qty
+						if key not in picked_items[item_data.item_code]:
+							picked_items[item_data.item_code][key] = frappe._dict({"picked_qty": 0})
+						picked_items[item_data.item_code][key]["picked_qty"] += batch_qty
 
 					continue
-
-			if item_data.item_code not in picked_items:
-				picked_items[item_data.item_code] = {}
 
 			if key not in picked_items[item_data.item_code]:
 				picked_items[item_data.item_code][key] = frappe._dict(
@@ -1695,8 +1693,11 @@ def create_delivery_note(source_name, target_doc=None):
 
 
 @frappe.whitelist()
-def create_delivery(source_name, target_doc=None, target=None):
+def create_delivery(
+	source_name: str, target_doc: str | dict | Document | None = None, target: str | None = None
+):
 	pick_list = frappe.get_doc("Pick List", source_name)
+	pick_list.check_permission("read")
 	target = target or (frappe.flags.args or {}).get("target") or "Delivery Note"
 	validate_item_locations(pick_list)
 	sales_dict = dict()
@@ -1776,7 +1777,9 @@ def create_delivery_wo_so(pick_list, target, target_doc=None):
 
 
 @frappe.whitelist()
-def create_dn_for_pick_lists(source_name, target_doc=None, kwargs=None):
+def create_dn_for_pick_lists(
+	source_name: str, target_doc: str | dict | Document | None = None, kwargs: str | dict | None = None
+):
 	"""Get Items from Multiple Pick Lists and create a Delivery Note for filtered customer"""
 	if kwargs is None:
 		kwargs = {}
@@ -1784,6 +1787,7 @@ def create_dn_for_pick_lists(source_name, target_doc=None, kwargs=None):
 		kwargs = json.loads(kwargs)
 
 	pick_list = frappe.get_doc("Pick List", source_name)
+	pick_list.check_permission("read")
 	validate_item_locations(pick_list)
 
 	sales_order_arg = kwargs.get("sales_order")

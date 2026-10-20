@@ -13,7 +13,7 @@
  "doctype": "Workspace",
  "for_user": "",
  "hide_custom": 0,
- "icon": "sell",
+ "icon": "store",
  "idx": 0,
  "is_hidden": 0,
  "label": "Selling",
@@ -501,7 +501,7 @@
    "hidden": 0,
    "is_query_report": 0,
    "label": "Other Reports",
-   "link_count": 11,
+   "link_count": 23,
    "link_type": "DocType",
    "onboard": 0,
    "type": "Card Break"
@@ -629,6 +629,126 @@
   },
   {
    "hidden": 0,
+   "is_query_report": 1,
+   "label": "Sales Register",
+   "link_count": 0,
+   "link_to": "Sales Register",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Item-wise Sales Register",
+   "link_count": 0,
+   "link_to": "Item-wise Sales Register",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Gross Profit",
+   "link_count": 0,
+   "link_to": "Gross Profit",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Territory-wise Sales",
+   "link_count": 0,
+   "link_to": "Territory-wise Sales",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Lost Quotations",
+   "link_count": 0,
+   "link_to": "Lost Quotations",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Accounts Receivable",
+   "link_count": 0,
+   "link_to": "Accounts Receivable",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Accounts Receivable Summary",
+   "link_count": 0,
+   "link_to": "Accounts Receivable Summary",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Payment Terms Status for Sales Order",
+   "link_count": 0,
+   "link_to": "Payment Terms Status for Sales Order",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Customer-wise Item Price",
+   "link_count": 0,
+   "link_to": "Customer-wise Item Price",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Sales Person Commission Summary",
+   "link_count": 0,
+   "link_to": "Sales Person Commission Summary",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Sales Partner Commission Summary",
+   "link_count": 0,
+   "link_to": "Sales Partner Commission Summary",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Sales Partner Transaction Summary",
+   "link_count": 0,
+   "link_to": "Sales Partner Transaction Summary",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
    "is_query_report": 0,
    "label": "Thailand Sales & Tax",
    "link_count": 3,
@@ -667,7 +787,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-10-05 14:06:48.597024",
+ "modified": "2026-10-05 14:06:49.597024",
  "modified_by": "Administrator",
  "module": "Selling",
  "name": "Selling",
@@ -694,5 +814,7 @@
  "sequence_id": 6.0,
  "shortcuts": [],
  "title": "Selling",
- "type": "Workspace"
+ "type": "Workspace",
+ "module_onboarding": "Selling Onboarding",
+ "standard": 1
 }
