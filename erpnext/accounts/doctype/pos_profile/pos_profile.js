@@ -71,6 +71,18 @@ frappe.ui.form.on("POS Profile", {
 			};
 		});
 
+		frm.set_query("cost_center", function (doc) {
+			if (!doc.company) {
+				frappe.throw(__("Please set Company"));
+			}
+
+			return {
+				filters: {
+					company: doc.company,
+					is_group: 0,
+				},
+			};
+		});
 
 		frm.set_query("expense_account", function (doc) {
 			if (!doc.company) {
@@ -102,6 +114,14 @@ frappe.ui.form.on("POS Profile", {
 			};
 		});
 
+		frm.set_query("write_off_cost_center", function (doc) {
+			return {
+				filters: {
+					is_group: 0,
+					company: doc.company,
+				},
+			};
+		});
 
 		erpnext.accounts.dimensions.setup_dimension_filters(frm, frm.doctype);
 	},

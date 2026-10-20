@@ -39,6 +39,14 @@ erpnext.accounts.taxes = {
 							},
 						};
 					});
+					frm.set_query("cost_center", "taxes", function (doc) {
+						return {
+							filters: {
+								company: doc.company,
+								is_group: 0,
+							},
+						};
+					});
 				}
 			},
 			validate: function (frm) {

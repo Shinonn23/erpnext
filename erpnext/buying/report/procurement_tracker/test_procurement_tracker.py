@@ -163,14 +163,14 @@ class TestProcurementTracker(ERPNextTestSuite):
 			{"doctype": "Project", "project_name": "_Test Procurement Tracker", "company": "_Test Company"}
 		).insert()
 
-	def test_project_filter_applies(self):
+	def test_cost_center_and_project_filters_both_apply(self):
 		project = self.make_project()
 		with_project = create_purchase_order(do_not_submit=True)
 		with_project.items[0].project = project.name
 		with_project.submit()
 		without_project = create_purchase_order()
 
-		rows = self.run_report(project=project.name)
+		rows = self.run_report(cost_center=with_project.items[0].cost_center, project=project.name)
 		orders = {row.get("purchase_order") for row in rows}
 		self.assertIn(with_project.name, orders)
 		self.assertNotIn(without_project.name, orders)

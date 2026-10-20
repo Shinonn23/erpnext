@@ -81,6 +81,7 @@ class AccountsTestMixin:
 			company = company.save()
 
 		self.company = company.name
+		self.cost_center = company.cost_center
 		self.warehouse = "Stores - " + abbr
 		self.finished_warehouse = "Finished Goods - " + abbr
 		self.income_account = "Sales - " + abbr

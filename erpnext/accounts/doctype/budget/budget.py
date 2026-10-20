@@ -59,6 +59,7 @@ class Budget(Document):
 		budget_end_date: DF.Date | None
 		budget_start_date: DF.Date | None
 		company: DF.Link
+		cost_center: DF.Link | None
 		department: DF.Link | None
 		distribute_equally: DF.Check
 		distribution_frequency: DF.Literal["Monthly", "Quarterly", "Half-Yearly", "Yearly"]
@@ -80,6 +81,7 @@ class Budget(Document):
 		self.set_fiscal_year_dates()
 		self.validate_duplicate()
 		self.validate_account()
+		self.set_null_value()
 		self.validate_applicable_for()
 		self.validate_existing_expenses()
 
@@ -87,7 +89,7 @@ class Budget(Document):
 		if self.budget_against not in get_budget_dimensions():
 			frappe.throw(
 				_(
-					"Budget Against must be Project, Department, Territory, Sales Person "
+					"Budget Against must be Project, Department, Territory, Sales Person, Cost Center "
 					"or an enabled Accounting Dimension"
 				)
 			)
@@ -185,6 +187,12 @@ class Budget(Document):
 					"Budget cannot be assigned against {0}, as its Root Type is not of Income or Expense"
 				).format(self.account)
 			)
+
+	def set_null_value(self):
+		if self.budget_against == "Cost Center":
+			self.project = None
+		else:
+			self.cost_center = None
 
 	def validate_applicable_for(self):
 		if self.applicable_on_material_request and not (
@@ -426,8 +434,8 @@ def validate_expense_against_budget(params, expense_amount=0):
 	if not params.get("expense_account") and params.get("account"):
 		params.expense_account = params.account
 
-	if not params.get("account") and params.item_code:
-		params.account = get_item_expense_account(params)
+	if not (params.get("account") and params.get("cost_center")) and params.item_code:
+		params.cost_center, params.account = get_item_details(params)
 
 	if not params.account:
 		return
@@ -834,29 +842,48 @@ def get_accumulated_monthly_budget(budget_name, posting_date):
 	return flt(result[0]["accumulated_amount"]) if result else 0.0
 
 
-def get_item_expense_account(params):
+def get_item_details(params):
+	cost_center, expense_account = None, None
+
 	if not params.get("company"):
-		return None
+		return cost_center, expense_account
 
 	if params.item_code:
-		expense_account = frappe.db.get_value(
+		item_defaults = frappe.db.get_value(
 			"Item Default",
 			{"parent": params.item_code, "company": params.get("company")},
-			"expense_account",
+			["buying_cost_center", "expense_account"],
 		)
-		if expense_account:
-			return expense_account
+		if item_defaults:
+			cost_center, expense_account = item_defaults
 
-	if params.get("item_group"):
-		expense_account = frappe.db.get_value(
+	if not (cost_center and expense_account):
+		for doctype in ["Item Group", "Company"]:
+			data = get_expense_cost_center(doctype, params)
+
+			if not cost_center and data:
+				cost_center = data[0]
+
+			if not expense_account and data:
+				expense_account = data[1]
+
+			if cost_center and expense_account:
+				return cost_center, expense_account
+
+	return cost_center, expense_account
+
+
+def get_expense_cost_center(doctype, params):
+	if doctype == "Item Group":
+		return frappe.db.get_value(
 			"Item Default",
-			{"parent": params.item_group, "company": params.get("company")},
-			"expense_account",
+			{"parent": params.get(frappe.scrub(doctype)), "company": params.get("company")},
+			["buying_cost_center", "expense_account"],
 		)
-		if expense_account:
-			return expense_account
-
-	return frappe.db.get_value("Company", params.company, "default_expense_account")
+	else:
+		return frappe.db.get_value(
+			doctype, params.get(frappe.scrub(doctype)), ["cost_center", "default_expense_account"]
+		)
 
 
 def get_fiscal_year_date_range(from_fiscal_year, to_fiscal_year):

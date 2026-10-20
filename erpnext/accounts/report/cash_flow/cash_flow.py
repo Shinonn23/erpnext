@@ -23,6 +23,7 @@ from erpnext.accounts.doctype.financial_report_template.financial_report_engine 
 from erpnext.accounts.report.financial_statements import (
 	build_period_list,
 	get_columns,
+	get_cost_centers_with_children,
 	get_data,
 	get_filtered_list_for_consolidated_report,
 	is_dimension_grouped,
@@ -266,6 +267,11 @@ def get_account_type_based_gl_data(company, filters=None):
 		query = query.where(
 			(gl.finance_book.isin([cstr(filters.finance_book), ""])) | (gl.finance_book.isnull())
 		)
+
+	# cost center (with children)
+	if filters.get("cost_center"):
+		cost_centers = get_cost_centers_with_children(filters.cost_center)
+		query = query.where(gl.cost_center.isin(cost_centers))
 
 	# project
 	if filters.get("project"):

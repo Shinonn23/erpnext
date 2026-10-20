@@ -299,6 +299,7 @@ def make_adjustment_entry(
 	posting_date,
 	posting_time,
 	expense_account: str | None = None,
+	cost_center: str | None = None,
 ):
 	"""A draft Adjustment Entry for the item-warehouses that can be adjusted, and the plans of all
 	of them, which say why the others are not."""
@@ -313,6 +314,7 @@ def make_adjustment_entry(
 			"posting_time": posting_time,
 			"set_posting_time": 1,
 			"expense_account": expense_account or get_stock_adjustment_account(company),
+			"cost_center": cost_center or frappe.get_cached_value("Company", company, "cost_center"),
 		}
 	)
 

@@ -134,6 +134,7 @@
   "project",
   "department",
   "dimension_col_break",
+  "cost_center",
   "section_break_80",
   "page_break",
   "sales_order",
@@ -605,6 +606,15 @@
    "fieldtype": "Link",
    "label": "Project",
    "options": "Project",
+   "print_hide": 1
+  },
+  {
+   "default": ":Company",
+   "depends_on": "eval:cint(erpnext.is_perpetual_inventory_enabled(parent.company))",
+   "fieldname": "cost_center",
+   "fieldtype": "Link",
+   "label": "Cost Center",
+   "options": "Cost Center",
    "print_hide": 1
   },
   {
@@ -1186,7 +1196,7 @@
  "idx": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-10-20 10:00:00.000000",
+ "modified": "2026-10-21 05:30:00.000000",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Purchase Receipt Item",

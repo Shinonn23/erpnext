@@ -74,6 +74,7 @@
   "column_break_15",
   "manufacturer_part_no",
   "ad_sec_break",
+  "cost_center",
   "dimension_col_break",
   "project",
   "section_break_44",
@@ -557,6 +558,12 @@
    "fieldname": "expected_delivery_date",
    "fieldtype": "Date",
    "label": "Expected Delivery Date"
+  },
+  {
+   "fieldname": "cost_center",
+   "fieldtype": "Link",
+   "label": "Cost Center",
+   "options": "Cost Center"
   },
   {
    "fieldname": "dimension_col_break",

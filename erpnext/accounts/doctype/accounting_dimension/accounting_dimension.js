@@ -8,6 +8,7 @@ frappe.ui.form.on("Accounting Dimension", {
 			invalid_doctypes.push(
 				"Accounting Dimension",
 				"Project",
+				"Cost Center",
 				"Accounting Dimension Detail",
 				"Company"
 			);

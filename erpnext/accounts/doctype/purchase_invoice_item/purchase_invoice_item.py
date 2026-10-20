@@ -29,6 +29,7 @@ class PurchaseInvoiceItem(Document):
 		bom: DF.Link | None
 		brand: DF.Link | None
 		conversion_factor: DF.Float
+		cost_center: DF.Link | None
 		deferred_expense_account: DF.Link | None
 		delivered_by_supplier: DF.Check
 		department: DF.Link | None

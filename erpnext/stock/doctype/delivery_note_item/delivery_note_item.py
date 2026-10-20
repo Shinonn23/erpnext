@@ -33,6 +33,7 @@ class DeliveryNoteItem(Document):
 		brand: DF.Link | None
 		company_total_stock: DF.Float
 		conversion_factor: DF.Float
+		cost_center: DF.Link | None
 		custody_loan_item: DF.Link | None
 		customer_item_code: DF.Data | None
 		description: DF.TextEditor | None

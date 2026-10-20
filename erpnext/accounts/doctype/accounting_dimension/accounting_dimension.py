@@ -55,6 +55,7 @@ class AccountingDimension(Document):
 			*core_doctypes_list,
 			"Accounting Dimension",
 			"Project",
+			"Cost Center",
 			"Accounting Dimension Detail",
 			"Company",
 			"Account",
@@ -203,6 +204,7 @@ def get_budget_dimension_fields():
 	dimensions = [
 		frappe._dict(fieldname="project", document_type="Project"),
 		*(frappe._dict(fieldname=d, document_type=frappe.unscrub(d)) for d in STANDARD_DIMENSIONS),
+		frappe._dict(fieldname="cost_center", document_type="Cost Center"),
 		*get_accounting_dimensions(as_list=False),
 	]
 	# an Accounting Dimension on Department must not be budgeted twice
@@ -220,6 +222,7 @@ def get_budget_dimensions(exclude_dimension=None):
 	dimensions = [
 		"Project",
 		*(frappe.unscrub(fieldname) for fieldname in STANDARD_DIMENSIONS),
+		"Cost Center",
 		*frappe.get_all("Accounting Dimension", filters=filters, pluck="document_type"),
 	]
 	# a Department Accounting Dimension must not list (or budget) the native one twice
@@ -335,7 +338,7 @@ def get_dimension_with_children(doctype, dimensions):
 
 
 @frappe.whitelist()
-def get_dimensions(with_project=False):
+def get_dimensions(with_cost_center_and_project=False):
 	c = frappe.qb.DocType("Accounting Dimension Detail")
 	p = frappe.qb.DocType("Accounting Dimension")
 	dimension_filters = (
@@ -349,11 +352,19 @@ def get_dimensions(with_project=False):
 		.run(as_dict=1)
 	)
 
-	if isinstance(with_project, str):
-		with_project = with_project.lower().strip() == "true"
+	if isinstance(with_cost_center_and_project, str):
+		if with_cost_center_and_project.lower().strip() == "true":
+			with_cost_center_and_project = True
+		else:
+			with_cost_center_and_project = False
 
-	if with_project:
-		dimension_filters.append(frappe._dict({"fieldname": "project", "document_type": "Project"}))
+	if with_cost_center_and_project:
+		dimension_filters.extend(
+			[
+				frappe._dict({"fieldname": "cost_center", "document_type": "Cost Center"}),
+				frappe._dict({"fieldname": "project", "document_type": "Project"}),
+			]
+		)
 
 	default_dimensions_map = {}
 	for dimension in default_dimensions:

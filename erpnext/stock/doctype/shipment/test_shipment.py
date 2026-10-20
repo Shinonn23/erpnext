@@ -1,7 +1,6 @@
 # Copyright (c) 2020, Frappe Technologies Pvt. Ltd. and Contributors
 # See license.txt
 
-import unittest
 from datetime import date, timedelta
 
 import frappe
@@ -55,6 +54,7 @@ def create_test_delivery_note():
 			"uom": "Nos",
 			"warehouse": "Stores - _TC",
 			"rate": item.standard_rate,
+			"cost_center": "Main - _TC",
 		},
 	)
 	delivery_note.insert()
@@ -197,6 +197,7 @@ def create_material_receipt(item, company):
 			"qty": 5,
 			"uom": "Nos",
 			"basic_rate": item.standard_rate,
+			"cost_center": "Main - _TC",
 		},
 	)
 	stock.insert()

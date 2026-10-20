@@ -22,7 +22,7 @@ class TestTaxesAndTotals(ERPNextTestSuite):
 						"rate": 100,
 						"income_account": "Sales - _TC",
 						"expense_account": "Cost of Goods Sold - _TC",
-
+						"cost_center": "_Test Cost Center - _TC",
 					}
 				],
 				"taxes": [],
@@ -36,6 +36,7 @@ class TestTaxesAndTotals(ERPNextTestSuite):
 			{
 				"charge_type": "On Net Total",
 				"account_head": "_Test Account VAT - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "VAT",
 				"rate": 10,
 			},
@@ -47,6 +48,7 @@ class TestTaxesAndTotals(ERPNextTestSuite):
 			{
 				"charge_type": "On Previous Row Amount",
 				"account_head": "_Test Account Service Tax - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "Service Tax",
 				"rate": 14,
 				"row_id": 1,
@@ -59,6 +61,7 @@ class TestTaxesAndTotals(ERPNextTestSuite):
 			{
 				"charge_type": "On Previous Row Total",
 				"account_head": "_Test Account Customs Duty - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "Customs Duty",
 				"rate": 5,
 				"row_id": 2,
@@ -71,6 +74,7 @@ class TestTaxesAndTotals(ERPNextTestSuite):
 			{
 				"charge_type": "On Item Quantity",
 				"account_head": "_Test Account Shipping Charges - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "Shipping",
 				"rate": 50,
 			},
@@ -153,7 +157,7 @@ class TestTaxesAndTotals(ERPNextTestSuite):
 						"rate": 7.77,
 						"income_account": "Sales - _TC",
 						"expense_account": "Cost of Goods Sold - _TC",
-
+						"cost_center": "_Test Cost Center - _TC",
 					},
 					{
 						"item_code": "_Test Item",
@@ -161,7 +165,7 @@ class TestTaxesAndTotals(ERPNextTestSuite):
 						"rate": 7.77,
 						"income_account": "Sales - _TC",
 						"expense_account": "Cost of Goods Sold - _TC",
-
+						"cost_center": "_Test Cost Center - _TC",
 					},
 					{
 						"item_code": "_Test Item",
@@ -169,19 +173,21 @@ class TestTaxesAndTotals(ERPNextTestSuite):
 						"rate": 7.77,
 						"income_account": "Sales - _TC",
 						"expense_account": "Cost of Goods Sold - _TC",
-
+						"cost_center": "_Test Cost Center - _TC",
 					},
 				],
 				"taxes": [
 					{
 						"charge_type": "On Net Total",
 						"account_head": "_Test Account VAT - _TC",
+						"cost_center": "_Test Cost Center - _TC",
 						"description": "VAT",
 						"rate": 16,
 					},
 					{
 						"charge_type": "On Previous Row Amount",
 						"account_head": "_Test Account Service Tax - _TC",
+						"cost_center": "_Test Cost Center - _TC",
 						"description": "Service Tax",
 						"rate": 10,
 						"row_id": 1,
@@ -218,7 +224,7 @@ class TestTaxesAndTotals(ERPNextTestSuite):
 						"rate": 20,
 						"income_account": "Sales - _TC",
 						"expense_account": "Cost of Goods Sold - _TC",
-
+						"cost_center": "_Test Cost Center - _TC",
 					},
 					{
 						"item_code": "_Test Item",
@@ -226,7 +232,7 @@ class TestTaxesAndTotals(ERPNextTestSuite):
 						"rate": 19,
 						"income_account": "Sales - _TC",
 						"expense_account": "Cost of Goods Sold - _TC",
-
+						"cost_center": "_Test Cost Center - _TC",
 					},
 					{
 						"item_code": "_Test Item",
@@ -234,13 +240,14 @@ class TestTaxesAndTotals(ERPNextTestSuite):
 						"rate": 1000,
 						"income_account": "Sales - _TC",
 						"expense_account": "Cost of Goods Sold - _TC",
-
+						"cost_center": "_Test Cost Center - _TC",
 					},
 				],
 				"taxes": [
 					{
 						"charge_type": "On Net Total",
 						"account_head": "_Test Account VAT - _TC",
+						"cost_center": "_Test Cost Center - _TC",
 						"description": "VAT",
 						"rate": 9,
 					},
@@ -275,13 +282,14 @@ class TestTaxesAndTotals(ERPNextTestSuite):
 						"rate": 47.41,
 						"income_account": "Sales - _TC",
 						"expense_account": "Cost of Goods Sold - _TC",
-
+						"cost_center": "_Test Cost Center - _TC",
 					}
 				],
 				"taxes": [
 					{
 						"charge_type": "On Net Total",
 						"account_head": "_Test Account VAT - _TC",
+						"cost_center": "_Test Cost Center - _TC",
 						"description": "VAT",
 						"rate": 16,
 					},
@@ -344,6 +352,7 @@ class TestTaxesAndTotals(ERPNextTestSuite):
 				"rate": 100,
 				"income_account": "Sales - _TC",
 				"expense_account": "Cost of Goods Sold - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 				"item_tax_template": template_19pct.name,
 			},
 		)
@@ -353,6 +362,7 @@ class TestTaxesAndTotals(ERPNextTestSuite):
 			{
 				"charge_type": "On Net Total",
 				"account_head": "_Test Account VAT - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "VAT 7%",
 				"rate": 7,
 			},
@@ -363,6 +373,7 @@ class TestTaxesAndTotals(ERPNextTestSuite):
 			{
 				"charge_type": "On Net Total",
 				"account_head": "_Test Account Service Tax - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "VAT 19%",
 				"rate": 19,
 			},
@@ -462,6 +473,7 @@ class TestTaxesAndTotals(ERPNextTestSuite):
 				"rate": 100,
 				"income_account": "Sales - _TC",
 				"expense_account": "Cost of Goods Sold - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 				"item_tax_template": template_19pct.name,
 			},
 		)
@@ -471,6 +483,7 @@ class TestTaxesAndTotals(ERPNextTestSuite):
 			{
 				"charge_type": "On Net Total",
 				"account_head": "_Test Account VAT - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "VAT 7%",
 				"rate": 0,
 			},
@@ -481,6 +494,7 @@ class TestTaxesAndTotals(ERPNextTestSuite):
 			{
 				"charge_type": "On Net Total",
 				"account_head": "_Test Account Service Tax - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "VAT 19%",
 				"rate": 0,
 			},

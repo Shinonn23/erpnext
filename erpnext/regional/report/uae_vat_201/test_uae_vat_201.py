@@ -75,6 +75,7 @@ class TestUaeVat201(ERPNextTestSuite):
 			warehouse="_Test UAE VAT Supplier Warehouse - _TCUV",
 			currency="USD",
 			conversion_rate=3.67,
+			cost_center="Main - _TCUV",
 			expense_account="Cost of Goods Sold - _TCUV",
 			item="_Test UAE VAT Item",
 			do_not_save=1,
@@ -85,6 +86,7 @@ class TestUaeVat201(ERPNextTestSuite):
 			{
 				"charge_type": "On Net Total",
 				"account_head": "VAT 5% - _TCUV",
+				"cost_center": "Main - _TCUV",
 				"description": "VAT 5% @ 5.0",
 				"rate": 5.0,
 			},
@@ -112,6 +114,7 @@ class TestUaeVat201(ERPNextTestSuite):
 			debit_to="Debtors - _TCUV",
 			income_account="Sales - _TCUV",
 			expense_account="Cost of Goods Sold - _TCUV",
+			cost_center="Main - _TCUV",
 			item="_Test UAE VAT Item",
 			do_not_save=1,
 		)
@@ -121,6 +124,7 @@ class TestUaeVat201(ERPNextTestSuite):
 			{
 				"charge_type": "On Net Total",
 				"account_head": "VAT 5% - _TCUV",
+				"cost_center": "Main - _TCUV",
 				"description": "VAT 5% @ 5.0",
 				"rate": 5.0,
 			},
@@ -149,6 +153,7 @@ class TestUaeVat201(ERPNextTestSuite):
 			debit_to="Debtors - _TCUV",
 			income_account="Sales - _TCUV",
 			expense_account="Cost of Goods Sold - _TCUV",
+			cost_center="Main - _TCUV",
 			item="_Test UAE VAT Item",
 			do_not_save=1,
 		)
@@ -163,6 +168,7 @@ class TestUaeVat201(ERPNextTestSuite):
 					"warehouse": "Finished Goods - _TCUV",
 					"income_account": "Sales - _TCUV",
 					"expense_account": "Cost of Goods Sold - _TCUV",
+					"cost_center": "Main - _TCUV",
 				},
 			)
 		si.append(
@@ -170,6 +176,7 @@ class TestUaeVat201(ERPNextTestSuite):
 			{
 				"charge_type": "On Net Total",
 				"account_head": "VAT 5% - _TCUV",
+				"cost_center": "Main - _TCUV",
 				"description": "VAT 5% @ 5.0",
 				"rate": 5.0,
 			},
@@ -288,6 +295,7 @@ def make_sales_invoices():
 			debit_to="Debtors - _TCUV",
 			income_account="Sales - _TCUV",
 			expense_account="Cost of Goods Sold - _TCUV",
+			cost_center="Main - _TCUV",
 			item=item,
 			do_not_save=1,
 		)
@@ -298,6 +306,7 @@ def make_sales_invoices():
 				{
 					"charge_type": "On Net Total",
 					"account_head": "VAT 5% - _TCUV",
+					"cost_center": "Main - _TCUV",
 					"description": "VAT 5% @ 5.0",
 					"rate": 5.0,
 				},
@@ -330,6 +339,7 @@ def create_purchase_invoices():
 		supplier_warehouse="_Test UAE VAT Supplier Warehouse - _TCUV",
 		warehouse="_Test UAE VAT Supplier Warehouse - _TCUV",
 		currency="AED",
+		cost_center="Main - _TCUV",
 		expense_account="Cost of Goods Sold - _TCUV",
 		item="_Test UAE VAT Item",
 		do_not_save=1,
@@ -340,6 +350,7 @@ def create_purchase_invoices():
 		{
 			"charge_type": "On Net Total",
 			"account_head": "VAT 5% - _TCUV",
+			"cost_center": "Main - _TCUV",
 			"description": "VAT 5% @ 5.0",
 			"rate": 5.0,
 		},

@@ -834,8 +834,15 @@ def get_overdue_portion(invoice: frappe._dict, payable_amount: float | None) -> 
 	return min(max(payable_amount - paid, 0.0), outstanding)
 
 
-def get_customer_outstanding(customer, company, ignore_outstanding_sales_order=False):
+def get_customer_outstanding(customer, company, ignore_outstanding_sales_order=False, cost_center=None):
 	# Outstanding based on GL Entries
+	cond = ""
+	if cost_center:
+		lft, rgt = frappe.get_cached_value("Cost Center", cost_center, ["lft", "rgt"])
+
+		cond = f""" and cost_center in (select name from `tabCost Center` where
+			lft >= {lft} and rgt <= {rgt})"""
+
 	outstanding_based_on_gle = frappe.db.sql(
 		f"""
 		select sum(debit) - sum(credit)

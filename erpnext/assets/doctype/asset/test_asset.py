@@ -559,6 +559,7 @@ class TestAsset(AssetSetup):
 					"charge_type": "On Net Total",
 					"account_head": "_Test Account Service Tax - _TC",
 					"description": "_Test Account Service Tax",
+					"cost_center": "Main - _TC",
 					"rate": 5.0,
 				},
 				{
@@ -567,6 +568,7 @@ class TestAsset(AssetSetup):
 					"charge_type": "On Net Total",
 					"account_head": "_Test Account Shipping Charges - _TC",
 					"description": "_Test Account Shipping Charges",
+					"cost_center": "Main - _TC",
 					"rate": 5.0,
 				},
 			],
@@ -1777,6 +1779,15 @@ class TestDepreciationBasics(AssetSetup):
 		asset.reload()
 		self.assertEqual(asset.finance_books[0].value_after_depreciation, 100000.0)
 
+	def test_asset_cost_center(self):
+		asset = create_asset(asset_type="Existing Asset", do_not_save=1)
+		asset.cost_center = "Main - WP"
+
+		self.assertRaises(frappe.ValidationError, asset.submit)
+
+		asset.cost_center = "Main - _TC"
+		asset.submit()
+
 	def test_depreciation_on_final_day_of_the_month(self):
 		"""Tests if final day of the month is picked each time, if the depreciation start date is the last day of the month."""
 
@@ -2104,6 +2115,7 @@ def set_depreciation_settings_in_company(company=None):
 	company.accumulated_depreciation_account = "_Test Accumulated Depreciations - " + company.abbr
 	company.depreciation_expense_account = "_Test Depreciations - " + company.abbr
 	company.disposal_account = "_Test Gain/Loss on Asset Disposal - " + company.abbr
+	company.depreciation_cost_center = "Main - " + company.abbr
 	company.save()
 
 	# Enable booking asset depreciation entry automatically

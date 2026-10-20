@@ -1798,6 +1798,7 @@ class TestSubcontractingReceipt(ERPNextTestSuite):
 			{
 				"account_head": "_Test Account Excise Duty - _TC",
 				"charge_type": "On Net Total",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "Excise Duty",
 				"doctype": "Purchase Taxes and Charges",
 				"rate": 10,
@@ -1863,6 +1864,7 @@ class TestSubcontractingReceipt(ERPNextTestSuite):
 				"account_head": "_Test Account Excise Duty - _TC",
 				"charge_type": "Actual",
 				"add_deduct_tax": "Deduct",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "TDS on Contract",
 				"doctype": "Purchase Taxes and Charges",
 				"tax_amount": 800,
@@ -1927,6 +1929,7 @@ class TestSubcontractingReceipt(ERPNextTestSuite):
 			{
 				"account_head": "_Test Account Excise Duty - _TC",
 				"charge_type": "On Net Total",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "Excise Duty",
 				"doctype": "Purchase Taxes and Charges",
 				"rate": 10,
@@ -2527,6 +2530,7 @@ def get_items(**args):
 			"rejected_qty": 0.0,
 			"stock_uom": "_Test UOM",
 			"warehouse": args.warehouse or "_Test Warehouse - _TC",
+			"cost_center": args.cost_center or "Main - _TC",
 		},
 		{
 			"conversion_factor": 1.0,
@@ -2541,6 +2545,7 @@ def get_items(**args):
 			"rejected_qty": 0.0,
 			"stock_uom": "_Test UOM",
 			"warehouse": args.warehouse or "_Test Warehouse 1 - _TC",
+			"cost_center": args.cost_center or "Main - _TC",
 		},
 	]
 

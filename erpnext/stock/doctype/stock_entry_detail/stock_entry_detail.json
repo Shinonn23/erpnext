@@ -66,6 +66,7 @@
   "accounting",
   "expense_account",
   "accounting_dimensions_section",
+  "cost_center",
   "project",
   "department",
   "dimension_col_break",
@@ -349,6 +350,14 @@
    "fieldtype": "Link",
    "label": "Difference Account",
    "options": "Account",
+   "print_hide": 1
+  },
+  {
+   "depends_on": "eval:cint(erpnext.is_perpetual_inventory_enabled(parent.company))",
+   "fieldname": "cost_center",
+   "fieldtype": "Link",
+   "label": "Cost Center",
+   "options": "Cost Center",
    "print_hide": 1
   },
   {
@@ -730,7 +739,7 @@
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-10-20 10:00:00.000000",
+ "modified": "2026-10-21 05:30:00.000000",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Stock Entry Detail",

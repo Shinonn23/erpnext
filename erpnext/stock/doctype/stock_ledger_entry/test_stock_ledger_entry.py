@@ -241,6 +241,7 @@ class TestStockLedgerEntry(ERPNextTestSuite, StockTestMixin):
 			warehouse="Stores - _TC",
 			company=company,
 			expense_account="Cost of Goods Sold - _TC",
+			cost_center="Main - _TC",
 		)
 
 		# check outgoing_rate for DN
@@ -266,6 +267,7 @@ class TestStockLedgerEntry(ERPNextTestSuite, StockTestMixin):
 			company=company,
 			warehouse="Stores - _TC",
 			expense_account="Cost of Goods Sold - _TC",
+			cost_center="Main - _TC",
 		)
 
 		# check incoming rate for Return entry
@@ -341,6 +343,7 @@ class TestStockLedgerEntry(ERPNextTestSuite, StockTestMixin):
 			warehouse="Stores - _TC",
 			company=company,
 			expense_account="Cost of Goods Sold - _TC",
+			cost_center="Main - _TC",
 		)
 
 		# check outgoing_rate for DN
@@ -366,6 +369,7 @@ class TestStockLedgerEntry(ERPNextTestSuite, StockTestMixin):
 			company=company,
 			warehouse="Stores - _TC",
 			expense_account="Cost of Goods Sold - _TC",
+			cost_center="Main - _TC",
 		)
 
 		# check incoming rate for Return entry
@@ -1614,6 +1618,7 @@ class TestStockLedgerEntry(ERPNextTestSuite, StockTestMixin):
 			warehouse=warehouse,
 			company="_Test Company",
 			expense_account="Cost of Goods Sold - _TC",
+			cost_center="Main - _TC",
 			do_not_submit=True,
 		)
 		dn.submit()
@@ -1655,6 +1660,7 @@ class TestStockLedgerEntry(ERPNextTestSuite, StockTestMixin):
 			warehouse=warehouse,
 			company="_Test Company",
 			expense_account="Cost of Goods Sold - _TC",
+			cost_center="Main - _TC",
 		)
 
 		settings = frappe.get_doc("System Settings")
@@ -2109,6 +2115,7 @@ def create_repack_entry(**args):
 			"qty": 5,
 			"conversion_factor": 1,
 			"expense_account": "Stock Adjustment - _TC",
+			"cost_center": "Main - _TC",
 		},
 	)
 
@@ -2120,6 +2127,7 @@ def create_repack_entry(**args):
 			"qty": 1,
 			"conversion_factor": 1,
 			"expense_account": "Stock Adjustment - _TC",
+			"cost_center": "Main - _TC",
 		},
 	)
 

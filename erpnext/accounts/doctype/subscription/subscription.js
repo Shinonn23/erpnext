@@ -11,6 +11,13 @@ frappe.ui.form.on("Subscription", {
 			};
 		});
 
+		frm.set_query("cost_center", function () {
+			return {
+				filters: {
+					company: frm.doc.company,
+				},
+			};
+		});
 
 		frm.set_query("sales_tax_template", function () {
 			return {

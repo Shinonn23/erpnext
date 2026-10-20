@@ -73,6 +73,7 @@
   "project",
   "department",
   "dimension_col_break",
+  "cost_center",
   "other_info_tab",
   "printing_settings",
   "select_print_heading",
@@ -116,95 +117,95 @@
    "fieldname": "stock_count",
    "fieldtype": "Link",
    "label": "Stock Count",
+   "no_copy": 1,
    "options": "Stock Count",
-   "read_only": 1,
-   "no_copy": 1
+   "read_only": 1
   },
   {
    "fieldname": "customer_address",
    "fieldtype": "Link",
-   "label": "Customer Address Snapshot",
-   "options": "Address",
    "hidden": 1,
-   "read_only": 1,
-   "no_copy": 1
+   "label": "Customer Address Snapshot",
+   "no_copy": 1,
+   "options": "Address",
+   "read_only": 1
   },
   {
    "fieldname": "customer_address_display",
    "fieldtype": "Text Editor",
-   "label": "Customer Address Display Snapshot",
    "hidden": 1,
-   "read_only": 1,
-   "no_copy": 1
+   "label": "Customer Address Display Snapshot",
+   "no_copy": 1,
+   "read_only": 1
   },
   {
    "fieldname": "customer_contact",
    "fieldtype": "Link",
-   "label": "Customer Contact Snapshot",
-   "options": "Contact",
    "hidden": 1,
-   "read_only": 1,
-   "no_copy": 1
+   "label": "Customer Contact Snapshot",
+   "no_copy": 1,
+   "options": "Contact",
+   "read_only": 1
   },
   {
    "fieldname": "customer_contact_display",
    "fieldtype": "Text Editor",
-   "label": "Customer Contact Display Snapshot",
    "hidden": 1,
-   "read_only": 1,
-   "no_copy": 1
+   "label": "Customer Contact Display Snapshot",
+   "no_copy": 1,
+   "read_only": 1
   },
   {
    "fieldname": "customer_contact_email",
    "fieldtype": "Data",
-   "label": "Customer Contact Email Snapshot",
    "hidden": 1,
-   "read_only": 1,
-   "no_copy": 1
+   "label": "Customer Contact Email Snapshot",
+   "no_copy": 1,
+   "read_only": 1
   },
   {
    "fieldname": "is_system_generated",
    "fieldtype": "Check",
-   "label": "Is System Generated",
    "hidden": 1,
-   "read_only": 1,
-   "no_copy": 1
+   "label": "Is System Generated",
+   "no_copy": 1,
+   "read_only": 1
   },
   {
    "fieldname": "is_custody_loan_transaction",
    "fieldtype": "Check",
-   "label": "Is Custody Loan Transaction",
    "hidden": 1,
-   "read_only": 1,
+   "in_standard_filter": 1,
+   "label": "Is Custody Loan Transaction",
    "no_copy": 1,
-   "in_standard_filter": 1
+   "read_only": 1
   },
   {
    "fieldname": "custody_loan",
    "fieldtype": "Link",
-   "label": "Custody Loan",
-   "options": "Custody Loan",
    "hidden": 1,
-   "read_only": 1,
-   "no_copy": 1
+   "label": "Custody Loan",
+   "no_copy": 1,
+   "options": "Custody Loan",
+   "read_only": 1
   },
   {
    "fieldname": "custody_loan_source_doctype",
    "fieldtype": "Link",
-   "label": "Custody Loan Source Type",
-   "options": "DocType",
    "hidden": 1,
-   "read_only": 1,
-   "no_copy": 1
+   "label": "Custody Loan Source Type",
+   "no_copy": 1,
+   "options": "DocType",
+   "read_only": 1
   },
   {
    "fieldname": "custody_loan_source_name",
    "fieldtype": "Dynamic Link",
-   "label": "Custody Loan Source",
-   "options": "custody_loan_source_doctype",
    "hidden": 1,
-   "read_only": 1,
-   "no_copy": 1
+   "label": "Custody Loan Source",
+   "no_copy": 1,
+   "options": "custody_loan_source_doctype",
+   "read_only": 1
   },
   {
    "fieldname": "naming_series",
@@ -467,30 +468,30 @@
    "print_hide": 1
   },
   {
-   "fieldname": "requires_shipment",
-   "fieldtype": "Check",
-   "label": "Ship via Shipment",
    "default": "0",
    "depends_on": "eval:doc.purpose == \"Material Transfer\"",
-   "description": "Track this transfer with a Shipment. Stock moves to the configured transit warehouse when Shipment is submitted."
+   "description": "Track this transfer with a Shipment. Stock moves to the configured transit warehouse when Shipment is submitted.",
+   "fieldname": "requires_shipment",
+   "fieldtype": "Check",
+   "label": "Ship via Shipment"
   },
   {
+   "depends_on": "eval:doc.requires_shipment",
+   "description": "Final warehouse; transit handling is automatic.",
    "fieldname": "shipment_destination_warehouse",
    "fieldtype": "Link",
    "label": "Destination Warehouse",
-   "options": "Warehouse",
-   "depends_on": "eval:doc.requires_shipment",
    "mandatory_depends_on": "eval:doc.requires_shipment",
-   "description": "Final warehouse; transit handling is automatic."
+   "options": "Warehouse"
   },
   {
+   "depends_on": "eval:doc.requires_shipment",
    "fieldname": "shipment",
    "fieldtype": "Link",
    "label": "Shipment",
+   "no_copy": 1,
    "options": "Shipment",
-   "read_only": 1,
-   "depends_on": "eval:doc.requires_shipment",
-   "no_copy": 1
+   "read_only": 1
   },
   {
    "depends_on": "to_warehouse",
@@ -900,6 +901,12 @@
   {
    "fieldname": "dimension_col_break",
    "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "cost_center",
+   "fieldtype": "Link",
+   "label": "Cost Center",
+   "options": "Cost Center"
   }
  ],
  "grid_page_length": 50,
@@ -908,7 +915,7 @@
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-10-20 10:00:00.000000",
+ "modified": "2026-10-21 05:30:00.000000",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Stock Entry",

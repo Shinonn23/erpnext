@@ -630,7 +630,7 @@ class TestInventoryDimension(ERPNextTestSuite):
 			warehouse=data.from_warehouse,
 			target_warehouse=data.to_warehouse,
 			qty=5,
-
+			cost_center=data.cost_center,
 			expense_account=data.expense_account,
 			do_not_submit=True,
 		)
@@ -1072,6 +1072,10 @@ def prepare_data_for_internal_transfer():
 
 		frappe.db.set_value("Company", company, "unrealized_profit_loss_account", account)
 
+	cost_center = frappe.db.get_value("Company", company, "cost_center") or frappe.db.get_value(
+		"Cost Center", {"company": company}, "name"
+	)
+
 	expene_account = frappe.db.get_value(
 		"Company", company, "stock_adjustment_account"
 	) or frappe.db.get_value("Account", {"company": company, "account_type": "Expense Account"}, "name")
@@ -1083,7 +1087,7 @@ def prepare_data_for_internal_transfer():
 			"customer": customer,
 			"supplier": supplier,
 			"company": company,
-
+			"cost_center": cost_center,
 			"expene_account": expene_account,
 			"store_warehouse": frappe.db.get_value(
 				"Warehouse", {"name": ("like", "Store%"), "company": company}, "name"

@@ -60,6 +60,22 @@ frappe.ui.form.on("Subcontracting Order", {
 			};
 		});
 
+		frm.set_query("cost_center", (doc) => {
+			return {
+				filters: {
+					company: doc.company,
+				},
+			};
+		});
+
+		frm.set_query("cost_center", "items", (doc) => {
+			return {
+				filters: {
+					company: doc.company,
+				},
+			};
+		});
+
 		frm.set_query("set_warehouse", () => {
 			return {
 				filters: {

@@ -16,6 +16,7 @@ from erpnext.accounts.ledger_permissions import (
 	_ledger_query_permission_context,
 	check_ledger_voucher_permissions,
 )
+from erpnext.accounts.report.financial_statements import get_cost_centers_with_children
 from erpnext.accounts.report.utils import convert_to_presentation_currency, get_currency
 from erpnext.accounts.utils import get_account_currency
 
@@ -93,6 +94,9 @@ def validate_filters(filters, account_details):
 			if dimension != "project" and not frappe.db.has_column("GL Entry", dimension):
 				frappe.throw(_("{0} is not configured on GL Entry").format(_(dimension.replace("_", " ").title())))
 			filters[dimension] = frappe.parse_json(filters.get(dimension))
+
+	if filters.get("cost_center"):
+		filters.cost_center = frappe.parse_json(filters.get("cost_center"))
 
 
 def validate_party(filters):
@@ -205,7 +209,7 @@ def get_gl_entries(filters, accounting_dimensions):
 		select
 			name as gl_entry, posting_date, account, party_type, party,
 			voucher_type, voucher_subtype, voucher_no, {dimension_fields}
-			{standard_dimension_fields}, {transaction_currency_fields}
+			cost_center, {standard_dimension_fields}, {transaction_currency_fields}
 			against_voucher_type, against_voucher, account_currency,
 			against, is_opening, creation {select_fields}
 		from `tabGL Entry`
@@ -238,6 +242,10 @@ def get_conditions(filters):
 		filters.account = get_accounts_with_children(filters.account)
 		if filters.account:
 			conditions.append("account in %(account)s")
+
+	if filters.get("cost_center"):
+		filters.cost_center = get_cost_centers_with_children(filters.cost_center)
+		conditions.append("cost_center in %(cost_center)s")
 
 	if filters.get("voucher_no"):
 		conditions.append("voucher_no=%(voucher_no)s")
@@ -602,6 +610,7 @@ def get_accountwise_gle(filters, accounting_dimensions, gl_entries, gle_map):
 				if filters.get("include_dimensions"):
 					for dim in accounting_dimensions:
 						keylist.append(gle.get(dim))
+					keylist.append(gle.get("cost_center"))
 					keylist.extend(gle.get(dim) for dim in ("project", "department", "territory", "sales_person"))
 
 				key = tuple(keylist)
@@ -611,7 +620,14 @@ def get_accountwise_gle(filters, accounting_dimensions, gl_entries, gle_map):
 					update_value_in_dict(consolidated_gle, key, gle)
 
 		if filters.get("include_dimensions"):
-			dimensions = [*accounting_dimensions, "project", "department", "territory", "sales_person"]
+			dimensions = [
+				*accounting_dimensions,
+				"cost_center",
+				"project",
+				"department",
+				"territory",
+				"sales_person",
+			]
 
 			for dimension in dimensions:
 				if val := gle.get(dimension):
@@ -813,6 +829,9 @@ def get_columns(filters):
 			columns.append(
 				{"label": _(dim.label), "options": dim.label, "fieldname": dim.fieldname, "width": 100}
 			)
+		columns.append(
+			{"label": _("Cost Center"), "options": "Cost Center", "fieldname": "cost_center", "width": 100}
+		)
 
 	columns.extend(
 		[
@@ -904,6 +923,7 @@ def get_gl_entries_duckdb(filters, accounting_dimensions, conn):
 		"voucher_type",
 		"voucher_subtype",
 		"voucher_no",
+		"cost_center",
 		"project",
 		"department",
 		"territory",
@@ -928,6 +948,7 @@ def get_gl_entries_duckdb(filters, accounting_dimensions, conn):
 		"voucher_type",
 		"voucher_subtype",
 		"voucher_no",
+		"cost_center",
 		*_standard_dimension_selects(),
 		"against_voucher_type",
 		"against_voucher",
@@ -1007,6 +1028,11 @@ def _build_gl_conditions_duckdb(filters):
 		if filters.account:
 			conditions.append(f"account IN ({', '.join(['?'] * len(filters.account))})")
 			params.extend(filters.account)
+
+	if filters.get("cost_center"):
+		filters.cost_center = get_cost_centers_with_children(filters.cost_center)
+		conditions.append(f"cost_center IN ({', '.join(['?'] * len(filters.cost_center))})")
+		params.extend(filters.cost_center)
 
 	if filters.get("voucher_no"):
 		conditions.append("voucher_no = ?")

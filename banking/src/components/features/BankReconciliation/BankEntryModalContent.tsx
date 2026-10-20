@@ -5,7 +5,7 @@ import _ from "@/lib/translate"
 import { UnreconciledTransaction, useGetRuleForTransaction, useRefreshUnreconciledTransactions, useUpdateActionLog } from "./utils"
 import { useFieldArray, useForm, useFormContext, useWatch } from "react-hook-form"
 import { JournalEntry } from "@/types/Accounts/JournalEntry"
-import { getCompanyCurrency } from "@/lib/company"
+import { getCompanyCostCenter, getCompanyCurrency } from "@/lib/company"
 import { FrappeConfig, FrappeContext, useFrappePostCall } from "frappe-react-sdk"
 import { toast } from "sonner"
 import ErrorBanner from "@/components/ui/error-banner"
@@ -28,6 +28,7 @@ import { BankTransaction } from "@/types/Accounts/BankTransaction"
 import FileUploadBanner from "@/components/common/FileUploadBanner"
 import { Label } from "@/components/ui/label"
 import { FileDropzone } from "@/components/ui/file-dropzone"
+import { useGetAccounts } from "@/components/common/AccountsDropdown"
 import { useHotkeys } from "react-hotkeys-hook"
 import { slug } from "@/lib/frappe"
 const RecordBankEntryModalContent = () => {
@@ -166,7 +167,8 @@ const BankEntryForm = ({ selectedTransaction }: { selectedTransaction: Unreconci
                 debit: isWithdrawal ? 0 : selectedTransaction.unallocated_amount,
                 credit: isWithdrawal ? selectedTransaction.unallocated_amount : 0,
                 party_type: '',
-                party: ''
+                party: '',
+                cost_center: ''
             }]
 
         // If there is no rule, we can just add the entries for the bank account transaction and the other side will be the reverse
@@ -177,6 +179,7 @@ const BankEntryForm = ({ selectedTransaction }: { selectedTransaction: Unreconci
                     // Amounts will be the reverse of the bank account transaction
                     debit: isWithdrawal ? selectedTransaction.unallocated_amount : 0,
                     credit: isWithdrawal ? 0 : selectedTransaction.unallocated_amount,
+                    cost_center: getCompanyCostCenter(selectedTransaction.company ?? '') ?? '',
                 }
             )
         } else {
@@ -188,6 +191,7 @@ const BankEntryForm = ({ selectedTransaction }: { selectedTransaction: Unreconci
                     // Amounts will be the reverse of the bank account transaction
                     debit: isWithdrawal ? selectedTransaction.unallocated_amount : 0,
                     credit: isWithdrawal ? 0 : selectedTransaction.unallocated_amount,
+                    cost_center: getCompanyCostCenter(selectedTransaction.company ?? '') ?? '',
                 })
             } else {
                 // For multiple accounts, we need to loop over and add entries for each
@@ -208,6 +212,7 @@ const BankEntryForm = ({ selectedTransaction }: { selectedTransaction: Unreconci
                             account: acc?.account ?? '',
                             debit: differenceAmount > 0 ? 0 : Math.abs(differenceAmount),
                             credit: differenceAmount > 0 ? Math.abs(differenceAmount) : 0,
+                            cost_center: getCompanyCostCenter(selectedTransaction.company ?? '') ?? '',
                             user_remark: acc?.user_remark ?? '',
                         })
                     } else {
@@ -226,6 +231,7 @@ const BankEntryForm = ({ selectedTransaction }: { selectedTransaction: Unreconci
                             account: acc?.account ?? '',
                             debit: computedDebit,
                             credit: computedCredit,
+                            cost_center: getCompanyCostCenter(selectedTransaction.company ?? '') ?? '',
                             user_remark: acc?.user_remark ?? '',
                         })
                     }
@@ -434,6 +440,22 @@ const Entries = ({ company, isWithdrawal, currency }: { company: string, isWithd
         }
     }
 
+    const { data: accounts } = useGetAccounts()
+
+    const onAccountChange = (value: string, index: number) => {
+        // If it's an income or expense account, get the default cost center
+        if (value) {
+            const account = accounts?.find((acc) => acc.name === value)
+            if (account && account.report_type === "Profit and Loss") {
+                // Set the default company cost center
+                setValue(`entries.${index}.cost_center`, getCompanyCostCenter(company) ?? '')
+                return
+            }
+        }
+
+        setValue(`entries.${index}.cost_center`, '')
+    }
+
     const { fields, append, remove } = useFieldArray({
         control: control,
         name: 'entries'
@@ -455,11 +477,12 @@ const Entries = ({ company, isWithdrawal, currency }: { company: string, isWithd
             party: '',
             account: '',
             debit: debitAmount,
-            credit: creditAmount
+            credit: creditAmount,
+            cost_center: getCompanyCostCenter(company) ?? ''
         } as JournalEntryAccount, {
             focusName: `entries.${existingEntries.length}.account`
         })
-    }, [append, getValues])
+    }, [company, append, getValues])
 
     const [selectedRows, setSelectedRows] = useState<number[]>([])
 
@@ -516,7 +539,8 @@ const Entries = ({ company, isWithdrawal, currency }: { company: string, isWithd
                 party: '',
                 account: '',
                 debit: debitAmount,
-                credit: creditAmount
+                credit: creditAmount,
+                cost_center: getCompanyCostCenter(company) ?? ''
             } as JournalEntryAccount, {
                 focusName: `entries.${existingEntries.length}.account`
             })
@@ -537,6 +561,7 @@ const Entries = ({ company, isWithdrawal, currency }: { company: string, isWithd
                         onCheckedChange={onSelectAll} /></TableHead>
                     <TableHead>{_("Party")}</TableHead>
                     <TableHead>{_("Account")}</TableHead>
+                    <TableHead>{_("Cost Center")}</TableHead>
                     <TableHead>{_("Remarks")}</TableHead>
                     <TableHead className="text-end">{_("Debit")}</TableHead>
                     <TableHead className="text-end">{_("Credit")}</TableHead>
@@ -588,6 +613,17 @@ const Entries = ({ company, isWithdrawal, currency }: { company: string, isWithd
                                 buttonClassName="min-w-64"
                                 readOnly={index === 0}
                                 isRequired
+                                hideLabel
+                            />
+                        </TableCell>
+                        <TableCell className="align-top">
+                            <LinkFormField
+                                doctype="Cost Center"
+                                name={`entries.${index}.cost_center`}
+                                label={_("Cost Center")}
+                                filters={[["company", "=", company], ["is_group", "=", 0], ["disabled", "=", 0]]}
+                                buttonClassName="min-w-48"
+                                readOnly={index === 0}
                                 hideLabel
                             />
                         </TableCell>

@@ -87,6 +87,7 @@
   "territory",
   "sales_person",
   "dimension_col_break",
+  "cost_center",
   "section_break_12",
   "status",
   "custom_remarks",
@@ -154,6 +155,13 @@
    "print_hide": 1,
    "remember_last_selected_value": 1,
    "reqd": 1
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "cost_center",
+   "fieldtype": "Link",
+   "label": "Cost Center",
+   "options": "Cost Center"
   },
   {
    "fieldname": "mode_of_payment",
@@ -598,9 +606,9 @@
    "label": "Custom Remarks"
   },
   {
-   "hidden": 1,
    "fieldname": "tax_withholding_category",
    "fieldtype": "Link",
+   "hidden": 1,
    "label": "Tax Withholding Category",
    "options": "Tax Withholding Category"
   },
@@ -822,7 +830,7 @@
    "table_fieldname": "payment_entries"
   }
  ],
- "modified": "2026-09-30 23:24:44.044604",
+ "modified": "2026-10-21 05:30:00.000000",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Payment Entry",

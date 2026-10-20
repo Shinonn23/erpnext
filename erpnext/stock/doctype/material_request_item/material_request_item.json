@@ -64,6 +64,7 @@
   "project",
   "department",
   "dimension_col_break",
+  "cost_center",
   "more_info",
   "lead_time_date",
   "sales_order",
@@ -209,10 +210,10 @@
    "fieldtype": "Link",
    "in_list_view": 1,
    "label": "UOM",
+   "mandatory_depends_on": "eval:!in_list(['Asset Transfer', 'Customer Demo'], parent.material_request_type) && !(parent.material_request_type == 'Customer Borrow / Loan' && parent.borrow_item_type == 'Asset')",
    "oldfieldname": "uom",
    "oldfieldtype": "Link",
    "options": "UOM",
-   "mandatory_depends_on": "eval:!in_list(['Asset Transfer', 'Customer Demo'], parent.material_request_type) && !(parent.material_request_type == 'Customer Borrow / Loan' && parent.borrow_item_type == 'Asset')",
    "print_width": "70px",
    "width": "70px"
   },
@@ -428,6 +429,13 @@
    "fieldtype": "Link",
    "label": "Expense Account",
    "options": "Account",
+   "print_hide": 1
+  },
+  {
+   "fieldname": "cost_center",
+   "fieldtype": "Link",
+   "label": "Cost Center",
+   "options": "Cost Center",
    "print_hide": 1
   },
   {
@@ -705,7 +713,7 @@
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-10-20 10:00:00.000000",
+ "modified": "2026-10-21 05:30:00.000000",
  "modified_by": "arirat.ba@connectdiagnostics.com",
  "module": "Stock",
  "name": "Material Request Item",

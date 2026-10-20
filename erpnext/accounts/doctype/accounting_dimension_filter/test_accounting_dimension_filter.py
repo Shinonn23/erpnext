@@ -27,6 +27,7 @@ class TestAccountingDimensionFilter(ERPNextTestSuite):
 
 	def test_allowed_dimension_validation(self):
 		si = create_sales_invoice(do_not_save=1)
+		si.items[0].cost_center = "Main - _TC"
 		si.department = "_Test Department - _TC"
 		si.items[0].department = "_Test Department - _TC"
 		si.location = "Block 1"
@@ -42,6 +43,7 @@ class TestAccountingDimensionFilter(ERPNextTestSuite):
 
 		# Test with no department for Sales Account
 		si.items[0].department = ""
+		si.items[0].cost_center = "_Test Cost Center 2 - _TC"
 		si.save()
 		si.department = ""
 		si.items[0].department = ""
@@ -51,6 +53,29 @@ class TestAccountingDimensionFilter(ERPNextTestSuite):
 
 
 def create_accounting_dimension_filter():
+	if not frappe.db.get_value("Accounting Dimension Filter", {"accounting_dimension": "Cost Center"}):
+		frappe.get_doc(
+			{
+				"doctype": "Accounting Dimension Filter",
+				"accounting_dimension": "Cost Center",
+				"allow_or_restrict": "Allow",
+				"company": "_Test Company",
+				"apply_restriction_on_values": 1,
+				"accounts": [
+					{
+						"applicable_on_account": "Sales - _TC",
+					}
+				],
+				"dimensions": [
+					{"accounting_dimension": "Cost Center", "dimension_value": "_Test Cost Center 2 - _TC"}
+				],
+			}
+		).insert()
+	else:
+		doc = frappe.get_doc("Accounting Dimension Filter", {"accounting_dimension": "Cost Center"})
+		doc.disabled = 0
+		doc.save()
+
 	if not frappe.db.get_value("Accounting Dimension Filter", {"accounting_dimension": "Department"}):
 		frappe.get_doc(
 			{
@@ -70,6 +95,10 @@ def create_accounting_dimension_filter():
 
 
 def disable_dimension_filter():
+	doc = frappe.get_doc("Accounting Dimension Filter", {"accounting_dimension": "Cost Center"})
+	doc.disabled = 1
+	doc.save()
+
 	doc = frappe.get_doc("Accounting Dimension Filter", {"accounting_dimension": "Department"})
 	doc.disabled = 1
 	doc.save()

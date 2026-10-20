@@ -5,7 +5,6 @@
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
- "icon": "book-open",
  "field_order": [
   "posting_date",
   "company",
@@ -15,6 +14,7 @@
   "party",
   "due_date",
   "voucher_detail_no",
+  "cost_center",
   "finance_book",
   "project",
   "department",
@@ -132,6 +132,12 @@
    "search_index": 1
   },
   {
+   "fieldname": "cost_center",
+   "fieldtype": "Link",
+   "label": "Cost Center",
+   "options": "Cost Center"
+  },
+  {
    "fieldname": "project",
    "fieldtype": "Link",
    "label": "Project",
@@ -182,10 +188,11 @@
    "search_index": 1
   }
  ],
+ "icon": "book-open",
  "in_create": 1,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2024-03-27 13:10:09.967095",
+ "modified": "2026-10-21 05:30:00.000000",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Payment Ledger Entry",

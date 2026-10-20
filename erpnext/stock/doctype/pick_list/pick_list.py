@@ -2054,7 +2054,23 @@ def update_delivery_note_item(source, target, delivery_note):
 
 
 def update_child_item(source, target, target_doc):
-	return
+	cost_center = frappe.db.get_value("Project", target_doc.project, "cost_center")
+	if not cost_center:
+		cost_center = get_cost_center(source.item_code, "Item", target_doc.company)
+
+	if not cost_center:
+		cost_center = get_cost_center(source.item_group, "Item Group", target_doc.company)
+
+	target.cost_center = cost_center
+
+
+def get_cost_center(for_item, from_doctype, company):
+	"""Returns Cost Center for Item or Item Group"""
+	return frappe.db.get_value(
+		"Item Default",
+		fieldname=["buying_cost_center"],
+		filters={"parent": for_item, "parenttype": from_doctype, "company": company},
+	)
 
 
 def set_delivery_note_missing_values(target):

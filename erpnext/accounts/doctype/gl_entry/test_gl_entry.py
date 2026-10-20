@@ -13,11 +13,13 @@ from erpnext.tests.utils import ERPNextTestSuite
 class TestGLEntry(ERPNextTestSuite):
 	def test_round_off_entry(self):
 		frappe.db.set_value("Company", "_Test Company", "round_off_account", "_Test Write Off - _TC")
+		frappe.db.set_value("Company", "_Test Company", "round_off_cost_center", "_Test Cost Center - _TC")
 
 		jv = make_journal_entry(
 			"_Test Account Cost for Goods Sold - _TC",
 			"_Test Bank - _TC",
 			100,
+			"_Test Cost Center - _TC",
 			submit=False,
 		)
 
@@ -28,7 +30,7 @@ class TestGLEntry(ERPNextTestSuite):
 		round_off_entry = frappe.db.sql(
 			"""select name from `tabGL Entry`
 			where voucher_type='Journal Entry' and voucher_no = %s
-			and account='_Test Write Off - _TC'
+			and account='_Test Write Off - _TC' and cost_center='_Test Cost Center - _TC'
 			and debit = 0 and credit = '.01'""",
 			jv.name,
 		)
@@ -82,6 +84,7 @@ class TestGLEntry(ERPNextTestSuite):
 			"_Test Account Cost for Goods Sold - _TC",
 			"_Test Bank - _TC",
 			100,
+			"_Test Cost Center - _TC",
 			save=False,
 			submit=False,
 		)
@@ -103,6 +106,7 @@ class TestGLEntry(ERPNextTestSuite):
 			"_Test Account Cost for Goods Sold - _TC",
 			"_Test Bank - _TC",
 			100,
+			"_Test Cost Center - _TC",
 			save=False,
 			submit=False,
 		)
@@ -125,6 +129,7 @@ class TestGLEntry(ERPNextTestSuite):
 			"Opening Balance Equity - _TC",
 			"Cash - _TC",
 			100,
+			"_Test Cost Center - _TC",
 			save=False,
 			submit=False,
 		)

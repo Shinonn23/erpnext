@@ -66,6 +66,7 @@ class DeliveryNote(SellingController):
 		contact_mobile: DF.SmallText | None
 		contact_person: DF.Link | None
 		conversion_rate: DF.Float
+		cost_center: DF.Link | None
 		currency: DF.Link
 		customer: DF.Link
 		customer_address: DF.Link | None
@@ -916,6 +917,7 @@ def make_sales_invoice(
 					"parent": "delivery_note",
 					"so_detail": "so_detail",
 					"against_sales_order": "sales_order",
+					"cost_center": "cost_center",
 				},
 				"postprocess": update_item,
 				"filter": lambda d: get_pending_qty(d) <= 0

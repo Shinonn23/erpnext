@@ -55,6 +55,7 @@ class Company(NestedSet):
 		company_logo: DF.AttachImage | None
 		company_name: DF.Data
 		asset_capitalization_threshold: DF.Currency
+		cost_center: DF.Link | None
 		customer_demo_return_lookahead_days: DF.Int
 		customer_loan_warehouse: DF.Link | None
 		low_value_asset_expense_account: DF.Link | None
@@ -92,6 +93,7 @@ class Company(NestedSet):
 		default_warehouse: DF.Link | None
 		default_warehouse_for_sales_return: DF.Link | None
 		default_wip_warehouse: DF.Link | None
+		depreciation_cost_center: DF.Link | None
 		depreciation_expense_account: DF.Link | None
 		disposal_account: DF.Link | None
 		domain: DF.Data | None
@@ -123,6 +125,7 @@ class Company(NestedSet):
 		rgt: DF.Int
 		role_allowed_for_frozen_entries: DF.Link | None
 		round_off_account: DF.Link | None
+		round_off_cost_center: DF.Link | None
 		round_off_for_opening: DF.Link | None
 		sales_monthly_history: DF.SmallText | None
 		sample_retention_warehouse: DF.Link | None
@@ -404,6 +407,9 @@ class Company(NestedSet):
 				sync_financial_report_templates(self.chart_of_accounts, self.existing_company)
 				self.create_default_accounts()
 				self.create_default_warehouses()
+
+		if not frappe.db.get_value("Cost Center", {"is_group": 0, "company": self.name}):
+			self.create_default_cost_center()
 
 		if frappe.flags.country_change:
 			install_country_fixtures(self.name, self.country)
@@ -773,6 +779,34 @@ class Company(NestedSet):
 			)
 			mode_of_payment.save(ignore_permissions=True)
 
+	def create_default_cost_center(self):
+		cc_list = [
+			{
+				"cost_center_name": self.name,
+				"company": self.name,
+				"is_group": 1,
+				"parent_cost_center": None,
+			},
+			{
+				"cost_center_name": _("Main"),
+				"company": self.name,
+				"is_group": 0,
+				"parent_cost_center": self.name + " - " + self.abbr,
+			},
+		]
+		for cc in cc_list:
+			cc.update({"doctype": "Cost Center"})
+			cc_doc = frappe.get_doc(cc)
+			cc_doc.flags.ignore_permissions = True
+
+			if cc.get("cost_center_name") == self.name:
+				cc_doc.flags.ignore_mandatory = True
+			cc_doc.insert()
+
+		self.db_set("cost_center", _("Main") + " - " + self.abbr)
+		self.db_set("round_off_cost_center", _("Main") + " - " + self.abbr)
+		self.db_set("depreciation_cost_center", _("Main") + " - " + self.abbr)
+
 	def after_rename(self, olddn, newdn, merge=False):
 		self.db_set("company_name", newdn)
 
@@ -789,7 +823,7 @@ class Company(NestedSet):
 
 	def on_trash(self):
 		"""
-		Trash accounts and budgets for this company if no gl entry exists
+		Trash accounts and cost centers for this company if no gl entry exists
 		"""
 		if frappe.db.get_single_value("Global Defaults", "demo_company") == self.name:
 			frappe.throw(
@@ -810,7 +844,7 @@ class Company(NestedSet):
 				self.name,
 			)
 
-			for doctype in ["Account", "Budget", "Party Account"]:
+			for doctype in ["Account", "Cost Center", "Budget", "Party Account"]:
 				frappe.db.sql(f"delete from `tab{doctype}` where company = %s", self.name)
 
 		if not frappe.db.get_value("Stock Ledger Entry", {"company": self.name}):

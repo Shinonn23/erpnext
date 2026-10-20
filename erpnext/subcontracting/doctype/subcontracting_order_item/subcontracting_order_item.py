@@ -18,6 +18,7 @@ class SubcontractingOrderItem(Document):
 		amount: DF.Currency
 		bom: DF.Link
 		conversion_factor: DF.Float
+		cost_center: DF.Link | None
 		description: DF.TextEditor | None
 		expected_delivery_date: DF.Date | None
 		expense_account: DF.Link | None

@@ -16,6 +16,7 @@ class PaymentEntryDeduction(Document):
 
 		account: DF.Link
 		amount: DF.Currency
+		cost_center: DF.Link
 		description: DF.SmallText | None
 		dunning: DF.Link | None
 		is_exchange_gain_loss: DF.Check

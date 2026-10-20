@@ -12,5 +12,13 @@ frappe.ui.form.on("Dunning Type", {
 				},
 			};
 		});
+		frm.set_query("cost_center", () => {
+			return {
+				filters: {
+					is_group: 0,
+					company: frm.doc.company,
+				},
+			};
+		});
 	},
 });

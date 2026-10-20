@@ -35,6 +35,7 @@ from erpnext.accounts.doctype.financial_report_template.financial_report_validat
 )
 from erpnext.accounts.report.financial_statements import (
 	get_columns,
+	get_cost_centers_with_children,
 	get_period_list,
 )
 from erpnext.accounts.utils import get_children, get_currency_precision
@@ -749,6 +750,10 @@ class FinancialQueryBuilder:
 			if isinstance(projects, str):
 				projects = [projects]
 			query = query.where(table.project.isin(projects))
+
+		if self.filters.get("cost_center"):
+			self.filters.cost_center = get_cost_centers_with_children(self.filters.cost_center)
+			query = query.where(table.cost_center.isin(self.filters.cost_center))
 
 		finance_book = self.filters.get("finance_book")
 		if self.filters.get("include_default_book_entries"):

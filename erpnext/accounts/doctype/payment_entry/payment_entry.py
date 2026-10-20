@@ -103,6 +103,7 @@ class PaymentEntry(AccountsController):
 		company: DF.Link
 		contact_email: DF.Data | None
 		contact_person: DF.Link | None
+		cost_center: DF.Link | None
 		custom_remarks: DF.Check
 		deductions: DF.Table[PaymentEntryDeduction]
 		difference_amount: DF.Currency
@@ -605,12 +606,12 @@ class PaymentEntry(AccountsController):
 				self.party_account = party_account
 
 		if self.paid_from and (not self.paid_from_account_currency or not self.paid_from_account_type):
-			acc = get_account_details(self.paid_from, self.posting_date)
+			acc = get_account_details(self.paid_from, self.posting_date, self.cost_center)
 			self.paid_from_account_currency = acc.account_currency
 			self.paid_from_account_type = acc.account_type
 
 		if self.paid_to and (not self.paid_to_account_currency or not self.paid_to_account_type):
-			acc = get_account_details(self.paid_to, self.posting_date)
+			acc = get_account_details(self.paid_to, self.posting_date, self.cost_center)
 			self.paid_to_account_currency = acc.account_currency
 			self.paid_to_account_type = acc.account_type
 
@@ -1199,7 +1200,7 @@ class PaymentEntry(AccountsController):
 
 		if not exchange_gain_loss_row:
 			values = frappe.get_cached_value(
-				"Company", self.company, ("exchange_gain_loss_account",), as_dict=True
+				"Company", self.company, ("exchange_gain_loss_account", "cost_center"), as_dict=True
 			)
 
 			for fieldname, value in values.items():
@@ -1220,6 +1221,7 @@ class PaymentEntry(AccountsController):
 				"deductions",
 				{
 					"account": values.exchange_gain_loss_account,
+					"cost_center": values.cost_center,
 					"is_exchange_gain_loss": 1,
 				},
 			)
@@ -1403,7 +1405,7 @@ class PaymentEntry(AccountsController):
 				"party": self.party,
 				"against": against_account,
 				"account_currency": self.party_account_currency,
-
+				"cost_center": self.cost_center,
 			},
 			item=self,
 		)
@@ -1411,6 +1413,10 @@ class PaymentEntry(AccountsController):
 		for d in self.get("references"):
 			# re-defining dr_or_cr for every reference in order to avoid the last value affecting calculation of reverse
 			dr_or_cr = "credit" if self.payment_type == "Receive" else "debit"
+			cost_center = self.cost_center
+			if d.reference_doctype == "Sales Invoice" and not cost_center:
+				cost_center = frappe.db.get_value(d.reference_doctype, d.reference_name, "cost_center")
+
 			gle = party_gl_dict.copy()
 
 			allocated_amount_in_company_currency = self.calculate_base_allocated_amount_for_reference(d)
@@ -1434,6 +1440,7 @@ class PaymentEntry(AccountsController):
 						"party": self.party,
 						"against": against_account,
 						"account_currency": self.party_account_currency,
+						"cost_center": cost_center,
 						dr_or_cr + "_in_account_currency": d.allocated_amount,
 						dr_or_cr: allocated_amount_in_company_currency,
 						dr_or_cr + "_in_transaction_currency": d.allocated_amount
@@ -1488,6 +1495,7 @@ class PaymentEntry(AccountsController):
 						"party": self.party,
 						"against": against_account,
 						"account_currency": self.party_account_currency,
+						"cost_center": self.cost_center,
 						dr_or_cr + "_in_account_currency": self.unallocated_amount,
 						dr_or_cr + "_in_transaction_currency": self.unallocated_amount
 						if self.party_account_currency == self.transaction_currency
@@ -1561,6 +1569,7 @@ class PaymentEntry(AccountsController):
 			"party_type": self.party_type,
 			"party": self.party,
 			"account_currency": self.party_account_currency,
+			"cost_center": self.cost_center,
 			"voucher_type": "Payment Entry",
 			"voucher_no": self.name,
 			"voucher_detail_no": invoice.name,
@@ -1641,6 +1650,7 @@ class PaymentEntry(AccountsController):
 						if self.paid_from_account_currency == self.transaction_currency
 						else self.base_paid_amount / self.transaction_exchange_rate,
 						"credit": self.base_paid_amount,
+						"cost_center": self.cost_center,
 						"post_net_value": True,
 					},
 					item=self,
@@ -1658,7 +1668,7 @@ class PaymentEntry(AccountsController):
 						if self.paid_to_account_currency == self.transaction_currency
 						else self.base_received_amount / self.transaction_exchange_rate,
 						"debit": self.base_received_amount,
-
+						"cost_center": self.cost_center,
 					},
 					item=self,
 				)
@@ -1694,6 +1704,7 @@ class PaymentEntry(AccountsController):
 						else d.tax_amount,
 						dr_or_cr + "_in_transaction_currency": base_tax_amount
 						/ self.transaction_exchange_rate,
+						"cost_center": d.cost_center,
 						"post_net_value": True,
 					},
 					account_currency,
@@ -1720,6 +1731,7 @@ class PaymentEntry(AccountsController):
 							else d.tax_amount,
 							rev_dr_or_cr + "_in_transaction_currency": base_tax_amount
 							/ self.transaction_exchange_rate,
+							"cost_center": self.cost_center,
 							"post_net_value": True,
 						},
 						account_currency,
@@ -1745,7 +1757,7 @@ class PaymentEntry(AccountsController):
 						"debit_in_account_currency": d.amount,
 						"debit_in_transaction_currency": d.amount / self.transaction_exchange_rate,
 						"debit": d.amount,
-
+						"cost_center": d.cost_center,
 					},
 					item=d,
 				)
@@ -1772,6 +1784,7 @@ class PaymentEntry(AccountsController):
 	def calculate_deductions(self, tax_details):
 		return {
 			"account": tax_details["tax"]["account_head"],
+			"cost_center": frappe.get_cached_value("Company", self.company, "cost_center"),
 			"amount": self.total_allocated_amount * (tax_details["tax"]["rate"] / 100),
 		}
 
@@ -2367,6 +2380,11 @@ def get_outstanding_reference_documents(args, validate=False):
 		common_filter.append(ple.voucher_type == args["voucher_type"])
 		common_filter.append(ple.voucher_no == args["voucher_no"])
 
+	# Add cost center condition
+	if args.get("cost_center"):
+		condition += f" and cost_center={frappe.db.escape(args.get('cost_center'))}"
+		accounting_dimensions_filter.append(ple.cost_center == args.get("cost_center"))
+
 	# dynamic dimension filters
 	active_dimensions = get_dimensions()[0]
 	for dim in active_dimensions:
@@ -2596,6 +2614,7 @@ def get_orders_to_be_billed(
 	company,
 	party_account_currency,
 	company_currency,
+	cost_center=None,
 	filters=None,
 ):
 	voucher_type = None
@@ -2609,7 +2628,7 @@ def get_orders_to_be_billed(
 
 	# dynamic dimension filters
 	condition = ""
-	active_dimensions = get_dimensions(with_project=True)[0]
+	active_dimensions = get_dimensions(True)[0]
 	for dim in active_dimensions:
 		if filters.get(dim.fieldname):
 			condition += f" and {dim.fieldname}={frappe.db.escape(filters.get(dim.fieldname))}"
@@ -2681,6 +2700,7 @@ def get_negative_outstanding_invoices(
 	party_account,
 	party_account_currency,
 	company_currency,
+	cost_center=None,
 	condition=None,
 ):
 	if party_type not in ["Customer", "Supplier"]:
@@ -2722,6 +2742,7 @@ def get_negative_outstanding_invoices(
 				"voucher_type": voucher_type,
 				"party_type": scrub(party_type),
 				"party_account": "debit_to" if party_type == "Customer" else "credit_to",
+				"cost_center": cost_center,
 				"account": account,
 			}
 		),
@@ -2731,7 +2752,7 @@ def get_negative_outstanding_invoices(
 
 
 @frappe.whitelist()
-def get_party_details(company, party_type, party, date):
+def get_party_details(company, party_type, party, date, cost_center=None):
 	bank_account = ""
 	party_bank_account = ""
 
@@ -2760,7 +2781,7 @@ def get_party_details(company, party_type, party, date):
 
 
 @frappe.whitelist()
-def get_account_details(account, date):
+def get_account_details(account, date, cost_center=None):
 	frappe.has_permission("Payment Entry", throw=True)
 
 	# to check if the passed account is accessible under reference doctype Payment Entry
@@ -2782,7 +2803,7 @@ def get_account_details(account, date):
 @frappe.whitelist()
 def get_company_defaults(company):
 	frappe.has_permission("Company", doc=company, throw=True)
-	fields = ["write_off_account", "exchange_gain_loss_account"]
+	fields = ["write_off_account", "exchange_gain_loss_account", "cost_center"]
 	return frappe.get_cached_value("Company", company, fields, as_dict=1)
 
 
@@ -2964,6 +2985,7 @@ def get_payment_entry(
 	pe = frappe.new_doc("Payment Entry")
 	pe.payment_type = payment_type
 	pe.company = doc.company
+	pe.cost_center = doc.get("cost_center")
 	pe.posting_date = nowdate()
 	pe.reference_date = reference_date
 	pe.mode_of_payment = doc.get("mode_of_payment")
@@ -3037,6 +3059,7 @@ def get_payment_entry(
 						"deductions",
 						{
 							"account": doc.income_account,
+							"cost_center": doc.cost_center,
 							"amount": -1 * unpaid_dunning_amount,
 							"description": _("Interest and/or dunning fee"),
 							"dunning": doc.name,
@@ -3427,6 +3450,8 @@ def set_pending_discount_loss(pe, doc, discount_amount, base_total_discount_loss
 			"deductions",
 			{
 				"account": frappe.get_cached_value("Company", pe.company, account_type),
+				"cost_center": pe.cost_center
+				or frappe.get_cached_value("Company", pe.company, "cost_center"),
 				"amount": discount_amount * positive_negative,
 			},
 		)
@@ -3477,6 +3502,7 @@ def add_income_discount_loss(pe, doc, total_discount_percent) -> float:
 		"deductions",
 		{
 			"account": frappe.get_cached_value("Company", pe.company, "default_discount_account"),
+			"cost_center": pe.cost_center or frappe.get_cached_value("Company", pe.company, "cost_center"),
 			"amount": flt(base_loss_on_income, precision) * positive_negative,
 		},
 	)
@@ -3510,6 +3536,8 @@ def add_tax_discount_loss(pe, doc, total_discount_percentage) -> float:
 			"deductions",
 			{
 				"account": account,
+				"cost_center": pe.cost_center
+				or frappe.get_cached_value("Company", pe.company, "cost_center"),
 				"amount": flt(loss, precision) * positive_negative,
 			},
 		)

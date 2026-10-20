@@ -73,6 +73,7 @@
   "column_break_exht",
   "service_expense_account",
   "accounting_dimensions_section",
+  "cost_center",
   "dimension_col_break",
   "project",
   "department",
@@ -467,6 +468,15 @@
    "fieldtype": "Column Break"
   },
   {
+   "default": ":Company",
+   "depends_on": "eval:cint(erpnext.is_perpetual_inventory_enabled(parent.company))",
+   "fieldname": "cost_center",
+   "fieldtype": "Link",
+   "label": "Cost Center",
+   "options": "Cost Center",
+   "print_hide": 1
+  },
+  {
    "fieldname": "section_break_80",
    "fieldtype": "Section Break"
   },
@@ -642,10 +652,10 @@
    "non_negative": 1
   },
   {
+   "collapsible": 1,
    "fieldname": "inventory_dimension",
    "fieldtype": "Section Break",
-   "label": "Inventory Dimension",
-   "collapsible": 1
+   "label": "Inventory Dimension"
   },
   {
    "fieldname": "storage_location",
@@ -659,7 +669,7 @@
  "idx": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-08-07 17:31:31.732720",
+ "modified": "2026-10-21 05:30:00.000000",
  "modified_by": "Administrator",
  "module": "Subcontracting",
  "name": "Subcontracting Receipt Item",

@@ -13,6 +13,7 @@ import erpnext
 from erpnext.assets.doctype.asset.asset import _get_asset_value_after_depreciation
 from erpnext.assets.doctype.asset.depreciation import (
 	depreciate_asset,
+	get_disposal_account_and_cost_center,
 	get_gl_entries_on_asset_disposal,
 	get_value_after_depreciation_on_disposal_date,
 	reset_depreciation_schedule,
@@ -26,6 +27,7 @@ from erpnext.setup.doctype.item_group.item_group import get_item_group_defaults
 from erpnext.stock.doctype.item.item import get_item_defaults
 from erpnext.stock.get_item_details import (
 	ItemDetailsCtx,
+	get_default_cost_center,
 	get_default_expense_account,
 	get_item_warehouse_,
 )
@@ -66,6 +68,7 @@ class AssetCapitalization(StockController):
 		asset_items: DF.Table[AssetCapitalizationAssetItem]
 		asset_items_total: DF.Currency
 		company: DF.Link
+		cost_center: DF.Link | None
 		department: DF.Link | None
 		finance_book: DF.Link | None
 		naming_series: DF.Literal["ACC-ASC-.YYYY.-"]
@@ -309,6 +312,8 @@ class AssetCapitalization(StockController):
 
 				self.validate_item(item)
 
+			if not d.cost_center:
+				d.cost_center = frappe.get_cached_value("Company", self.company, "cost_center")
 
 	def validate_source_mandatory(self):
 		if not (self.get("stock_items") or self.get("asset_items") or self.get("service_items")):
@@ -430,7 +435,9 @@ class AssetCapitalization(StockController):
 		elif self.docstatus == 2:
 			make_reverse_gl_entries(voucher_type=self.doctype, voucher_no=self.name)
 
-	def get_gl_entries(self, inventory_account_map=None, default_expense_account=None):
+	def get_gl_entries(
+		self, inventory_account_map=None, default_expense_account=None, default_cost_center=None
+	):
 		# Stock GL Entries
 		gl_entries = []
 
@@ -490,6 +497,7 @@ class AssetCapitalization(StockController):
 							{
 								"account": account,
 								"against": target_account,
+								"cost_center": item_row.cost_center,
 								"project": item_row.get("project") or self.get("project"),
 								"remarks": self.get("remarks") or "Accounting Entry for Stock",
 								"credit": -1 * stock_value_difference,
@@ -545,6 +553,7 @@ class AssetCapitalization(StockController):
 					{
 						"account": item_row.expense_account,
 						"against": target_account,
+						"cost_center": item_row.cost_center,
 						"project": item_row.get("project") or self.get("project"),
 						"remarks": self.get("remarks") or "Accounting Entry for Stock",
 						"credit": expense_amount,
@@ -574,6 +583,7 @@ class AssetCapitalization(StockController):
 						"against": ", ".join(target_against),
 						"remarks": self.get("remarks") or _("Accounting Entry for Asset"),
 						"debit": total_value,
+						"cost_center": self.get("cost_center"),
 					},
 					item=self,
 				)
@@ -662,6 +672,17 @@ def get_target_item_details(item_code: str | None = None, company: str | None = 
 	# Set Item Details
 	out.target_item_name = item.item_name
 
+	# Cost Center
+	item_defaults = get_item_defaults(item.name, company)
+	item_group_defaults = get_item_group_defaults(item.name, company)
+	brand_defaults = get_brand_defaults(item.name, company)
+	out.cost_center = get_default_cost_center(
+		ItemDetailsCtx({"item_code": item.name, "company": company}),
+		item_defaults,
+		item_group_defaults,
+		brand_defaults,
+	)
+
 	return out
 
 
@@ -714,6 +735,12 @@ def get_consumed_stock_item_details(ctx: ItemDetailsCtx):
 	out.warehouse = get_item_warehouse_(ctx, item, overwrite_warehouse=True) if item else None
 	if out.warehouse:
 		frappe.has_permission("Warehouse", doc=out.warehouse, throw=True)
+
+	# Cost Center
+	item_defaults = get_item_defaults(item.name, ctx.company)
+	item_group_defaults = get_item_group_defaults(item.name, ctx.company)
+	brand_defaults = get_brand_defaults(item.name, ctx.company)
+	out.cost_center = get_default_cost_center(ctx, item_defaults, item_group_defaults, brand_defaults)
 
 	if ctx.item_code and out.warehouse:
 		incoming_rate_args = frappe._dict(
@@ -802,6 +829,13 @@ def get_consumed_asset_details(ctx):
 	else:
 		out.fixed_asset_account = None
 
+	# Cost Center
+	if asset_details.item_code:
+		item = frappe.get_cached_doc("Item", asset_details.item_code)
+		item_defaults = get_item_defaults(item.name, ctx.company)
+		item_group_defaults = get_item_group_defaults(item.name, ctx.company)
+		brand_defaults = get_brand_defaults(item.name, ctx.company)
+		out.cost_center = get_default_cost_center(ctx, item_defaults, item_group_defaults, brand_defaults)
 	return out
 
 
@@ -825,6 +859,7 @@ def get_service_item_details(ctx):
 	brand_defaults = get_brand_defaults(item.name, ctx.company)
 
 	out.expense_account = get_default_expense_account(ctx, item_defaults, item_group_defaults, brand_defaults)
+	out.cost_center = get_default_cost_center(ctx, item_defaults, item_group_defaults, brand_defaults)
 
 	return out
 
@@ -844,6 +879,7 @@ def get_items_tagged_to_wip_composite_asset(params):
 		"stock_qty",
 		"stock_uom",
 		"warehouse",
+		"cost_center",
 		"qty",
 		"valuation_rate",
 		"amount",

@@ -22,6 +22,7 @@ class ProcessPaymentReconciliation(Document):
 		amended_from: DF.Link | None
 		bank_cash_account: DF.Link | None
 		company: DF.Link
+		cost_center: DF.Link | None
 		default_advance_account: DF.Link | None
 		error_log: DF.LongText | None
 		from_invoice_date: DF.Date | None
@@ -106,6 +107,7 @@ def get_pr_instance(doc: str):
 		"receivable_payable_account",
 		"default_advance_account",
 		"bank_cash_account",
+		"cost_center",
 		"from_invoice_date",
 		"to_invoice_date",
 		"from_payment_date",

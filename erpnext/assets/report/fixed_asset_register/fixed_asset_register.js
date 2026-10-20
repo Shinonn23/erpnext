@@ -24,7 +24,12 @@ frappe.query_reports["Fixed Asset Register"] = {
 			fieldtype: "Link",
 			options: "Asset Category",
 		},
-
+		{
+			fieldname: "cost_center",
+			label: __("Cost Center"),
+			fieldtype: "Link",
+			options: "Cost Center",
+		},
 		{
 			fieldname: "group_by",
 			label: __("Group By"),

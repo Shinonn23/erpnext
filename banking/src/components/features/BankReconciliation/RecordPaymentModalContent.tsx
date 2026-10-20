@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogTitle, DialogDescription, DialogHeader, Di
 import _ from "@/lib/translate"
 import { UnreconciledTransaction, useGetRuleForTransaction, useRefreshUnreconciledTransactions, useUpdateActionLog } from "./utils"
 import { useFieldArray, useForm, useFormContext, useWatch } from "react-hook-form"
-import { getCompanyCurrency } from "@/lib/company"
+import { getCompanyCostCenter, getCompanyCurrency } from "@/lib/company"
 import { FrappeConfig, FrappeContext, useFrappeGetCall, useFrappePostCall } from "frappe-react-sdk"
 import { toast } from "sonner"
 import ErrorBanner from "@/components/ui/error-banner"
@@ -824,6 +824,7 @@ const Summary = ({ currency }: { currency: string }) => {
             setValue('deductions', [...deductions, {
                 amount: amount,
                 account: '',
+                cost_center: getCompanyCostCenter(getValues('company')),
                 description: ''
             } as PaymentEntryDeduction])
 
@@ -1148,6 +1149,7 @@ const OtherChargesSection = ({ currency }: { currency: string }) => {
 
         append({
             account: '',
+            cost_center: getCompanyCostCenter(getValues('company')),
             description: '',
             amount: 0
         } as PaymentEntryDeduction)
@@ -1170,6 +1172,7 @@ const OtherChargesSection = ({ currency }: { currency: string }) => {
                         checked={selectedRows.length > 0 && selectedRows.length === fields.length}
                         onCheckedChange={onSelectAll} /></TableHead>
                     <TableHead>{_("Account")} <span className="text-ink-red-3">*</span></TableHead>
+                    <TableHead>{_("Cost Center")} <span className="text-ink-red-3">*</span></TableHead>
                     <TableHead>{_("Description")}</TableHead>
                     <TableHead className="text-end">{_("Amount")} <span className="text-ink-red-3">*</span></TableHead>
                 </TableRow>
@@ -1195,6 +1198,26 @@ const OtherChargesSection = ({ currency }: { currency: string }) => {
                                 }}
                                 buttonClassName="min-w-64"
                                 isRequired
+                                hideLabel
+                            />
+                        </TableCell>
+                        <TableCell className="align-top">
+                            <LinkFormField
+                                doctype="Cost Center"
+                                reference_doctype="Payment Entry Deduction"
+                                customQuery={{
+                                    query: "erpnext.controllers.queries.get_filtered_dimensions",
+                                    filters: {
+                                        "dimension": "cost_center",
+                                        "company": getValues('company'),
+                                    }
+                                }}
+                                rules={{
+                                    required: _("Cost Center is required"),
+                                }}
+                                name={`deductions.${index}.cost_center`}
+                                label={_("Cost Center")}
+                                buttonClassName="min-w-48"
                                 hideLabel
                             />
                         </TableCell>

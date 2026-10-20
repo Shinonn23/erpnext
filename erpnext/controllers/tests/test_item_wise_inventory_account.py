@@ -126,6 +126,7 @@ class TestItemWiseInventoryAccount(ERPNextTestSuite):
 			rate=200,
 			warehouse=self.default_warehouse,
 			company=self.company,
+			cost_center=frappe.db.get_value("Company", self.company, "cost_center"),
 			expense_account=frappe.db.get_value("Company", self.company, "default_expense_account"),
 			do_not_submit=True,
 		)
@@ -195,6 +196,7 @@ class TestItemWiseInventoryAccount(ERPNextTestSuite):
 			rate=200,
 			warehouse=self.default_warehouse,
 			company=self.company,
+			cost_center=frappe.db.get_value("Company", self.company, "cost_center"),
 			expense_account=frappe.db.get_value("Company", self.company, "default_expense_account"),
 		)
 
@@ -403,6 +405,7 @@ class TestItemWiseInventoryAccount(ERPNextTestSuite):
 			rate=200,
 			warehouse=self.default_warehouse,
 			company=self.company,
+			cost_center=frappe.db.get_value("Company", self.company, "cost_center"),
 			expense_account=frappe.db.get_value("Company", self.company, "default_expense_account"),
 			do_not_submit=True,
 		)

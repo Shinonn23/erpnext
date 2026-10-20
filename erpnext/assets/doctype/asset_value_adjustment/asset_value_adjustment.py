@@ -31,6 +31,7 @@ class AssetValueAdjustment(Document):
 		asset: DF.Link
 		asset_category: DF.ReadOnly | None
 		company: DF.Link | None
+		cost_center: DF.Link | None
 		current_asset_value: DF.Currency
 		date: DF.Date
 		difference_account: DF.Link
@@ -90,8 +91,8 @@ class AssetValueAdjustment(Document):
 			depreciation_expense_account,
 		) = get_depreciation_accounts(asset.asset_category, asset.company)
 
-		depreciation_series = frappe.get_cached_value(
-			"Company", asset.company, "series_for_depreciation_entry"
+		depreciation_cost_center, depreciation_series = frappe.get_cached_value(
+			"Company", asset.company, ["depreciation_cost_center", "series_for_depreciation_entry"]
 		)
 
 		je = frappe.new_doc("Journal Entry")
@@ -103,6 +104,7 @@ class AssetValueAdjustment(Document):
 		je.finance_book = self.finance_book
 
 		entry_template = {
+			"cost_center": self.cost_center or depreciation_cost_center,
 			"reference_type": "Asset",
 			"reference_name": asset.name,
 			"department": asset.department,
@@ -227,5 +229,5 @@ class AssetValueAdjustment(Document):
 
 @frappe.whitelist()
 def get_value_of_accounting_dimensions(asset_name):
-	dimension_fields = frappe.get_list("Accounting Dimension", pluck="fieldname")
+	dimension_fields = [*frappe.get_list("Accounting Dimension", pluck="fieldname"), "cost_center"]
 	return frappe.db.get_value("Asset", asset_name, fieldname=dimension_fields, as_dict=True)

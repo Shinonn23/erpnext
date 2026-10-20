@@ -79,6 +79,7 @@ class PurchaseOrder(BuyingController):
 		contact_mobile: DF.SmallText | None
 		contact_person: DF.Link | None
 		conversion_rate: DF.Float
+		cost_center: DF.Link | None
 		currency: DF.Link
 		customer: DF.Link | None
 		customer_contact_display: DF.SmallText | None
@@ -934,6 +935,14 @@ def get_mapped_purchase_invoice(source_name, target_doc=None, ignore_permissions
 			else flt(obj.qty) - get_billed_and_mapped_qty(obj.name)
 		)
 
+		item = get_item_defaults(target.item_code, source_parent.company)
+		item_group = get_item_group_defaults(target.item_code, source_parent.company)
+		target.cost_center = (
+			obj.cost_center
+			or frappe.db.get_value("Project", obj.project, "cost_center")
+			or item.get("buying_cost_center")
+			or item_group.get("buying_cost_center")
+		)
 
 	def select_item(d):
 		filtered_items = args.get("filtered_children", [])

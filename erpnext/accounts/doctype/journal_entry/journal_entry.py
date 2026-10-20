@@ -1274,6 +1274,7 @@ class JournalEntry(AccountsController):
 					"against_voucher": d.reference_name,
 					"remarks": remarks,
 					"voucher_detail_no": d.reference_detail_no,
+					"cost_center": d.cost_center,
 					"project": d.project,
 					"department": d.get("department"),
 					"territory": d.get("territory"),
@@ -1349,6 +1350,7 @@ class JournalEntry(AccountsController):
 						"accounts",
 						{
 							"account": difference_account,
+							"cost_center": erpnext.get_default_cost_center(self.company),
 						},
 					)
 
@@ -1584,6 +1586,9 @@ def get_payment_entry_against_invoice(
 def get_payment_entry(ref_doc, args):
 	frappe.has_permission("Journal Entry", ptype="create", throw=True)
 
+	cost_center = ref_doc.get("cost_center") or frappe.get_cached_value(
+		"Company", ref_doc.company, "cost_center"
+	)
 	exchange_rate = 1
 	if args.get("party_account"):
 		# Modified to include the posting date for which the exchange rate is required.
@@ -1606,6 +1611,7 @@ def get_payment_entry(ref_doc, args):
 			"account": args.get("party_account"),
 			"party_type": args.get("party_type"),
 			"party": ref_doc.get(args.get("party_type").lower()),
+			"cost_center": cost_center,
 			"account_type": frappe.get_cached_value("Account", args.get("party_account"), "account_type"),
 			"account_currency": args.get("party_account_currency")
 			or get_account_currency(args.get("party_account")),
@@ -1631,6 +1637,8 @@ def get_payment_entry(ref_doc, args):
 			bank_account["account_currency"],
 			ref_doc.company,
 		)
+
+	bank_row.cost_center = cost_center
 
 	amount = args.get("debit_in_account_currency") or args.get("amount")
 

@@ -53,6 +53,7 @@ frappe.ui.form.on("Budget", {
 	},
 
 	budget_against: function (frm) {
+		frm.trigger("set_null_value");
 		frm.trigger("toggle_reqd_fields");
 	},
 
@@ -70,7 +71,17 @@ frappe.ui.form.on("Budget", {
 		toggle_distribution_fields(frm);
 	},
 
+	set_null_value: function (frm) {
+		if (frm.doc.budget_against == "Cost Center") {
+			frm.set_value("project", null);
+		} else {
+			frm.set_value("cost_center", null);
+		}
+	},
+
 	toggle_reqd_fields: function (frm) {
+		frm.toggle_reqd("cost_center", frm.doc.budget_against == "Cost Center");
+		frm.toggle_reqd("project", frm.doc.budget_against == "Project");
 		const dimensions = erpnext.accounts.dimensions.accounting_dimensions || [];
 		for (const dimension of dimensions) {
 			frm.toggle_reqd(dimension.fieldname, dimension.document_type == frm.doc.budget_against);

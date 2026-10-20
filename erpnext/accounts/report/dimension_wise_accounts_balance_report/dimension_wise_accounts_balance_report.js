@@ -56,6 +56,7 @@ frappe.query_reports["Dimension-wise Accounts Balance Report"] = {
 			fieldname: "dimension",
 			label: __("Select Dimension"),
 			fieldtype: "Select",
+			default: "Cost Center",
 			options: get_accounting_dimension_options(),
 			reqd: 1,
 		},
@@ -68,7 +69,7 @@ frappe.query_reports["Dimension-wise Accounts Balance Report"] = {
 };
 
 function get_accounting_dimension_options() {
-	let options = [];
+	let options = ["Cost Center", "Project"];
 	frappe.db.get_list("Accounting Dimension", { fields: ["document_type"] }).then((res) => {
 		res.forEach((dimension) => {
 			options.push(dimension.document_type);

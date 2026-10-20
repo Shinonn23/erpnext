@@ -26,6 +26,7 @@ class AccountClosingBalance(Document):
 		account_currency: DF.Link | None
 		closing_date: DF.Date | None
 		company: DF.Link | None
+		cost_center: DF.Link | None
 		credit: DF.Currency
 		credit_in_account_currency: DF.Currency
 		credit_in_reporting_currency: DF.Currency
@@ -96,6 +97,7 @@ def generate_key(entry, accounting_dimensions):
 	key = [
 		cstr(entry.get("account")),
 		cstr(entry.get("account_currency")),
+		cstr(entry.get("cost_center")),
 		cstr(entry.get("project")),
 		cstr(entry.get("department")),
 		cstr(entry.get("territory")),
@@ -108,6 +110,7 @@ def generate_key(entry, accounting_dimensions):
 		"company": cstr(entry.get("company")),
 		"account": cstr(entry.get("account")),
 		"account_currency": cstr(entry.get("account_currency")),
+		"cost_center": cstr(entry.get("cost_center")),
 		"project": cstr(entry.get("project")),
 		"department": cstr(entry.get("department")),
 		"territory": cstr(entry.get("territory")),
@@ -142,6 +145,7 @@ def get_previous_closing_entries(company, closing_date, accounting_dimensions):
 			account_closing_balance.credit,
 			account_closing_balance.debit_in_account_currency,
 			account_closing_balance.credit_in_account_currency,
+			account_closing_balance.cost_center,
 			account_closing_balance.project,
 			account_closing_balance.department,
 			account_closing_balance.territory,

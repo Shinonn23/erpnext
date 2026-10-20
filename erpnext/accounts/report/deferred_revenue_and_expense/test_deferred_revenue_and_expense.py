@@ -67,6 +67,7 @@ class TestDeferredRevenueAndExpense(ERPNextTestSuite, AccountsTestMixin):
 		self.supplier = "_Test Supplier"
 		self.warehouse = "Stores - _TC"
 		self.debit_to = "Debtors - _TC"
+		self.cost_center = "Main - _TC"
 		self.income_account = "Sales - _TC"
 		self.expense_account = "Cost of Goods Sold - _TC"
 		self.setup_deferred_accounts_and_items()
@@ -86,6 +87,8 @@ class TestDeferredRevenueAndExpense(ERPNextTestSuite, AccountsTestMixin):
 			customer=self.customer,
 			debit_to=self.debit_to,
 			posting_date="2021-05-01",
+			parent_cost_center=self.cost_center,
+			cost_center=self.cost_center,
 			do_not_save=True,
 			rate=300,
 			price_list_rate=300,
@@ -152,6 +155,8 @@ class TestDeferredRevenueAndExpense(ERPNextTestSuite, AccountsTestMixin):
 			is_return=False,
 			update_stock=False,
 			posting_date=frappe.utils.datetime.date(2021, 5, 1),
+			parent_cost_center=self.cost_center,
+			cost_center=self.cost_center,
 			do_not_save=True,
 			rate=300,
 			price_list_rate=300,
@@ -219,6 +224,8 @@ class TestDeferredRevenueAndExpense(ERPNextTestSuite, AccountsTestMixin):
 			customer=self.customer,
 			debit_to=self.debit_to,
 			posting_date="2021-05-01",
+			parent_cost_center=self.cost_center,
+			cost_center=self.cost_center,
 			do_not_save=True,
 			rate=300,
 			price_list_rate=300,
@@ -286,6 +293,8 @@ class TestDeferredRevenueAndExpense(ERPNextTestSuite, AccountsTestMixin):
 			is_return=False,
 			update_stock=False,
 			posting_date=frappe.utils.datetime.date(2021, 12, 30),
+			parent_cost_center=self.cost_center,
+			cost_center=self.cost_center,
 			do_not_save=True,
 			rate=3910,
 			price_list_rate=3910,
