@@ -338,19 +338,9 @@
    "hidden": 0,
    "is_query_report": 0,
    "label": "Tax & Compliance",
-   "link_count": 7,
+   "link_count": 6,
    "onboard": 0,
    "type": "Card Break"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 1,
-   "label": "TDS Computation Summary",
-   "link_count": 0,
-   "link_to": "TDS Computation Summary",
-   "link_type": "Report",
-   "onboard": 0,
-   "type": "Link"
   },
   {
    "hidden": 0,
@@ -924,7 +914,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-10-04 21:00:00.000000",
+ "modified": "2026-10-20 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Accounts",
  "module_onboarding": "Accounting Onboarding",
@@ -985,19 +975,6 @@
    "keep_closed": 0,
    "label": "Chart of Accounts",
    "link_to": "Account",
-   "link_type": "DocType",
-   "open_in_new_tab": 0,
-   "show_arrow": 0,
-   "type": "Link"
-  },
-  {
-   "child": 1,
-   "collapsible": 1,
-   "default_workspace": 0,
-   "indent": 0,
-   "keep_closed": 0,
-   "label": "Chart of Cost Centers",
-   "link_to": "Cost Center",
    "link_type": "DocType",
    "open_in_new_tab": 0,
    "show_arrow": 0,
@@ -1382,20 +1359,6 @@
    "type": "Link"
   },
   {
-   "child": 1,
-   "collapsible": 1,
-   "default_workspace": 0,
-   "icon": "notepad-text",
-   "indent": 0,
-   "keep_closed": 0,
-   "label": "Cost Center Allocation",
-   "link_to": "Cost Center Allocation",
-   "link_type": "DocType",
-   "open_in_new_tab": 0,
-   "show_arrow": 0,
-   "type": "Link"
-  },
-  {
    "child": 0,
    "collapsible": 1,
    "default_workspace": 0,
@@ -1503,19 +1466,6 @@
    "open_in_new_tab": 0,
    "show_arrow": 0,
    "type": "Section Break"
-  },
-  {
-   "child": 1,
-   "collapsible": 1,
-   "default_workspace": 0,
-   "indent": 0,
-   "keep_closed": 0,
-   "label": "TDS Computation Summary",
-   "link_to": "TDS Computation Summary",
-   "link_type": "Report",
-   "open_in_new_tab": 0,
-   "show_arrow": 0,
-   "type": "Link"
   },
   {
    "child": 1,
