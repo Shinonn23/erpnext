@@ -28,6 +28,10 @@ for (const doctype of [
 	});
 }
 
+erpnext.stock.is_subcontracting_or_return_transfer = (doc) => {
+	return doc.purpose == "Send to Subcontractor" || (doc.purpose == "Material Transfer" && doc.is_return);
+};
+
 erpnext.stock.StockController = class StockController extends frappe.ui.form.Controller {
 	onload() {
 		// warehouse query if company

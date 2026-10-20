@@ -162,15 +162,11 @@ def _get_fiscal_years(company=None):
 
 		if company:
 			FYC = DocType("Fiscal Year Company")
+			company_years = frappe.qb.from_(FYC).select(FYC.parent).where(FYC.company == company)
 			query = query.where(
 				ExistsCriterion(frappe.qb.from_(FYC).select(FYC.name).where(FYC.parent == FY.name)).negate()
-				| ExistsCriterion(
-					frappe.qb.from_(FYC)
-					.select(FYC.company)
-					.where(FYC.parent == FY.name)
-					.where(FYC.company == company)
-				)
-			)
+				| FY.name.isin(company_years)
+			).orderby(Case().when(FY.name.isin(company_years), 0).else_(1))
 
 		query = query.orderby(FY.year_start_date, order=Order.desc)
 		fiscal_years = query.run(as_dict=True)
@@ -653,6 +649,7 @@ def update_reference_in_journal_entry(d, journal_entry, do_not_save=False):
 		d["allocated_amount"] = d["allocated_amount"] * -1
 		d["unadjusted_amount"] = d["unadjusted_amount"] * -1
 
+	insert_position = -1
 	if flt(d["unadjusted_amount"]) - flt(d["allocated_amount"]) != 0:
 		# adjust the unreconciled balance
 		amount_in_account_currency = flt(d["unadjusted_amount"]) - flt(d["allocated_amount"])
@@ -664,9 +661,10 @@ def update_reference_in_journal_entry(d, journal_entry, do_not_save=False):
 		)
 	else:
 		journal_entry.remove(jv_detail)
+		insert_position += jv_detail.idx
 
 	# new row with references
-	new_row = journal_entry.append("accounts")
+	new_row = journal_entry.append("accounts", position=insert_position)
 
 	# Copy field values into new row
 	[
@@ -1325,7 +1323,9 @@ def get_companies():
 
 
 @frappe.whitelist()
-def get_children(doctype, parent, company, is_root=False, include_disabled=False):
+def get_children(
+	doctype: str, parent: str, company: str, is_root: bool = False, include_disabled: bool = False
+):
 	if isinstance(include_disabled, str):
 		include_disabled = loads(include_disabled)
 	from erpnext.accounts.report.financial_statements import sort_accounts
@@ -1333,21 +1333,28 @@ def get_children(doctype, parent, company, is_root=False, include_disabled=False
 	parent_fieldname = "parent_" + doctype.lower().replace(" ", "_")
 	fields = ["name as value", "is_group as expandable"]
 	filters = [["docstatus", "<", 2]]
-	if frappe.db.has_column(doctype, "disabled") and not include_disabled:
-		filters.append(["disabled", "=", False])
+	if frappe.db.has_column(doctype, "disabled"):
+		if include_disabled:
+			# the tree marks disabled rows, so it needs the flag
+			fields.append("disabled")
+		else:
+			filters.append(["disabled", "=", False])
+
+	# extra columns the tree views render as badges / clean labels
+	node_fields = {
+		"Account": ["root_type", "account_name", "account_number", "account_currency", "freeze_account"],
+		"Cost Center": ["cost_center_name", "cost_center_number"],
+	}
+	fields += node_fields.get(doctype, [])
 
 	if is_root:
 		filters.append(IfNull(Field(parent_fieldname), "") == "")
+		filters.append(["company", "=", company])
+		if doctype == "Account":
+			fields.append("report_type")
 	else:
 		filters.append([parent_fieldname, "=", parent])
-
-	if is_root:
-		fields += ["root_type", "report_type", "account_currency"] if doctype == "Account" else []
-		filters.append(["company", "=", company])
-
-	else:
-		fields += ["root_type", "account_currency"] if doctype == "Account" else []
-		fields += [parent_fieldname + " as parent"]
+		fields.append(parent_fieldname + " as parent")
 
 	acc = frappe.get_list(doctype, fields=fields, filters=filters)
 

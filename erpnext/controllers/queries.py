@@ -16,7 +16,7 @@ from pypika import Order
 
 import erpnext
 from erpnext.accounts.utils import build_qb_match_conditions
-from erpnext.selling.doctype.party_specific_item.party_specific_item import get_party_item_restrictions
+from erpnext.selling.doctype.party_specific_item.party_specific_item import get_restricted_items_condition
 from erpnext.stock.doctype.item.item_search import get_item_search_candidates
 from erpnext.stock.get_item_details import ItemDetailsCtx, _get_item_tax_template
 from erpnext.stock.item_uom import get_item_uoms, is_item_uom_restricted
@@ -221,12 +221,12 @@ def item_query(
 	searched_fields = list(searchfields)
 	searchfields = " or ".join([field + " like %(txt)s" for field in searchfields])
 
+	restricted_items_cond = ""
 	if filters and isinstance(filters, dict):
 		if filters.get("customer") or filters.get("supplier"):
 			party_type = "Customer" if filters.get("customer") else "Supplier"
 			party = filters.get("customer") or filters.get("supplier")
-			for field, values in get_party_item_restrictions(party_type, party).items():
-				filters[field] = ["not in", list(values)]
+			restricted_items_cond = get_restricted_items_cond(party_type, party)
 
 			if filters.get("customer"):
 				del filters["customer"]
@@ -261,7 +261,7 @@ def item_query(
 			and (tabItem.end_of_life > %(today)s or ifnull(tabItem.end_of_life, '0000-00-00')='0000-00-00')
 			and ({scond} or tabItem.item_code IN (select parent from `tabItem Barcode` where barcode LIKE %(txt)s)
 				{description_cond})
-			{fcond} {mcond} {candidate_cond}
+			{fcond} {mcond} {candidate_cond} {restricted_items_cond}
 		order by
 			if(locate(%(_txt)s, name), locate(%(_txt)s, name), 99999),
 			if(locate(%(_txt)s, item_name), locate(%(_txt)s, item_name), 99999),
@@ -274,6 +274,7 @@ def item_query(
 			mcond=get_match_cond(doctype).replace("%", "%%"),
 			description_cond=description_cond,
 			candidate_cond=candidate_cond,
+			restricted_items_cond=restricted_items_cond.replace("%", "%%"),
 		),
 		{
 			"today": nowdate(),
@@ -285,6 +286,17 @@ def item_query(
 		},
 		as_dict=as_dict,
 	)
+
+
+def get_restricted_items_cond(party_type, party):
+	"""Return a SQL condition that excludes items reserved for other parties."""
+	restricted_items_condition = get_restricted_items_condition(party_type, party)
+	if restricted_items_condition is None:
+		return ""
+
+	item = frappe.qb.DocType("Item")
+	restricted_items = frappe.qb.from_(item).select(item.name).where(restricted_items_condition)
+	return f"and tabItem.name not in ({restricted_items})"
 
 
 @frappe.whitelist()
@@ -419,7 +431,7 @@ def get_delivery_notes_to_be_billed(
 	query = (
 		query.where(
 			(DeliveryNote.docstatus == 1)
-			& (DeliveryNote.status.notin(["Stopped", "Closed"]))
+			& (DeliveryNote.status.notin(["Stopped", "Closed", "Return Issued"]))
 			& (DeliveryNote[searchfield].like(f"%{txt}%"))
 			& (
 				((DeliveryNote.is_return == 0) & (DeliveryNote.per_billed < 100))

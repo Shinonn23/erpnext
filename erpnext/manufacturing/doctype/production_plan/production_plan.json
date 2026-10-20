@@ -2,8 +2,10 @@
  "actions": [],
  "autoname": "naming_series:",
  "creation": "2017-10-29 11:53:09.523362",
+ "description": "Plans the work orders and materials needed for your demand.",
  "doctype": "DocType",
  "document_type": "Document",
+ "documentation": "https://docs.frappe.io/erpnext/user/manual/en/production-plan",
  "engine": "InnoDB",
  "field_order": [
   "naming_series",
@@ -54,6 +56,7 @@
   "include_safety_stock",
   "ignore_existing_ordered_qty",
   "column_break_25",
+  "raw_material_group_warehouse",
   "for_warehouse",
   "for_storage_location",
   "get_items_for_mr",
@@ -329,6 +332,13 @@
    "options": "Warehouse"
   },
   {
+   "description": "Optional group warehouse. Raw material availability is checked across its child warehouses; material is still received into For Warehouse.",
+   "fieldname": "raw_material_group_warehouse",
+   "fieldtype": "Link",
+   "label": "Raw Material Group Warehouse",
+   "options": "Warehouse"
+  },
+  {
    "fieldname": "for_storage_location",
    "fieldtype": "Link",
    "label": "For Storage Location",
@@ -464,11 +474,11 @@
   }
  ],
  "grid_page_length": 50,
- "icon": "fa fa-calendar",
+ "icon": "calendar-check",
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2025-08-12 19:48:09.302503",
+ "modified": "2026-07-07 00:00:01.000000",
  "modified_by": "Administrator",
  "module": "Manufacturing",
  "name": "Production Plan",

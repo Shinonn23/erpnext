@@ -147,7 +147,8 @@ def get_columns():
 		{
 			"fieldname": "voucher_type",
 			"label": _("Voucher Type"),
-			"fieldtype": "Data",
+			"fieldtype": "Link",
+			"options": "DocType",
 			"width": 110,
 		},
 		{
@@ -160,7 +161,8 @@ def get_columns():
 		{
 			"fieldname": "from_voucher_type",
 			"label": _("From Voucher Type"),
-			"fieldtype": "Data",
+			"fieldtype": "Link",
+			"options": "DocType",
 			"width": 110,
 		},
 		{

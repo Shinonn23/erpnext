@@ -4,6 +4,7 @@
 
 import frappe
 from frappe import _
+from frappe.desk.reportview import build_match_conditions
 from frappe.utils import DateTimeLikeObject, getdate, today
 
 import erpnext
@@ -90,8 +91,8 @@ def get_data(filters, conditions, stock_scope=None):
 		if filters.period_based_on and conditions.get("trans") in ["Sales Invoice", "Purchase Invoice"]:
 			posting_date = "t1." + filters.period_based_on
 
-	if conditions["based_on_select"] in ["t1.project,", "t2.project,"]:
-		cond = " and " + conditions["based_on_select"][:-1] + " IS Not NULL"
+	if filters.get("based_on") == "Project":
+		cond = " and " + conditions["based_on_select"].split(",")[0] + " != ''"
 
 	if not filters.get("include_closed_orders"):
 		if conditions.get("trans") in ["Sales Order", "Purchase Order"]:
@@ -104,6 +105,7 @@ def get_data(filters, conditions, stock_scope=None):
 		cond += " and coalesce(t2.warehouse, '') = " + frappe.db.escape(stock_scope[0] or "")
 		if len(stock_scope) == 2:
 			cond += " and coalesce(t2.storage_location, '') = " + frappe.db.escape(stock_scope[1] or "")
+	cond += get_permission_condition(conditions["trans"])
 
 	year_start_date, year_end_date = frappe.get_cached_value(
 		"Fiscal Year", filters.get("fiscal_year"), ["year_start_date", "year_end_date"]
@@ -244,6 +246,12 @@ def get_data(filters, conditions, stock_scope=None):
 		data.append(total_row)
 
 	return data
+
+
+def get_permission_condition(doctype):
+	if match_conditions := build_match_conditions(doctype):
+		return f" and t1.name in (select name from `tab{doctype}` where {match_conditions})"
+	return ""
 
 
 def calculate_total_row(data, columns, company_currency=None):

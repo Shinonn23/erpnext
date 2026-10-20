@@ -769,13 +769,13 @@ def make_shipment_from_document(source_doctype, source_name):
 
 @frappe.whitelist()
 def get_address_name(ref_doctype, docname):
-	# Return address name
+	frappe.has_permission(ref_doctype, "select", doc=docname, throw=True)
 	return get_party_shipping_address(ref_doctype, docname)
 
 
 @frappe.whitelist()
 def get_contact_name(ref_doctype, docname):
-	# Return address name
+	frappe.has_permission(ref_doctype, "select", doc=docname, throw=True)
 	return get_default_contact(ref_doctype, docname)
 
 

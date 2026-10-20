@@ -12,7 +12,7 @@ from frappe.query_builder.functions import Sum
 from frappe.utils import cint, flt, nowdate, nowtime, parse_json
 
 from erpnext.stock.doctype.storage_location.storage_location import validate_storage_location_warehouse
-from erpnext.stock.utils import get_or_make_bin, get_stock_balance
+from erpnext.stock.utils import _get_stock_balance, get_or_make_bin
 
 
 class StockReservationEntry(Document):
@@ -634,7 +634,7 @@ class StockReservationEntry(Document):
 				frappe.throw(msg)
 
 		if qty_to_be_reserved > allowed_qty:
-			actual_qty = get_stock_balance(
+			actual_qty = _get_stock_balance(
 				self.item_code,
 				self.warehouse,
 				inventory_dimensions_dict={"storage_location": self.storage_location}
@@ -771,7 +771,7 @@ def get_available_qty_to_reserve(
 			inventory_dimensions_dict={"storage_location": storage_location} if storage_location else None,
 		)
 
-	available_qty = get_stock_balance(
+	available_qty = _get_stock_balance(
 		item_code,
 		warehouse,
 		inventory_dimensions_dict={"storage_location": storage_location} if storage_location else None,
@@ -1425,7 +1425,7 @@ class StockReservation:
 		frappe.msgprint(msg, title=_("Stock Reservation"), indicator="orange")
 
 	def get_available_qty_to_reserve(self, item_code, warehouse, ignore_sre=None, storage_location=None):
-		available_qty = get_stock_balance(
+		available_qty = _get_stock_balance(
 			item_code,
 			warehouse,
 			inventory_dimensions_dict={"storage_location": storage_location} if storage_location else None,
@@ -1824,6 +1824,11 @@ def create_stock_reservation_entries_for_so_items(
 	if items_details:
 		for item in items_details:
 			so_item = frappe.get_doc("Sales Order Item", item.get("sales_order_item"))
+			if so_item.parent != sales_order.name:
+				frappe.throw(
+					_("Sales Order Item {0} does not belong to {1}").format(so_item.name, sales_order.name)
+				)
+
 			so_item.warehouse = item.get("warehouse")
 			so_item.qty_to_reserve = (
 				flt(item.get("qty_to_reserve"))

@@ -6,14 +6,14 @@
    "label": "Profit and Loss"
   }
  ],
- "content": "[{\"id\":\"tS7ZWzC24I\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Profit and Loss\",\"col\":12}},{\"id\":\"8Ej2KxPxOt\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"p7NY6MHe2Y\",\"type\":\"card\",\"data\":{\"card_name\":\"Financial Statements\",\"col\":4}},{\"id\":\"nKKr6fjgjb\",\"type\":\"card\",\"data\":{\"card_name\":\"Ledgers\",\"col\":4}},{\"id\":\"3AK1Zf0oew\",\"type\":\"card\",\"data\":{\"card_name\":\"Profitability\",\"col\":4}},{\"id\":\"Q_hBCnSeJY\",\"type\":\"card\",\"data\":{\"card_name\":\"Other Reports\",\"col\":4}}]",
+ "content": "[{\"id\":\"tS7ZWzC24I\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Profit and Loss\",\"col\":12}},{\"id\":\"8Ej2KxPxOt\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"p7NY6MHe2Y\",\"type\":\"card\",\"data\":{\"card_name\":\"Financial Statements\",\"col\":4}},{\"id\":\"nKKr6fjgjb\",\"type\":\"card\",\"data\":{\"card_name\":\"Ledgers\",\"col\":4}},{\"id\":\"3AK1Zf0oew\",\"type\":\"card\",\"data\":{\"card_name\":\"Profitability\",\"col\":4}},{\"id\":\"Q_hBCnSeJY\",\"type\":\"card\",\"data\":{\"card_name\":\"Other Reports\",\"col\":4}},{\"id\":\"newRegiste\",\"type\":\"card\",\"data\":{\"card_name\":\"Registers\",\"col\":4}}]",
  "creation": "2026-10-05 13:31:07.270706",
  "custom_blocks": [],
  "docstatus": 0,
  "doctype": "Workspace",
  "for_user": "",
  "hide_custom": 0,
- "icon": "table",
+ "icon": "sheet",
  "idx": 1,
  "indicator_color": "",
  "is_hidden": 0,
@@ -76,7 +76,7 @@
    "hidden": 0,
    "is_query_report": 0,
    "label": "Financial Statements",
-   "link_count": 5,
+   "link_count": 7,
    "link_type": "DocType",
    "onboard": 0,
    "type": "Card Break"
@@ -137,6 +137,27 @@
    "type": "Link"
   },
   {
+   "dependencies": "GL Entry",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Custom Financial Statement",
+   "link_count": 0,
+   "link_to": "Custom Financial Statement",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Financial Report Template",
+   "link_count": 0,
+   "link_to": "Financial Report Template",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
    "hidden": 0,
    "is_query_report": 0,
    "label": "Ledgers",
@@ -182,7 +203,7 @@
    "hidden": 0,
    "is_query_report": 0,
    "label": "Other Reports",
-   "link_count": 8,
+   "link_count": 7,
    "link_type": "DocType",
    "onboard": 0,
    "type": "Card Break"
@@ -262,9 +283,106 @@
    "link_type": "Report",
    "onboard": 0,
    "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Registers",
+   "link_count": 8,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "Sales Invoice",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Accounts Receivable",
+   "link_count": 0,
+   "link_to": "Accounts Receivable",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "Purchase Invoice",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Accounts Payable",
+   "link_count": 0,
+   "link_to": "Accounts Payable",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "Sales Invoice",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Accounts Receivable Summary",
+   "link_count": 0,
+   "link_to": "Accounts Receivable Summary",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "Purchase Invoice",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Accounts Payable Summary",
+   "link_count": 0,
+   "link_to": "Accounts Payable Summary",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "Sales Invoice",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Sales Register",
+   "link_count": 0,
+   "link_to": "Sales Register",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "Purchase Invoice",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Purchase Register",
+   "link_count": 0,
+   "link_to": "Purchase Register",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "Sales Invoice",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Item-wise Sales Register",
+   "link_count": 0,
+   "link_to": "Item-wise Sales Register",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "Purchase Invoice",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Item-wise Purchase Register",
+   "link_count": 0,
+   "link_to": "Item-wise Purchase Register",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
   }
  ],
- "modified": "2026-10-05 15:09:40.993713",
+ "modified": "2026-10-05 15:09:41.993713",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Financial Reports",
@@ -278,5 +396,7 @@
  "sequence_id": 5.0,
  "shortcuts": [],
  "title": "Financial Reports",
- "type": "Workspace"
+ "type": "Workspace",
+ "module_onboarding": "Accounting Onboarding",
+ "standard": 1
 }

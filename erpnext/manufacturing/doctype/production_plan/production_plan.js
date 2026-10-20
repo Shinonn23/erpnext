@@ -40,10 +40,21 @@ frappe.ui.form.on("Production Plan", {
 		});
 
 		frm.set_query("for_warehouse", function (doc) {
+			const filters = [
+				["Warehouse", "company", "=", doc.company],
+				["Warehouse", "is_group", "=", 0],
+			];
+			if (doc.raw_material_group_warehouse) {
+				filters.push(["Warehouse", "name", "descendants of", doc.raw_material_group_warehouse]);
+			}
+			return { filters };
+		});
+
+		frm.set_query("raw_material_group_warehouse", function (doc) {
 			return {
 				filters: {
 					company: doc.company,
-					is_group: 0,
+					is_group: 1,
 				},
 			};
 		});
@@ -136,6 +147,13 @@ frappe.ui.form.on("Production Plan", {
 	},
 	sub_assembly_warehouse(frm) {
 		frm.set_value("sub_assembly_storage_location", "");
+	},
+
+	raw_material_group_warehouse(frm) {
+		// For Warehouse must sit inside the chosen group, so drop a stale selection
+		if (frm.doc.raw_material_group_warehouse && frm.doc.for_warehouse) {
+			frm.set_value("for_warehouse", null);
+		}
 	},
 
 	refresh(frm) {
@@ -496,6 +514,7 @@ frappe.ui.form.on("Production Plan", {
 			frm.events.get_items_for_material_requests(frm);
 		} else {
 			const title = __("Transfer Materials For Warehouse {0}", [frm.doc.for_warehouse]);
+			const source_warehouse = frm.doc.raw_material_group_warehouse;
 			var dialog = new frappe.ui.Dialog({
 				title: title,
 				fields: [
@@ -504,6 +523,7 @@ frappe.ui.form.on("Production Plan", {
 						fieldtype: "Table MultiSelect",
 						fieldname: "warehouses",
 						options: "Production Plan Material Request Warehouse",
+						default: source_warehouse ? [{ warehouse: source_warehouse }] : [],
 						get_query: function () {
 							return {
 								filters: {
@@ -560,7 +580,9 @@ frappe.ui.form.on("Production Plan", {
 	download_materials_required(frm) {
 		const warehouses_data = [];
 
-		if (frm.doc.for_warehouse) {
+		if (frm.doc.raw_material_group_warehouse) {
+			warehouses_data.push({ warehouse: frm.doc.raw_material_group_warehouse });
+		} else if (frm.doc.for_warehouse) {
 			warehouses_data.push({
 				warehouse: frm.doc.for_warehouse,
 				storage_location: frm.doc.for_storage_location,
