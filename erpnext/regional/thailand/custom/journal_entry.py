@@ -33,6 +33,7 @@ class JournalEntry(JournalEntry):
 						"<b>Is Petty Cash Account</b> in account and journal entry account not same, please check it before submit."
 					)
 				)
+		validate_vat_tax_invoices(self)
 
 	def validate(self):
 		super().validate()
@@ -73,6 +74,61 @@ def company_tax_accounts(company):
 	"""The company's row of Thai Tax Settings (None for a company that has none)."""
 	settings = frappe.get_cached_doc("Thai Tax Settings")
 	return next((row for row in settings.company_accounts if row.company == company), None)
+
+
+def validate_vat_tax_invoices(doc):
+	"""Owner decision 22-10-2026: VAT that a Journal Entry posts the way a tax invoice records it (a credit on output
+	VAT, a debit on input VAT: the due accounts of Thai Tax Settings) needs its tax invoice (Create Tax Invoice), or
+	the Sales / Purchase Tax Reports miss it. Lines the other way need none, so the month-end VAT closing entry (a
+	debit on output VAT and a credit on input VAT, clearing both balances) posts no tax invoice; reversals and
+	opening balances are left alone either way."""
+	if (
+		doc.get("reversal_of")
+		or doc.get("is_system_generated")
+		or doc.voucher_type == "Opening Entry"
+		or doc.get("is_opening") == "Yes"
+	):
+		return
+	accounts = company_tax_accounts(doc.company)
+	if not accounts:
+		return
+	details = {row.name: row for row in doc.get("tax_invoice_details") or []}
+	for line in doc.get("accounts"):
+		if line.account == accounts.sales_tax_account:
+			vat = flt(line.credit) - flt(line.debit)
+			untaxed = _(
+				"Row #{0} credits output VAT of {1} to {2} without a Sales Tax Invoice, so the Sales Tax Report "
+				"would miss it. Tick Create Tax Invoice (and choose the Customer on the Tax Invoice tab) before "
+				"submitting."
+			)
+		elif line.account == accounts.purchase_tax_account:
+			vat = flt(line.debit) - flt(line.credit)
+			untaxed = _(
+				"Row #{0} debits input VAT of {1} to {2} without a Purchase Tax Invoice, so the Purchase Tax Report "
+				"would miss it. Tick Create Tax Invoice and enter the supplier's Tax Invoice Number and Tax Invoice "
+				"Date before submitting."
+			)
+		else:
+			continue
+		if vat <= 0:
+			continue
+		if not doc.get("create_tax_invoice"):
+			frappe.throw(
+				untaxed.format(line.idx, fmt_money(vat, precision=2), line.account),
+				title=_("Tax Invoice Required"),
+			)
+		# the supplier's number and date, on the line's row of the Tax Invoice tab (or still on the line itself)
+		tax_invoice = details.get(line.reference_detail_no) or line
+		if line.account == accounts.purchase_tax_account and not (
+			tax_invoice.get("tax_invoice_number") and tax_invoice.get("tax_invoice_date")
+		):
+			frappe.throw(
+				_(
+					"Row #{0}: input VAT of {1} on {2} needs the supplier's Tax Invoice Number and Tax Invoice Date "
+					"(Tax Invoice tab) before submitting."
+				).format(line.idx, fmt_money(vat, precision=2), line.account),
+				title=_("Tax Invoice Required"),
+			)
 
 
 def validate_undue_vat_settlement(doc):

@@ -267,7 +267,8 @@ def update_voucher_tinv(doctype, voucher, tinv, split_tax_invoice=False):
 	# Sales Invoice - use Sales Tax Invoice as Tax Invoice
 	# Purchase Invoice - use Bill No as Tax Invoice
 	if doctype == "Sales Tax Invoice":
-		setting = get_thai_tax_settings(voucher.company)
+		# a Journal Entry's voucher is its Tax Invoice Detail row, which has no company
+		setting = get_thai_tax_settings(voucher.get("company") or tinv.company)
 		if (
 			setting.create_sales_taxinv_on_zero_tax
 			and setting.get("manual_keyin_sales_taxinv_on_zero_tax")

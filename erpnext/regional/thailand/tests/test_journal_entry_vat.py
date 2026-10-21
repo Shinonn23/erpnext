@@ -1,6 +1,8 @@
 """VAT rules of the Thai Journal Entry (owner, 22-10-2026).
 A customer's service invoice, whose output VAT waits on the undue account until it is paid, is received with a Payment
-Entry only: a Journal Entry that settles it is refused on validate.
+Entry only: a Journal Entry that settles it is refused on validate. VAT a Journal Entry posts the way a tax invoice
+records it (a credit on output VAT, a debit on input VAT) needs Create Tax Invoice, and input VAT the supplier's tax
+invoice number and date, before submit; the month-end VAT closing entry, reversals and opening balances need none.
 Offline: the Thai Tax Settings, the invoices' GL and ERPNext's own Journal Entry validation are stand-ins."""
 
 import unittest
@@ -10,7 +12,7 @@ from unittest.mock import Mock, patch
 import frappe
 
 from erpnext.accounts.doctype.journal_entry.journal_entry import JournalEntry as ERPNextJournalEntry
-from erpnext.regional.thailand.custom import journal_entry
+from erpnext.regional.thailand.custom import custom_api, journal_entry
 from erpnext.regional.thailand.custom.journal_entry import JournalEntry
 
 CD = "CD"
@@ -136,6 +138,185 @@ class TestJournalEntryValidate(_Stubs, unittest.TestCase):
 		):
 			journal.validate()
 		erpnext_validate.assert_called_once()
+
+
+def _vat_journal(*lines, **fields):
+	journal = _journal(*lines, **fields)
+	for idx, line in enumerate(journal.accounts, 1):
+		line.idx = idx
+	journal.setdefault("tax_invoice_details", [])
+	return journal
+
+
+def _input_vat(**fields):
+	return _vat_journal(
+		_line("5330-02", debit=1000),
+		_line("1154-00", debit=70, **fields.pop("line", {})),
+		_line("1111-00", credit=1070),
+		**fields,
+	)
+
+
+class TestVatTaxInvoices(_Stubs, unittest.TestCase):
+	def test_input_vat_without_a_tax_invoice_is_refused(self):
+		with self.assertRaises(frappe.ValidationError) as refused:
+			journal_entry.validate_vat_tax_invoices(_input_vat())
+		self.assertIn(
+			"Row #2 debits input VAT of 70.00 to 1154-00 without a Purchase Tax Invoice",
+			str(refused.exception),
+		)
+
+	def test_input_vat_needs_the_supplier_tax_invoice_number_and_date(self):
+		with self.assertRaises(frappe.ValidationError) as refused:
+			journal_entry.validate_vat_tax_invoices(_input_vat(create_tax_invoice=1))
+		self.assertIn("needs the supplier's Tax Invoice Number and Tax Invoice Date", str(refused.exception))
+		on_line = {"tax_invoice_number": "INV-1", "tax_invoice_date": "2026-10-22"}
+		journal_entry.validate_vat_tax_invoices(_input_vat(create_tax_invoice=1, line=on_line))
+
+	def test_the_number_and_date_may_be_on_the_tax_invoice_tab(self):
+		journal = _input_vat(create_tax_invoice=1, line={"reference_detail_no": "TID-1"})
+		journal.tax_invoice_details = [
+			frappe._dict(name="TID-1", tax_invoice_number="INV-1", tax_invoice_date="2026-10-22")
+		]
+		journal_entry.validate_vat_tax_invoices(journal)
+
+	def test_output_vat_needs_create_tax_invoice_only(self):
+		sale = [_line("1130-01", debit=10700), _line("4100-01", credit=10000), _line("2135-00", credit=700)]
+		with self.assertRaises(frappe.ValidationError) as refused:
+			journal_entry.validate_vat_tax_invoices(_vat_journal(*sale))
+		self.assertIn(
+			"Row #3 credits output VAT of 700.00 to 2135-00 without a Sales Tax Invoice",
+			str(refused.exception),
+		)
+		# the Sales Tax Invoice the entry makes gives the number and date
+		journal_entry.validate_vat_tax_invoices(_vat_journal(*sale, create_tax_invoice=1))
+
+	def test_the_month_end_vat_closing_entry_needs_no_tax_invoice(self):
+		closing = [_line("2135-00", debit=3500), _line("1154-00", credit=700), _line("2136-00", credit=2800)]
+		journal_entry.validate_vat_tax_invoices(_vat_journal(*closing))
+
+	def test_reversals_and_opening_balances_are_left_alone(self):
+		reopened = [_line("2135-00", credit=3500), _line("1154-00", debit=700), _line("2136-00", debit=2800)]
+		journal_entry.validate_vat_tax_invoices(_vat_journal(*reopened, reversal_of="JV-1"))
+		journal_entry.validate_vat_tax_invoices(
+			_vat_journal(*reopened, voucher_type="Opening Entry", is_opening="Yes")
+		)
+
+	def test_journals_without_vat_and_companies_without_settings_pass(self):
+		journal_entry.validate_vat_tax_invoices(
+			_vat_journal(_line("5320-02", debit=1), _line("1111-00", credit=1))
+		)
+		journal_entry.validate_vat_tax_invoices(_input_vat(company="Other"))
+
+
+class TestClearingJournal(_Stubs, unittest.TestCase):
+	"""The journal a payment's Clear Undue Tax button makes (make_clear_vat_journal_entry) ticks Create Tax Invoice;
+	it submits once the supplier's tax invoice number and date are in."""
+
+	def make(self):
+		payment = frappe._dict(
+			name="PAY-1",
+			company=CD,
+			party_type="Supplier",
+			party="SUP-1",
+			company_tax_address="CD-Billing",
+			references=[
+				frappe._dict(
+					reference_doctype="Purchase Invoice",
+					reference_name="PINV-1",
+					allocated_amount=10700,
+					total_amount=10700,
+				)
+			],
+			check_permission=Mock(),
+		)
+		journal = frappe._dict(accounts=[])
+		journal.append = lambda table, row: journal.accounts.append(
+			frappe._dict(row, idx=len(journal.accounts) + 1)
+		)
+		invoice_gl = [
+			{"account": "2120-01", "debit": 0, "credit": 10700},
+			{"account": "1154-01", "debit": 700, "credit": 0},
+			{"account": "5320-02", "debit": 10000, "credit": 0},
+		]
+		with (
+			patch.object(custom_api.frappe, "get_doc", return_value=payment),
+			patch.object(custom_api.frappe, "has_permission", return_value=True),
+			patch.object(custom_api.frappe, "new_doc", return_value=journal),
+			patch.object(custom_api.frappe, "db", SimpleNamespace(get_all=Mock(return_value=invoice_gl))),
+			patch.object(
+				custom_api.frappe,
+				"get_cached_value",
+				side_effect=lambda doctype, name, field: "Profit and Loss"
+				if name == "5320-02"
+				else "Balance Sheet",
+			),
+			patch.object(custom_api, "get_thai_tax_settings", return_value=SETTINGS.company_accounts[0]),
+		):
+			journal = custom_api.make_clear_vat_journal_entry("Payment Entry", "PAY-1")
+		journal.update(
+			doctype="Journal Entry", company=CD, voucher_type="Journal Entry", tax_invoice_details=[]
+		)
+		return journal
+
+	def test_the_clearing_journal_submits_with_the_supplier_tax_invoice(self):
+		journal = self.make()
+		self.assertEqual(journal.create_tax_invoice, 1)
+		self.assertEqual(
+			[
+				(line.account, line.debit_in_account_currency or 0, line.credit_in_account_currency or 0)
+				for line in journal.accounts
+			],
+			[("1154-01", 0, 700), ("1154-00", 700, 0)],
+		)
+		for line in journal.accounts:
+			line.update(
+				debit=line.debit_in_account_currency or 0, credit=line.credit_in_account_currency or 0
+			)
+		with self.assertRaises(frappe.ValidationError):
+			journal_entry.validate_vat_tax_invoices(journal)
+		journal.accounts[1].update(tax_invoice_number="IV-1", tax_invoice_date="2026-10-22")
+		journal_entry.validate_vat_tax_invoices(journal)
+
+
+class _DetailRow(SimpleNamespace):
+	"""A Journal Entry Tax Invoice Detail row: no company field."""
+
+	def get(self, key, default=None):
+		return getattr(self, key, default)
+
+
+class TestJournalSalesTaxInvoice(unittest.TestCase):
+	def test_the_sales_tax_invoice_of_a_journal_takes_its_number_and_company(self):
+		"""A journal's voucher is its Tax Invoice Detail row; the settings come from the tax invoice's company."""
+		detail = _DetailRow(company_tax_address="CD-Office", save=Mock())
+		tinv = SimpleNamespace(
+			name="CD-CI2600009", date="2026-10-22", company=CD, voucher_type="Journal Entry"
+		)
+		tinv.save = Mock()
+		settings = SimpleNamespace(create_sales_taxinv_on_zero_tax=0, get=lambda field: 0)
+		with patch.object(custom_api, "get_thai_tax_settings", return_value=settings) as thai_tax_settings:
+			custom_api.update_voucher_tinv("Sales Tax Invoice", detail, tinv)
+		thai_tax_settings.assert_called_once_with(CD)
+		self.assertEqual((detail.tax_invoice_number, detail.tax_invoice_date), ("CD-CI2600009", "2026-10-22"))
+		self.assertEqual(tinv.company_tax_address, "CD-Office")
+		detail.save.assert_called_once()
+
+
+class TestJournalEntrySubmit(_Stubs, unittest.TestCase):
+	def test_submitting_the_journal_runs_the_rule(self):
+		"""The Thai Journal Entry checks the tax invoices after ERPNext's own before_submit."""
+		journal = JournalEntry.__new__(JournalEntry)
+		journal.__dict__.update(_input_vat())
+		for line in journal.accounts:
+			line.is_petty_cash_account = 0
+		with (
+			patch.object(ERPNextJournalEntry, "before_submit") as erpnext_before_submit,
+			patch.object(journal_entry.frappe, "get_value", return_value=0),
+			self.assertRaises(frappe.ValidationError),
+		):
+			journal.before_submit()
+		erpnext_before_submit.assert_called_once()
 
 
 if __name__ == "__main__":
