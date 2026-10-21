@@ -701,6 +701,32 @@ class TestJournalBalances(unittest.TestCase):
 		self.assertEqual(self.debit(doc, "Bank - CD"), 10400.5)
 		self.assertEqual(doc.difference, 0)
 
+	def test_lines_the_form_has_not_rated_yet_count_in_company_currency(self):
+		# a journal as typed: amounts in the account's currency, no rate and no company-currency amounts yet
+		doc = journal(self.lines())
+		for row in doc.accounts:
+			row.update(exchange_rate=0, debit=0, credit=0, account_currency="THB")
+		with self.world.active():
+			self.assertEqual(withholding.get_receive_base(doc), 10000)
+		self.apply(doc)
+		self.assertEqual(self.debit(doc, "Bank - CD"), 10400)
+		self.assertEqual((doc.total_debit, doc.total_credit), (10700, 10700))
+		unreferenced = journal(
+			[
+				{"account": "Bank - CD", "debit_in_account_currency": 5000},
+				{
+					"account": "Debtors - CD",
+					"party_type": "Customer",
+					"party": "4A058",
+					"credit_in_account_currency": 5000,
+				},
+			]
+		)
+		for row in unreferenced.accounts:
+			row.update(exchange_rate=0, debit=0, credit=0)
+		with self.world.active():
+			self.assertEqual(withholding.get_receive_base(unreferenced), 5000)
+
 	def test_with_several_bank_lines_the_tax_is_added_and_the_difference_shown(self):
 		doc = journal(self.lines(banks=2))
 		out = self.apply(doc)

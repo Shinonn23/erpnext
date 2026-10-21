@@ -378,7 +378,7 @@ def get_receive_base(doc):
 	else:
 		for row in customer_credit_lines(doc):
 			if not (row.get("reference_type") in SOURCE_DOCTYPES and row.get("reference_name")):
-				base += flt(row.get("credit")) - flt(row.get("debit"))
+				base += _customer_credit(row) * (flt(row.get("exchange_rate")) or 1)
 	return flt(base, 2)
 
 
@@ -567,6 +567,11 @@ def apply_to_journal_entry(journal, rows):
 	"""Replace the debit lines an earlier run made with these rows, then balance the journal."""
 	check_receive_entry(journal)
 	customer_lines = customer_credit_lines(journal)
+	currency = frappe.get_cached_value("Company", journal.company, "default_currency")
+	for row in journal.get("accounts") or []:
+		# a line in company currency the form has not given a rate yet
+		if not flt(row.get("exchange_rate")) and row.get("account_currency") in (None, "", currency):
+			row.exchange_rate = 1
 	restored = 0.0
 	for row in withholding_rows(journal):
 		restored += flt(row.get(ROW_OFFSET))
@@ -584,7 +589,6 @@ def apply_to_journal_entry(journal, rows):
 		and flt(bank.debit) > withheld
 	)
 	cost_center = default_cost_center(journal.company, "Journal Entry Account")
-	currency = frappe.get_cached_value("Company", journal.company, "default_currency")
 	department = customer_lines[0].get("department")
 	for row in rows:
 		journal.append(
