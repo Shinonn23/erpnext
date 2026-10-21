@@ -879,6 +879,21 @@ class SellingController(StockController):
 					type_of_transaction=type_of_transaction,
 				)
 
+		elif self.docstatus == 2 and item_row.serial_and_batch_bundle and not cint(self.is_return):
+			# the target warehouse received its own bundle (above): the cancellation reverses that one, not the
+			# source warehouse's bundle the row holds
+			sle["serial_and_batch_bundle"] = frappe.db.get_value(
+				"Stock Ledger Entry",
+				{
+					"voucher_type": self.doctype,
+					"voucher_no": self.name,
+					"voucher_detail_no": item_row.name,
+					"warehouse": item_row.target_warehouse,
+					"is_cancelled": 0,
+				},
+				"serial_and_batch_bundle",
+			)
+
 		return sle
 
 	def set_po_nos(self, for_validate=False):

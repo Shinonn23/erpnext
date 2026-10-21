@@ -231,7 +231,7 @@ def get_stock_ledger_entries_for_batch_bundle(filters):
 				query = query.where(batch_package[field] == filters.get(field))
 			else:
 				value = filters.get(field)
-			query = query.where(sle[field].isin(value) if isinstance(value, list) else sle[field] == value)
+				query = query.where(sle[field].isin(value) if isinstance(value, list) else sle[field] == value)
 
 	if filters.start_from:
 		query = query.where(sle.posting_date > getdate(filters.start_from))

@@ -72,6 +72,12 @@ def create_tax_invoice_on_gl_tax(doc, method):
 		is_return = voucher.is_return  # Case Debit/Credit Note
 	if doc.voucher_type == "Journal Entry":
 		is_return = voucher.reversal_of and True or False
+	if doc.voucher_type == "Payment Entry":
+		# money paid back to a customer (or received back from a supplier) reverses VAT: a credit note refunded
+		is_return = (voucher.payment_type, voucher.party_type) in (
+			("Pay", "Customer"),
+			("Receive", "Supplier"),
+		)
 	sign = is_return and -1 or 1
 	# Tax amount, use Dr/Cr to ensure it support every case
 	if doc.account in [setting.sales_tax_account, setting.purchase_tax_account]:
@@ -81,6 +87,14 @@ def create_tax_invoice_on_gl_tax(doc, method):
 		if (tax_amount < 0 and not is_return) or (tax_amount > 0 and is_return):
 			doctype = "Purchase Tax Invoice"
 		tax_amount = abs(tax_amount) * sign
+		if setting.sales_tax_account != setting.purchase_tax_account:
+			# the account says which tax invoice, the side its sign: a debit on output VAT (a credit on input VAT)
+			# reduces it, as a credit note does, also on a Journal Entry that is not a reversal (owner, 22-10-2026)
+			if doc.account == setting.sales_tax_account:
+				doctype, tax_amount = "Sales Tax Invoice", doc.credit - doc.debit
+			else:
+				doctype, tax_amount = "Purchase Tax Invoice", doc.debit - doc.credit
+			sign = -1 if tax_amount < 0 else 1
 	if doctype:
 		if voucher.docstatus == 2:
 			tax_amount = 0
@@ -261,7 +275,8 @@ def update_voucher_tinv(doctype, voucher, tinv, split_tax_invoice=False):
 	# Sales Invoice - use Sales Tax Invoice as Tax Invoice
 	# Purchase Invoice - use Bill No as Tax Invoice
 	if doctype == "Sales Tax Invoice":
-		setting = get_thai_tax_settings(voucher.company)
+		# a Journal Entry's voucher is its Tax Invoice Detail row, which has no company
+		setting = get_thai_tax_settings(voucher.get("company") or tinv.company)
 		if (
 			setting.create_sales_taxinv_on_zero_tax
 			and setting.get("manual_keyin_sales_taxinv_on_zero_tax")
@@ -435,6 +450,10 @@ def make_clear_vat_journal_entry(dt, dn):
 	return je
 
 
+# the description of the two tax rows that move a paid invoice's undue VAT to due VAT on its Payment Entry
+CLEAR_UNDUE_TAX = "Clear Undue Tax"
+
+
 def clear_invoice_undue_tax(doc, method):
 	if frappe.flags.get("in_clear_invoice_undue_tax"):
 		return
@@ -475,7 +494,11 @@ def clear_invoice_undue_tax(doc, method):
 		)
 		for gl in gl_entries:
 			(undue_tax, base_amount, account_undue, account) = get_undue_tax(doc, ref, gl, tax)
-			if ref.reference_doctype in ("Purchase Invoice", "Expense Claim"):
+			# The pair must debit the undue account by what the invoice credited it (a credit note: credit it by
+			# what it debited). ERPNext posts an "Add" row as a credit on a Receive and as a debit on a Pay
+			# (add_tax_gl_entries), so a Pay takes the opposite signs, whatever it pays: a supplier's invoice or
+			# a customer's credit note refunded.
+			if doc.payment_type == "Pay":
 				undue_tax = -undue_tax
 				base_amount = -base_amount
 			base_total += base_amount
@@ -485,7 +508,7 @@ def clear_invoice_undue_tax(doc, method):
 					{
 						# 'add_deduct_tax': undue_tax > 0 and 'Deduct' or 'Add',
 						"add_deduct_tax": "Add",
-						"description": "Clear Undue Tax",
+						"description": CLEAR_UNDUE_TAX,
 						"charge_type": "Actual",
 						"account_head": account_undue,
 						"tax_amount": -undue_tax,
@@ -504,7 +527,7 @@ def clear_invoice_undue_tax(doc, method):
 		{
 			# 'add_deduct_tax': tax_total > 0 and 'Add' or 'Deduct',
 			"add_deduct_tax": "Add",
-			"description": "Clear Undue Tax",
+			"description": CLEAR_UNDUE_TAX,
 			"charge_type": "Actual",
 			"account_head": account,
 			"tax_amount": tax_total,

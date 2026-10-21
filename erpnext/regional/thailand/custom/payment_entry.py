@@ -2,6 +2,7 @@ import json
 
 import frappe
 from frappe import _
+from frappe.utils import flt
 
 try:
 	from hrms.overrides.employee_payment_entry import (
@@ -12,7 +13,7 @@ try:
 except ImportError:
 	origin_get_payment_entry_for_employee = None
 	_hrms_installed = False
-from erpnext.regional.thailand.custom.custom_api import get_thai_tax_settings
+from erpnext.regional.thailand.custom.custom_api import CLEAR_UNDUE_TAX, get_thai_tax_settings
 from erpnext.regional.thailand.custom.withholding import apply_receive_withholding, validate_receive_rows
 from erpnext.regional.thailand.custom.withholding_cert import (
 	CERT,
@@ -64,6 +65,24 @@ class PaymentEntry:
 				}
 			)
 		validate_receive_rows(self)
+
+	def add_tax_gl_entries(self, gl_entries):
+		"""The Clear Undue Tax rows move VAT from the undue to the due account and net to zero, so they move no money.
+		ERPNext gives every tax row not included in the paid amount a paid-account counter-line, and an Actual charge
+		cannot be included (validate_inclusive_tax): the pair would show on the bank as Dr and Cr lines that bank
+		reconciliation adds to the payment. Build the pair's GL as included, so the bank gets only what moved."""
+		pair = [
+			d for d in self.get("taxes") if d.description == CLEAR_UNDUE_TAX and not d.included_in_paid_amount
+		]
+		if not pair or round(sum(flt(d.tax_amount) for d in pair), self.precision("paid_amount")):
+			return super().add_tax_gl_entries(gl_entries)
+		for d in pair:
+			d.included_in_paid_amount = 1
+		try:
+			return super().add_tax_gl_entries(gl_entries)
+		finally:
+			for d in pair:
+				d.included_in_paid_amount = 0
 
 	def get_gl_dict(self, args, account_currency=None, item=None):
 		gl_dict = super().get_gl_dict(args, account_currency=account_currency, item=item)

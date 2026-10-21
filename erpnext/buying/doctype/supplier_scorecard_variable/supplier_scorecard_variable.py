@@ -180,7 +180,8 @@ def get_total_days_late(scorecard):
 
 
 def get_on_time_shipments(scorecard):
-	"""Gets the number of late shipments (counting each item) in the period (based on Purchase Receipts vs POs)"""
+	"""Gets the number of on time shipments (counting each item) in the period (based on Purchase Receipts vs POs):
+	received in full on or before the order item's Required By date"""
 
 	supplier = frappe.get_doc("Supplier", scorecard.supplier)
 
@@ -197,7 +198,7 @@ def get_on_time_shipments(scorecard):
 			WHERE
 				po.supplier = %(supplier)s
 				AND po_item.schedule_date BETWEEN %(start_date)s AND %(end_date)s
-				AND po_item.schedule_date <= pr.posting_date
+				AND pr.posting_date <= po_item.schedule_date
 				AND po_item.qty = pr_item.qty
 				AND pr_item.docstatus = 1
 				AND pr_item.purchase_order_item = po_item.name
