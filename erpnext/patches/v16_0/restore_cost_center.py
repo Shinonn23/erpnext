@@ -44,9 +44,14 @@ def execute():
 	for company in frappe.get_all("Company", fields=["name", "abbr"]):
 		if cost_center := ensure_default_cost_center(company):
 			default_cost_centers[company.name] = cost_center
+			print(f"restore_cost_center: {company.name} uses {cost_center}")
 
 	if default_cost_centers:
-		backfill(fields, default_cost_centers)
+		filled = backfill(fields, default_cost_centers)
+		print(
+			f"restore_cost_center: filled {sum(filled.values())} empty cost center links"
+			+ "".join(f"\n  {link}: {count}" for link, count in sorted(filled.items()) if count)
+		)
 
 	from erpnext.accounts.doctype.accounting_dimension.accounting_dimension import sync_budget_dimensions
 
@@ -133,6 +138,8 @@ def insert_cost_center(cost_center_name, company, is_group=0, parent_cost_center
 
 
 def backfill(fields, default_cost_centers):
+	"""Fill the empty cost center links. Returns {"<doctype>.<fieldname>": rows filled}."""
+	filled = {}
 	for doctype, fieldnames in fields.items():
 		if not frappe.db.exists("DocType", doctype) or not is_table_doctype(doctype):
 			continue
@@ -141,12 +148,21 @@ def backfill(fields, default_cost_centers):
 		fieldnames = {f for f in fieldnames if (doctype, f) not in SKIP_FIELDS}
 
 		if doctype in LEDGER_DOCTYPES or (meta.is_submittable and meta.has_field("company")):
-			backfill_parent(doctype, fieldnames, default_cost_centers)
+			counts = backfill_parent(doctype, fieldnames, default_cost_centers)
 		elif meta.istable:
+			counts = {}
 			for parent in get_submittable_parents(doctype):
-				backfill_child(doctype, parent, fieldnames, default_cost_centers)
+				for fieldname, count in backfill_child(doctype, parent, fieldnames, default_cost_centers).items():
+					counts[fieldname] = counts.get(fieldname, 0) + count
 		elif doctype == "POS Profile":
-			backfill_parent(doctype, {"write_off_cost_center"}, default_cost_centers)
+			counts = backfill_parent(doctype, {"write_off_cost_center"}, default_cost_centers)
+		else:
+			continue
+
+		for fieldname, count in counts.items():
+			filled[f"{doctype}.{fieldname}"] = count
+
+	return filled
 
 
 def get_submittable_parents(child_doctype):
@@ -177,6 +193,7 @@ def get_submittable_parents(child_doctype):
 def backfill_parent(doctype, fieldnames, default_cost_centers):
 	table = frappe.qb.DocType(doctype)
 	columns = set(frappe.db.get_table_columns(doctype))
+	counts = {}
 	for fieldname in sorted(fieldnames & columns):
 		for company, cost_center in default_cost_centers.items():
 			(
@@ -185,12 +202,15 @@ def backfill_parent(doctype, fieldnames, default_cost_centers):
 				.where(table.company == company)
 				.where(Coalesce(table[fieldname], "") == "")
 			).run()
+			counts[fieldname] = counts.get(fieldname, 0) + updated_rows()
+	return counts
 
 
 def backfill_child(doctype, parent_doctype, fieldnames, default_cost_centers):
 	child = frappe.qb.DocType(doctype)
 	parent = frappe.qb.DocType(parent_doctype)
 	columns = set(frappe.db.get_table_columns(doctype))
+	counts = {}
 	for fieldname in sorted(fieldnames & columns):
 		for company, cost_center in default_cost_centers.items():
 			parents_of_company = frappe.qb.from_(parent).select(parent.name).where(parent.company == company)
@@ -201,3 +221,10 @@ def backfill_child(doctype, parent_doctype, fieldnames, default_cost_centers):
 				.where(child.parent.isin(parents_of_company))
 				.where(Coalesce(child[fieldname], "") == "")
 			).run()
+			counts[fieldname] = counts.get(fieldname, 0) + updated_rows()
+	return counts
+
+
+def updated_rows():
+	"""Rows changed by the last UPDATE (for the summary the patch prints)."""
+	return max(getattr(frappe.db._cursor, "rowcount", 0) or 0, 0)
