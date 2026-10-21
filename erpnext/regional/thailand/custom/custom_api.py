@@ -87,6 +87,14 @@ def create_tax_invoice_on_gl_tax(doc, method):
 		if (tax_amount < 0 and not is_return) or (tax_amount > 0 and is_return):
 			doctype = "Purchase Tax Invoice"
 		tax_amount = abs(tax_amount) * sign
+		if setting.sales_tax_account != setting.purchase_tax_account:
+			# the account says which tax invoice, the side its sign: a debit on output VAT (a credit on input VAT)
+			# reduces it, as a credit note does, also on a Journal Entry that is not a reversal (owner, 22-10-2026)
+			if doc.account == setting.sales_tax_account:
+				doctype, tax_amount = "Sales Tax Invoice", doc.credit - doc.debit
+			else:
+				doctype, tax_amount = "Purchase Tax Invoice", doc.debit - doc.credit
+			sign = -1 if tax_amount < 0 else 1
 	if doctype:
 		if voucher.docstatus == 2:
 			tax_amount = 0

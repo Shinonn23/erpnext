@@ -100,14 +100,15 @@ frappe.ui.form.on("Journal Entry", {
 	},
 
 	validate(frm) {
-		// Input VAT rows need the supplier's tax invoice: ask for it, tick Create Tax Invoice
-		if (frm.doc.docstatus != 0) return;
+		// Input VAT rows need the supplier's tax invoice, either way (a supplier's credit note reduces it): ask
+		// for it, tick Create Tax Invoice. The month-end VAT Closing entry makes none.
+		if (frm.doc.docstatus != 0 || frm.doc.voucher_type == "VAT Closing") return;
 		return erpnext.regional.thailand.tax_popups.get_tax_accounts(frm.doc.company).then((accounts) => {
 			const rows = (frm.doc.accounts || []).filter(
 				(row) =>
 					accounts.purchase_tax_account &&
 					row.account == accounts.purchase_tax_account &&
-					flt(row.debit_in_account_currency) > 0 &&
+					(flt(row.debit_in_account_currency) > 0 || flt(row.credit_in_account_currency) > 0) &&
 					!(row.tax_invoice_number && row.tax_invoice_date)
 			);
 			if (!rows.length) return;
@@ -116,7 +117,7 @@ frappe.ui.form.on("Journal Entry", {
 			frappe.validated = false;
 			// a Journal Entry may have no supplier row: the popup asks who issued the tax invoice
 			erpnext.regional.thailand.tax_popups.ask_tax_invoice(frm, {
-				vat_amount: row.debit,
+				vat_amount: row.debit || -row.credit,
 				ask_supplier: true,
 				defaults: {
 					supplier: row.supplier || (party && party.party),

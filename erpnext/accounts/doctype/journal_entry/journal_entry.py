@@ -124,6 +124,7 @@ class JournalEntry(AccountsController):
 			"Exchange Gain Or Loss",
 			"Deferred Revenue",
 			"Deferred Expense",
+			"VAT Closing",
 		]
 		write_off_amount: DF.Currency
 		write_off_based_on: DF.Literal["Accounts Receivable", "Accounts Payable"]

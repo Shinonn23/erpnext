@@ -33,6 +33,7 @@ class JournalEntry(JournalEntry):
 						"<b>Is Petty Cash Account</b> in account and journal entry account not same, please check it before submit."
 					)
 				)
+		validate_vat_closing_submitter(self)
 		validate_vat_tax_invoices(self)
 
 	def validate(self):
@@ -49,6 +50,7 @@ class JournalEntry(JournalEntry):
 				)
 		validate_receive_rows(self)
 		validate_undue_vat_settlement(self)
+		validate_vat_closing(self)
 
 	def get_gl_dict(self, args, account_currency=None, item=None):
 		gl_dict = super().get_gl_dict(args, account_currency=account_currency, item=item)
@@ -76,14 +78,18 @@ def company_tax_accounts(company):
 	return next((row for row in settings.company_accounts if row.company == company), None)
 
 
+# the Entry Type of the month-end entry that moves the output and input VAT balances to VAT payable / receivable
+VAT_CLOSING = "VAT Closing"
+
+
 def validate_vat_tax_invoices(doc):
-	"""Owner decision 22-10-2026: VAT that a Journal Entry posts the way a tax invoice records it (a credit on output
-	VAT, a debit on input VAT: the due accounts of Thai Tax Settings) needs its tax invoice (Create Tax Invoice), or
-	the Sales / Purchase Tax Reports miss it. Lines the other way need none, so the month-end VAT closing entry (a
-	debit on output VAT and a credit on input VAT, clearing both balances) posts no tax invoice; reversals and
-	opening balances are left alone either way."""
+	"""Owner decisions 22-10-2026: VAT a Journal Entry posts to the due accounts of Thai Tax Settings (output VAT,
+	input VAT), either way, needs its tax invoice (Create Tax Invoice), or the Sales / Purchase Tax Reports miss it;
+	a credit note or a supplier's credit note makes a negative one. The month-end VAT Closing entry posts none
+	(validate_vat_closing); reversals, opening balances and system journals are left alone."""
 	if (
-		doc.get("reversal_of")
+		doc.voucher_type == VAT_CLOSING
+		or doc.get("reversal_of")
 		or doc.get("is_system_generated")
 		or doc.voucher_type == "Opening Entry"
 		or doc.get("is_opening") == "Yes"
@@ -95,26 +101,26 @@ def validate_vat_tax_invoices(doc):
 	details = {row.name: row for row in doc.get("tax_invoice_details") or []}
 	for line in doc.get("accounts"):
 		if line.account == accounts.sales_tax_account:
-			vat = flt(line.credit) - flt(line.debit)
 			untaxed = _(
-				"Row #{0} credits output VAT of {1} to {2} without a Sales Tax Invoice, so the Sales Tax Report "
+				"Row #{0} posts {1} {2} of output VAT to {3} without a Sales Tax Invoice, so the Sales Tax Report "
 				"would miss it. Tick Create Tax Invoice (and choose the Customer on the Tax Invoice tab) before "
-				"submitting."
+				"submitting; the month-end closing goes in an Entry Type VAT Closing."
 			)
 		elif line.account == accounts.purchase_tax_account:
-			vat = flt(line.debit) - flt(line.credit)
 			untaxed = _(
-				"Row #{0} debits input VAT of {1} to {2} without a Purchase Tax Invoice, so the Purchase Tax Report "
-				"would miss it. Tick Create Tax Invoice and enter the supplier's Tax Invoice Number and Tax Invoice "
-				"Date before submitting."
+				"Row #{0} posts {1} {2} of input VAT to {3} without a Purchase Tax Invoice, so the Purchase Tax "
+				"Report would miss it. Tick Create Tax Invoice and enter the supplier's Tax Invoice Number and Tax "
+				"Invoice Date before submitting; the month-end closing goes in an Entry Type VAT Closing."
 			)
 		else:
 			continue
-		if vat <= 0:
+		vat = flt(line.debit) - flt(line.credit)
+		if not vat:
 			continue
+		side, amount = (_("a debit of"), vat) if vat > 0 else (_("a credit of"), -vat)
 		if not doc.get("create_tax_invoice"):
 			frappe.throw(
-				untaxed.format(line.idx, fmt_money(vat, precision=2), line.account),
+				untaxed.format(line.idx, side, fmt_money(amount, precision=2), line.account),
 				title=_("Tax Invoice Required"),
 			)
 		# the supplier's number and date, on the line's row of the Tax Invoice tab (or still on the line itself)
@@ -126,9 +132,69 @@ def validate_vat_tax_invoices(doc):
 				_(
 					"Row #{0}: input VAT of {1} on {2} needs the supplier's Tax Invoice Number and Tax Invoice Date "
 					"(Tax Invoice tab) before submitting."
-				).format(line.idx, fmt_money(vat, precision=2), line.account),
+				).format(line.idx, fmt_money(amount, precision=2), line.account),
 				title=_("Tax Invoice Required"),
 			)
+
+
+def validate_vat_closing(doc):
+	"""Owner decision 22-10-2026: after filing PP30 each month the Accounts Manager posts an Entry Type VAT Closing
+	that moves the output VAT and input VAT balances to the VAT Payable / VAT Receivable Account of Thai Tax Settings
+	(either way: output VAT over input VAT is payable, the reverse receivable). It touches only those four accounts,
+	names no party and makes no tax invoice."""
+	if doc.voucher_type != VAT_CLOSING:
+		return
+	accounts = company_tax_accounts(doc.company)
+	if not (accounts and accounts.vat_payable_account and accounts.vat_receivable_account):
+		frappe.throw(
+			_(
+				"Set the VAT Payable Account and VAT Receivable Account of {0} in Thai Tax Settings first."
+			).format(doc.company),
+			title=_("VAT Closing"),
+		)
+	vat = {accounts.sales_tax_account, accounts.purchase_tax_account}
+	allowed = vat | {accounts.vat_payable_account, accounts.vat_receivable_account}
+	for line in doc.get("accounts"):
+		if line.account not in allowed:
+			frappe.throw(
+				_(
+					"Row #{0}: a VAT Closing entry moves only output VAT ({1}) and input VAT ({2}) to the VAT "
+					"Payable Account ({3}) or VAT Receivable Account ({4}), not {5}."
+				).format(
+					line.idx,
+					accounts.sales_tax_account,
+					accounts.purchase_tax_account,
+					accounts.vat_payable_account,
+					accounts.vat_receivable_account,
+					line.account,
+				),
+				title=_("VAT Closing"),
+			)
+		if line.get("party_type") or line.get("party"):
+			frappe.throw(
+				_("Row #{0}: a VAT Closing entry names no party.").format(line.idx), title=_("VAT Closing")
+			)
+	if not any(line.account in vat for line in doc.get("accounts")):
+		frappe.throw(
+			_("A VAT Closing entry moves the balance of output VAT ({0}) or input VAT ({1}).").format(
+				accounts.sales_tax_account, accounts.purchase_tax_account
+			),
+			title=_("VAT Closing"),
+		)
+	if doc.get("create_tax_invoice"):
+		frappe.throw(
+			_("A VAT Closing entry makes no tax invoice: untick Create Tax Invoice."), title=_("VAT Closing")
+		)
+
+
+def validate_vat_closing_submitter(doc):
+	"""Only an Accounts Manager submits the VAT Closing entry (it closes the month's VAT after PP30 is filed)."""
+	if doc.voucher_type == VAT_CLOSING and "Accounts Manager" not in frappe.get_roles():
+		frappe.throw(
+			_("Only an Accounts Manager submits a VAT Closing entry."),
+			frappe.PermissionError,
+			title=_("VAT Closing"),
+		)
 
 
 def validate_undue_vat_settlement(doc):

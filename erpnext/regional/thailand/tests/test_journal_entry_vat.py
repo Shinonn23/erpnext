@@ -1,8 +1,9 @@
 """VAT rules of the Thai Journal Entry (owner, 22-10-2026).
 A customer's service invoice, whose output VAT waits on the undue account until it is paid, is received with a Payment
-Entry only: a Journal Entry that settles it is refused on validate. VAT a Journal Entry posts the way a tax invoice
-records it (a credit on output VAT, a debit on input VAT) needs Create Tax Invoice, and input VAT the supplier's tax
-invoice number and date, before submit; the month-end VAT closing entry, reversals and opening balances need none.
+Entry only: a Journal Entry that settles it is refused on validate. VAT a Journal Entry posts to output or input VAT,
+either way, needs Create Tax Invoice, and input VAT the supplier's tax invoice number and date, before submit; the
+month-end entry of Entry Type VAT Closing moves both balances to VAT payable / receivable and needs none, and only an
+Accounts Manager submits it. Reversals and opening balances are left alone.
 Offline: the Thai Tax Settings, the invoices' GL and ERPNext's own Journal Entry validation are stand-ins."""
 
 import unittest
@@ -24,6 +25,8 @@ SETTINGS = SimpleNamespace(
 			sales_tax_account_undue="2135-01",
 			purchase_tax_account="1154-00",
 			purchase_tax_account_undue="1154-01",
+			vat_payable_account="2135-02",
+			vat_receivable_account="1154-02",
 		)
 	]
 )
@@ -139,6 +142,19 @@ class TestJournalEntryValidate(_Stubs, unittest.TestCase):
 			journal.validate()
 		erpnext_validate.assert_called_once()
 
+	def test_saving_a_vat_closing_entry_checks_its_accounts(self):
+		journal = JournalEntry.__new__(JournalEntry)
+		journal.__dict__.update(_closing(_line("2135-00", debit=70), _line("1111-00", credit=70)))
+		for line in journal.accounts:
+			line.update(is_petty_cash_account=0, petty_cash_holder=None, petty_cash_holder_name=None)
+		with (
+			patch.object(ERPNextJournalEntry, "validate"),
+			patch.object(journal_entry, "validate_receive_rows"),
+			self.assertRaises(frappe.ValidationError) as refused,
+		):
+			journal.validate()
+		self.assertIn("a VAT Closing entry moves only", str(refused.exception))
+
 
 def _vat_journal(*lines, **fields):
 	journal = _journal(*lines, **fields)
@@ -162,7 +178,7 @@ class TestVatTaxInvoices(_Stubs, unittest.TestCase):
 		with self.assertRaises(frappe.ValidationError) as refused:
 			journal_entry.validate_vat_tax_invoices(_input_vat())
 		self.assertIn(
-			"Row #2 debits input VAT of 70.00 to 1154-00 without a Purchase Tax Invoice",
+			"Row #2 posts a debit of 70.00 of input VAT to 1154-00 without a Purchase Tax Invoice",
 			str(refused.exception),
 		)
 
@@ -185,15 +201,40 @@ class TestVatTaxInvoices(_Stubs, unittest.TestCase):
 		with self.assertRaises(frappe.ValidationError) as refused:
 			journal_entry.validate_vat_tax_invoices(_vat_journal(*sale))
 		self.assertIn(
-			"Row #3 credits output VAT of 700.00 to 2135-00 without a Sales Tax Invoice",
+			"Row #3 posts a credit of 700.00 of output VAT to 2135-00 without a Sales Tax Invoice",
 			str(refused.exception),
 		)
 		# the Sales Tax Invoice the entry makes gives the number and date
 		journal_entry.validate_vat_tax_invoices(_vat_journal(*sale, create_tax_invoice=1))
 
-	def test_the_month_end_vat_closing_entry_needs_no_tax_invoice(self):
-		closing = [_line("2135-00", debit=3500), _line("1154-00", credit=700), _line("2136-00", credit=2800)]
-		journal_entry.validate_vat_tax_invoices(_vat_journal(*closing))
+	def test_reductions_need_their_tax_invoice_too(self):
+		"""A credit note or a supplier's credit note by journal: a debit on output VAT, a credit on input VAT."""
+		credit_note = [
+			_line("4100-01", debit=1000),
+			_line("2135-00", debit=70),
+			_line("1130-01", credit=1070),
+		]
+		with self.assertRaises(frappe.ValidationError) as refused:
+			journal_entry.validate_vat_tax_invoices(_vat_journal(*credit_note))
+		self.assertIn("Row #2 posts a debit of 70.00 of output VAT to 2135-00", str(refused.exception))
+		journal_entry.validate_vat_tax_invoices(_vat_journal(*credit_note, create_tax_invoice=1))
+		on_line = {"tax_invoice_number": "CN-1", "tax_invoice_date": "2026-10-22"}
+		supplier_note = [
+			_line("2120-01", debit=1070),
+			_line("5330-02", credit=1000),
+			_line("1154-00", credit=70),
+		]
+		with self.assertRaises(frappe.ValidationError):
+			journal_entry.validate_vat_tax_invoices(_vat_journal(*supplier_note, create_tax_invoice=1))
+		supplier_note[2].update(on_line)
+		journal_entry.validate_vat_tax_invoices(_vat_journal(*supplier_note, create_tax_invoice=1))
+
+	def test_the_month_end_closing_goes_in_a_vat_closing_entry(self):
+		closing = [_line("2135-00", debit=3500), _line("1154-00", credit=700), _line("2135-02", credit=2800)]
+		with self.assertRaises(frappe.ValidationError) as refused:
+			journal_entry.validate_vat_tax_invoices(_vat_journal(*closing))
+		self.assertIn("the month-end closing goes in an Entry Type VAT Closing", str(refused.exception))
+		journal_entry.validate_vat_tax_invoices(_vat_journal(*closing, voucher_type="VAT Closing"))
 
 	def test_reversals_and_opening_balances_are_left_alone(self):
 		reopened = [_line("2135-00", credit=3500), _line("1154-00", debit=700), _line("2136-00", debit=2800)]
@@ -207,6 +248,127 @@ class TestVatTaxInvoices(_Stubs, unittest.TestCase):
 			_vat_journal(_line("5320-02", debit=1), _line("1111-00", credit=1))
 		)
 		journal_entry.validate_vat_tax_invoices(_input_vat(company="Other"))
+
+
+def _closing(*lines, **fields):
+	return _vat_journal(*lines, voucher_type="VAT Closing", **fields)
+
+
+PAYABLE = [_line("2135-00", debit=3500), _line("1154-00", credit=700), _line("2135-02", credit=2800)]
+RECEIVABLE = [_line("2135-00", debit=700), _line("1154-00", credit=3500), _line("1154-02", debit=2800)]
+
+
+class TestVatClosing(_Stubs, unittest.TestCase):
+	def test_both_balances_go_to_vat_payable_or_receivable(self):
+		journal_entry.validate_vat_closing(_closing(*PAYABLE))
+		journal_entry.validate_vat_closing(_closing(*RECEIVABLE))
+		journal_entry.validate_vat_closing(_closing(_line("2135-00", debit=70), _line("2135-02", credit=70)))
+
+	def test_only_the_four_vat_accounts(self):
+		with self.assertRaises(frappe.ValidationError) as refused:
+			journal_entry.validate_vat_closing(
+				_closing(_line("2135-00", debit=70), _line("1111-00", credit=70))
+			)
+		self.assertIn("Row #2: a VAT Closing entry moves only output VAT (2135-00)", str(refused.exception))
+		with self.assertRaises(frappe.ValidationError):
+			journal_entry.validate_vat_closing(
+				_closing(_line("2135-02", debit=70), _line("1154-02", credit=70))
+			)
+
+	def test_no_party_and_no_tax_invoice(self):
+		with self.assertRaises(frappe.ValidationError):
+			journal_entry.validate_vat_closing(
+				_closing(
+					_line("2135-00", debit=70), _line("2135-02", credit=70, party_type="Supplier", party="RD")
+				)
+			)
+		with self.assertRaises(frappe.ValidationError):
+			journal_entry.validate_vat_closing(_closing(*PAYABLE, create_tax_invoice=1))
+
+	def test_the_accounts_are_set_up_first(self):
+		with patch.object(
+			journal_entry.frappe,
+			"get_cached_doc",
+			return_value=SimpleNamespace(
+				company_accounts=[
+					SimpleNamespace(company=CD, vat_payable_account=None, vat_receivable_account=None)
+				]
+			),
+		):
+			with self.assertRaises(frappe.ValidationError) as refused:
+				journal_entry.validate_vat_closing(_closing(*PAYABLE))
+		self.assertIn("Set the VAT Payable Account and VAT Receivable Account", str(refused.exception))
+
+	def test_other_entry_types_are_not_checked_here(self):
+		journal_entry.validate_vat_closing(
+			_vat_journal(_line("2135-00", debit=70), _line("1111-00", credit=70))
+		)
+
+	def test_only_an_accounts_manager_submits_it(self):
+		with patch.object(journal_entry.frappe, "get_roles", return_value=["Accounts User"]):
+			with self.assertRaises(frappe.ValidationError) as refused:
+				journal_entry.validate_vat_closing_submitter(_closing(*PAYABLE))
+		self.assertIn("Only an Accounts Manager submits a VAT Closing entry", str(refused.exception))
+		with patch.object(
+			journal_entry.frappe, "get_roles", return_value=["Accounts User", "Accounts Manager"]
+		):
+			journal_entry.validate_vat_closing_submitter(_closing(*PAYABLE))
+		with patch.object(journal_entry.frappe, "get_roles", return_value=["Accounts User"]):
+			journal_entry.validate_vat_closing_submitter(_vat_journal(*PAYABLE))
+
+
+def _journal_tax_invoice(account, debit=0, credit=0, reversal_of=None):
+	"""The tax invoice create_tax_invoice_on_gl_tax makes for a journal's GL row on a due VAT account."""
+	made = {}
+	journal = frappe._dict(
+		doctype="Journal Entry", docstatus=1, reversal_of=reversal_of, create_tax_invoice=1
+	)
+	detail = frappe._dict(doctype="Journal Entry Tax Invoice Detail", tax_base_amount=1000)
+
+	def get_doc(doctype, name):
+		return detail if doctype == "Journal Entry Tax Invoice Detail" else journal
+
+	def create(doc, doctype, base_amount, tax_amount, voucher, split_tax_invoice=False):
+		made.update(doctype=doctype, base=base_amount, tax=tax_amount)
+		return [Mock()]
+
+	gl_entry = frappe._dict(
+		voucher_type="Journal Entry",
+		voucher_no="JV-1",
+		voucher_detail_no="TID-1",
+		company=CD,
+		account=account,
+		debit=debit,
+		credit=credit,
+		flags=frappe._dict(),
+	)
+	with (
+		patch.object(custom_api, "get_thai_tax_settings", return_value=SETTINGS.company_accounts[0]),
+		patch.object(custom_api.frappe, "get_doc", side_effect=get_doc),
+		patch.object(custom_api.frappe, "get_cached_value", return_value=7),
+		patch.object(custom_api, "create_tax_invoice", side_effect=create),
+		patch.object(custom_api, "update_voucher_tinv", side_effect=lambda doctype, voucher, tinv: tinv),
+	):
+		custom_api.create_tax_invoice_on_gl_tax(gl_entry, None)
+	return made
+
+
+class TestJournalTaxInvoiceKind(unittest.TestCase):
+	def test_the_account_names_the_tax_invoice_and_the_side_its_sign(self):
+		cases = {
+			("2135-00", 0, 70): ("Sales Tax Invoice", 1000, 70),
+			("2135-00", 70, 0): ("Sales Tax Invoice", -1000, -70),
+			("1154-00", 70, 0): ("Purchase Tax Invoice", 1000, 70),
+			("1154-00", 0, 70): ("Purchase Tax Invoice", -1000, -70),
+		}
+		for (account, debit, credit), (doctype, base, tax) in cases.items():
+			with self.subTest(account=account, debit=debit):
+				made = _journal_tax_invoice(account, debit, credit)
+				self.assertEqual(made, {"doctype": doctype, "base": base, "tax": tax})
+
+	def test_a_reversal_still_makes_the_negative_one(self):
+		made = _journal_tax_invoice("1154-00", credit=70, reversal_of="JV-0")
+		self.assertEqual(made, {"doctype": "Purchase Tax Invoice", "base": -1000, "tax": -70})
 
 
 class TestClearingJournal(_Stubs, unittest.TestCase):
@@ -317,6 +479,19 @@ class TestJournalEntrySubmit(_Stubs, unittest.TestCase):
 		):
 			journal.before_submit()
 		erpnext_before_submit.assert_called_once()
+
+	def test_submitting_a_vat_closing_entry_needs_an_accounts_manager(self):
+		journal = JournalEntry.__new__(JournalEntry)
+		journal.__dict__.update(_closing(*[frappe._dict(line) for line in PAYABLE]))
+		for line in journal.accounts:
+			line.is_petty_cash_account = 0
+		with (
+			patch.object(ERPNextJournalEntry, "before_submit"),
+			patch.object(journal_entry.frappe, "get_value", return_value=0),
+			patch.object(journal_entry.frappe, "get_roles", return_value=["Accounts User"]),
+			self.assertRaises(frappe.ValidationError),
+		):
+			journal.before_submit()
 
 
 if __name__ == "__main__":
