@@ -72,6 +72,12 @@ def create_tax_invoice_on_gl_tax(doc, method):
 		is_return = voucher.is_return  # Case Debit/Credit Note
 	if doc.voucher_type == "Journal Entry":
 		is_return = voucher.reversal_of and True or False
+	if doc.voucher_type == "Payment Entry":
+		# money paid back to a customer (or received back from a supplier) reverses VAT: a credit note refunded
+		is_return = (voucher.payment_type, voucher.party_type) in (
+			("Pay", "Customer"),
+			("Receive", "Supplier"),
+		)
 	sign = is_return and -1 or 1
 	# Tax amount, use Dr/Cr to ensure it support every case
 	if doc.account in [setting.sales_tax_account, setting.purchase_tax_account]:
@@ -479,7 +485,11 @@ def clear_invoice_undue_tax(doc, method):
 		)
 		for gl in gl_entries:
 			(undue_tax, base_amount, account_undue, account) = get_undue_tax(doc, ref, gl, tax)
-			if ref.reference_doctype in ("Purchase Invoice", "Expense Claim"):
+			# The pair must debit the undue account by what the invoice credited it (a credit note: credit it by
+			# what it debited). ERPNext posts an "Add" row as a credit on a Receive and as a debit on a Pay
+			# (add_tax_gl_entries), so a Pay takes the opposite signs, whatever it pays: a supplier's invoice or
+			# a customer's credit note refunded.
+			if doc.payment_type == "Pay":
 				undue_tax = -undue_tax
 				base_amount = -base_amount
 			base_total += base_amount
