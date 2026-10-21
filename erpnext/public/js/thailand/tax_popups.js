@@ -148,7 +148,6 @@ erpnext.regional.thailand.tax_popups.create_withholding_tax_cert = async functio
 //   before VAT and its amount become a row on the type's Receive Account (withholding.py), replacing an earlier run;
 // - a payment to a supplier, or a journal with a supplier line: ERPNext's own withholding (Consider for Tax
 //   Withholding with the type of income popup; on a Payment Entry, or the types of the paid invoices' items).
-erpnext.regional.thailand.tax_popups.WITHHOLD = "Withhold Tax";
 
 // "Receive", "Pay" or null: what Withhold Tax does on this entry
 erpnext.regional.thailand.tax_popups.withholding_direction = function (frm) {
@@ -170,7 +169,7 @@ erpnext.regional.thailand.tax_popups.withholding_direction = function (frm) {
 erpnext.regional.thailand.tax_popups.add_withhold_tax_buttons = function (frm) {
 	if (frm.doc.docstatus !== 0 || frm.read_only || !(frm.perm && frm.perm[0] && frm.perm[0].write)) return;
 	const popups = erpnext.regional.thailand.tax_popups;
-	const group = __(popups.WITHHOLD);
+	const group = __("Withhold Tax");
 	frm.add_custom_button(__("Based On Manual Selection"), () => popups.withhold_manual(frm), group);
 	frm.add_custom_button(
 		__("Based On Paying Document's Line Items"),
