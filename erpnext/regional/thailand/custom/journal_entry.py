@@ -4,9 +4,20 @@ from frappe import _
 from erpnext.accounts.doctype.journal_entry.journal_entry import JournalEntry
 
 from .payment_entry import reconcile_undue_tax_gls
+from .withholding import apply_receive_withholding, validate_receive_rows
 
 
 class JournalEntry(JournalEntry):
+	@frappe.whitelist()
+	def apply_thai_withholding(
+		self, tax_withholding_category=None, base_amount=None, withholding_amount=None, based_on="Manual"
+	):
+		"""Withhold Tax on a journal that credits a customer: debit lines on the types' Receive Accounts
+		(withholding.py)."""
+		return apply_receive_withholding(
+			self, tax_withholding_category, base_amount, withholding_amount, based_on
+		)
+
 	def before_submit(self):
 		super().before_submit()
 		for line in self.accounts:
@@ -34,6 +45,7 @@ class JournalEntry(JournalEntry):
 						"petty_cash_holder_name": "",
 					}
 				)
+		validate_receive_rows(self)
 
 	def get_gl_dict(self, args, account_currency=None, item=None):
 		gl_dict = super().get_gl_dict(args, account_currency=account_currency, item=item)
