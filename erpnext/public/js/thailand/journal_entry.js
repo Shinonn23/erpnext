@@ -74,6 +74,17 @@ frappe.ui.form.on("Journal Entry", {
 
 	apply_tds(frm) {
 		if (!frm.doc.apply_tds) return;
+		// ERPNext would add the tax to the customer's debit (TCS): a customer's withholding is Withhold Tax's
+		if (erpnext.regional.thailand.tax_popups.withholding_direction(frm) === "Receive") {
+			frm.set_value("apply_tds", 0);
+			frappe.msgprint(
+				__(
+					"This journal credits a customer: enter the tax the customer withheld with Withhold Tax → Based On Manual Selection. Consider for Tax Withholding is for the tax we withhold from a supplier."
+				),
+				__("Withhold Tax")
+			);
+			return;
+		}
 		frm.trigger("thai_ask_withholding");
 	},
 
