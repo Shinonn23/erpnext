@@ -13,11 +13,28 @@ except ImportError:
 	origin_get_payment_entry_for_employee = None
 	_hrms_installed = False
 from erpnext.regional.thailand.custom.custom_api import get_thai_tax_settings
+from erpnext.regional.thailand.custom.withholding import apply_receive_withholding, validate_receive_rows
+from erpnext.regional.thailand.custom.withholding_cert import (
+	CERT,
+	existing_certificates,
+)
+from erpnext.regional.thailand.custom.withholding_cert import (
+	linked_address as _linked_address,
+)
 
 REF_DOCTYPES = ["Purchase Invoice", "Expense Claim", "Journal Entry"]
 
 
 class PaymentEntry:
+	@frappe.whitelist()
+	def apply_thai_withholding(
+		self, tax_withholding_category=None, base_amount=None, withholding_amount=None, based_on="Manual"
+	):
+		"""Withhold Tax on a receipt from a customer: deductions on the types' Receive Accounts (withholding.py)."""
+		return apply_receive_withholding(
+			self, tax_withholding_category, base_amount, withholding_amount, based_on
+		)
+
 	def before_submit(self):
 		if self.is_petty_cash:
 			is_petty_cash_paid_from = frappe.get_value(
@@ -46,6 +63,7 @@ class PaymentEntry:
 					"petty_cash_holder_name": "",
 				}
 			)
+		validate_receive_rows(self)
 
 	def get_gl_dict(self, args, account_currency=None, item=None):
 		gl_dict = super().get_gl_dict(args, account_currency=account_currency, item=item)
@@ -92,25 +110,25 @@ def get_payment_entry_for_employee(
 	return pe
 
 
-def _linked_address(link_doctype, link_name, own=False):
-	"""The only (or the Billing) address linked to a party or company; None when it is ambiguous."""
-	filters = [["Dynamic Link", "link_doctype", "=", link_doctype], ["Dynamic Link", "link_name", "=", link_name]]
-	if own:
-		filters.append(["is_your_company_address", "=", 1])
-	addresses = frappe.get_all("Address", filters=filters, fields=["name", "address_type"], distinct=True)
-	billing = [a for a in addresses if a.address_type == "Billing"]
-	candidates = billing or addresses
-	return candidates[0].name if len(candidates) == 1 else None
-
-
 @frappe.whitelist()
 def make_withholding_tax_cert(filters, doc):
+	"""The manual "Create Withholding Tax Cert" (a fallback: submitting the entry makes its certificates,
+	withholding_cert.py)."""
 	filters = frappe.parse_json(filters)
 	pay = frappe.parse_json(doc)
 	# a Payment Entry, or a Journal Entry that withholds (Consider for Tax Withholding)
 	voucher_type = pay.get("doctype") if pay.get("doctype") in ("Payment Entry", "Journal Entry") else "Payment Entry"
 	frappe.get_doc(voucher_type, pay.get("name")).check_permission("read")
 	frappe.has_permission("Withholding Tax Cert", "create", throw=True)
+	existing = existing_certificates(voucher_type, pay.get("name"))
+	if existing:
+		frappe.throw(
+			_("{0} {1} already has Withholding Tax Cert {2}: open it from Connections.").format(
+				_(voucher_type),
+				pay.get("name"),
+				", ".join(frappe.utils.get_link_to_form(CERT, name) for name in existing),
+			)
+		)
 	cert = frappe.new_doc("Withholding Tax Cert")
 	if voucher_type == "Journal Entry":
 		party = next((r for r in pay.get("accounts") or [] if r.get("party_type") == "Supplier" and r.get("party")), {})
@@ -217,6 +235,7 @@ def get_payment_entry_tax_withholding_categories(doc):
 			continue
 
 		invoice = frappe.get_doc(allowed_doctype, reference.reference_name)
+		invoice.check_permission("read")
 		if invoice.company != payment.company:
 			frappe.throw(_("All references must belong to the selected company."))
 		if invoice.docstatus != 1:

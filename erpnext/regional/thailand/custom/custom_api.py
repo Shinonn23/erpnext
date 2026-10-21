@@ -39,35 +39,12 @@ def get_thai_tax_accounts(company):
 
 
 @frappe.whitelist()
-def get_withholding_category_choices(company, date=None):
-	"""Withholding categories with an account for the company, the rate valid on the date and the Thai type of
-	income (the PND3/PND53 line), for the "what is withheld" popup."""
-	date = frappe.utils.getdate(date or frappe.utils.today())
-	choices = []
-	for category in frappe.get_all(
-		"Tax Withholding Category",
-		fields=["name", "category_name", "thai_type_of_income", "thai_income_tax_form"],
-		order_by="name",
-	):
-		if not frappe.db.exists("Tax Withholding Account", {"parent": category.name, "company": company}):
-			continue
-		rate = frappe.db.get_value(
-			"Tax Withholding Rate",
-			{"parent": category.name, "from_date": ["<=", date], "to_date": [">=", date]},
-			"tax_withholding_rate",
-		)
-		if rate is None:
-			continue
-		choices.append(
-			{
-				"name": category.name,
-				"label": f"{category.category_name or category.name} {flt(rate):g}%",
-				"rate": flt(rate),
-				"type_of_income": category.thai_type_of_income,
-				"income_tax_form": category.thai_income_tax_form,
-			}
-		)
-	return choices
+def get_withholding_category_choices(company, date=None, direction="Pay"):
+	"""Withholding categories set up for the direction (Applies To, and its account for the company), the rate valid
+	on the date and the Thai type of income (the PND3/PND53 line), for the "what is withheld" popup."""
+	from erpnext.regional.thailand.custom.withholding import get_withholding_choices
+
+	return get_withholding_choices(company, date, direction)
 
 
 def create_tax_invoice_on_gl_tax(doc, method):

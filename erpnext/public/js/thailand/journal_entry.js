@@ -57,25 +57,44 @@ frappe.ui.form.on("Journal Entry Account", {
 
 frappe.ui.form.on("Journal Entry", {
 	refresh(frm) {
-		// A Journal Entry that withheld (Consider for Tax Withholding) issues its certificate like a payment does
+		// Withhold Tax: a line crediting a customer (tax it withheld) or a supplier line (tax we withhold)
+		erpnext.regional.thailand.tax_popups.add_withhold_tax_buttons(frm);
+		// A Journal Entry that withheld (Consider for Tax Withholding) gets its certificate on submit, like a payment
+		// (Connections); the button is the fallback for an entry without one
 		if (frm.doc.docstatus == 1 && (frm.doc.tax_withholding_entries || []).length) {
-			const supplier = (frm.doc.accounts || []).find((row) => row.party_type == "Supplier" && row.party);
-			frm.add_custom_button(
-				__("Create Withholding Tax Cert"),
-				() => erpnext.regional.thailand.tax_popups.create_withholding_tax_cert(frm, supplier && supplier.party),
-				undefined,
-				"Withholding Tax Cert"
+			const supplier = (frm.doc.accounts || []).find(
+				(row) => row.party_type == "Supplier" && row.party
+			);
+			erpnext.regional.thailand.tax_popups.add_withholding_tax_cert_fallback(
+				frm,
+				supplier && supplier.party
 			);
 		}
 	},
 
 	apply_tds(frm) {
-		// Ask what is withheld: the category sets the rate and the PND3/PND53 line
 		if (!frm.doc.apply_tds) return;
+		// ERPNext would add the tax to the customer's debit (TCS): a customer's withholding is Withhold Tax's
+		if (erpnext.regional.thailand.tax_popups.withholding_direction(frm) === "Receive") {
+			frm.set_value("apply_tds", 0);
+			frappe.msgprint(
+				__(
+					"This journal credits a customer: enter the tax the customer withheld with Withhold Tax → Based On Manual Selection. Consider for Tax Withholding is for the tax we withhold from a supplier."
+				),
+				__("Withhold Tax")
+			);
+			return;
+		}
+		frm.trigger("thai_ask_withholding");
+	},
+
+	thai_ask_withholding(frm) {
+		// Ask what is withheld: the category sets the rate and the PND3/PND53 line
 		erpnext.regional.thailand.tax_popups.ask_withholding_category(frm, {
 			date: frm.doc.posting_date,
 			current: frm.doc.tax_withholding_category,
-			on_cancel: () => frm.set_value("apply_tds", 0),
+			// closing the popup unticks the box, unless a type was chosen before (Withhold Tax opened it again)
+			on_cancel: () => !frm.doc.tax_withholding_category && frm.set_value("apply_tds", 0),
 			on_pick: (choice) => frm.set_value("tax_withholding_category", choice.name),
 		});
 	},

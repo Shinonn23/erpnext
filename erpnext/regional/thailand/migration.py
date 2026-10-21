@@ -14,11 +14,13 @@ def transfer_thailand_module_ownership():
 	app is uninstalled. Run this idempotently while the Thailand app is still
 	installed so uninstalling it cannot remove the migrated implementation.
 	"""
+	from erpnext.regional.thailand.custom.withholding import set_withholding_directions
 	from erpnext.regional.thailand.install import make_custom_fields, make_property_setters
 
 	make_custom_fields()
 	make_property_setters()
 	remove_duplicate_withholding_fields()
+	set_withholding_directions()
 
 	if not frappe.db.exists("Module Def", "Regional"):
 		frappe.get_doc(

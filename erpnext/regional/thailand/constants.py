@@ -1,11 +1,23 @@
 ERP_CUSTOM_FIELDS = {
 	"Tax Withholding Category": [
 		{
+			"fieldname": "thai_applies_to",
+			"fieldtype": "Select",
+			"label": "Applies To",
+			"options": "Pay and Receive\nPay\nReceive",
+			"default": "Pay and Receive",
+			"insert_after": "category_name",
+			"in_standard_filter": 1,
+			"description": "Pay: we withhold this tax from suppliers (PND3 / PND53). Receive: customers withhold it "
+			"from what they pay us. Withhold Tax offers a type only for the directions it applies to; each "
+			"direction needs its account for every company in the Accounts table.",
+		},
+		{
 			"fieldname": "thai_income_tax_form",
 			"fieldtype": "Select",
 			"label": "Thai Income Tax Form",
 			"options": "\nPND3\nPND53",
-			"insert_after": "category_name",
+			"insert_after": "thai_applies_to",
 		},
 		{
 			"fieldname": "thai_type_of_income",
@@ -13,6 +25,52 @@ ERP_CUSTOM_FIELDS = {
 			"label": "Thai Type of Income",
 			"options": "Withholding Tax Type Of Income",
 			"insert_after": "thai_income_tax_form",
+		},
+	],
+	"Tax Withholding Account": [
+		{
+			"fieldname": "customer_withholding_account",
+			"fieldtype": "Link",
+			"label": "Receive Account (tax withheld by customers)",
+			"options": "Account",
+			"insert_after": "account",
+			"in_list_view": 1,
+			"columns": 4,
+			"description": "Asset account for the tax our customers withhold from what they pay us "
+			"(ภาษีเงินได้ถูกหัก ณ ที่จ่าย). Required when Applies To includes Receive; Withhold Tax on a "
+			"receipt debits it.",
+		},
+	],
+	# the row Withhold Tax adds on a receipt from a customer (see custom/withholding.py)
+	"Payment Entry Deduction": [
+		{
+			"fieldname": "thai_withholding_category",
+			"fieldtype": "Link",
+			"label": "Tax Withholding Category",
+			"options": "Tax Withholding Category",
+			"insert_after": "description",
+			"read_only": 1,
+			"depends_on": "eval:doc.thai_withholding_category",
+			"description": "Tax the customer withheld, added by Withhold Tax. Running Withhold Tax again replaces "
+			"this row.",
+		},
+		{
+			"fieldname": "thai_withholding_base",
+			"fieldtype": "Currency",
+			"label": "Withholding Tax Base",
+			"options": "Company:company:default_currency",
+			"insert_after": "thai_withholding_category",
+			"read_only": 1,
+			"depends_on": "eval:doc.thai_withholding_category",
+		},
+		{
+			"fieldname": "thai_withholding_offset",
+			"fieldtype": "Currency",
+			"label": "Withholding Taken Off Paid Amount",
+			"options": "Company:company:default_currency",
+			"insert_after": "thai_withholding_base",
+			"read_only": 1,
+			"hidden": 1,
 		},
 	],
 	"Address": [
@@ -385,6 +443,36 @@ ERP_CUSTOM_FIELDS = {
 			"read_only": 1,
 			"depends_on": "eval:doc.is_petty_cash_account == 1;",
 		},
+		# the debit line Withhold Tax adds on a Journal Entry that credits a customer (see custom/withholding.py)
+		{
+			"fieldname": "thai_withholding_category",
+			"fieldtype": "Link",
+			"label": "Tax Withholding Category",
+			"options": "Tax Withholding Category",
+			"insert_after": "user_remark",
+			"read_only": 1,
+			"depends_on": "eval:doc.thai_withholding_category",
+			"description": "Tax the customer withheld, added by Withhold Tax. Running Withhold Tax again replaces "
+			"this line.",
+		},
+		{
+			"fieldname": "thai_withholding_base",
+			"fieldtype": "Currency",
+			"label": "Withholding Tax Base",
+			"options": "Company:company:default_currency",
+			"insert_after": "thai_withholding_category",
+			"read_only": 1,
+			"depends_on": "eval:doc.thai_withholding_category",
+		},
+		{
+			"fieldname": "thai_withholding_offset",
+			"fieldtype": "Currency",
+			"label": "Withholding Taken Off the Bank Line",
+			"options": "Company:company:default_currency",
+			"insert_after": "thai_withholding_base",
+			"read_only": 1,
+			"hidden": 1,
+		},
 	],
 	"Currency Exchange Settings": [
 		{
@@ -571,6 +659,20 @@ HRMS_CUSTOM_FIELDS = {
 }
 
 ERP_PROPERTY_SETTERS = {
+	# per company: the account for tax we withhold (Pay) next to the one for tax withheld from us (Receive)
+	"Tax Withholding Account": [
+		("account", "label", "Pay Account (tax we withhold)", "Data"),
+		("account", "reqd", "0", "Check"),
+		("account", "columns", "4", "Int"),
+		(
+			"account",
+			"description",
+			"Liability account for the tax we withhold from suppliers (PND3 / PND53). Required when Applies To "
+			"includes Pay.",
+			"Small Text",
+		),
+		("company", "columns", "2", "Int"),
+	],
 	"Purchase Taxes and Charges": [
 		("rate", "precision", "6", "Select"),
 	],

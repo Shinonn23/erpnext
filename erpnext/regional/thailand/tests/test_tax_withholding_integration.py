@@ -11,6 +11,16 @@ from erpnext.regional.thailand.custom.payment_entry import make_withholding_tax_
 
 
 class TestThaiTaxWithholdingIntegration(unittest.TestCase):
+	def setUp(self):
+		# flt(x, precision) reads the rounding method from System Settings
+		settings = patch.object(
+			frappe,
+			"get_system_settings",
+			side_effect=lambda key: "UTC" if key == "time_zone" else "Commercial Rounding",
+		)
+		settings.start()
+		self.addCleanup(settings.stop)
+
 	def test_core_withholding_entry_builds_thai_certificate_line(self):
 		cert = MagicMock()
 		payment_source = MagicMock()
@@ -45,8 +55,16 @@ class TestThaiTaxWithholdingIntegration(unittest.TestCase):
 			) as destination_permission,
 			patch(
 				"erpnext.regional.thailand.custom.payment_entry.frappe.db",
-				MagicMock(get_value=MagicMock(return_value=category)),
+				MagicMock(
+					get_value=MagicMock(
+						side_effect=lambda doctype, name, fields, **kwargs: (
+							"ค่าบริการ" if fields == "category_name" else category
+						)
+					)
+				),
 			),
+			# no certificate yet: the manual button is the fallback for an entry without one
+			patch("erpnext.regional.thailand.custom.payment_entry.existing_certificates", return_value={}),
 		):
 			result = make_withholding_tax_cert(
 				json.dumps({"date": "2026-10-05", "company_address": "Company Address"}),
@@ -60,6 +78,7 @@ class TestThaiTaxWithholdingIntegration(unittest.TestCase):
 			"withholding_tax_items",
 			{
 				"type_of_income": "5",
+				"description": "ค่าบริการ",
 				"tax_base": 10000,
 				"tax_rate": 3,
 				"tax_amount": 300,
@@ -69,9 +88,12 @@ class TestThaiTaxWithholdingIntegration(unittest.TestCase):
 
 	def test_setup_uses_core_category_as_the_only_wht_master(self):
 		category_fields = {field["fieldname"] for field in ERP_CUSTOM_FIELDS["Tax Withholding Category"]}
-		self.assertEqual(category_fields, {"thai_income_tax_form", "thai_type_of_income"})
-		self.assertNotIn("Payment Entry Deduction", ERP_CUSTOM_FIELDS)
+		self.assertEqual(category_fields, {"thai_applies_to", "thai_income_tax_form", "thai_type_of_income"})
 		self.assertNotIn("Withholding Tax Type", ERP_CUSTOM_FIELDS)
+		# a deduction Withhold Tax adds names its Tax Withholding Category, not the retired Withholding Tax Type
+		deduction_fields = {field["fieldname"] for field in ERP_CUSTOM_FIELDS["Payment Entry Deduction"]}
+		self.assertIn("thai_withholding_category", deduction_fields)
+		self.assertFalse({"withholding_tax_type", "withholding_tax_base"} & deduction_fields)
 
 	def test_payment_entry_extension_composes_with_installed_controller(self):
 		controller_bases = get_controller("Payment Entry").__mro__

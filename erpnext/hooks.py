@@ -91,6 +91,7 @@ doctype_js = {
 	"Purchase Tax Invoice": "public/js/thailand/purchase_tax_invoice.js",
 	"Sales Tax Invoice": "public/js/thailand/sales_tax_invoice.js",
 	"Currency Exchange Settings": "public/js/thailand/currency_exchange_settings.js",
+	"Tax Withholding Category": "public/js/thailand/tax_withholding_category.js",
 }
 doctype_list_js = {
 	"Stock Entry": "stock/doctype/stock_entry/stock_entry_list.js",
@@ -109,6 +110,8 @@ extend_doctype_class = {
 	"Address": "erpnext.accounts.custom.address.ERPNextAddress",
 	"Payment Entry": "erpnext.regional.thailand.custom.payment_entry.PaymentEntry",
 	"Quality Inspection": "erpnext.loan.doctype.custody_loan.custody_loan_core.CustodyLoanQualityInspectionMixin",
+	# a Pay Account and a Receive Account per company, required by Applies To
+	"Tax Withholding Category": "erpnext.regional.thailand.custom.withholding.TaxWithholdingCategory",
 }
 
 override_whitelisted_methods = {
@@ -202,8 +205,12 @@ _thailand_doc_events = {
 		"on_submit": [
 			"erpnext.regional.thailand.custom.payment_entry.reconcile_undue_tax",
 			"erpnext.regional.thailand.custom.payment_entry.update_sales_billing_outstanding_amount",
+			"erpnext.regional.thailand.custom.withholding_cert.create_withholding_certificates",
 		],
-		"on_cancel": "erpnext.regional.thailand.custom.payment_entry.update_sales_billing_outstanding_amount",
+		"on_cancel": [
+			"erpnext.regional.thailand.custom.payment_entry.update_sales_billing_outstanding_amount",
+			"erpnext.regional.thailand.custom.withholding_cert.cancel_withholding_certificates",
+		],
 	},
 	"Unreconcile Payment": {"on_submit": "erpnext.regional.thailand.custom.unreconcile_payment.unreconcile_undue_tax"},
 	"Sales Invoice": {
@@ -234,7 +241,11 @@ _thailand_doc_events = {
 	},
 	"Journal Entry": {
 		"on_update": "erpnext.regional.thailand.custom.custom_api.prepare_journal_entry_tax_invoice_detail",
-		"on_submit": "erpnext.regional.thailand.custom.journal_entry.reconcile_undue_tax",
+		"on_submit": [
+			"erpnext.regional.thailand.custom.journal_entry.reconcile_undue_tax",
+			"erpnext.regional.thailand.custom.withholding_cert.create_withholding_certificates",
+		],
+		"on_cancel": "erpnext.regional.thailand.custom.withholding_cert.cancel_withholding_certificates",
 	},
 	"Print Format": {"before_validate": "erpnext.regional.thailand.custom.print_format.allow_update_standard"},
 	"Address": {"on_update": "erpnext.regional.thailand.custom.address.update_tax_info_in_linked_doc"},
@@ -266,6 +277,12 @@ _regulatory_affairs_doc_events = {
 auto_cancel_exempted_doctypes = ["Payment Entry", "Sales Tax Invoice", "Purchase Tax Invoice"]
 
 on_print_pdf = "erpnext.regional.thailand.custom.print_utils.add_comment_on_print_pdf"
+
+# Connections of a payment / journal: its Withholding Tax Certs and Thai tax invoices (Voucher Type / Voucher No)
+override_doctype_dashboards = {
+	"Payment Entry": "erpnext.regional.thailand.custom.dashboard_overrides.get_dashboard_data_for_payment_entry",
+	"Journal Entry": "erpnext.regional.thailand.custom.dashboard_overrides.get_dashboard_data_for_journal_entry",
+}
 on_gle_rename = "erpnext.regional.thailand.custom.gl_entry.rename_gl_entry_in_tax_invoice"
 
 # website
