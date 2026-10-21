@@ -27,7 +27,7 @@ from erpnext.accounts.doctype.repost_accounting_ledger.repost_accounting_ledger 
 	validate_docs_for_voucher_types,
 )
 from erpnext.accounts.doctype.tax_withholding_entry.tax_withholding_entry import SalesTaxWithholding
-from erpnext.accounts.general_ledger import get_round_off_account
+from erpnext.accounts.general_ledger import get_round_off_account_and_cost_center
 from erpnext.accounts.party import (
 	CROSS_PARTY_FIELD_NO_MAP,
 	get_due_date,
@@ -123,6 +123,7 @@ class SalesInvoice(SellingController):
 		contact_mobile: DF.SmallText | None
 		contact_person: DF.Link | None
 		conversion_rate: DF.Float
+		cost_center: DF.Link | None
 		coupon_code: DF.Link | None
 		currency: DF.Link
 		customer: DF.Link
@@ -163,6 +164,7 @@ class SalesInvoice(SellingController):
 		loyalty_points: DF.Int
 		loyalty_program: DF.Link | None
 		loyalty_redemption_account: DF.Link | None
+		loyalty_redemption_cost_center: DF.Link | None
 		named_place: DF.Data | None
 		naming_series: DF.Literal["ACC-SINV-.YYYY.-", "ACC-SINV-RET-.YYYY.-"]
 		net_total: DF.Currency
@@ -246,12 +248,14 @@ class SalesInvoice(SellingController):
 		update_billed_amount_in_sales_order: DF.Check
 		update_outstanding_for_self: DF.Check
 		update_stock: DF.Check
+		use_company_roundoff_cost_center: DF.Check
 		utm_campaign: DF.Link | None
 		utm_content: DF.Data | None
 		utm_medium: DF.Link | None
 		utm_source: DF.Link | None
 		write_off_account: DF.Link | None
 		write_off_amount: DF.Currency
+		write_off_cost_center: DF.Link | None
 		write_off_outstanding_amount_automatically: DF.Check
 	# end: auto-generated types
 
@@ -323,6 +327,7 @@ class SalesInvoice(SellingController):
 		self.clear_unallocated_advances("Sales Invoice Advance", "advances")
 		self.validate_fixed_asset()
 		self.set_income_account_for_fixed_assets()
+		self.validate_item_cost_centers()
 		self.check_conversion_rate()
 		self.validate_accounts()
 
@@ -449,6 +454,10 @@ class SalesInvoice(SellingController):
 						_("Row #{0}: You must select an Asset for Item {1}.").format(d.idx, d.item_code),
 						title=_("Missing Asset"),
 					)
+
+	def validate_item_cost_centers(self):
+		for item in self.items:
+			item.validate_cost_center(self.company)
 
 	def validate_income_account(self):
 		for item in self.get("items"):
@@ -1007,7 +1016,9 @@ class SalesInvoice(SellingController):
 				"select_print_heading",
 				"write_off_account",
 				"taxes_and_charges",
+				"write_off_cost_center",
 				"apply_discount_on",
+				"cost_center",
 			):
 				if (not for_validate) or (for_validate and not self.get(fieldname)):
 					self.set(fieldname, pos.get(fieldname))
@@ -1768,6 +1779,7 @@ class SalesInvoice(SellingController):
 						"debit_in_transaction_currency": grand_total,
 						"against_voucher": against_voucher,
 						"against_voucher_type": self.doctype,
+						"cost_center": self.cost_center,
 						"project": self.project,
 					},
 					self.party_account_currency,
@@ -1799,6 +1811,7 @@ class SalesInvoice(SellingController):
 							"credit_in_transaction_currency": flt(
 								amount, tax.precision("tax_amount_after_discount_amount")
 							),
+							"cost_center": tax.cost_center,
 						},
 						account_currency,
 						item=tax,
@@ -1816,6 +1829,7 @@ class SalesInvoice(SellingController):
 						"debit": flt(self.total_taxes_and_charges),
 						"debit_in_account_currency": flt(self.base_total_taxes_and_charges),
 						"debit_in_transaction_currency": flt(self.total_taxes_and_charges),
+						"cost_center": self.cost_center,
 					},
 					account_currency,
 					item=self,
@@ -1862,6 +1876,7 @@ class SalesInvoice(SellingController):
 									else flt(amount, item.precision("net_amount"))
 								),
 								"credit_in_transaction_currency": flt(amount, item.precision("net_amount")),
+								"cost_center": item.cost_center,
 								"project": item.project or self.project,
 							},
 							account_currency,
@@ -1923,6 +1938,7 @@ class SalesInvoice(SellingController):
 						"credit_in_transaction_currency": self.loyalty_amount,
 						"against_voucher": self.return_against if cint(self.is_return) else self.name,
 						"against_voucher_type": self.doctype,
+						"cost_center": self.cost_center,
 					},
 					item=self,
 				)
@@ -1931,6 +1947,7 @@ class SalesInvoice(SellingController):
 				self.get_gl_dict(
 					{
 						"account": self.loyalty_redemption_account,
+						"cost_center": self.cost_center or self.loyalty_redemption_cost_center,
 						"against": self.customer,
 						"debit": self.loyalty_amount,
 						"debit_in_transaction_currency": self.loyalty_amount,
@@ -1970,6 +1987,7 @@ class SalesInvoice(SellingController):
 								"credit_in_transaction_currency": payment_mode.amount,
 								"against_voucher": against_voucher,
 								"against_voucher_type": self.doctype,
+								"cost_center": self.cost_center,
 							},
 							self.party_account_currency,
 							item=self,
@@ -1987,6 +2005,7 @@ class SalesInvoice(SellingController):
 								if payment_mode_account_currency == self.company_currency
 								else payment_mode.amount,
 								"debit_in_transaction_currency": payment_mode.amount,
+								"cost_center": self.cost_center,
 							},
 							payment_mode_account_currency,
 							item=self,
@@ -2019,6 +2038,7 @@ class SalesInvoice(SellingController):
 					if cint(self.is_return) and self.return_against
 					else self.name,
 					"against_voucher_type": self.doctype,
+					"cost_center": self.cost_center,
 					"project": self.project,
 				},
 				self.party_account_currency,
@@ -2030,6 +2050,7 @@ class SalesInvoice(SellingController):
 					"against": self.customer,
 					"credit": self.base_change_amount,
 					"credit_in_transaction_currency": self.change_amount,
+					"cost_center": self.cost_center,
 				},
 				item=self,
 			),
@@ -2043,6 +2064,8 @@ class SalesInvoice(SellingController):
 			and flt(self.write_off_amount, self.precision("write_off_amount"))
 		):
 			write_off_account_currency = get_account_currency(self.write_off_account)
+			default_cost_center = frappe.get_cached_value("Company", self.company, "cost_center")
+
 			gl_entries.append(
 				self.get_gl_dict(
 					{
@@ -2061,6 +2084,7 @@ class SalesInvoice(SellingController):
 						),
 						"against_voucher": self.return_against if cint(self.is_return) else self.name,
 						"against_voucher_type": self.doctype,
+						"cost_center": self.cost_center,
 						"project": self.project,
 					},
 					self.party_account_currency,
@@ -2081,6 +2105,7 @@ class SalesInvoice(SellingController):
 						"debit_in_transaction_currency": flt(
 							self.write_off_amount, self.precision("write_off_amount")
 						),
+						"cost_center": self.cost_center or self.write_off_cost_center or default_cost_center,
 					},
 					write_off_account_currency,
 					item=self,
@@ -2093,7 +2118,13 @@ class SalesInvoice(SellingController):
 			and self.base_rounding_adjustment
 			and not self.is_internal_transfer()
 		):
-			round_off_account, round_off_for_opening = get_round_off_account(self.company)
+			(
+				round_off_account,
+				round_off_cost_center,
+				round_off_for_opening,
+			) = get_round_off_account_and_cost_center(
+				self.company, "Sales Invoice", self.name, self.use_company_roundoff_cost_center
+			)
 
 			if self.is_opening == "Yes" and self.rounding_adjustment:
 				if not round_off_for_opening:
@@ -2124,6 +2155,9 @@ class SalesInvoice(SellingController):
 						"credit": flt(
 							self.base_rounding_adjustment, self.precision("base_rounding_adjustment")
 						),
+						"cost_center": round_off_cost_center
+						if self.use_company_roundoff_cost_center
+						else (self.cost_center or round_off_cost_center),
 					},
 					item=self,
 				)
@@ -2597,6 +2631,7 @@ def make_delivery_note(source_name, target_doc=None):
 					"serial_no": "serial_no",
 					"sales_order": "against_sales_order",
 					"so_detail": "so_detail",
+					"cost_center": "cost_center",
 				},
 				"postprocess": update_item,
 				"condition": lambda doc: doc.delivered_by_supplier != 1
@@ -2864,7 +2899,7 @@ def make_inter_company_transaction(doctype, source_name, target_doc=None):
 
 	item_field_map = {
 		"doctype": target_doctype + " Item",
-		"field_no_map": ["income_account", "expense_account", "warehouse"],
+		"field_no_map": ["income_account", "expense_account", "cost_center", "warehouse"],
 		"field_map": {
 			"rate": "rate",
 		},
@@ -2903,7 +2938,7 @@ def make_inter_company_transaction(doctype, source_name, target_doc=None):
 				"validation": {"docstatus": ["=", 1]},
 				"postprocess": update_details,
 				"set_target_warehouse": "set_from_warehouse",
-				"field_no_map": [*CROSS_PARTY_FIELD_NO_MAP, "set_warehouse"],
+				"field_no_map": [*CROSS_PARTY_FIELD_NO_MAP, "set_warehouse", "cost_center"],
 			},
 			doctype + " Item": item_field_map,
 		},
@@ -3258,6 +3293,7 @@ def create_dunning(source_name, target_doc=None, ignore_permissions=False):
 			target.rate_of_interest = dunning_type.rate_of_interest
 			target.dunning_fee = dunning_type.dunning_fee
 			target.income_account = dunning_type.income_account
+			target.cost_center = dunning_type.cost_center
 			target.language = source.language
 			target.get_dunning_letter_text()
 

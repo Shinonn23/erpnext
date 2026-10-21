@@ -20,6 +20,7 @@ class SubcontractingReceiptSuppliedItem(Document):
 		bom_detail_no: DF.Data | None
 		consumed_qty: DF.Float
 		conversion_factor: DF.Float
+		cost_center: DF.Link | None
 		current_stock: DF.Float
 		description: DF.TextEditor | None
 		expense_account: DF.Link | None

@@ -231,6 +231,7 @@ class POSInvoiceMergeLog(Document):
 
 			if doc.redeem_loyalty_points:
 				invoice.loyalty_redemption_account = doc.loyalty_redemption_account
+				invoice.loyalty_redemption_cost_center = doc.loyalty_redemption_cost_center
 				loyalty_points_sum += doc.loyalty_points
 				loyalty_amount_sum += doc.loyalty_amount
 
@@ -258,7 +259,7 @@ class POSInvoiceMergeLog(Document):
 			for tax in doc.get("taxes"):
 				found = False
 				for t in taxes:
-					if t.account_head == tax.account_head:
+					if t.account_head == tax.account_head and t.cost_center == tax.cost_center:
 						t.tax_amount = flt(t.tax_amount) + flt(tax.tax_amount_after_discount_amount)
 						t.base_tax_amount = flt(t.base_tax_amount) + flt(
 							tax.base_tax_amount_after_discount_amount
@@ -327,7 +328,7 @@ class POSInvoiceMergeLog(Document):
 		dimension_values = frappe.db.get_value(
 			"POS Profile",
 			{"name": invoice.pos_profile},
-			[*accounting_dimensions_fields, "project"],
+			[*accounting_dimensions_fields, "cost_center", "project"],
 			as_dict=1,
 		)
 		for dimension in accounting_dimensions:
@@ -347,6 +348,10 @@ class POSInvoiceMergeLog(Document):
 
 			invoice.set(dimension.fieldname, dimension_value)
 
+		invoice.set(
+			"cost_center",
+			data[0].get("cost_center") if data[0].get("cost_center") else dimension_values.get("cost_center"),
+		)
 		invoice.set(
 			"project", data[0].get("project") if data[0].get("project") else dimension_values.get("project")
 		)
@@ -509,7 +514,7 @@ def split_invoices_by_accounting_dimension(pos_invoices):
 		accounting_dimensions = frappe.db.get_value(
 			"POS Invoice",
 			invoice.pos_invoice,
-			[*dimension_fields, "project", "territory", "sales_person"],
+			[*dimension_fields, "cost_center", "project", "territory", "sales_person"],
 			as_dict=1,
 		)
 

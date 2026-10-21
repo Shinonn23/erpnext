@@ -26,13 +26,13 @@ class TestBudgetDimensionList(unittest.TestCase):
 	def test_native_dimensions_are_listed_between_project_and_accounting_dimensions(self):
 		self.assertEqual(
 			self.budget_dimensions(["Branch"]),
-			["Project", "Department", "Territory", "Sales Person", "Branch"],
+			["Project", "Department", "Territory", "Sales Person", "Cost Center", "Branch"],
 		)
 
 	def test_department_accounting_dimension_is_not_listed_twice(self):
 		self.assertEqual(
 			self.budget_dimensions(["Department", "Branch"]),
-			["Project", "Department", "Territory", "Sales Person", "Branch"],
+			["Project", "Department", "Territory", "Sales Person", "Cost Center", "Branch"],
 		)
 
 	def test_budget_dimension_fields_are_unique_by_fieldname(self):
@@ -49,6 +49,7 @@ class TestBudgetDimensionList(unittest.TestCase):
 				("department", "Department"),
 				("territory", "Territory"),
 				("sales_person", "Sales Person"),
+				("cost_center", "Cost Center"),
 				("branch", "Branch"),
 			],
 		)

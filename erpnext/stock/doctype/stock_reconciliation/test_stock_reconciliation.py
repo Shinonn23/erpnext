@@ -2576,6 +2576,12 @@ def create_stock_reconciliation(**args):
 		if frappe.get_all("Stock Ledger Entry", {"company": sr.company})
 		else frappe.get_cached_value("Account", {"account_type": "Temporary", "company": sr.company}, "name")
 	)
+	sr.cost_center = (
+		args.cost_center
+		or frappe.get_cached_value("Company", sr.company, "cost_center")
+		or frappe.get_cached_value("Cost Center", filters={"is_group": 0, "company": sr.company})
+	)
+
 	bundle_id = None
 	if not args.use_serial_batch_fields and (args.batch_no or args.serial_no) and args.qty:
 		batches = frappe._dict({})

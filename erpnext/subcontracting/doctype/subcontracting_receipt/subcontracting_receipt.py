@@ -16,7 +16,7 @@ from erpnext.setup.doctype.brand.brand import get_brand_defaults
 from erpnext.setup.doctype.item_group.item_group import get_item_group_defaults
 from erpnext.stock.doctype.inventory_dimension.inventory_dimension import get_inventory_dimensions
 from erpnext.stock.doctype.item.item import get_item_defaults
-from erpnext.stock.get_item_details import get_default_expense_account
+from erpnext.stock.get_item_details import get_default_cost_center, get_default_expense_account
 from erpnext.stock.stock_ledger import get_valuation_rate
 
 
@@ -56,6 +56,7 @@ class SubcontractingReceipt(SubcontractingController):
 		contact_email: DF.SmallText | None
 		contact_mobile: DF.SmallText | None
 		contact_person: DF.Link | None
+		cost_center: DF.Link | None
 		department: DF.Link | None
 		distribute_additional_costs_based_on: DF.Literal["Qty", "Amount"]
 		in_words: DF.Data | None
@@ -123,6 +124,7 @@ class SubcontractingReceipt(SubcontractingController):
 		super().before_validate()
 		self.validate_items_qty()
 		self.set_items_bom()
+		self.set_items_cost_center()
 
 		if self.company:
 			default_expense_account = self.get_company_default(
@@ -161,6 +163,7 @@ class SubcontractingReceipt(SubcontractingController):
 		self.get_current_stock()
 
 		self.set_supplied_items_expense_account()
+		self.set_supplied_items_cost_center()
 		self.set_supplied_items_inventory_dimensions()
 		self.validate_storage_locations()
 
@@ -320,6 +323,25 @@ class SubcontractingReceipt(SubcontractingController):
 						{"name": item.subcontracting_order_item, "parent": item.subcontracting_order},
 						"bom",
 					)
+
+	def set_items_cost_center(self):
+		if self.company:
+			cost_center = frappe.get_cached_value("Company", self.company, "cost_center")
+
+			for item in self.items:
+				if not item.cost_center:
+					item.cost_center = cost_center
+
+	def set_supplied_items_cost_center(self):
+		for item in self.supplied_items:
+			if not item.cost_center:
+				item.cost_center = get_default_cost_center(
+					{"project": self.project},
+					get_item_defaults(item.rm_item_code, self.company),
+					get_item_group_defaults(item.rm_item_code, self.company),
+					get_brand_defaults(item.rm_item_code, self.company),
+					self.company,
+				)
 
 	def set_supplied_items_inventory_dimensions(self):
 		if hasattr(self, "inventory_dimensions") and (inventory_dimensions := get_inventory_dimensions()):
@@ -857,6 +879,7 @@ class SubcontractingReceipt(SubcontractingController):
 						"item_code": item.rm_item_code,
 						"amount": item.amount,
 						"expense_account": item.expense_account,
+						"cost_center": item.cost_center,
 					}
 				)
 			)
@@ -884,6 +907,7 @@ class SubcontractingReceipt(SubcontractingController):
 					self.add_gl_entry(
 						gl_entries=gl_entries,
 						account=_inv_dict["account"],
+						cost_center=item.cost_center,
 						debit=stock_value_diff,
 						credit=0.0,
 						remarks=remarks,
@@ -900,6 +924,7 @@ class SubcontractingReceipt(SubcontractingController):
 					self.add_gl_entry(
 						gl_entries=gl_entries,
 						account=item.expense_account,
+						cost_center=item.cost_center,
 						debit=0.0,
 						credit=flt(stock_value_diff) - service_cost,
 						remarks=remarks,
@@ -914,6 +939,7 @@ class SubcontractingReceipt(SubcontractingController):
 					self.add_gl_entry(
 						gl_entries=gl_entries,
 						account=service_account,
+						cost_center=item.cost_center,
 						debit=0.0,
 						credit=service_cost,
 						remarks=remarks,
@@ -933,6 +959,7 @@ class SubcontractingReceipt(SubcontractingController):
 							self.add_gl_entry(
 								gl_entries=gl_entries,
 								account=_inv_dict.get("account"),
+								cost_center=rm_item.cost_center or item.cost_center,
 								debit=0.0,
 								credit=flt(rm_item.amount),
 								remarks=remarks,
@@ -945,6 +972,7 @@ class SubcontractingReceipt(SubcontractingController):
 							self.add_gl_entry(
 								gl_entries=gl_entries,
 								account=rm_item.expense_account or item.expense_account,
+								cost_center=rm_item.cost_center or item.cost_center,
 								debit=flt(rm_item.amount),
 								credit=0.0,
 								remarks=remarks,
@@ -959,6 +987,7 @@ class SubcontractingReceipt(SubcontractingController):
 						self.add_gl_entry(
 							gl_entries=gl_entries,
 							account=item.expense_account,
+							cost_center=self.cost_center or self.get_company_default("cost_center"),
 							debit=item.qty * item.additional_cost_per_qty,
 							credit=0.0,
 							remarks=remarks,
@@ -975,6 +1004,7 @@ class SubcontractingReceipt(SubcontractingController):
 						self.add_gl_entry(
 							gl_entries=gl_entries,
 							account=loss_account,
+							cost_center=item.cost_center,
 							debit=0.0,
 							credit=divisional_loss,
 							remarks=remarks,
@@ -987,6 +1017,7 @@ class SubcontractingReceipt(SubcontractingController):
 						self.add_gl_entry(
 							gl_entries=gl_entries,
 							account=item.expense_account,
+							cost_center=item.cost_center,
 							debit=divisional_loss,
 							credit=0.0,
 							remarks=remarks,
@@ -1012,6 +1043,7 @@ class SubcontractingReceipt(SubcontractingController):
 			self.add_gl_entry(
 				gl_entries=gl_entries,
 				account=row.expense_account,
+				cost_center=self.cost_center or self.get_company_default("cost_center"),
 				debit=0.0,
 				credit=credit_amount,
 				remarks=remarks,
@@ -1057,6 +1089,7 @@ class SubcontractingReceipt(SubcontractingController):
 					self.add_gl_entry(
 						gl_entries=gl_entries,
 						account=entry.expense_account,
+						cost_center=entry.dimensions.cost_center or item.cost_center,
 						debit=0.0,
 						credit=credit_amount,
 						remarks=remarks,
@@ -1073,6 +1106,7 @@ class SubcontractingReceipt(SubcontractingController):
 					self.add_gl_entry(
 						gl_entries=gl_entries,
 						account=item.expense_account,
+						cost_center=item.cost_center,
 						debit=0.0,
 						credit=credit_amount * -1,
 						remarks=remarks,
@@ -1253,5 +1287,6 @@ def add_po_items_to_pr(scr_doc, target_doc):
 						"purchase_order": item.parent,
 						"purchase_order_item": item.name,
 						"project": item.project,
+						"cost_center": item.cost_center,
 					},
 				)

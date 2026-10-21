@@ -53,6 +53,7 @@ class TestGeneralLedger(ERPNextTestSuite):
 		jv.posting_date = today()
 		jv.company = company
 		jv.multi_currency = 1
+		jv.cost_center = "_Test Cost Center - _TC"
 		jv.set(
 			"accounts",
 			[
@@ -61,13 +62,13 @@ class TestGeneralLedger(ERPNextTestSuite):
 					"debit_in_account_currency": 1000,
 					"credit_in_account_currency": 0,
 					"exchange_rate": 75,
-
+					"cost_center": "_Test Cost Center - _TC",
 				},
 				{
 					"account": "Cash - _TC",
 					"debit_in_account_currency": 0,
 					"credit_in_account_currency": 75000,
-
+					"cost_center": "_Test Cost Center - _TC",
 				},
 			],
 		)
@@ -78,6 +79,7 @@ class TestGeneralLedger(ERPNextTestSuite):
 		jv.posting_date = today()
 		jv.company = company
 		jv.multi_currency = 1
+		jv.cost_center = "_Test Cost Center - _TC"
 		jv.set(
 			"accounts",
 			[
@@ -86,13 +88,13 @@ class TestGeneralLedger(ERPNextTestSuite):
 					"debit_in_account_currency": 0,
 					"credit_in_account_currency": 900,
 					"exchange_rate": 100,
-
+					"cost_center": "_Test Cost Center - _TC",
 				},
 				{
 					"account": "Cash - _TC",
 					"debit_in_account_currency": 90000,
 					"credit_in_account_currency": 0,
-
+					"cost_center": "_Test Cost Center - _TC",
 				},
 			],
 		)
@@ -125,6 +127,9 @@ class TestGeneralLedger(ERPNextTestSuite):
 			"Company", company, "unrealized_exchange_gain_loss_account", "_Test Exchange Gain/Loss - _TC"
 		)
 		revaluation_jv = revaluation.make_jv_for_revaluation()
+		revaluation_jv.cost_center = "_Test Cost Center - _TC"
+		for acc in revaluation_jv.get("accounts"):
+			acc.cost_center = "_Test Cost Center - _TC"
 		revaluation_jv.save()
 		revaluation_jv.submit()
 
@@ -185,6 +190,7 @@ class TestGeneralLedger(ERPNextTestSuite):
 		jv.posting_date = today()
 		jv.company = company
 		jv.multi_currency = 1
+		jv.cost_center = "_Test Cost Center - _TC"
 		jv.set(
 			"accounts",
 			[
@@ -195,13 +201,13 @@ class TestGeneralLedger(ERPNextTestSuite):
 					"debit_in_account_currency": 1000,
 					"credit_in_account_currency": 0,
 					"exchange_rate": 75,
-
+					"cost_center": "_Test Cost Center - _TC",
 				},
 				{
 					"account": "Cash - _TC",
 					"debit_in_account_currency": 0,
 					"credit_in_account_currency": 75000,
-
+					"cost_center": "_Test Cost Center - _TC",
 				},
 			],
 		)
@@ -225,6 +231,9 @@ class TestGeneralLedger(ERPNextTestSuite):
 			"Company", company, "unrealized_exchange_gain_loss_account", "_Test Exchange Gain/Loss - _TC"
 		)
 		revaluation_jv = revaluation.make_jv_for_revaluation()
+		revaluation_jv.cost_center = "_Test Cost Center - _TC"
+		for acc in revaluation_jv.get("accounts"):
+			acc.cost_center = "_Test Cost Center - _TC"
 		revaluation_jv.save()
 		revaluation_jv.submit()
 

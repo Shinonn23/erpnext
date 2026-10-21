@@ -41,6 +41,7 @@ class TestTaxesAndTotals(ERPNextTestSuite):
 			{
 				"charge_type": "On Net Total",
 				"account_head": "_Test Account VAT - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "VAT",
 				"included_in_print_rate": True,
 				"rate": 10,
@@ -94,6 +95,7 @@ class TestTaxesAndTotals(ERPNextTestSuite):
 			{
 				"charge_type": "On Net Total",
 				"account_head": "_Test Account VAT - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "Account VAT",
 				"included_in_print_rate": True,
 				"rate": 9,
@@ -104,6 +106,7 @@ class TestTaxesAndTotals(ERPNextTestSuite):
 			{
 				"charge_type": "On Net Total",
 				"account_head": "_Test Account Service Tax - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "Account Service Tax",
 				"included_in_print_rate": True,
 				"rate": 9,

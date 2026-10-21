@@ -742,6 +742,7 @@ class TaxWithholdingController:
 		self.calculate_taxes_and_totals()
 
 	def _create_tax_row(self, account_head, tax_amount):
+		cost_center = self.doc.cost_center or erpnext.get_default_cost_center(self.doc.company)
 		return self.doc.append(
 			"taxes",
 			{
@@ -750,6 +751,7 @@ class TaxWithholdingController:
 				"charge_type": "Actual",
 				"account_head": account_head,
 				"description": account_head,
+				"cost_center": cost_center,
 				"tax_amount": tax_amount,
 				"dont_recompute_tax": 1,
 			},
@@ -1405,6 +1407,8 @@ class JournalTaxWithholding(TaxWithholdingController):
 					"account": account_head,
 					"account_currency": account_currency,
 					"exchange_rate": exchange_rate,
+					"cost_center": self.doc.get("cost_center")
+					or erpnext.get_default_cost_center(self.doc.company),
 					"credit": 0,
 					"credit_in_account_currency": 0,
 					"debit": 0,

@@ -117,6 +117,7 @@ class TestSerialNo(ERPNextTestSuite):
 			serial_no=[serial_nos[0]],
 			company="_Test Company 1",
 			warehouse=wh,
+			cost_center="_Test Company 1 - _TC1",
 		)
 		sn_doc.reload()
 
@@ -152,6 +153,7 @@ class TestSerialNo(ERPNextTestSuite):
 			serial_no=[serial_nos[0]],
 			company="_Test Company 1",
 			warehouse=wh,
+			cost_center="_Test Company 1 - _TC1",
 		)
 
 		# Delivery from second company
@@ -161,6 +163,7 @@ class TestSerialNo(ERPNextTestSuite):
 			serial_no=[serial_nos[0]],
 			company="_Test Company 1",
 			warehouse=wh,
+			cost_center="_Test Company 1 - _TC1",
 		)
 		sn_doc.reload()
 

@@ -27,7 +27,9 @@ class TestStandardDimensions(unittest.TestCase):
 		)
 
 	def test_filters_are_parsed_and_bound_in_both_backends(self):
-		self.filters.update(department='["Operations"]', territory='["West", "East"]', sales_person='["Alice"]')
+		self.filters.update(
+			department='["Operations"]', territory='["West", "East"]', sales_person='["Alice"]'
+		)
 		report.validate_filters(self.filters, {})
 		self.assertEqual(self.filters.department, ["Operations"])
 		self.assertEqual(self.filters.territory, ["West", "East"])
@@ -111,15 +113,16 @@ class TestStandardDimensions(unittest.TestCase):
 		frappe.db.sql.return_value = []
 		report.get_gl_entries(self.filters, [])
 		query = frappe.db.sql.call_args.args[0]
-		self.assertIn("project, department, territory, sales_person,", query)
+		self.assertIn("cost_center, project, department, territory, sales_person,", query)
 		conn = Mock()
-		row = [None] * 22
-		row[9:12] = ["Operations", "West", "Alice"]
+		row = [None] * 23
+		row[8:13] = ["Main - CD", None, "Operations", "West", "Alice"]
 		conn.execute.return_value.fetchall.return_value = [row]
 		entries = report.get_gl_entries_duckdb(self.filters, [], conn)
+		self.assertEqual(entries[0].cost_center, "Main - CD")
 		self.assertEqual(entries[0].department, "Operations")
 		self.assertEqual(entries[0].territory, "West")
 		self.assertEqual(entries[0].sales_person, "Alice")
 		query = conn.execute.call_args.args[0]
-		self.assertIn("project, department, territory, sales_person,", query)
+		self.assertIn("cost_center, project, department, territory, sales_person,", query)
 		self.assertEqual(permission_check.call_count, 2)

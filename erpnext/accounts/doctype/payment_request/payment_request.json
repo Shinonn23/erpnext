@@ -42,6 +42,7 @@
   "branch_code",
   "swift_number",
   "accounting_dimensions_section",
+  "cost_center",
   "dimension_col_break",
   "project",
   "recipient_and_message",
@@ -253,6 +254,12 @@
    "fieldname": "accounting_dimensions_section",
    "fieldtype": "Section Break",
    "label": "Accounting Dimensions"
+  },
+  {
+   "fieldname": "cost_center",
+   "fieldtype": "Link",
+   "label": "Cost Center",
+   "options": "Cost Center"
   },
   {
    "fieldname": "dimension_col_break",
@@ -474,7 +481,7 @@
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-02-27 19:11:03.308896",
+ "modified": "2026-10-21 05:30:00.000000",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Payment Request",

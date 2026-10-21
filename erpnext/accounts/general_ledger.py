@@ -8,6 +8,7 @@ import frappe
 from frappe import _
 from frappe.model.meta import get_field_precision
 from frappe.utils import cint, flt, formatdate, get_link_to_form, getdate, now
+from frappe.utils.caching import request_cache
 from frappe.utils.dashboard import cache_source
 
 import erpnext
@@ -193,12 +194,85 @@ def process_gl_map(gl_map, merge_entries=True, precision=None, from_repost=False
 	if not gl_map:
 		return []
 
+	if gl_map[0].voucher_type != "Period Closing Voucher":
+		gl_map = distribute_gl_based_on_cost_center_allocation(gl_map, precision, from_repost)
+
 	if merge_entries:
 		gl_map = merge_similar_entries(gl_map, precision)
 
 	gl_map = toggle_debit_credit_if_negative(gl_map)
 
 	return gl_map
+
+
+def distribute_gl_based_on_cost_center_allocation(gl_map, precision=None, from_repost=False):
+	round_off_account, default_currency = frappe.get_cached_value(
+		"Company", gl_map[0].company, ["round_off_account", "default_currency"]
+	)
+	if not precision:
+		precision = get_field_precision(
+			frappe.get_meta("GL Entry").get_field("debit"),
+			currency=default_currency,
+		)
+
+	new_gl_map = []
+	for d in gl_map:
+		cost_center = d.get("cost_center")
+
+		cost_center_allocation = get_cost_center_allocation_data(
+			gl_map[0]["company"], gl_map[0]["posting_date"], cost_center
+		)
+
+		if not cost_center_allocation:
+			new_gl_map.append(d)
+			continue
+
+		# Validate budget against main cost center
+		if not from_repost:
+			validate_expense_against_budget(
+				d, expense_amount=flt(d.debit, precision) - flt(d.credit, precision)
+			)
+
+		if d.account == round_off_account:
+			d.cost_center = cost_center_allocation[0][0]
+			new_gl_map.append(d)
+			continue
+
+		for sub_cost_center, percentage in cost_center_allocation:
+			gle = copy.deepcopy(d)
+			gle.cost_center = sub_cost_center
+			for field in ("debit", "credit", "debit_in_account_currency", "credit_in_account_currency"):
+				gle[field] = flt(flt(d.get(field)) * percentage / 100, precision)
+			new_gl_map.append(gle)
+
+	return new_gl_map
+
+
+@request_cache
+def get_cost_center_allocation_data(company, posting_date, cost_center):
+	cost_center_allocation = frappe.db.get_value(
+		"Cost Center Allocation",
+		{
+			"docstatus": 1,
+			"company": company,
+			"valid_from": ("<=", posting_date),
+			"main_cost_center": cost_center,
+		},
+		pluck=True,
+		order_by="valid_from desc",
+	)
+
+	if not cost_center_allocation:
+		return []
+
+	records = frappe.db.get_all(
+		"Cost Center Allocation Percentage",
+		{"parent": cost_center_allocation},
+		["cost_center", "percentage"],
+		as_list=True,
+	)
+
+	return records
 
 
 def set_default_dimensions(gl_map):
@@ -273,6 +347,7 @@ def merge_similar_entries(gl_map, precision=None):
 def get_merge_properties(dimensions=None):
 	merge_properties = [
 		"account",
+		"cost_center",
 		"party",
 		"party_type",
 		"voucher_detail_no",
@@ -493,7 +568,9 @@ def has_opening_entries(gl_map: list) -> bool:
 
 
 def make_round_off_gle(gl_map, debit_credit_diff, trx_cur_debit_credit_diff, precision):
-	round_off_account, round_off_for_opening = get_round_off_account(gl_map[0].company)
+	round_off_account, round_off_cost_center, round_off_for_opening = get_round_off_account_and_cost_center(
+		gl_map[0].company, gl_map[0].voucher_type, gl_map[0].voucher_no
+	)
 	round_off_gle = frappe._dict()
 	round_off_account_exists = False
 	has_opening_entry = has_opening_entries(gl_map)
@@ -541,6 +618,7 @@ def make_round_off_gle(gl_map, debit_credit_diff, trx_cur_debit_credit_diff, pre
 			"credit_in_transaction_currency": trx_cur_debit_credit_diff
 			if trx_cur_debit_credit_diff > 0
 			else 0,
+			"cost_center": round_off_cost_center,
 			"party_type": None,
 			"party": None,
 			"is_opening": "No",
@@ -598,14 +676,22 @@ def update_accounting_dimensions(round_off_gle):
 			round_off_gle[dimension] = values.get(dimension)
 
 
-def get_round_off_account(company):
-	round_off_account, round_off_for_opening = frappe.get_cached_value(
-		"Company", company, ["round_off_account", "round_off_for_opening"]
-	) or [None, None]
+def get_round_off_account_and_cost_center(company, voucher_type, voucher_no, use_company_default=False):
+	round_off_account, round_off_cost_center, round_off_for_opening = frappe.get_cached_value(
+		"Company", company, ["round_off_account", "round_off_cost_center", "round_off_for_opening"]
+	) or [None, None, None]
 
 	# Use expense account as fallback
 	if not round_off_account:
 		round_off_account = frappe.get_cached_value("Company", company, "default_expense_account")
+
+	meta = frappe.get_meta(voucher_type)
+
+	# Give first preference to parent cost center for round off GLE
+	if not use_company_default and meta.has_field("cost_center"):
+		parent_cost_center = frappe.db.get_value(voucher_type, voucher_no, "cost_center")
+		if parent_cost_center:
+			round_off_cost_center = parent_cost_center
 
 	if not round_off_account:
 		frappe.throw(
@@ -614,7 +700,14 @@ def get_round_off_account(company):
 			)
 		)
 
-	return round_off_account, round_off_for_opening
+	if not round_off_cost_center:
+		frappe.throw(
+			_("Please mention '{0}' in Company: {1}").format(
+				frappe.bold("Round Off Cost Center"), get_link_to_form("Company", company)
+			)
+		)
+
+	return round_off_account, round_off_cost_center, round_off_for_opening
 
 
 def make_reverse_gl_entries(

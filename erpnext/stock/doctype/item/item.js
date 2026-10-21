@@ -543,6 +543,34 @@ $.extend(erpnext.item, {
 			};
 		};
 
+		frm.fields_dict["item_defaults"].grid.get_field("buying_cost_center").get_query = function (
+			doc,
+			cdt,
+			cdn
+		) {
+			const row = locals[cdt][cdn];
+			return {
+				filters: {
+					is_group: 0,
+					company: row.company,
+				},
+			};
+		};
+
+		frm.fields_dict["item_defaults"].grid.get_field("selling_cost_center").get_query = function (
+			doc,
+			cdt,
+			cdn
+		) {
+			const row = locals[cdt][cdn];
+			return {
+				filters: {
+					is_group: 0,
+					company: row.company,
+				},
+			};
+		};
+
 		frm.fields_dict["taxes"].grid.get_field("tax_type").get_query = function (doc, cdt, cdn) {
 			return {
 				filters: [

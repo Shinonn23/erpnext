@@ -120,11 +120,17 @@ class TestDepreciationDepartment(unittest.TestCase):
 	def rows(self, department):
 		asset = frappe._dict(name="ASSET-1", department=department)
 		schedule = frappe._dict(depreciation_amount=100)
-		return depreciation.get_credit_and_debit_entry("Accumulated", schedule, asset, "Expense", [])
+		return depreciation.get_credit_and_debit_entry(
+			"Accumulated", schedule, asset, "Main - CD", "Expense", []
+		)
 
 	def test_both_rows_carry_the_department_the_asset_is_held_in(self):
 		credit, debit = self.rows("Lab")
 		self.assertEqual((credit["department"], debit["department"]), ("Lab", "Lab"))
+
+	def test_both_rows_carry_the_depreciation_cost_center(self):
+		credit, debit = self.rows("Lab")
+		self.assertEqual((credit["cost_center"], debit["cost_center"]), ("Main - CD", "Main - CD"))
 
 	def test_asset_without_a_department_leaves_the_rows_unassigned(self):
 		credit, debit = self.rows(None)
@@ -140,7 +146,7 @@ class TestDepreciationDepartment(unittest.TestCase):
 			"default_dimension": "Default Department",
 		}
 		credit, debit = depreciation.get_credit_and_debit_entry(
-			"Accumulated", frappe._dict(depreciation_amount=100), asset, "Expense", [dimension]
+			"Accumulated", frappe._dict(depreciation_amount=100), asset, "Main - CD", "Expense", [dimension]
 		)
 		self.assertEqual(
 			(credit["department"], debit["department"]), ("Default Department", "Default Department")

@@ -86,6 +86,20 @@ GRANTS = {
 	"Company": [
 		"Desk User",
 	],
+	"Cost Center": [
+		"Delivery Manager",
+		"Delivery User",
+		"Maintenance Manager",
+		"Maintenance User",
+		"Manufacturing Manager",
+		"Manufacturing User",
+		"Projects Manager",
+		"Projects User",
+		"Purchase Master Manager",
+		"Quality Manager",
+		"Sales Master Manager",
+		"Stock Manager",
+	],
 	"Coupon Code": [
 		"Maintenance Manager",
 		"Maintenance User",

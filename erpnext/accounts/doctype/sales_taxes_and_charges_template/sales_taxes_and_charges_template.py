@@ -9,6 +9,7 @@ from frappe.utils import flt
 
 from erpnext.controllers.accounts_controller import (
 	validate_account_head,
+	validate_cost_center,
 	validate_inclusive_tax,
 	validate_taxes_and_charges,
 )
@@ -69,6 +70,7 @@ def valdiate_taxes_and_charges_template(doc):
 	for tax in doc.get("taxes"):
 		validate_taxes_and_charges(tax)
 		validate_account_head(tax.idx, tax.account_head, doc.company, _("Taxes and Charges"))
+		validate_cost_center(tax, doc)
 		validate_inclusive_tax(tax, doc)
 
 

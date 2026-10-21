@@ -173,6 +173,7 @@ frappe.ui.form.on("Purchase Receipt", {
 
 	toggle_display_account_head: function (frm) {
 		var enabled = erpnext.is_perpetual_inventory_enabled(frm.doc.company);
+		frm.fields_dict["items"].grid.set_column_disp(["cost_center"], enabled);
 	},
 });
 
@@ -389,7 +390,7 @@ erpnext.stock.PurchaseReceiptController = class PurchaseReceiptController extend
 
 	items_add(doc, cdt, cdn) {
 		const row = frappe.get_doc(cdt, cdn);
-		const field_copy = ["expense_account"];
+		const field_copy = ["expense_account", "cost_center"];
 		if (doc.project) {
 			frappe.model.set_value(cdt, cdn, "project", doc.project);
 		} else {

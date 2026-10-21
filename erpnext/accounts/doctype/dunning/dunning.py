@@ -47,6 +47,7 @@ class Dunning(AccountsController):
 		contact_mobile: DF.SmallText | None
 		contact_person: DF.Link | None
 		conversion_rate: DF.Float
+		cost_center: DF.Link | None
 		currency: DF.Link | None
 		customer: DF.Link
 		customer_address: DF.Link | None

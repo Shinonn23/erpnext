@@ -388,7 +388,7 @@ class BuyingController(SubcontractingController):
 			self.add_gl_entry(
 				gl_entries=gl_entries,
 				account=details.purchase_expense_account,
-
+				cost_center=row.cost_center,
 				debit=amount,
 				credit=0.0,
 				remarks=_("Purchase Expense for Item {0}").format(row.item_code),
@@ -402,7 +402,7 @@ class BuyingController(SubcontractingController):
 			self.add_gl_entry(
 				gl_entries=gl_entries,
 				account=details.purchase_expense_contra_account,
-
+				cost_center=row.cost_center,
 				debit=0.0,
 				credit=amount,
 				remarks=_("Purchase Expense for Item {0}").format(row.item_code),
@@ -1112,7 +1112,7 @@ class BuyingController(SubcontractingController):
 		items_data = get_asset_item_details(asset_items)
 		messages = []
 		alert = False
-		accounting_dimensions = get_dimensions()
+		accounting_dimensions = get_dimensions(with_cost_center_and_project=True)
 
 		for d in self.items:
 			if d.is_fixed_asset:

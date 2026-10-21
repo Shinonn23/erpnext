@@ -28,6 +28,7 @@
   "is_return",
   "return_against",
   "accounting_dimensions_section",
+  "cost_center",
   "dimension_col_break",
   "project",
   "department",
@@ -1153,6 +1154,12 @@
    "label": "Accounting Dimensions"
   },
   {
+   "fieldname": "cost_center",
+   "fieldtype": "Link",
+   "label": "Cost Center",
+   "options": "Cost Center"
+  },
+  {
    "fieldname": "dimension_col_break",
    "fieldtype": "Column Break"
   },
@@ -1315,7 +1322,7 @@
  "idx": 261,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-10-13 12:12:32.190935",
+ "modified": "2026-10-21 05:30:00.000000",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Purchase Receipt",

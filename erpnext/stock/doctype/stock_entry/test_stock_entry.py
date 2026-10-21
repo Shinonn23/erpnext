@@ -230,6 +230,7 @@ class TestStockEntry(ERPNextTestSuite):
 			qty=10,
 			basic_rate=100,
 			expense_account="Stock Adjustment - _TC",
+			cost_center="Main - _TC",
 		)
 
 		transit_entry = make_stock_entry(
@@ -242,6 +243,7 @@ class TestStockEntry(ERPNextTestSuite):
 			qty=10,
 			basic_rate=100,
 			expense_account="Stock Adjustment - _TC",
+			cost_center="Main - _TC",
 		)
 
 		end_transit_entry = make_stock_in_entry(transit_entry.name)
@@ -284,6 +286,7 @@ class TestStockEntry(ERPNextTestSuite):
 			qty=10,
 			basic_rate=100,
 			expense_account="Stock Adjustment - _TC",
+			cost_center="Main - _TC",
 		)
 
 		# Submitting or saving with add_to_transit=1 and a non-transit target warehouse must be rejected
@@ -303,6 +306,7 @@ class TestStockEntry(ERPNextTestSuite):
 				"qty": 5,
 				"basic_rate": 100,
 				"expense_account": "Stock Adjustment - _TC",
+				"cost_center": "Main - _TC",
 			},
 		)
 		self.assertRaises(frappe.ValidationError, se.save)
@@ -690,6 +694,45 @@ class TestStockEntry(ERPNextTestSuite):
 		"Stock Settings",
 		{"auto_create_serial_and_batch_bundle_for_outward": 1, "do_not_use_batchwise_valuation": 0},
 	)
+	def test_additional_cost_follows_auto_picked_transfer_rows(self):
+		from erpnext.accounts.doctype.cost_center.test_cost_center import create_cost_center
+
+		create_cost_center(
+			cost_center_name="_Test APBT Cost Center", company="_Test Company with perpetual inventory"
+		)
+		cost_centers = ("Main - TCP1", "_Test APBT Cost Center - TCP1")
+		transfer = self.make_auto_picked_batch_transfer(
+			rates=(100, 300), row_qtys=(1, 1), additional_cost=40, cost_centers=cost_centers
+		)
+
+		self.assertEqual([d.amount for d in transfer.items], [110, 330])
+		freight = dict(
+			frappe.get_all(
+				"GL Entry",
+				filters={
+					"voucher_no": transfer.name,
+					"account": transfer.additional_costs[0].expense_account,
+					"is_cancelled": 0,
+				},
+				fields=["cost_center", "credit"],
+				as_list=True,
+			)
+		)
+		self.assertEqual(freight, dict(zip(cost_centers, (10, 30), strict=True)))
+		inward_values = dict(
+			frappe.get_all(
+				"Stock Ledger Entry",
+				filters={"voucher_no": transfer.name, "actual_qty": (">", 0), "is_cancelled": 0},
+				fields=["voucher_detail_no", "stock_value_difference"],
+				as_list=True,
+			)
+		)
+		self.assertEqual(inward_values, {d.name: d.amount for d in transfer.items})
+
+	@ERPNextTestSuite.change_settings(
+		"Stock Settings",
+		{"auto_create_serial_and_batch_bundle_for_outward": 1, "do_not_use_batchwise_valuation": 0},
+	)
 	def test_transfer_with_picked_and_auto_picked_rows_keeps_batch_qty(self):
 		item_code = self.make_batches_at_rates((100, 300), "_Test Warehouse - _TC")
 		batches = frappe.get_all("Batch", filters={"item": item_code}, pluck="name", order_by="creation")
@@ -830,6 +873,7 @@ class TestStockEntry(ERPNextTestSuite):
 			"items",
 			{
 				"conversion_factor": 1.0,
+				"cost_center": "_Test Cost Center - _TC",
 				"doctype": "Stock Entry Detail",
 				"expense_account": "Stock Adjustment - _TC",
 				"basic_rate": 150,
@@ -1284,6 +1328,7 @@ class TestStockEntry(ERPNextTestSuite):
 			st1.company = "_Test Company 1"
 			st1.get("items")[0].t_warehouse = "_Test Warehouse 2 - _TC1"
 			st1.get("items")[0].expense_account = "Stock Adjustment - _TC1"
+			st1.get("items")[0].cost_center = "Main - _TC1"
 			st1.set_stock_entry_type()
 			st1.insert()
 			st1.submit()
@@ -2646,6 +2691,7 @@ class TestStockEntry(ERPNextTestSuite):
 						"uom": "Nos",
 						"t_warehouse": "Stores - TCP1",
 						"allow_zero_valuation_rate": 1,
+						"cost_center": "Main - TCP1",
 					},
 					{
 						"item_code": "_Test Item",
@@ -2655,6 +2701,7 @@ class TestStockEntry(ERPNextTestSuite):
 						"uom": "Nos",
 						"t_warehouse": "Stores - TCP1",
 						"allow_zero_valuation_rate": 1,
+						"cost_center": "Main - TCP1",
 					},
 				],
 				"additional_costs": [
@@ -2775,6 +2822,7 @@ class TestStockEntry(ERPNextTestSuite):
 						"uom": "Nos",
 						"t_warehouse": "Stores - TCP1",
 						"allow_zero_valuation_rate": 1,
+						"cost_center": "Main - TCP1",
 					}
 				],
 			}
@@ -2795,6 +2843,7 @@ class TestStockEntry(ERPNextTestSuite):
 						"qty": 5,
 						"uom": "Nos",
 						"s_warehouse": "Stores - TCP1",
+						"cost_center": "Main - TCP1",
 					},
 					{
 						"item_code": fg,
@@ -2802,6 +2851,7 @@ class TestStockEntry(ERPNextTestSuite):
 						"uom": "Nos",
 						"t_warehouse": "Finished Goods - TCP1",
 						"is_finished_item": 1,
+						"cost_center": "Main - TCP1",
 					},
 				],
 				"additional_costs": [
@@ -2821,6 +2871,78 @@ class TestStockEntry(ERPNextTestSuite):
 			"Stock Entry",
 			se.name,
 			sorted([["Stock In Hand - TCP1", 500.0, 0.0], ["Miscellaneous Expenses - TCP1", 0.0, 500.0]]),
+		)
+
+	def test_additional_cost_gl_matches_valuation_split(self):
+		company = "_Test Company with perpetual inventory"
+		cost_center = "_Test Additional Cost CC - TCP1"
+		if not frappe.db.exists("Cost Center", cost_center):
+			frappe.get_doc(
+				{
+					"doctype": "Cost Center",
+					"cost_center_name": "_Test Additional Cost CC",
+					"company": company,
+					"is_group": 0,
+					"parent_cost_center": "_Test Company with perpetual inventory - TCP1",
+				}
+			).insert()
+
+		uoms = [{"uom": "Nos", "conversion_factor": 1}, {"uom": "Box", "conversion_factor": 2}]
+		item_a = make_item("_Test Addl Cost CF A", {"is_stock_item": 1, "uoms": uoms}).name
+		uoms[1]["conversion_factor"] = 3
+		item_b = make_item("_Test Addl Cost CF B", {"is_stock_item": 1, "uoms": uoms}).name
+
+		se = frappe.get_doc(
+			{
+				"doctype": "Stock Entry",
+				"purpose": "Material Receipt",
+				"stock_entry_type": "Material Receipt",
+				"posting_date": nowdate(),
+				"company": company,
+				"items": [
+					{
+						"item_code": item_a,
+						"qty": 1,
+						"basic_rate": 0,
+						"uom": "Box",
+						"conversion_factor": 2,
+						"t_warehouse": "Stores - TCP1",
+						"allow_zero_valuation_rate": 1,
+						"cost_center": "Main - TCP1",
+					},
+					{
+						"item_code": item_b,
+						"qty": 1,
+						"basic_rate": 0,
+						"uom": "Box",
+						"conversion_factor": 3,
+						"t_warehouse": "Stores - TCP1",
+						"allow_zero_valuation_rate": 1,
+						"cost_center": cost_center,
+					},
+				],
+				"additional_costs": [
+					{
+						"expense_account": "Miscellaneous Expenses - TCP1",
+						"amount": 100,
+						"description": "misc",
+					}
+				],
+			}
+		)
+		se.insert()
+		se.submit()
+
+		self.assertEqual([40.0, 60.0], [flt(d.additional_cost, 2) for d in se.items])
+
+		expense_by_cost_center = frappe.get_all(
+			"GL Entry",
+			filters={"voucher_no": se.name, "account": "Miscellaneous Expenses - TCP1"},
+			fields=["cost_center", "credit"],
+		)
+		self.assertEqual(
+			{"Main - TCP1": 40.0, cost_center: 60.0},
+			{d.cost_center: d.credit for d in expense_by_cost_center},
 		)
 
 	def test_additional_cost_distribution_non_manufacture(self):
@@ -3510,6 +3632,7 @@ class TestStockEntry(ERPNextTestSuite):
 					"stock_qty": 1,
 					"conversion_factor": 1,
 					"expense_account": se.items[0].expense_account,
+					"cost_center": se.items[0].cost_center,
 					"uom": se.items[0].uom,
 					"stock_uom": se.items[0].stock_uom,
 				},
@@ -3752,6 +3875,7 @@ class TestStockEntry(ERPNextTestSuite):
 		se.append(
 			"additional_costs",
 			{
+				"cost_center": "Main - _TC",
 				"amount": 50,
 				"expense_account": "Stock Adjustment - _TC",
 				"description": "Test Additional Cost",
@@ -4845,6 +4969,9 @@ def make_serialized_item(self, **args):
 			)
 		).name
 
+	if args.cost_center:
+		se.get("items")[0].cost_center = args.cost_center
+
 	if args.expense_account:
 		se.get("items")[0].expense_account = args.expense_account
 
@@ -4876,6 +5003,7 @@ def get_multiple_items():
 	return [
 		{
 			"conversion_factor": 1.0,
+			"cost_center": "Main - TCP1",
 			"doctype": "Stock Entry Detail",
 			"expense_account": "Stock Adjustment - TCP1",
 			"basic_rate": 100,
@@ -4888,6 +5016,7 @@ def get_multiple_items():
 		},
 		{
 			"conversion_factor": 1.0,
+			"cost_center": "Main - TCP1",
 			"doctype": "Stock Entry Detail",
 			"expense_account": "Stock Adjustment - TCP1",
 			"basic_rate": 5000,

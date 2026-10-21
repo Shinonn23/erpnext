@@ -12,6 +12,7 @@ from erpnext.tests.utils import ERPNextTestSuite
 class TestPaymentLedger(ERPNextTestSuite):
 	def setUp(self):
 		self.company = "_Test Company"
+		self.cost_center = "Main - _TC"
 		self.warehouse = "Stores - _TC"
 		self.income_account = "Sales - _TC"
 		self.expense_account = "Cost of Goods Sold - _TC"
@@ -22,6 +23,7 @@ class TestPaymentLedger(ERPNextTestSuite):
 			company=self.company,
 			debit_to=self.debit_to,
 			expense_account=self.expense_account,
+			cost_center=self.cost_center,
 			income_account=self.income_account,
 			warehouse=self.warehouse,
 		)

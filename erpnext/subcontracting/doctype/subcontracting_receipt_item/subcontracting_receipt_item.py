@@ -21,6 +21,7 @@ class SubcontractingReceiptItem(Document):
 		bom: DF.Link | None
 		brand: DF.Link | None
 		conversion_factor: DF.Float
+		cost_center: DF.Link | None
 		department: DF.Link | None
 		description: DF.TextEditor | None
 		expense_account: DF.Link | None

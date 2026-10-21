@@ -51,7 +51,7 @@ def _execute(filters, additional_table_columns=None):
 	invoice_income_map, invoice_tax_map = get_invoice_tax_map(
 		invoice_list, invoice_income_map, income_accounts, include_payments
 	)
-	# Warehouse Map
+	# Cost Center & Warehouse Map
 	invoice_cc_wh_map = get_invoice_cc_wh_map(invoice_list)
 	invoice_so_dn_map = get_invoice_so_dn_map(invoice_list)
 	company_currency = frappe.get_cached_value("Company", filters.get("company"), "default_currency")
@@ -78,6 +78,7 @@ def _execute(filters, additional_table_columns=None):
 		# invoice details
 		sales_order = list(set(invoice_so_dn_map.get(inv.name, {}).get("sales_order", [])))
 		delivery_note = list(set(invoice_so_dn_map.get(inv.name, {}).get("delivery_note", [])))
+		cost_center = list(set(invoice_cc_wh_map.get(inv.name, {}).get("cost_center", [])))
 		warehouse = list(set(invoice_cc_wh_map.get(inv.name, {}).get("warehouse", [])))
 		inv_customer_details = customer_details.get(inv.customer, {})
 
@@ -98,6 +99,7 @@ def _execute(filters, additional_table_columns=None):
 			"remarks": inv.remarks,
 			"sales_order": ", ".join(sales_order),
 			"delivery_note": ", ".join(delivery_note),
+			"cost_center": ", ".join(cost_center),
 			"warehouse": ", ".join(warehouse),
 			"currency": company_currency,
 		}
@@ -269,6 +271,13 @@ def get_columns(invoice_list, additional_table_columns, include_payments=False):
 				"fieldname": "delivery_note",
 				"fieldtype": "Link",
 				"options": "Delivery Note",
+				"width": 100,
+			},
+			{
+				"label": _("Cost Center"),
+				"fieldname": "cost_center",
+				"fieldtype": "Link",
+				"options": "Cost Center",
 				"width": 100,
 			},
 			{
@@ -615,9 +624,9 @@ def get_invoice_so_dn_map(invoice_list):
 
 def get_invoice_cc_wh_map(invoice_list):
 	si_items = frappe.db.sql(
-		"""select parent, warehouse
+		"""select parent, cost_center, warehouse
 		from `tabSales Invoice Item` where parent in (%s)
-		and warehouse != ''"""
+		and (cost_center != '' or warehouse != '')"""
 		% ", ".join(["%s"] * len(invoice_list)),
 		tuple(inv.name for inv in invoice_list),
 		as_dict=1,
@@ -625,6 +634,11 @@ def get_invoice_cc_wh_map(invoice_list):
 
 	invoice_cc_wh_map = {}
 	for d in si_items:
+		if d.cost_center:
+			invoice_cc_wh_map.setdefault(d.parent, frappe._dict()).setdefault("cost_center", []).append(
+				d.cost_center
+			)
+
 		if d.warehouse:
 			invoice_cc_wh_map.setdefault(d.parent, frappe._dict()).setdefault("warehouse", []).append(
 				d.warehouse

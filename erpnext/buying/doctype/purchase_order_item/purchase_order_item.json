@@ -105,6 +105,7 @@
   "project",
   "department",
   "dimension_col_break",
+  "cost_center",
   "more_info_section_break",
   "is_fixed_asset",
   "item_tax_rate",
@@ -692,6 +693,13 @@
    "print_hide": 1
   },
   {
+   "fieldname": "cost_center",
+   "fieldtype": "Link",
+   "label": "Cost Center",
+   "options": "Cost Center",
+   "print_hide": 1
+  },
+  {
    "allow_on_submit": 1,
    "default": "0",
    "fieldname": "page_break",
@@ -956,7 +964,7 @@
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-09-30 23:24:44.044604",
+ "modified": "2026-10-21 05:30:00.000000",
  "modified_by": "Administrator",
  "module": "Buying",
  "name": "Purchase Order Item",

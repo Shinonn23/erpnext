@@ -13,6 +13,7 @@
   "default_inventory_account",
   "inventory_account_currency",
   "purchase_defaults",
+  "buying_cost_center",
   "default_supplier",
   "column_break_8",
   "expense_account",
@@ -23,6 +24,7 @@
   "expenses_added_to_stock_account",
   "expenses_added_to_stock_contra_account",
   "selling_defaults",
+  "selling_cost_center",
   "column_break_12",
   "income_account",
   "cost_of_good_sold_section",
@@ -70,6 +72,15 @@
    "label": "Purchase Defaults"
   },
   {
+   "description": "Cost center used for tracking purchase expenses for this item",
+   "fieldname": "buying_cost_center",
+   "fieldtype": "Link",
+   "label": "Default Buying Cost Center",
+   "ignore_user_permissions": 1,
+   "options": "Cost Center",
+   "show_description_on_click": 1
+  },
+  {
    "description": "This supplier will be auto-selected in new purchase transactions",
    "fieldname": "default_supplier",
    "fieldtype": "Link",
@@ -93,6 +104,14 @@
    "fieldname": "selling_defaults",
    "fieldtype": "Section Break",
    "label": "Sales Defaults"
+  },
+  {
+   "description": "Cost center used for tracking sales revenue for this item",
+   "fieldname": "selling_cost_center",
+   "fieldtype": "Link",
+   "label": "Default Selling Cost Center",
+   "options": "Cost Center",
+   "show_description_on_click": 1
   },
   {
    "fieldname": "column_break_12",

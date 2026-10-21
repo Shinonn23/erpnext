@@ -780,6 +780,7 @@ class TestQuotation(ERPNextTestSuite):
 			{
 				"account_head": "_Test Account VAT - _TC",
 				"charge_type": "On Net Total",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "VAT",
 				"doctype": "Sales Taxes and Charges",
 				"rate": 10,
@@ -828,6 +829,7 @@ class TestQuotation(ERPNextTestSuite):
 			{
 				"account_head": "_Test Account VAT - _TC",
 				"charge_type": "On Net Total",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "VAT",
 				"doctype": "Sales Taxes and Charges",
 				"rate": 10,

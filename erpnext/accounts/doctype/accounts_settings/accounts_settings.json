@@ -716,7 +716,7 @@
   },
   {
    "default": "0",
-   "description": "Enable accounting dimensions for accounting transactions",
+   "description": "Enable cost center, projects and other custom accounting dimensions",
    "fieldname": "enable_accounting_dimensions",
    "fieldtype": "Check",
    "label": "Enable Accounting Dimensions"

@@ -28,6 +28,7 @@ class StockEntryDetail(Document):
 		bom_no: DF.Link | None
 		bom_secondary_item: DF.Data | None
 		conversion_factor: DF.Float
+		cost_center: DF.Link | None
 		custody_loan_item: DF.Link | None
 		customer_provided_item_cost: DF.Currency
 		department: DF.Link | None

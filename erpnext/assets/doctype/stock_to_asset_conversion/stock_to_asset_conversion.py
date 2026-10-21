@@ -602,6 +602,8 @@ class StocktoAssetConversion(StockController):
 		entries = []
 		perpetual = erpnext.is_perpetual_inventory_enabled(self.company)
 		low_value_account = frappe.db.get_value("Company", self.company, "low_value_asset_expense_account")
+		# the conversion has no Cost Center of its own: book it on the company's default
+		cost_center = erpnext.get_default_cost_center(self.company)
 		inventory_map = self.get_inventory_account_map()
 		if self.use_item_inventory_account:
 			inventory_map = get_item_wise_inventory_account_map(self.stock_items, self.company)
@@ -639,7 +641,7 @@ class StocktoAssetConversion(StockController):
 				credit_account = inventory["account"] if perpetual else self.get_company_default("default_expense_account")
 				if not credit_account:
 					frappe.throw(_("Set an Inventory Account for Warehouse {0}").format(row.warehouse) if perpetual else _("Set a Default Expense Account in Company {0}").format(self.company))
-				entries.append(self.get_gl_dict({"account": credit_account, "credit": stock_value, "against": low_value_account}, inventory.get("account_currency"), item=row))
+				entries.append(self.get_gl_dict({"account": credit_account, "credit": stock_value, "against": low_value_account, "cost_center": cost_center}, inventory.get("account_currency"), item=row))
 		for output in self.assets:
 			value = flt(output.asset_value, self.precision("total_value"))
 			if output.accounting_treatment == "Expense":
@@ -648,7 +650,7 @@ class StocktoAssetConversion(StockController):
 				account = get_asset_category_account("fixed_asset_account", item=output.asset_item_code, company=self.company)
 			if not account:
 				frappe.throw(_("Set a Fixed Asset Account for Item {0}").format(output.asset_item_code))
-			entries.append(self.get_gl_dict({"account": account, "debit": value, "against": "Stock Conversion", "remarks": self.name}, item=output))
+			entries.append(self.get_gl_dict({"account": account, "debit": value, "against": "Stock Conversion", "remarks": self.name, "cost_center": cost_center}, item=output))
 		return entries
 
 	def get_items_and_warehouses(self):

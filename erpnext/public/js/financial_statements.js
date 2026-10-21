@@ -292,12 +292,17 @@ erpnext.financial_statements = {
 			return e.df.fieldname == "project";
 		});
 
+		let cost_center = $.grep(filters, function (e) {
+			return e.df.fieldname == "cost_center";
+		});
+
 		frappe.route_options = {
 			account: data.account || data.accounts,
 			company: get_filter_value("company"),
 			from_date: data.from_date || data.year_start_date,
 			to_date: data.to_date || data.year_end_date,
 			project: project && project.length > 0 ? project[0].get_value() : "",
+			cost_center: cost_center && cost_center.length > 0 ? cost_center[0].get_value() : "",
 		};
 
 		filters.forEach((f) => {
@@ -355,6 +360,7 @@ erpnext.financial_statements = {
 					to_fiscal_year: filters.to_fiscal_year,
 					periodicity: filters.periodicity,
 					presentation_currency: filters.presentation_currency,
+					cost_center: filters.cost_center,
 					project: filters.project,
 				});
 			});
@@ -370,6 +376,7 @@ erpnext.financial_statements = {
 					to_fiscal_year: filters.to_fiscal_year,
 					periodicity: filters.periodicity,
 					presentation_currency: filters.presentation_currency,
+					cost_center: filters.cost_center,
 					project: filters.project,
 				});
 			});
@@ -384,6 +391,7 @@ erpnext.financial_statements = {
 					from_fiscal_year: filters.from_fiscal_year,
 					to_fiscal_year: filters.to_fiscal_year,
 					periodicity: filters.periodicity,
+					cost_center: filters.cost_center,
 					project: filters.project,
 				});
 			});
@@ -391,7 +399,7 @@ erpnext.financial_statements = {
 	},
 
 	get_accounting_dimension_options: function () {
-		const options = ["", "Project"];
+		const options = ["", "Cost Center", "Project"];
 		frappe.db
 			.get_list("Accounting Dimension", { fields: ["document_type"], filters: { disabled: 0 } })
 			.then((res) => {
@@ -499,7 +507,17 @@ function get_filters() {
 			options: erpnext.get_presentation_currency_list(),
 			depends_on: "eval: !doc.report_template",
 		},
-
+		{
+			fieldname: "cost_center",
+			label: __("Cost Center"),
+			fieldtype: "MultiSelectList",
+			get_data: function (txt) {
+				return frappe.db.get_link_options("Cost Center", txt, {
+					company: get_filter_value("company"),
+				});
+			},
+			options: "Cost Center",
+		},
 		{
 			fieldname: "project",
 			label: __("Project"),

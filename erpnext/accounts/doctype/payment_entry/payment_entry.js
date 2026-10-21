@@ -516,6 +516,7 @@ frappe.ui.form.on("Payment Entry", {
 					party_type: frm.doc.party_type,
 					party: frm.doc.party,
 					date: frm.doc.posting_date,
+					cost_center: frm.doc.cost_center,
 				},
 				callback: function (r, rt) {
 					if (r.message) {
@@ -645,6 +646,7 @@ frappe.ui.form.on("Payment Entry", {
 				args: {
 					account: account,
 					date: frm.doc.posting_date,
+					cost_center: frm.doc.cost_center,
 				},
 				callback: function (r, rt) {
 					if (r.message) {
@@ -911,7 +913,7 @@ frappe.ui.form.on("Payment Entry", {
 			frm.dimension_filters.map((elem, idx) => {
 				fields.push({
 					fieldtype: "Link",
-					label: elem.label,
+					label: elem.document_type == "Cost Center" ? "Cost Center" : elem.label,
 					options: elem.document_type,
 					fieldname: elem.fieldname || elem.document_type,
 				});
@@ -944,6 +946,7 @@ frappe.ui.form.on("Payment Entry", {
 			function (filters) {
 				frappe.flags.allocate_payment_amount = true;
 				frm.events.validate_filters_data(frm, filters);
+				frm.doc.cost_center = filters.cost_center;
 				frm.events.get_outstanding_documents(
 					frm,
 					filters,
@@ -1006,6 +1009,7 @@ frappe.ui.form.on("Payment Entry", {
 			payment_type: frm.doc.payment_type,
 			party: frm.doc.party,
 			party_account: frm.doc.payment_type == "Receive" ? frm.doc.paid_from : frm.doc.paid_to,
+			cost_center: frm.doc.cost_center,
 		};
 
 		for (let key in filters) {
@@ -1300,6 +1304,7 @@ frappe.ui.form.on("Payment Entry", {
 
 			row = frm.add_child("deductions");
 			row.account = account;
+			row.cost_center = company_defaults?.cost_center;
 			row.is_exchange_gain_loss = 1;
 		}
 
@@ -1334,6 +1339,7 @@ frappe.ui.form.on("Payment Entry", {
 		if (!row) {
 			row = frm.add_child("deductions");
 			row.account = write_off_account;
+			row.cost_center = response.message?.cost_center;
 		}
 
 		row.amount = flt(row.amount) + difference_amount;

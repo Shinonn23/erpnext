@@ -17,6 +17,7 @@ class TestExchangeRateRevaluation(ERPNextTestSuite):
 		self.company = "_Test Company"
 		self.item = "_Test Item"
 		self.customer = "_Test Customer"
+		self.cost_center = "Main - _TC"
 		self.debtors_usd = "_Test Receivable USD - _TC"
 		self.set_system_and_company_settings()
 
@@ -40,6 +41,8 @@ class TestExchangeRateRevaluation(ERPNextTestSuite):
 			customer=self.customer,
 			debit_to=self.debtors_usd,
 			posting_date=today(),
+			parent_cost_center=self.cost_center,
+			cost_center=self.cost_center,
 			rate=100,
 			price_list_rate=100,
 			do_not_submit=1,
@@ -92,6 +95,8 @@ class TestExchangeRateRevaluation(ERPNextTestSuite):
 			customer=self.customer,
 			debit_to=self.debtors_usd,
 			posting_date=today(),
+			parent_cost_center=self.cost_center,
+			cost_center=self.cost_center,
 			rate=100,
 			price_list_rate=100,
 			do_not_submit=1,
@@ -168,6 +173,8 @@ class TestExchangeRateRevaluation(ERPNextTestSuite):
 			customer=self.customer,
 			debit_to=self.debtors_usd,
 			posting_date=add_days(today(), -1),
+			parent_cost_center=self.cost_center,
+			cost_center=self.cost_center,
 			rate=100,
 			price_list_rate=100,
 			do_not_submit=1,
@@ -255,6 +262,8 @@ class TestExchangeRateRevaluation(ERPNextTestSuite):
 			customer=self.customer,
 			debit_to=self.debtors_usd,
 			posting_date=today(),
+			parent_cost_center=self.cost_center,
+			cost_center=self.cost_center,
 			rate=100,
 			price_list_rate=100,
 			do_not_submit=1,
@@ -297,6 +306,8 @@ class TestExchangeRateRevaluation(ERPNextTestSuite):
 			customer="_Test Customer 1",
 			debit_to=self.debtors_usd,
 			posting_date=today(),
+			parent_cost_center=self.cost_center,
+			cost_center=self.cost_center,
 			rate=100,
 			price_list_rate=100,
 			do_not_submit=1,

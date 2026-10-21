@@ -11,6 +11,12 @@ frappe.query_reports["Procurement Tracker"] = {
 			default: frappe.defaults.get_user_default("Company"),
 		},
 		{
+			fieldname: "cost_center",
+			label: __("Cost Center"),
+			fieldtype: "Link",
+			options: "Cost Center",
+		},
+		{
 			fieldname: "project",
 			label: __("Project"),
 			fieldtype: "Link",

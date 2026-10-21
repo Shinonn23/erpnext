@@ -41,7 +41,8 @@ class TestRepostAccountingLedger(ERPNextTestSuite):
 			company="_Test Company",
 			customer="_Test Customer",
 			debit_to="Debtors - _TC",
-
+			parent_cost_center="Main - _TC",
+			cost_center="Main - _TC",
 			rate=100,
 			**kwargs,
 		)
@@ -89,7 +90,7 @@ class TestRepostAccountingLedger(ERPNextTestSuite):
 				"period_end_date": today(),
 				"company": "_Test Company",
 				"fiscal_year": fy[0],
-
+				"cost_center": "Main - _TC",
 				"closing_account_head": "Retained Earnings - _TC",
 				"remarks": "test",
 			}
@@ -218,6 +219,7 @@ class TestRepostAccountingLedger(ERPNextTestSuite):
 		company.default_provisional_account = provisional_account
 		company.save()
 
+		test_cc = company.cost_center
 		default_expense_account = company.service_expense_account
 
 		item = make_item(properties={"is_stock_item": 0})
@@ -225,8 +227,8 @@ class TestRepostAccountingLedger(ERPNextTestSuite):
 		pr = make_purchase_receipt(company="_Test Company", item_code=item.name, rate=1000.0, qty=1.0)
 		pr_gl_entries = get_gl_entries(pr.doctype, pr.name, skip_cancelled=True)
 		expected_pr_gles = [
-			{"account": provisional_account, "debit": 0.0, "credit": 1000.0},
-			{"account": default_expense_account, "debit": 1000.0, "credit": 0.0},
+			{"account": provisional_account, "debit": 0.0, "credit": 1000.0, "cost_center": test_cc},
+			{"account": default_expense_account, "debit": 1000.0, "credit": 0.0, "cost_center": test_cc},
 		]
 		self.assertEqual(expected_pr_gles, pr_gl_entries)
 
@@ -242,8 +244,8 @@ class TestRepostAccountingLedger(ERPNextTestSuite):
 
 		pr_gles_after_repost = get_gl_entries(pr.doctype, pr.name, skip_cancelled=True)
 		expected_pr_gles_after_repost = [
-			{"account": default_expense_account, "debit": 1000.0, "credit": 0.0},
-			{"account": another_provisional_account, "debit": 0.0, "credit": 1000.0},
+			{"account": default_expense_account, "debit": 1000.0, "credit": 0.0, "cost_center": test_cc},
+			{"account": another_provisional_account, "debit": 0.0, "credit": 1000.0, "cost_center": test_cc},
 		]
 		self.assertEqual(len(pr_gles_after_repost), len(expected_pr_gles_after_repost))
 		self.assertEqual(expected_pr_gles_after_repost, pr_gles_after_repost)

@@ -15,6 +15,7 @@ class TestAccountsReceivable(ERPNextTestSuite, AccountsTestMixin):
 		self.customer = "_Test Customer"
 		self.item = "_Test Item"
 		self.debit_to = "Debtors - _TC"
+		self.cost_center = "Main - _TC"
 
 	def test_01_receivable_summary_output(self):
 		"""
@@ -33,6 +34,9 @@ class TestAccountsReceivable(ERPNextTestSuite, AccountsTestMixin):
 			customer=self.customer,
 			debit_to=self.debit_to,
 			posting_date=today(),
+			parent_cost_center=self.cost_center,
+			cost_center=self.cost_center,
+			rate=200,
 			price_list_rate=200,
 		)
 
@@ -121,6 +125,9 @@ class TestAccountsReceivable(ERPNextTestSuite, AccountsTestMixin):
 			customer=self.customer,
 			debit_to=self.debit_to,
 			posting_date=today(),
+			parent_cost_center=self.cost_center,
+			cost_center=self.cost_center,
+			rate=200,
 			price_list_rate=200,
 		)
 		# make partial payment
@@ -203,6 +210,9 @@ class TestAccountsReceivable(ERPNextTestSuite, AccountsTestMixin):
 			customer=self.customer,
 			debit_to=self.debit_to,
 			posting_date=today(),
+			parent_cost_center=self.cost_center,
+			cost_center=self.cost_center,
+			rate=200,
 			price_list_rate=200,
 			do_not_submit=True,
 		)

@@ -23,6 +23,7 @@ class TestShippingRule(ERPNextTestSuite):
 				shipping_rule.label = f"{rule_type} Delivery"
 				shipping_rule.shipping_rule_type = rule_type
 				shipping_rule.company = "_Test Company 1"
+				shipping_rule.cost_center = None
 				with self.assertRaisesRegex(frappe.ValidationError, "does not belong to Company"):
 					shipping_rule.insert()
 
@@ -31,12 +32,14 @@ class TestShippingRule(ERPNextTestSuite):
 		shipping_rule.label = "Standard Delivery"
 		shipping_rule.insert()
 		shipping_rule.company = "_Test Company 1"
+		shipping_rule.cost_center = None
 		with self.assertRaisesRegex(frappe.ValidationError, "does not belong to Company"):
 			shipping_rule.save()
 
 		shipping_rule.reload()
 		shipping_rule.company = "_Test Company 1"
 		shipping_rule.account = "_Test Account Shipping Charges - _TC1"
+		shipping_rule.cost_center = None
 		shipping_rule.save()
 		shipping_rule.reload()
 		self.assertEqual(shipping_rule.company, "_Test Company 1")
@@ -83,6 +86,7 @@ def create_shipping_rule(shipping_rule_type, shipping_rule_name):
 	sr.account = "_Test Account Shipping Charges - _TC"
 	sr.calculate_based_on = "Net Total"
 	sr.company = "_Test Company"
+	sr.cost_center = "_Test Cost Center - _TC"
 	sr.label = shipping_rule_name
 	sr.name = shipping_rule_name
 	sr.shipping_rule_type = shipping_rule_type

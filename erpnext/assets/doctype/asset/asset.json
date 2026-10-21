@@ -73,6 +73,9 @@
   "depreciation_schedule_sb",
   "depreciation_schedule_view",
   "other_info_tab",
+  "accounting_dimensions_section",
+  "cost_center",
+  "dimension_col_break",
   "insurance_section",
   "policy_number",
   "insurer",
@@ -203,6 +206,12 @@
    "in_standard_filter": 1,
    "label": "Custodian",
    "options": "Employee"
+  },
+  {
+   "fieldname": "cost_center",
+   "fieldtype": "Link",
+   "label": "Cost Center",
+   "options": "Cost Center"
   },
   {
    "fieldname": "department",
@@ -454,17 +463,17 @@
    "fieldname": "stock_to_asset_accounting_treatment",
    "fieldtype": "Select",
    "label": "Stock Conversion Accounting Treatment",
+   "no_copy": 1,
    "options": "\nExpense\nImmediate Depreciation\nScheduled Depreciation\nHold Value",
-   "read_only_depends_on": "eval:doc.docstatus != 0 || !doc.stock_to_asset_conversion",
-   "no_copy": 1
+   "read_only_depends_on": "eval:doc.docstatus != 0 || !doc.stock_to_asset_conversion"
   },
   {
    "fieldname": "stock_to_asset_depreciation_journal_entry",
    "fieldtype": "Link",
    "label": "Immediate Depreciation Entry",
+   "no_copy": 1,
    "options": "Journal Entry",
-   "read_only": 1,
-   "no_copy": 1
+   "read_only": 1
   },
   {
    "fieldname": "column_break_51",
@@ -632,6 +641,11 @@
    "label": "Depreciation"
   },
   {
+   "fieldname": "accounting_dimensions_section",
+   "fieldtype": "Section Break",
+   "label": "Accounting Dimensions"
+  },
+  {
    "fieldname": "section_break_jtou",
    "fieldtype": "Section Break",
    "label": "Additional Info"
@@ -654,6 +668,10 @@
   },
   {
    "fieldname": "column_break_wqzi",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "dimension_col_break",
    "fieldtype": "Column Break"
   },
   {
@@ -722,14 +740,14 @@
   },
   {
    "group": "Stock to Asset Conversion",
+   "is_child_table": 1,
    "link_doctype": "Stock to Asset Conversion Asset",
    "link_fieldname": "asset",
-   "is_child_table": 1,
    "parent_doctype": "Stock to Asset Conversion",
    "table_fieldname": "assets"
   }
  ],
- "modified": "2026-10-18 16:00:01.000000",
+ "modified": "2026-10-21 05:30:00.000000",
  "modified_by": "Administrator",
  "module": "Assets",
  "name": "Asset",

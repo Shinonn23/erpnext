@@ -382,6 +382,7 @@ def book_deferred_income_or_expense(doc, deferred_process, posting_date=None):
 					gl_posting_date,
 					project,
 					account_currency,
+					item.cost_center,
 					item,
 					deferred_process,
 					submit_journal_entry,
@@ -397,6 +398,7 @@ def book_deferred_income_or_expense(doc, deferred_process, posting_date=None):
 					gl_posting_date,
 					project,
 					account_currency,
+					item.cost_center,
 					item,
 					deferred_process,
 				)
@@ -471,6 +473,7 @@ def make_gl_entries(
 	posting_date,
 	project,
 	account_currency,
+	cost_center,
 	item,
 	deferred_process=None,
 ):
@@ -488,6 +491,7 @@ def make_gl_entries(
 				"against": against,
 				"credit": base_amount,
 				"credit_in_account_currency": amount,
+				"cost_center": cost_center,
 				"voucher_detail_no": item.name,
 				"posting_date": posting_date,
 				"project": project,
@@ -506,6 +510,7 @@ def make_gl_entries(
 				"against": against,
 				"debit": base_amount,
 				"debit_in_account_currency": amount,
+				"cost_center": cost_center,
 				"voucher_detail_no": item.name,
 				"posting_date": posting_date,
 				"project": project,
@@ -551,6 +556,7 @@ def book_revenue_via_journal_entry(
 	posting_date,
 	project,
 	account_currency,
+	cost_center,
 	item,
 	deferred_process=None,
 	submit="No",
@@ -572,6 +578,7 @@ def book_revenue_via_journal_entry(
 		"reference_name": doc.name,
 		"reference_type": doc.doctype,
 		"reference_detail_no": item.name,
+		"cost_center": cost_center,
 		"project": project,
 	}
 
@@ -583,6 +590,7 @@ def book_revenue_via_journal_entry(
 		"reference_name": doc.name,
 		"reference_type": doc.doctype,
 		"reference_detail_no": item.name,
+		"cost_center": cost_center,
 		"project": project,
 	}
 

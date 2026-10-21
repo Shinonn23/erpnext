@@ -911,6 +911,9 @@ frappe.ui.form.on("Stock Entry", {
 		frm.fields_dict.items.grid.refresh();
 		frm.cscript.toggle_related_fields(frm.doc);
 	},
+	cost_center(frm, cdt, cdn) {
+		erpnext.utils.copy_value_in_all_rows(frm.doc, cdt, cdn, "items", "cost_center");
+	},
 	validate_purpose_consumption: function (frm) {
 		frappe
 			.call({
@@ -942,7 +945,7 @@ frappe.ui.form.on("Stock Entry", {
 
 	toggle_display_account_head: function (frm) {
 		var enabled = erpnext.is_perpetual_inventory_enabled(frm.doc.company);
-		frm.fields_dict["items"].grid.set_column_disp(["expense_account"], enabled);
+		frm.fields_dict["items"].grid.set_column_disp(["cost_center", "expense_account"], enabled);
 	},
 
 	set_basic_rate: function (frm, cdt, cdn) {
@@ -1363,6 +1366,7 @@ frappe.ui.form.on("Stock Entry Detail", {
 				batch_no: d.batch_no,
 				bom_no: d.bom_no,
 				expense_account: d.expense_account,
+				cost_center: d.cost_center,
 				company: frm.doc.company,
 				qty: d.qty,
 				voucher_type: frm.doc.doctype,
@@ -1412,6 +1416,9 @@ frappe.ui.form.on("Stock Entry Detail", {
 		erpnext.utils.copy_value_in_all_rows(frm.doc, cdt, cdn, "items", "expense_account");
 	},
 
+	cost_center(frm, cdt, cdn) {
+		erpnext.utils.copy_value_in_all_rows(frm.doc, cdt, cdn, "items", "cost_center");
+	},
 
 	sample_quantity(frm, cdt, cdn) {
 		validate_sample_quantity(frm, cdt, cdn);
@@ -1711,6 +1718,10 @@ erpnext.stock.StockEntry = class StockEntry extends erpnext.stock.StockControlle
 
 			erpnext.accounts.dimensions.update_dimension(this.frm, this.frm.doctype);
 
+			if (!this.frm.doc.__onload?.load_after_mapping) {
+				this.set_default_account("cost_center", "cost_center");
+			}
+
 			this.frm.refresh_fields("items");
 		}
 	}
@@ -1845,8 +1856,8 @@ erpnext.stock.StockEntry = class StockEntry extends erpnext.stock.StockControlle
 	items_add(doc, cdt, cdn) {
 		var row = frappe.get_doc(cdt, cdn);
 
-		if (!row.expense_account) {
-			this.frm.script_manager.copy_from_first_row("items", row, ["expense_account"]);
+		if (!(row.expense_account && row.cost_center)) {
+			this.frm.script_manager.copy_from_first_row("items", row, ["expense_account", "cost_center"]);
 		}
 
 		if (this.frm.doc.from_warehouse) row.s_warehouse = this.frm.doc.from_warehouse;

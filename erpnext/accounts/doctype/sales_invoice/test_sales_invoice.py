@@ -340,6 +340,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			{
 				"charge_type": "On Net Total",
 				"account_head": "_Test Account Service Tax - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "Service Tax",
 				"rate": 14,
 				"included_in_print_rate": 1,
@@ -350,6 +351,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			{
 				"charge_type": "On Item Quantity",
 				"account_head": "_Test Account Education Cess - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "CESS",
 				"rate": 5,
 				"included_in_print_rate": 1,
@@ -399,6 +401,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			{
 				"charge_type": "On Net Total",
 				"account_head": "_Test Account Service Tax - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "Tax 10%",
 				"rate": 10,
 				"included_in_print_rate": 1,
@@ -422,6 +425,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			{
 				"charge_type": "On Net Total",
 				"account_head": "_Test Account Service Tax - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "Tax 10%",
 				"rate": 10,
 				"included_in_print_rate": 1,
@@ -450,6 +454,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 				"rate": 30000,
 				"income_account": "Sales - _TC",
 				"expense_account": "Cost of Goods Sold - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 			},
 		)
 		si.append(
@@ -457,6 +462,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			{
 				"charge_type": "On Net Total",
 				"account_head": "_Test Account Service Tax - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "Tax 10%",
 				"rate": 10,
 				"included_in_print_rate": 1,
@@ -504,6 +510,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 				"rate": rate,
 				"income_account": "Sales - _TC",
 				"expense_account": "Cost of Goods Sold - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 			}
 			if item_tax_rate:
 				item_dict["item_tax_rate"] = item_tax_rate
@@ -514,6 +521,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			{
 				"charge_type": "On Net Total",
 				"account_head": "_Test Account Service Tax - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "Tax 10%",
 				"rate": 10,
 				"included_in_print_rate": 1,
@@ -538,6 +546,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			{
 				"charge_type": "On Net Total",
 				"account_head": "_Test Account Service Tax - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "Tax 10%",
 				"rate": 10,
 				"included_in_print_rate": 1,
@@ -548,6 +557,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			{
 				"charge_type": "On Previous Row Amount",
 				"account_head": "_Test Account Education Cess - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "Cess 5% on Tax 10%",
 				"rate": 5,
 				"row_id": 1,
@@ -572,6 +582,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			{
 				"charge_type": "On Net Total",
 				"account_head": "_Test Account Service Tax - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "Tax 10%",
 				"rate": 10,
 				"included_in_print_rate": 1,
@@ -582,6 +593,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			{
 				"charge_type": "On Previous Row Amount",
 				"account_head": "_Test Account Education Cess - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "Cess 5% on Tax 10%",
 				"rate": 5,
 				"row_id": 1,
@@ -607,6 +619,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			{
 				"charge_type": "On Net Total",
 				"account_head": "_Test Account Service Tax - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "Tax 10%",
 				"rate": 10,
 				"included_in_print_rate": 1,
@@ -617,6 +630,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			{
 				"charge_type": "On Previous Row Total",
 				"account_head": "_Test Account Education Cess - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "Cess 5% on Previous Total",
 				"rate": 5,
 				"row_id": 1,
@@ -641,6 +655,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			{
 				"charge_type": "On Previous Row Amount",
 				"account_head": "_Test Account Service Tax - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "Service Tax",
 				"rate": 10,
 				"row_id": 8,
@@ -723,6 +738,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 				"doctype": "Sales Taxes and Charges",
 				"charge_type": "On Previous Row Amount",
 				"account_head": "_Test Account Service Tax - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "Service Tax",
 				"rate": 10,
 				"row_id": 8,
@@ -789,6 +805,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			{
 				"account_head": "_Test Account VAT - _TC",
 				"charge_type": "On Net Total",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "VAT",
 				"doctype": "Sales Taxes and Charges",
 				"rate": 19,
@@ -825,6 +842,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			{
 				"account_head": "_Test Account Excise Duty - _TC",
 				"charge_type": "On Net Total",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "Excise Duty",
 				"doctype": "Sales Taxes and Charges",
 				"rate": 11,
@@ -835,6 +853,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			{
 				"account_head": "_Test Account Education Cess - _TC",
 				"charge_type": "On Net Total",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "Education Cess",
 				"doctype": "Sales Taxes and Charges",
 				"rate": 0,
@@ -845,6 +864,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			{
 				"account_head": "_Test Account S&H Education Cess - _TC",
 				"charge_type": "On Net Total",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "S&H Education Cess",
 				"doctype": "Sales Taxes and Charges",
 				"rate": 3,
@@ -885,6 +905,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			{
 				"account_head": "_Test Account VAT - _TC",
 				"charge_type": "On Net Total",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "VAT",
 				"doctype": "Sales Taxes and Charges",
 				"rate": 24,
@@ -1129,6 +1150,54 @@ class TestSalesInvoice(ERPNextTestSuite):
 		jv.cancel()
 		self.assertEqual(frappe.db.get_value("Sales Invoice", w.name, "outstanding_amount"), 562.0)
 
+	def test_outstanding_on_cost_center_allocation(self):
+		# setup cost centers
+		from erpnext.accounts.doctype.cost_center.test_cost_center import create_cost_center
+		from erpnext.accounts.doctype.cost_center_allocation.test_cost_center_allocation import (
+			create_cost_center_allocation,
+		)
+
+		cost_centers = [
+			"Main Cost Center 1",
+			"Sub Cost Center 1",
+			"Sub Cost Center 2",
+		]
+		for cc in cost_centers:
+			create_cost_center(cost_center_name=cc, company="_Test Company")
+
+		cca = create_cost_center_allocation(
+			"_Test Company",
+			"Main Cost Center 1 - _TC",
+			{"Sub Cost Center 1 - _TC": 60, "Sub Cost Center 2 - _TC": 40},
+		)
+
+		# make invoice
+		si = frappe.copy_doc(self.globalTestRecords["Sales Invoice"][0])
+		si.is_pos = 0
+		si.insert()
+		si.submit()
+
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import get_payment_entry
+
+		# make payment - fully paid
+		pe = get_payment_entry("Sales Invoice", si.name, bank_account="_Test Bank - _TC")
+		pe.reference_no = "1"
+		pe.reference_date = nowdate()
+		pe.paid_from_account_currency = si.currency
+		pe.paid_to_account_currency = si.currency
+		pe.source_exchange_rate = 1
+		pe.target_exchange_rate = 1
+		pe.paid_amount = si.outstanding_amount
+		pe.cost_center = cca.main_cost_center
+		pe.insert()
+		pe.submit()
+
+		# cancel cost center allocation
+		cca.cancel()
+
+		si.reload()
+		self.assertEqual(si.outstanding_amount, 0)
+
 	def test_sales_invoice_gl_entry_without_perpetual_inventory(self):
 		si = frappe.copy_doc(self.globalTestRecords["Sales Invoice"][1])
 		si.insert()
@@ -1176,6 +1245,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			income_account="Sales - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
 			warehouse="Stores - TCP1",
+			cost_center="Main - TCP1",
 			write_off_account="_Test Write Off - TCP1",
 		)
 
@@ -1183,6 +1253,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			company="_Test Company with perpetual inventory",
 			item_code="_Test FG Item",
 			warehouse="Stores - TCP1",
+			cost_center="Main - TCP1",
 		)
 
 		pos = create_sales_invoice(
@@ -1192,6 +1263,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			warehouse="Stores - TCP1",
 			income_account="Sales - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
+			cost_center="Main - TCP1",
 			do_not_save=True,
 		)
 
@@ -1247,6 +1319,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			income_account="Sales - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
 			warehouse="Stores - TCP1",
+			cost_center="Main - TCP1",
 			write_off_account="_Test Write Off - TCP1",
 		)
 
@@ -1254,6 +1327,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			company="_Test Company with perpetual inventory",
 			item_code="_Test FG Item",
 			warehouse="Stores - TCP1",
+			cost_center="Main - TCP1",
 		)
 
 		pos = create_sales_invoice(
@@ -1263,6 +1337,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			warehouse="Stores - TCP1",
 			income_account="Sales - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
+			cost_center="Main - TCP1",
 			do_not_save=True,
 		)
 
@@ -1285,6 +1360,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			income_account="Sales - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
 			warehouse="Stores - TCP1",
+			cost_center="Main - TCP1",
 			write_off_account="_Test Write Off - TCP1",
 		)
 
@@ -1292,6 +1368,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			company="_Test Company with perpetual inventory",
 			item_code="_Test FG Item",
 			warehouse="Stores - TCP1",
+			cost_center="Main - TCP1",
 		)
 
 		pos = create_sales_invoice(
@@ -1301,6 +1378,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			warehouse="Stores - TCP1",
 			income_account="Sales - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
+			cost_center="Main - TCP1",
 			do_not_save=True,
 		)
 
@@ -1363,6 +1441,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			income_account="Sales - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
 			warehouse="Stores - TCP1",
+			cost_center="Main - TCP1",
 			write_off_account="_Test Write Off - TCP1",
 		)
 
@@ -1370,6 +1449,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			company="_Test Company with perpetual inventory",
 			item_code="_Test FG Item",
 			warehouse="Stores - TCP1",
+			cost_center="Main - TCP1",
 		)
 
 		pos = create_sales_invoice(
@@ -1379,6 +1459,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			warehouse="Stores - TCP1",
 			income_account="Sales - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
+			cost_center="Main - TCP1",
 			do_not_save=True,
 		)
 
@@ -1547,6 +1628,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			company="_Test Company with perpetual inventory",
 			debit_to="Debtors - TCP1",
 			income_account="Sales - TCP1",
+			cost_center="Main - TCP1",
 			do_not_save=True,
 		)
 		si.get("items")[0].item_code = None
@@ -1735,6 +1817,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			warehouse="Stores - TCP1",
 			income_account="Sales - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
+			cost_center="Main - TCP1",
 		)
 
 		actual_qty_1 = get_qty_after_transaction(item_code="_Test Item", warehouse="Stores - TCP1")
@@ -1764,6 +1847,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			warehouse="Stores - TCP1",
 			income_account="Sales - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
+			cost_center="Main - TCP1",
 		)
 
 		actual_qty_2 = get_qty_after_transaction(item_code="_Test Item", warehouse="Stores - TCP1")
@@ -1868,6 +1952,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			debit_to="Debtors - TCP1",
 			income_account="Sales - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
+			cost_center="Main - TCP1",
 		)
 
 		incoming_rate = frappe.db.get_value(
@@ -2018,6 +2103,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 				"qty": 1,
 				"rate": 80,
 				"income_account": "Sales - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 			},
 		)
 		si.submit()
@@ -2300,6 +2386,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 				"rate": 50,
 				"income_account": "Sales - _TC",
 				"expense_account": "Cost of Goods Sold - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 			},
 		)
 		si.append(
@@ -2311,6 +2398,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 				"rate": 50,
 				"income_account": "Sales - _TC",
 				"expense_account": "Cost of Goods Sold - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 			},
 		)
 
@@ -2319,6 +2407,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			{
 				"charge_type": "On Net Total",
 				"account_head": "_Test Account Service Tax - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "Service Tax",
 				"rate": 10,
 			},
@@ -2353,6 +2442,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 					"account_head": "_Test Account Service Tax - _TC",
 					"description": tax,
 					"rate": 14,
+					"cost_center": "_Test Cost Center - _TC",
 					"included_in_print_rate": 1,
 				},
 			)
@@ -2398,6 +2488,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 					"qty": 1,
 					"rate": rate,
 					"income_account": "Sales - _TC",
+					"cost_center": "_Test Cost Center - _TC",
 				},
 			)
 		for tax_account in ["_Test Account VAT - _TC", "_Test Account Service Tax - _TC"]:
@@ -2408,6 +2499,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 					"account_head": tax_account,
 					"description": tax_account,
 					"rate": 9,
+					"cost_center": "_Test Cost Center - _TC",
 					"included_in_print_rate": 1,
 				},
 			)
@@ -2456,6 +2548,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 					"qty": d[1],
 					"rate": d[0],
 					"income_account": "Sales - _TC",
+					"cost_center": "_Test Cost Center - _TC",
 				},
 			)
 		for tax_account in ["_Test Account VAT - _TC", "_Test Account Service Tax - _TC"]:
@@ -2466,10 +2559,12 @@ class TestSalesInvoice(ERPNextTestSuite):
 					"account_head": tax_account,
 					"description": tax_account,
 					"rate": 6,
+					"cost_center": "_Test Cost Center - _TC",
 					"included_in_print_rate": 1,
 				},
 			)
 
+		si.cost_center = "_Test Cost Center 2 - _TC"
 		si.location = "Block 1"
 
 		si.save()
@@ -2513,11 +2608,12 @@ class TestSalesInvoice(ERPNextTestSuite):
 		round_off_gle = frappe.db.get_value(
 			"GL Entry",
 			{"voucher_type": "Sales Invoice", "voucher_no": si.name, "account": "Round Off - _TC"},
-			["location"],
+			["cost_center", "location"],
 			as_dict=1,
 		)
 
 		if round_off_gle:
+			self.assertEqual(round_off_gle.cost_center, "_Test Cost Center 2 - _TC")
 			self.assertEqual(round_off_gle.location, "Block 1")
 
 	def test_sales_invoice_with_shipping_rule(self):
@@ -2577,6 +2673,34 @@ class TestSalesInvoice(ERPNextTestSuite):
 		si_doc = frappe.get_doc("Sales Invoice", si.name)
 		self.assertEqual(si_doc.outstanding_amount, 0)
 
+	def test_sales_invoice_with_cost_center(self):
+		from erpnext.accounts.doctype.cost_center.test_cost_center import create_cost_center
+
+		cost_center = "_Test Cost Center for BS Account - _TC"
+		create_cost_center(cost_center_name="_Test Cost Center for BS Account", company="_Test Company")
+
+		si = create_sales_invoice_against_cost_center(cost_center=cost_center, debit_to="Debtors - _TC")
+		self.assertEqual(si.cost_center, cost_center)
+
+		expected_values = {
+			"Debtors - _TC": {"cost_center": cost_center},
+			"Sales - _TC": {"cost_center": cost_center},
+		}
+
+		gl_entries = frappe.db.sql(
+			"""select account, cost_center, account_currency, debit, credit,
+			debit_in_account_currency, credit_in_account_currency
+			from `tabGL Entry` where voucher_type='Sales Invoice' and voucher_no=%s
+			order by account asc""",
+			si.name,
+			as_dict=1,
+		)
+
+		self.assertTrue(gl_entries)
+
+		for gle in gl_entries:
+			self.assertEqual(expected_values[gle.account]["cost_center"], gle.cost_center)
+
 	def test_sales_invoice_with_project_link(self):
 		from erpnext.projects.doctype.project.test_project import make_project
 
@@ -2607,7 +2731,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 		}
 
 		gl_entries = frappe.db.sql(
-			"""select account, project, account_currency, debit, credit,
+			"""select account, cost_center, project, account_currency, debit, credit,
 			debit_in_account_currency, credit_in_account_currency
 			from `tabGL Entry` where voucher_type='Sales Invoice' and voucher_no=%s
 			order by account asc""",
@@ -2619,6 +2743,29 @@ class TestSalesInvoice(ERPNextTestSuite):
 
 		for gle in gl_entries:
 			self.assertEqual(expected_values[gle.account]["project"], gle.project)
+
+	def test_sales_invoice_without_cost_center(self):
+		cost_center = "_Test Cost Center - _TC"
+		si = create_sales_invoice(debit_to="Debtors - _TC")
+
+		expected_values = {
+			"Debtors - _TC": {"cost_center": None},
+			"Sales - _TC": {"cost_center": cost_center},
+		}
+
+		gl_entries = frappe.db.sql(
+			"""select account, cost_center, account_currency, debit, credit,
+			debit_in_account_currency, credit_in_account_currency
+			from `tabGL Entry` where voucher_type='Sales Invoice' and voucher_no=%s
+			order by account asc""",
+			si.name,
+			as_dict=1,
+		)
+
+		self.assertTrue(gl_entries)
+
+		for gle in gl_entries:
+			self.assertEqual(expected_values[gle.account]["cost_center"], gle.cost_center)
 
 	@ERPNextTestSuite.change_settings("Selling Settings", {"allow_multiple_items": True})
 	def test_on_recurring_keeps_terms_and_shifts_service_dates(self):
@@ -2843,6 +2990,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			warehouse="Stores - WP",
 			income_account="Sales - WP",
 			expense_account="Cost of Goods Sold - WP",
+			cost_center="Main - WP",
 			currency="USD",
 			do_not_save=1,
 		)
@@ -2854,6 +3002,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 		target_doc.items[0].update(
 			{
 				"expense_account": "Cost of Goods Sold - _TC1",
+				"cost_center": "Main - _TC1",
 				"warehouse": "Stores - _TC1",
 			}
 		)
@@ -2885,6 +3034,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			warehouse="Stores - WP",
 			income_account="Sales - WP",
 			expense_account="Cost of Goods Sold - WP",
+			cost_center="Main - WP",
 			currency="USD",
 			do_not_save=1,
 		)
@@ -2896,6 +3046,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 		target_doc.items[0].update(
 			{
 				"expense_account": "Cost of Goods Sold - _TC1",
+				"cost_center": "Main - _TC1",
 				"warehouse": "Stores - _TC1",
 			}
 		)
@@ -2932,6 +3083,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			warehouse="Stores - WP",
 			income_account="Sales - WP",
 			expense_account="Cost of Goods Sold - WP",
+			cost_center="Main - WP",
 			currency="USD",
 			rate=100,
 			do_not_save=1,
@@ -2947,6 +3099,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 		pi.items[0].update(
 			{
 				"expense_account": "Cost of Goods Sold - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 				"warehouse": "Stores - _TC",
 			}
 		)
@@ -2980,6 +3133,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			warehouse="Stores - WP",
 			income_account="Sales - WP",
 			expense_account="Cost of Goods Sold - WP",
+			cost_center="Main - WP",
 			currency="USD",
 			do_not_save=1,
 		)
@@ -3024,6 +3178,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			warehouse="Stores - WP",
 			income_account="Sales - WP",
 			expense_account="Cost of Goods Sold - WP",
+			cost_center="Main - WP",
 			currency="USD",
 			update_stock=1,
 			do_not_save=1,
@@ -3038,6 +3193,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 		self.assertIsNone(target_doc.items[0].warehouse)
 		self.assertEqual(target_doc.items[0].expense_account, "Stock Received But Not Billed - _TC1")
 
+		target_doc.items[0].update({"cost_center": "Main - _TC1"})
 
 		# missing warehouse is validated on save, after mapping
 		self.assertRaises(WarehouseMissingError, target_doc.save)
@@ -3067,6 +3223,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			warehouse="Stores - WP",
 			income_account="Sales - WP",
 			expense_account="Cost of Goods Sold - WP",
+			cost_center="Main - WP",
 			currency="USD",
 			qty=3,
 			do_not_save=1,
@@ -3086,6 +3243,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 				"price_list_rate": 100,
 				"income_account": "Sales - WP",
 				"expense_account": "Cost of Goods Sold - WP",
+				"cost_center": "Main - WP",
 				"conversion_factor": 1,
 			},
 		)
@@ -3098,6 +3256,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			item.update(
 				{
 					"expense_account": "Cost of Goods Sold - _TC1",
+					"cost_center": "Main - _TC1",
 				}
 			)
 
@@ -3149,6 +3308,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			warehouse="Stores - TCP1",
 			income_account="Sales - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
+			cost_center="Main - TCP1",
 			currency="INR",
 			do_not_save=1,
 		)
@@ -3263,6 +3423,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			warehouse="Stores - TCP1",
 			income_account="Sales - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
+			cost_center="Main - TCP1",
 			currency="INR",
 			do_not_save=1,
 		)
@@ -3366,6 +3527,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			{
 				"charge_type": "On Net Total",
 				"account_head": "_Test Account Excise Duty - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "Excise Duty",
 				"rate": 0,
 			},
@@ -3423,7 +3585,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			company="_Test Company",
 		)
 
-		si = create_sales_invoice(do_not_save=1)
+		si = create_sales_invoice(parent_cost_center="Main - _TC", do_not_save=1)
 		si.apply_discount_on = "Grand Total"
 		si.additional_discount_account = additional_discount_account
 		si.additional_discount_percentage = 20
@@ -3432,6 +3594,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			{
 				"charge_type": "On Net Total",
 				"account_head": "_Test Account VAT - _TC",
+				"cost_center": "Main - _TC",
 				"description": "Test",
 				"rate": 10,
 			},
@@ -3561,7 +3724,8 @@ class TestSalesInvoice(ERPNextTestSuite):
 		frappe.db.set_single_value("Accounts Settings", "enable_common_party_accounting", 1)
 
 		# create a sales invoice
-		si = create_sales_invoice(customer=customer)
+		si = create_sales_invoice(customer=customer, parent_cost_center="_Test Cost Center - _TC")
+
 		# check outstanding of sales invoice
 		si.reload()
 		self.assertEqual(si.status, "Paid")
@@ -3631,7 +3795,9 @@ class TestSalesInvoice(ERPNextTestSuite):
 			dim.save()
 
 		# create a sales invoice
-		si = create_sales_invoice(customer=customer, do_not_submit=True)
+		si = create_sales_invoice(
+			customer=customer, parent_cost_center="_Test Cost Center - _TC", do_not_submit=True
+		)
 		si.department = "All Departments"
 		si.save().submit()
 
@@ -3718,7 +3884,8 @@ class TestSalesInvoice(ERPNextTestSuite):
 		customer = make_customer(customer="_Test Common Party Return SI")
 		supplier = create_supplier(supplier_name="_Test Common Party Return SI").name
 		party_link = create_party_link("Supplier", supplier, customer)
-		si = create_sales_invoice(customer=customer)
+
+		si = create_sales_invoice(customer=customer, parent_cost_center="_Test Cost Center - _TC")
 
 		return_si = make_return_doc(si.doctype, si.name)
 		return_si.submit()
@@ -4051,6 +4218,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 				{
 					"charge_type": "On Net Total",
 					"account_head": account_name,
+					"cost_center": "Main - _TC",
 					"description": "Commission",
 					"rate": 5,
 				},
@@ -4167,6 +4335,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 				"charge_type": "Actual",
 				"account_head": "Creditors - _TC",
 				"description": "Test",
+				"cost_center": "Main - _TC",
 				"tax_amount": 10,
 				"total": 10,
 				"dont_recompute_tax": 0,
@@ -4623,6 +4792,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			{
 				"charge_type": "On Net Total",
 				"account_head": "_Test Account Service Tax - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "Testing...",
 				"rate": 5,
 				"included_in_print_rate": True,
@@ -5281,6 +5451,33 @@ class TestSalesInvoice(ERPNextTestSuite):
 
 		self.assertEqual(stock_ledger_entry.incoming_rate, 0.0)
 
+	def test_inter_company_transaction_cost_center(self):
+		si = create_sales_invoice(
+			company="Wind Power LLC",
+			customer="_Test Internal Customer",
+			debit_to="Debtors - WP",
+			warehouse="Stores - WP",
+			income_account="Sales - WP",
+			expense_account="Cost of Goods Sold - WP",
+			parent_cost_center="Main - WP",
+			cost_center="Main - WP",
+			currency="USD",
+			do_not_save=1,
+		)
+
+		si.selling_price_list = "_Test Price List Rest of the World"
+		si.submit()
+
+		cost_center = frappe.db.get_value("Company", "_Test Company 1", "cost_center")
+		frappe.db.set_value("Company", "_Test Company 1", "cost_center", None)
+
+		target_doc = make_inter_company_transaction("Sales Invoice", si.name)
+
+		self.assertEqual(target_doc.cost_center, None)
+		self.assertEqual(target_doc.items[0].cost_center, None)
+
+		frappe.db.set_value("Company", "_Test Company 1", "cost_center", cost_center)
+
 	@ERPNextTestSuite.change_settings("Stock Settings", {"enable_stock_reservation": 1})
 	def test_update_stock_restricted_to_reserved_produced_serial_nos(self):
 		from erpnext.selling.doctype.sales_order.sales_order import (
@@ -5317,6 +5514,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			warehouse="Stores - WP",
 			income_account="Sales - WP",
 			expense_account="Cost of Goods Sold - WP",
+			cost_center="Main - WP",
 			currency="USD",
 			qty=20,
 			do_not_save=1,
@@ -5324,7 +5522,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 		si.selling_price_list = "_Test Price List Rest of the World"
 		si.submit()
 
-		accounts = {"expense_account": "Cost of Goods Sold - _TC1"}
+		accounts = {"expense_account": "Cost of Goods Sold - _TC1", "cost_center": "Main - _TC1"}
 		pi = make_inter_company_transaction("Sales Invoice", si.name)
 		pi.items[0].update({"qty": 1, "uom": "_Test UOM 1", "conversion_factor": 10, **accounts})
 		pi.submit()
@@ -5350,6 +5548,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 			warehouse="Stores - WP",
 			income_account="Sales - WP",
 			expense_account="Cost of Goods Sold - WP",
+			cost_center="Main - WP",
 			currency="USD",
 			qty=2,
 			do_not_save=1,
@@ -5361,7 +5560,7 @@ class TestSalesInvoice(ERPNextTestSuite):
 		for _ in range(2):
 			pi = make_inter_company_transaction("Sales Invoice", si.name)
 			pi.items[0].update(
-				{"qty": 1, "expense_account": "Cost of Goods Sold - _TC1"}
+				{"qty": 1, "expense_account": "Cost of Goods Sold - _TC1", "cost_center": "Main - _TC1"}
 			)
 			pi.submit()
 			purchase_invoices.append(pi.name)
@@ -5434,6 +5633,7 @@ def create_sales_invoice(**args):
 	si.currency = args.currency or "INR"
 	si.conversion_rate = args.conversion_rate or 1
 	si.naming_series = args.naming_series or "T-SINV-"
+	si.cost_center = args.parent_cost_center
 	si.is_internal_customer = args.is_internal_customer or 0
 	if args.is_created_using_pos:
 		si.is_pos = 1
@@ -5489,6 +5689,7 @@ def create_sales_invoice(**args):
 			"discount_account": args.discount_account or None,
 			"discount_amount": args.discount_amount or 0,
 			"asset": args.asset or None,
+			"cost_center": args.cost_center or "_Test Cost Center - _TC",
 			"conversion_factor": args.get("conversion_factor", 1),
 			"incoming_rate": args.incoming_rate or 0,
 			"serial_and_batch_bundle": bundle_id,
@@ -5505,6 +5706,49 @@ def create_sales_invoice(**args):
 			si.payment_schedule = []
 
 		si.load_from_db()
+	else:
+		si.payment_schedule = []
+
+	return si
+
+
+def create_sales_invoice_against_cost_center(**args):
+	si = frappe.new_doc("Sales Invoice")
+	args = frappe._dict(args)
+	if args.posting_date:
+		si.set_posting_time = 1
+	si.posting_date = args.posting_date or nowdate()
+
+	si.company = args.company or "_Test Company"
+	si.cost_center = args.cost_center or "_Test Cost Center - _TC"
+	si.customer = args.customer or "_Test Customer"
+	si.debit_to = args.debit_to or "Debtors - _TC"
+	si.update_stock = args.update_stock
+	si.is_pos = args.is_pos
+	si.is_return = args.is_return
+	si.return_against = args.return_against
+	si.currency = args.currency or "INR"
+	si.conversion_rate = args.conversion_rate or 1
+
+	si.append(
+		"items",
+		{
+			"item_code": args.item or args.item_code or "_Test Item",
+			"warehouse": args.warehouse or "_Test Warehouse - _TC",
+			"qty": args.qty or 1,
+			"rate": args.rate or 100,
+			"income_account": "Sales - _TC",
+			"expense_account": "Cost of Goods Sold - _TC",
+			"cost_center": args.cost_center or "_Test Cost Center - _TC",
+		},
+	)
+
+	if not args.do_not_save:
+		si.insert()
+		if not args.do_not_submit:
+			si.submit()
+		else:
+			si.payment_schedule = []
 	else:
 		si.payment_schedule = []
 
@@ -5535,6 +5779,7 @@ def get_taxes_and_charges():
 		{
 			"account_head": "_Test Account Excise Duty - TCP1",
 			"charge_type": "On Net Total",
+			"cost_center": "Main - TCP1",
 			"description": "Excise Duty",
 			"doctype": "Sales Taxes and Charges",
 			"idx": 1,
@@ -5545,6 +5790,7 @@ def get_taxes_and_charges():
 		{
 			"account_head": "_Test Account Education Cess - TCP1",
 			"charge_type": "On Previous Row Amount",
+			"cost_center": "Main - TCP1",
 			"description": "Education Cess",
 			"doctype": "Sales Taxes and Charges",
 			"idx": 2,
@@ -5644,6 +5890,7 @@ def add_taxes(doc):
 		{
 			"account_head": "_Test Account Excise Duty - TCP1",
 			"charge_type": "On Net Total",
+			"cost_center": "Main - TCP1",
 			"description": "Excise Duty",
 			"rate": 12,
 		},

@@ -59,6 +59,7 @@
   "default_income_account",
   "default_discount_account",
   "payment_terms",
+  "cost_center",
   "default_finance_book",
   "exchange_gain__loss_section",
   "exchange_gain_loss_account",
@@ -66,6 +67,7 @@
   "unrealized_exchange_gain_loss_account",
   "round_off_section",
   "round_off_account",
+  "round_off_cost_center",
   "column_break_jqfo",
   "round_off_for_opening",
   "deferred_accounting_section",
@@ -91,6 +93,7 @@
   "series_for_depreciation_entry",
   "column_break_40",
   "disposal_account",
+  "depreciation_cost_center",
   "capital_work_in_progress_account",
   "asset_received_but_not_billed",
   "accounts_closing_tab",
@@ -368,6 +371,15 @@
   },
   {
    "depends_on": "eval:!doc.__islocal",
+   "fieldname": "round_off_cost_center",
+   "fieldtype": "Link",
+   "ignore_user_permissions": 1,
+   "label": "Round Off Cost Center",
+   "no_copy": 1,
+   "options": "Cost Center"
+  },
+  {
+   "depends_on": "eval:!doc.__islocal",
    "fieldname": "write_off_account",
    "fieldtype": "Link",
    "ignore_user_permissions": 1,
@@ -452,6 +464,15 @@
    "label": "Default Deferred Expense Account",
    "no_copy": 1,
    "options": "Account"
+  },
+  {
+   "depends_on": "eval:!doc.__islocal",
+   "fieldname": "cost_center",
+   "fieldtype": "Link",
+   "ignore_user_permissions": 1,
+   "label": "Default Cost Center",
+   "no_copy": 1,
+   "options": "Cost Center"
   },
   {
    "depends_on": "eval:!doc.__islocal",
@@ -542,6 +563,15 @@
    "label": "Gain/Loss Account on Asset Disposal",
    "no_copy": 1,
    "options": "Account"
+  },
+  {
+   "depends_on": "eval:!doc.__islocal",
+   "fieldname": "depreciation_cost_center",
+   "fieldtype": "Link",
+   "ignore_user_permissions": 1,
+   "label": "Asset Depreciation Cost Center",
+   "no_copy": 1,
+   "options": "Cost Center"
   },
   {
    "depends_on": "eval:!doc.__islocal",
@@ -892,10 +922,10 @@
    "options": "Warehouse"
   },
   {
+   "default": "7",
    "fieldname": "customer_demo_return_lookahead_days",
    "fieldtype": "Int",
    "label": "Asset Return Look-ahead (Days)",
-   "default": "7",
    "non_negative": 1,
    "reqd": 1
   },
@@ -904,12 +934,12 @@
    "fieldtype": "Column Break"
   },
   {
+   "default": "0",
    "fieldname": "asset_capitalization_threshold",
    "fieldtype": "Currency",
    "label": "Asset Capitalization Threshold",
-   "options": "default_currency",
-   "default": "0",
    "non_negative": 1,
+   "options": "default_currency",
    "reqd": 1
   },
   {
@@ -1077,7 +1107,7 @@
  "image_field": "company_logo",
  "is_tree": 1,
  "links": [],
- "modified": "2026-10-18 12:00:00",
+ "modified": "2026-10-21 05:30:00.000000",
  "modified_by": "Administrator",
  "module": "Setup",
  "name": "Company",

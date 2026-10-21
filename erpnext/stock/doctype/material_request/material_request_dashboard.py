@@ -9,6 +9,7 @@ def get_data():
 		"internal_links": {
 			"Sales Order": ["items", "sales_order"],
 			"Project": ["items", "project"],
+			"Cost Center": ["items", "cost_center"],
 		},
 		"transactions": [
 			{
@@ -24,6 +25,6 @@ def get_data():
 			{"label": _("Stock"), "items": ["Stock Entry", "Purchase Receipt", "Pick List"]},
 			{"label": _("Manufacturing"), "items": ["Work Order"]},
 			{"label": _("Internal Transfer"), "items": ["Sales Order"]},
-			{"label": _("Accounting Dimensions"), "items": ["Project"]},
+			{"label": _("Accounting Dimensions"), "items": ["Project", "Cost Center"]},
 		],
 	}

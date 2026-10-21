@@ -462,6 +462,7 @@ def create_asset_repair(**args):
 	if args.submit:
 		asset_repair.repair_status = "Completed"
 		asset_repair.completion_date = add_days(args.failure_date, 1)
+		asset_repair.cost_center = frappe.db.get_value("Company", asset.company, "cost_center")
 
 		if args.stock_consumption:
 			stock_entry = frappe.get_doc(
@@ -474,6 +475,7 @@ def create_asset_repair(**args):
 					"item_code": asset_repair.stock_items[0].item_code,
 					"qty": asset_repair.stock_items[0].consumed_quantity,
 					"basic_rate": args.rate if args.get("rate") is not None else 100,
+					"cost_center": asset_repair.cost_center,
 				},
 			)
 			stock_entry.submit()
@@ -486,6 +488,7 @@ def create_asset_repair(**args):
 				company=asset.company,
 				item=args.item or "_Test Item",
 				expense_account=args.pi_expense_account1 or "Administrative Expenses - _TC",
+				cost_center=asset_repair.cost_center,
 				warehouse=args.warehouse or create_warehouse("Test Warehouse", company=asset.company),
 				rate="50",
 			)
@@ -493,6 +496,7 @@ def create_asset_repair(**args):
 				company=asset.company,
 				item=args.item or "_Test Item",
 				expense_account=args.pi_expense_account2 or "Legal Expenses - _TC",
+				cost_center=asset_repair.cost_center,
 				warehouse=args.warehouse or create_warehouse("Test Warehouse", company=asset.company),
 				rate="60",
 			)

@@ -171,6 +171,7 @@ class BootStrapTestData:
 		self.make_customer_group()
 		self.make_customer()
 		self.make_user()
+		self.make_cost_center()
 		self.make_warehouse()
 		self.make_uom()
 		self.make_item_tax_template()
@@ -957,6 +958,39 @@ class BootStrapTestData:
 		]
 		self.make_records(["supplier_group_name"], records)
 
+	def make_cost_center(self):
+		records = [
+			{
+				"company": "_Test Company",
+				"cost_center_name": "_Test Cost Center",
+				"doctype": "Cost Center",
+				"is_group": 0,
+				"parent_cost_center": "_Test Company - _TC",
+			},
+			{
+				"company": "_Test Company",
+				"cost_center_name": "_Test Cost Center 2",
+				"doctype": "Cost Center",
+				"is_group": 0,
+				"parent_cost_center": "_Test Company - _TC",
+			},
+			{
+				"company": "_Test Company",
+				"cost_center_name": "_Test Write Off Cost Center",
+				"doctype": "Cost Center",
+				"is_group": 0,
+				"parent_cost_center": "_Test Company - _TC",
+			},
+			{
+				"company": "_Test Company",
+				"cost_center_name": "Sub",
+				"doctype": "Cost Center",
+				"is_group": 0,
+				"parent_cost_center": "_Test Company - _TC",
+			},
+		]
+		self.make_records(["cost_center_name", "company"], records)
+
 	def make_location(self):
 		records = [
 			{"doctype": "Location", "location_name": "Test Location"},
@@ -1207,6 +1241,8 @@ class BootStrapTestData:
 				"item_group_defaults": [
 					{
 						"company": "_Test Company",
+						"buying_cost_center": "_Test Cost Center 2 - _TC",
+						"selling_cost_center": "_Test Cost Center 2 - _TC",
 						"default_warehouse": "_Test Warehouse - _TC",
 					}
 				],
@@ -1330,6 +1366,8 @@ class BootStrapTestData:
 						"company": "_Test Company",
 						"default_warehouse": "_Test Warehouse - _TC",
 						"expense_account": "_Test Account Cost for Goods Sold - _TC",
+						"buying_cost_center": "_Test Cost Center - _TC",
+						"selling_cost_center": "_Test Cost Center - _TC",
 						"income_account": "Sales - _TC",
 					}
 				],
@@ -1366,6 +1404,8 @@ class BootStrapTestData:
 						"company": "_Test Company",
 						"default_warehouse": "_Test Warehouse - _TC",
 						"expense_account": "_Test Account Cost for Goods Sold - _TC",
+						"buying_cost_center": "_Test Cost Center - _TC",
+						"selling_cost_center": "_Test Cost Center - _TC",
 						"income_account": "Sales - _TC",
 					}
 				],
@@ -1387,6 +1427,8 @@ class BootStrapTestData:
 						"company": "_Test Company",
 						"default_warehouse": "_Test Warehouse - _TC",
 						"expense_account": "_Test Account Cost for Goods Sold - _TC",
+						"buying_cost_center": "_Test Cost Center - _TC",
+						"selling_cost_center": "_Test Cost Center - _TC",
 						"income_account": "Sales - _TC",
 					}
 				],
@@ -1415,6 +1457,8 @@ class BootStrapTestData:
 						"company": "_Test Company",
 						"default_warehouse": "_Test Warehouse - _TC",
 						"expense_account": "_Test Account Cost for Goods Sold - _TC",
+						"buying_cost_center": "_Test Cost Center - _TC",
+						"selling_cost_center": "_Test Cost Center - _TC",
 						"income_account": "Sales - _TC",
 					}
 				],
@@ -1436,6 +1480,8 @@ class BootStrapTestData:
 						"company": "_Test Company",
 						"default_warehouse": "_Test Warehouse - _TC",
 						"expense_account": "_Test Account Cost for Goods Sold - _TC",
+						"buying_cost_center": "_Test Cost Center - _TC",
+						"selling_cost_center": "_Test Cost Center - _TC",
 						"income_account": "Sales - _TC",
 					}
 				],
@@ -1457,6 +1503,8 @@ class BootStrapTestData:
 						"company": "_Test Company",
 						"default_warehouse": "_Test Warehouse - _TC",
 						"expense_account": "_Test Account Cost for Goods Sold - _TC",
+						"buying_cost_center": "_Test Cost Center - _TC",
+						"selling_cost_center": "_Test Cost Center - _TC",
 						"income_account": "Sales - _TC",
 					}
 				],
@@ -1478,6 +1526,8 @@ class BootStrapTestData:
 						"company": "_Test Company",
 						"default_warehouse": "_Test Warehouse - _TC",
 						"expense_account": "_Test Account Cost for Goods Sold - _TC",
+						"buying_cost_center": "_Test Cost Center - _TC",
+						"selling_cost_center": "_Test Cost Center - _TC",
 						"income_account": "Sales - _TC",
 					}
 				],
@@ -1499,6 +1549,8 @@ class BootStrapTestData:
 						"company": "_Test Company",
 						"default_warehouse": "_Test Warehouse - _TC",
 						"expense_account": "_Test Account Cost for Goods Sold - _TC",
+						"buying_cost_center": "_Test Cost Center - _TC",
+						"selling_cost_center": "_Test Cost Center - _TC",
 						"income_account": "Sales - _TC",
 					}
 				],
@@ -1521,6 +1573,8 @@ class BootStrapTestData:
 						"company": "_Test Company",
 						"default_warehouse": "_Test Warehouse - _TC",
 						"expense_account": "_Test Account Cost for Goods Sold - _TC",
+						"buying_cost_center": "_Test Cost Center - _TC",
+						"selling_cost_center": "_Test Cost Center - _TC",
 						"income_account": "Sales - _TC",
 					}
 				],
@@ -1542,6 +1596,8 @@ class BootStrapTestData:
 						"company": "_Test Company",
 						"default_warehouse": "_Test Warehouse - _TC",
 						"expense_account": "_Test Account Cost for Goods Sold - _TC",
+						"buying_cost_center": "_Test Cost Center - _TC",
+						"selling_cost_center": "_Test Cost Center - _TC",
 						"income_account": "Sales - _TC",
 					}
 				],
@@ -1563,6 +1619,8 @@ class BootStrapTestData:
 						"company": "_Test Company",
 						"default_warehouse": "_Test Warehouse - _TC",
 						"expense_account": "_Test Account Cost for Goods Sold - _TC",
+						"buying_cost_center": "_Test Cost Center - _TC",
+						"selling_cost_center": "_Test Cost Center - _TC",
 						"income_account": "Sales - _TC",
 					}
 				],
@@ -1585,6 +1643,8 @@ class BootStrapTestData:
 						"company": "_Test Company",
 						"default_warehouse": "_Test Warehouse - _TC",
 						"expense_account": "_Test Account Cost for Goods Sold - _TC",
+						"buying_cost_center": "_Test Cost Center - _TC",
+						"selling_cost_center": "_Test Cost Center - _TC",
 						"income_account": "Sales - _TC",
 					}
 				],
@@ -1616,6 +1676,8 @@ class BootStrapTestData:
 						"company": "_Test Company",
 						"default_warehouse": "_Test Warehouse Group-C1 - _TC",
 						"expense_account": "_Test Account Cost for Goods Sold - _TC",
+						"buying_cost_center": "_Test Cost Center - _TC",
+						"selling_cost_center": "_Test Cost Center - _TC",
 						"income_account": "Sales - _TC",
 					}
 				],
@@ -1647,6 +1709,8 @@ class BootStrapTestData:
 						"company": "_Test Company",
 						"default_warehouse": "_Test Warehouse - _TC",
 						"expense_account": "_Test Account Cost for Goods Sold - _TC",
+						"buying_cost_center": "_Test Cost Center - _TC",
+						"selling_cost_center": "_Test Cost Center - _TC",
 						"income_account": "Sales - _TC",
 					}
 				],
@@ -1681,6 +1745,8 @@ class BootStrapTestData:
 						"company": "_Test Company",
 						"default_warehouse": "_Test Warehouse - _TC",
 						"expense_account": "_Test Account Cost for Goods Sold - _TC",
+						"buying_cost_center": "_Test Cost Center - _TC",
+						"selling_cost_center": "_Test Cost Center - _TC",
 						"income_account": "Sales - _TC",
 					}
 				],
@@ -1702,6 +1768,8 @@ class BootStrapTestData:
 						"company": "_Test Company",
 						"default_warehouse": "_Test Warehouse - _TC",
 						"expense_account": "_Test Account Cost for Goods Sold - _TC",
+						"buying_cost_center": "_Test Cost Center - _TC",
+						"selling_cost_center": "_Test Cost Center - _TC",
 						"income_account": "Sales - _TC",
 					}
 				],
@@ -1723,6 +1791,8 @@ class BootStrapTestData:
 						"company": "_Test Company",
 						"default_warehouse": "_Test Warehouse - _TC",
 						"expense_account": "_Test Account Cost for Goods Sold - _TC",
+						"buying_cost_center": "_Test Cost Center - _TC",
+						"selling_cost_center": "_Test Cost Center - _TC",
 						"income_account": "Sales - _TC",
 					}
 				],
@@ -2086,6 +2156,7 @@ class BootStrapTestData:
 						"charge_type": "On Net Total",
 						"description": "VAT",
 						"doctype": "Sales Taxes and Charges",
+						"cost_center": "Main - _TC",
 						"parentfield": "taxes",
 						"rate": 6,
 					},
@@ -2094,6 +2165,7 @@ class BootStrapTestData:
 						"charge_type": "On Net Total",
 						"description": "Service Tax",
 						"doctype": "Sales Taxes and Charges",
+						"cost_center": "Main - _TC",
 						"parentfield": "taxes",
 						"rate": 6.36,
 					},
@@ -2107,6 +2179,7 @@ class BootStrapTestData:
 					{
 						"account_head": "_Test Account Shipping Charges - _TC",
 						"charge_type": "Actual",
+						"cost_center": "_Test Cost Center - _TC",
 						"description": "Shipping Charges",
 						"doctype": "Sales Taxes and Charges",
 						"parentfield": "taxes",
@@ -2115,6 +2188,7 @@ class BootStrapTestData:
 					{
 						"account_head": "_Test Account Customs Duty - _TC",
 						"charge_type": "On Net Total",
+						"cost_center": "_Test Cost Center - _TC",
 						"description": "Customs Duty",
 						"doctype": "Sales Taxes and Charges",
 						"parentfield": "taxes",
@@ -2123,6 +2197,7 @@ class BootStrapTestData:
 					{
 						"account_head": "_Test Account Excise Duty - _TC",
 						"charge_type": "On Net Total",
+						"cost_center": "_Test Cost Center - _TC",
 						"description": "Excise Duty",
 						"doctype": "Sales Taxes and Charges",
 						"parentfield": "taxes",
@@ -2131,6 +2206,7 @@ class BootStrapTestData:
 					{
 						"account_head": "_Test Account Education Cess - _TC",
 						"charge_type": "On Previous Row Amount",
+						"cost_center": "_Test Cost Center - _TC",
 						"description": "Education Cess",
 						"doctype": "Sales Taxes and Charges",
 						"parentfield": "taxes",
@@ -2140,6 +2216,7 @@ class BootStrapTestData:
 					{
 						"account_head": "_Test Account S&H Education Cess - _TC",
 						"charge_type": "On Previous Row Amount",
+						"cost_center": "_Test Cost Center - _TC",
 						"description": "S&H Education Cess",
 						"doctype": "Sales Taxes and Charges",
 						"parentfield": "taxes",
@@ -2149,6 +2226,7 @@ class BootStrapTestData:
 					{
 						"account_head": "_Test Account CST - _TC",
 						"charge_type": "On Previous Row Total",
+						"cost_center": "_Test Cost Center - _TC",
 						"description": "CST",
 						"doctype": "Sales Taxes and Charges",
 						"parentfield": "taxes",
@@ -2158,6 +2236,7 @@ class BootStrapTestData:
 					{
 						"account_head": "_Test Account VAT - _TC",
 						"charge_type": "On Net Total",
+						"cost_center": "_Test Cost Center - _TC",
 						"description": "VAT",
 						"doctype": "Sales Taxes and Charges",
 						"parentfield": "taxes",
@@ -2166,6 +2245,7 @@ class BootStrapTestData:
 					{
 						"account_head": "_Test Account Discount - _TC",
 						"charge_type": "On Previous Row Total",
+						"cost_center": "_Test Cost Center - _TC",
 						"description": "Discount",
 						"doctype": "Sales Taxes and Charges",
 						"parentfield": "taxes",
@@ -2184,6 +2264,7 @@ class BootStrapTestData:
 						"charge_type": "On Net Total",
 						"description": "VAT",
 						"doctype": "Sales Taxes and Charges",
+						"cost_center": "Main - _TC",
 						"parentfield": "taxes",
 						"rate": 12,
 					},
@@ -2192,6 +2273,7 @@ class BootStrapTestData:
 						"charge_type": "On Net Total",
 						"description": "Service Tax",
 						"doctype": "Sales Taxes and Charges",
+						"cost_center": "Main - _TC",
 						"parentfield": "taxes",
 						"rate": 4,
 					},
@@ -2207,6 +2289,7 @@ class BootStrapTestData:
 						"charge_type": "On Net Total",
 						"description": "VAT",
 						"doctype": "Sales Taxes and Charges",
+						"cost_center": "Main - _TC",
 						"parentfield": "taxes",
 						"rate": 12,
 					},
@@ -2215,6 +2298,7 @@ class BootStrapTestData:
 						"charge_type": "On Net Total",
 						"description": "Service Tax",
 						"doctype": "Sales Taxes and Charges",
+						"cost_center": "Main - _TC",
 						"parentfield": "taxes",
 						"rate": 4,
 					},
@@ -2230,6 +2314,7 @@ class BootStrapTestData:
 						"charge_type": "On Net Total",
 						"description": "VAT",
 						"doctype": "Sales Taxes and Charges",
+						"cost_center": "Main - _TC",
 						"parentfield": "taxes",
 						"rate": 12,
 					},
@@ -2238,6 +2323,7 @@ class BootStrapTestData:
 						"charge_type": "On Net Total",
 						"description": "Service Tax",
 						"doctype": "Sales Taxes and Charges",
+						"cost_center": "Main - _TC",
 						"parentfield": "taxes",
 						"rate": 4,
 					},
@@ -2252,6 +2338,7 @@ class BootStrapTestData:
 					{
 						"charge_type": "Actual",
 						"account_head": "Sales Expenses - _TC",
+						"cost_center": "Main - _TC",
 						"description": "Test Shopping cart taxes with Tax Rule",
 						"tax_amount": 1000,
 					}
@@ -2265,6 +2352,7 @@ class BootStrapTestData:
 					{
 						"charge_type": "Actual",
 						"account_head": "Sales Expenses - _TC",
+						"cost_center": "Main - _TC",
 						"description": "Test Shopping cart taxes with Tax Rule",
 						"tax_amount": 200,
 					}
@@ -2285,6 +2373,7 @@ class BootStrapTestData:
 						"add_deduct_tax": "Add",
 						"category": "Total",
 						"charge_type": "On Net Total",
+						"cost_center": "Main - _TC",
 						"description": "VAT",
 						"doctype": "Purchase Taxes and Charges",
 						"parentfield": "taxes",
@@ -2390,6 +2479,7 @@ class BootStrapTestData:
 				"conversion_factor": 1,
 				"expiry_duration": 10,
 				"company": "_Test Company",
+				"cost_center": "Main - _TC",
 				"expense_account": "Loyalty - _TC",
 				"collection_rules": [{"tier_name": "Bronce", "collection_factor": 1000, "min_spent": 0}],
 			},
@@ -2402,6 +2492,7 @@ class BootStrapTestData:
 				"conversion_factor": 1,
 				"expiry_duration": 10,
 				"company": "_Test Company",
+				"cost_center": "Main - _TC",
 				"expense_account": "Loyalty - _TC",
 				"collection_rules": [
 					{"tier_name": "Bronze", "collection_factor": 1000, "min_spent": 0},
@@ -2542,7 +2633,8 @@ class BootStrapTestData:
 						"company": "_Test Company",
 						"expense_account": "_Test Account Cost for Goods Sold - _TC",
 						"income_account": "_Test Account Sales - _TC",
-
+						"buying_cost_center": "_Test Cost Center - _TC",
+						"selling_cost_center": "_Test Cost Center - _TC",
 					}
 				],
 			},
@@ -2559,6 +2651,7 @@ class BootStrapTestData:
 				"dunning_fee": 0,
 				"rate_of_interest": 0,
 				"income_account": "Sales - _TC",
+				"cost_center": "Main - _TC",
 				"dunning_letter_text": [
 					{
 						"language": "en",
@@ -2575,6 +2668,7 @@ class BootStrapTestData:
 				"dunning_fee": 10,
 				"rate_of_interest": 10,
 				"income_account": "Sales - _TC",
+				"cost_center": "Main - _TC",
 				"dunning_letter_text": [
 					{
 						"language": "en",

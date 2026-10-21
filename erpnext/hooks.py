@@ -162,6 +162,7 @@ on_session_creation = "erpnext.portal.utils.create_customer_or_supplier"
 
 treeviews = [
 	"Account",
+	"Cost Center",
 	"Warehouse",
 	"Item Group",
 	"Customer Group",

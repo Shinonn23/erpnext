@@ -36,6 +36,7 @@ class TestUnreconcilePayment(ERPNextTestSuite, AccountsTestMixin):
 		self.supplier = "_Test Supplier"
 		self.item = "_Test Item"
 		self.debit_to = "Debtors - _TC"
+		self.cost_center = "Main - _TC"
 		self.cash = "Cash - _TC"
 		self.debtors_usd = "_Test Receivable USD - _TC"
 
@@ -46,7 +47,8 @@ class TestUnreconcilePayment(ERPNextTestSuite, AccountsTestMixin):
 			customer=self.customer,
 			debit_to=self.debit_to,
 			posting_date=today(),
-
+			parent_cost_center=self.cost_center,
+			cost_center=self.cost_center,
 			rate=100,
 			do_not_submit=True,
 		)

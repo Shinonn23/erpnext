@@ -26,7 +26,7 @@ from erpnext.accounts.doctype.sales_invoice.sales_invoice import (
 )
 from erpnext.accounts.doctype.tax_withholding_entry.tax_withholding_entry import PurchaseTaxWithholding
 from erpnext.accounts.general_ledger import (
-	get_round_off_account,
+	get_round_off_account_and_cost_center,
 	make_gl_entries,
 	make_reverse_gl_entries,
 	merge_similar_entries,
@@ -114,6 +114,7 @@ class PurchaseInvoice(BuyingController):
 		contact_mobile: DF.SmallText | None
 		contact_person: DF.Link | None
 		conversion_rate: DF.Float
+		cost_center: DF.Link | None
 		credit_to: DF.Link
 		currency: DF.Link | None
 		department: DF.Link | None
@@ -220,9 +221,11 @@ class PurchaseInvoice(BuyingController):
 		update_billed_amount_in_purchase_receipt: DF.Check
 		update_outstanding_for_self: DF.Check
 		update_stock: DF.Check
+		use_company_roundoff_cost_center: DF.Check
 		use_transaction_date_exchange_rate: DF.Check
 		write_off_account: DF.Link | None
 		write_off_amount: DF.Currency
+		write_off_cost_center: DF.Link | None
 	# end: auto-generated types
 
 	def __init__(self, *args, **kwargs):
@@ -295,6 +298,7 @@ class PurchaseInvoice(BuyingController):
 		self.validate_expense_account()
 		self.set_against_expense_account()
 		self.validate_write_off_account()
+		self.validate_write_off_cost_center()
 		self.validate_multiple_billing("Purchase Receipt", "pr_detail", "amount")
 		self.set_status()
 		self.validate_purchase_receipt_if_update_stock()
@@ -719,6 +723,17 @@ class PurchaseInvoice(BuyingController):
 		if not doc or doc.report_type != "Profit and Loss" or doc.is_group or doc.company != self.company:
 			throw(_("Please enter a valid Write Off Account"))
 
+	def validate_write_off_cost_center(self):
+		if not self.write_off_cost_center:
+			return
+
+		doc = frappe.db.get_value(
+			"Cost Center", self.write_off_cost_center, ["is_group", "company"], as_dict=True
+		)
+
+		if not doc or doc.is_group or doc.company != self.company:
+			throw(_("Please enter a valid Write Off Cost Center"))
+
 	def check_prev_docstatus(self):
 		for d in self.get("items"):
 			if d.purchase_order:
@@ -805,6 +820,7 @@ class PurchaseInvoice(BuyingController):
 
 	def validate_for_repost(self):
 		self.validate_write_off_account()
+		self.validate_write_off_cost_center()
 		self.validate_expense_account()
 		validate_docs_for_voucher_types(["Purchase Invoice"])
 		validate_docs_for_deferred_accounting([], [self.name])
@@ -1007,6 +1023,7 @@ class PurchaseInvoice(BuyingController):
 			"against_voucher": against_voucher,
 			"against_voucher_type": self.doctype,
 			"project": self.project,
+			"cost_center": self.cost_center,
 			"_skip_merge": skip_merge,
 		}
 
@@ -1088,6 +1105,7 @@ class PurchaseInvoice(BuyingController):
 								{
 									"account": _inv_dict["account"],
 									"against": _inv_dict_from_warehouse["account"],
+									"cost_center": item.cost_center,
 									"project": item.project or self.project,
 									"remarks": self.get("remarks") or _("Accounting Entry for Stock"),
 									"debit": warehouse_debit_amount,
@@ -1108,6 +1126,7 @@ class PurchaseInvoice(BuyingController):
 								{
 									"account": _inv_dict_from_warehouse["account"],
 									"against": _inv_dict["account"],
+									"cost_center": item.cost_center,
 									"project": item.project or self.project,
 									"remarks": self.get("remarks") or _("Accounting Entry for Stock"),
 									"debit": -1 * flt(credit_amount, item.precision("base_net_amount")),
@@ -1128,6 +1147,7 @@ class PurchaseInvoice(BuyingController):
 										"debit": flt(item.base_net_amount, item.precision("base_net_amount")),
 										"debit_in_transaction_currency": item.net_amount,
 										"remarks": self.get("remarks") or _("Accounting Entry for Stock"),
+										"cost_center": item.cost_center,
 										"project": item.project,
 									},
 									account_currency,
@@ -1148,6 +1168,7 @@ class PurchaseInvoice(BuyingController):
 											item.precision("net_amount"),
 										),
 										"remarks": self.get("remarks") or _("Accounting Entry for Stock"),
+										"cost_center": item.cost_center,
 										"project": item.project or self.project,
 									},
 									account_currency,
@@ -1174,6 +1195,7 @@ class PurchaseInvoice(BuyingController):
 								{
 									"account": entry.expense_account,
 									"against": item.expense_account,
+									"cost_center": entry.dimensions.cost_center or item.cost_center,
 									"remarks": self.get("remarks") or _("Accounting Entry for Stock"),
 									"credit": flt(entry.base_amount),
 									"credit_in_account_currency": flt(entry.amount),
@@ -1201,6 +1223,7 @@ class PurchaseInvoice(BuyingController):
 								{
 									"account": supplier_inventory_account,
 									"against": item.expense_account,
+									"cost_center": item.cost_center,
 									"project": item.project or self.project,
 									"remarks": self.get("remarks") or _("Accounting Entry for Stock"),
 									"credit": flt(item.rm_supp_cost),
@@ -1232,6 +1255,7 @@ class PurchaseInvoice(BuyingController):
 									"against": self.supplier,
 									"debit": base_amount,
 									"debit_in_transaction_currency": amount,
+									"cost_center": item.cost_center,
 									"project": item.project or self.project,
 								},
 								account_currency,
@@ -1261,6 +1285,7 @@ class PurchaseInvoice(BuyingController):
 											"account": expense_account,
 											"against": self.supplier,
 											"debit": discrepancy_caused_by_exchange_rate_difference,
+											"cost_center": item.cost_center,
 											"project": item.project or self.project,
 										},
 										account_currency,
@@ -1273,6 +1298,7 @@ class PurchaseInvoice(BuyingController):
 											"account": self.get_company_default("exchange_gain_loss_account"),
 											"against": self.supplier,
 											"credit": discrepancy_caused_by_exchange_rate_difference,
+											"cost_center": item.cost_center,
 											"project": item.project or self.project,
 										},
 										account_currency,
@@ -1312,6 +1338,7 @@ class PurchaseInvoice(BuyingController):
 										item.precision("item_tax_amount"),
 									),
 									"remarks": self.remarks or _("Accounting Entry for Stock"),
+									"cost_center": self.cost_center,
 									"project": item.project or self.project,
 								},
 								item=item,
@@ -1450,6 +1477,7 @@ class PurchaseInvoice(BuyingController):
 							"debit": stock_adjustment_amt,
 							"debit_in_transaction_currency": stock_adjustment_amt / self.conversion_rate,
 							"remarks": self.get("remarks") or _("Stock Adjustment"),
+							"cost_center": item.cost_center,
 							"project": item.project or self.project,
 						},
 						account_currency,
@@ -1488,6 +1516,7 @@ class PurchaseInvoice(BuyingController):
 						"debit": stock_adjustment_amt,
 						"debit_in_transaction_currency": stock_adjustment_amt / self.conversion_rate,
 						"remarks": self.get("remarks") or _("Stock Adjustment"),
+						"cost_center": item.cost_center,
 						"project": item.project or self.project,
 					},
 					account_currency,
@@ -1524,6 +1553,7 @@ class PurchaseInvoice(BuyingController):
 							if account_currency == self.company_currency
 							else amount,
 							dr_or_cr + "_in_transaction_currency": amount,
+							"cost_center": tax.cost_center,
 						},
 						account_currency,
 						item=tax,
@@ -1536,6 +1566,12 @@ class PurchaseInvoice(BuyingController):
 				and flt(base_amount)
 				and not self.is_internal_transfer()
 			):
+				if self.auto_accounting_for_stock and not tax.cost_center:
+					frappe.throw(
+						_("Cost Center is required in row {0} in Taxes table for type {1}").format(
+							tax.idx, _(tax.category)
+						)
+					)
 				valuation_tax[tax.name] = capitalized_valuation_tax.get(tax.name, 0.0)
 
 		if self.is_opening == "No" and self.negative_expense_to_be_booked and valuation_tax:
@@ -1559,6 +1595,7 @@ class PurchaseInvoice(BuyingController):
 						self.get_gl_dict(
 							{
 								"account": tax.account_head,
+								"cost_center": tax.cost_center,
 								"against": self.supplier,
 								"credit": applicable_amount,
 								"credit_in_transaction_currency": flt(
@@ -1580,6 +1617,7 @@ class PurchaseInvoice(BuyingController):
 						self.get_gl_dict(
 							{
 								"account": tax.account_head,
+								"cost_center": tax.cost_center,
 								"against": self.supplier,
 								"credit": valuation_tax[tax.name],
 								"credit_in_transaction_currency": flt(
@@ -1603,6 +1641,7 @@ class PurchaseInvoice(BuyingController):
 						"credit": flt(self.total_taxes_and_charges),
 						"credit_in_transaction_currency": flt(self.total_taxes_and_charges),
 						"credit_in_account_currency": flt(self.base_total_taxes_and_charges),
+						"cost_center": self.cost_center,
 					},
 					account_currency,
 					item=self,
@@ -1656,6 +1695,7 @@ class PurchaseInvoice(BuyingController):
 						"debit_in_transaction_currency": self.paid_amount,
 						"against_voucher": against_voucher,
 						"against_voucher_type": self.doctype,
+						"cost_center": self.cost_center,
 						"project": self.project,
 					},
 					self.party_account_currency,
@@ -1673,6 +1713,7 @@ class PurchaseInvoice(BuyingController):
 						if bank_account_currency == self.company_currency
 						else self.paid_amount,
 						"credit_in_transaction_currency": self.paid_amount,
+						"cost_center": self.cost_center,
 					},
 					bank_account_currency,
 					item=self,
@@ -1701,6 +1742,7 @@ class PurchaseInvoice(BuyingController):
 						if cint(self.is_return) and self.return_against
 						else self.name,
 						"against_voucher_type": self.doctype,
+						"cost_center": self.cost_center,
 						"project": self.project,
 					},
 					self.party_account_currency,
@@ -1717,6 +1759,7 @@ class PurchaseInvoice(BuyingController):
 						if write_off_account_currency == self.company_currency
 						else self.write_off_amount,
 						"credit_in_transaction_currency": self.write_off_amount,
+						"cost_center": self.cost_center or self.write_off_cost_center,
 					},
 					item=self,
 				)
@@ -1728,7 +1771,13 @@ class PurchaseInvoice(BuyingController):
 		# eg: rounding_adjustment = 0.01 and exchange rate = 0.05 and precision of base_rounding_adjustment is 2
 		# 	then base_rounding_adjustment becomes zero and error is thrown in GL Entry
 		if not self.is_internal_transfer() and self.rounding_adjustment and self.base_rounding_adjustment:
-			round_off_account, round_off_for_opening = get_round_off_account(self.company)
+			(
+				round_off_account,
+				round_off_cost_center,
+				round_off_for_opening,
+			) = get_round_off_account_and_cost_center(
+				self.company, "Purchase Invoice", self.name, self.use_company_roundoff_cost_center
+			)
 
 			if self.is_opening == "Yes" and self.rounding_adjustment:
 				if not round_off_for_opening:
@@ -1752,6 +1801,9 @@ class PurchaseInvoice(BuyingController):
 						"against": self.supplier,
 						"debit_in_account_currency": self.rounding_adjustment,
 						"debit": self.base_rounding_adjustment,
+						"cost_center": round_off_cost_center
+						if self.use_company_roundoff_cost_center
+						else (self.cost_center or round_off_cost_center),
 					},
 					item=self,
 				)

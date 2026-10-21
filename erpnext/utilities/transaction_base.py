@@ -338,6 +338,7 @@ class TransactionBase(StatusUpdater):
 					"manufacturer": item.get("manufacturer"),
 					"stock_uom": item.get("stock_uom"),
 					"pos_profile": self.get("pos_profile") if cint(self.get("is_pos")) else "",
+					"cost_center": item.get("cost_center"),
 					"tax_category": self.get("tax_category"),
 					"item_tax_template": item.get("item_tax_template"),
 					"child_doctype": item.get("doctype"),
@@ -468,7 +469,7 @@ class TransactionBase(StatusUpdater):
 	def copy_from_first_row(self, row, fields):
 		sibling_rows = self.get(row.parentfield) if row else None
 		if sibling_rows:
-			fields.extend([x.get("fieldname") for x in get_dimensions(with_project=True)[0]])
+			fields.extend([x.get("fieldname") for x in get_dimensions(True)[0]])
 			first_row = sibling_rows[0]
 			[setattr(row, k, first_row.get(k)) for k in fields if hasattr(first_row, k)]
 

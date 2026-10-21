@@ -25,6 +25,7 @@
   "issue_credit_note",
   "return_against",
   "accounting_dimensions_section",
+  "cost_center",
   "column_break_18",
   "project",
   "dimension_col_break",
@@ -1231,56 +1232,56 @@
   {
    "fieldname": "custody_loan",
    "fieldtype": "Link",
+   "hidden": 1,
    "label": "Custody Loan",
    "options": "Custody Loan",
-   "read_only": 1,
-   "hidden": 1
+   "read_only": 1
   },
   {
    "fieldname": "is_system_generated",
    "fieldtype": "Check",
+   "hidden": 1,
    "label": "Is System Generated",
-   "read_only": 1,
-   "hidden": 1
+   "read_only": 1
   },
   {
    "fieldname": "is_custody_loan_transaction",
    "fieldtype": "Check",
+   "hidden": 1,
    "label": "Is Custody Loan Transaction",
-   "read_only": 1,
-   "hidden": 1
+   "read_only": 1
   },
   {
    "fieldname": "custody_loan_source_doctype",
    "fieldtype": "Link",
+   "hidden": 1,
    "label": "Custody Loan Source Type",
    "options": "DocType",
-   "read_only": 1,
-   "hidden": 1
+   "read_only": 1
   },
   {
    "fieldname": "custody_loan_source_name",
    "fieldtype": "Dynamic Link",
+   "hidden": 1,
    "label": "Custody Loan Source",
    "options": "custody_loan_source_doctype",
-   "read_only": 1,
-   "hidden": 1
+   "read_only": 1
   },
   {
    "default": "0",
    "fieldname": "requires_shipment",
    "fieldtype": "Check",
+   "hidden": 1,
    "label": "Ship via Shipment",
-   "read_only": 1,
-   "hidden": 1
+   "read_only": 1
   },
   {
    "fieldname": "custody_loan_shipment",
    "fieldtype": "Link",
+   "hidden": 1,
    "label": "Loan Shipment",
    "options": "Shipment",
-   "read_only": 1,
-   "hidden": 1
+   "read_only": 1
   },
   {
    "depends_on": "eval:!doc.__islocal",
@@ -1349,6 +1350,12 @@
    "fieldname": "accounting_dimensions_section",
    "fieldtype": "Section Break",
    "label": "Accounting Dimensions"
+  },
+  {
+   "fieldname": "cost_center",
+   "fieldtype": "Link",
+   "label": "Cost Center",
+   "options": "Cost Center"
   },
   {
    "fieldname": "dimension_col_break",
@@ -1532,7 +1539,7 @@
  "idx": 146,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-10-13 12:12:32.190935",
+ "modified": "2026-10-21 05:30:00.000000",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Delivery Note",

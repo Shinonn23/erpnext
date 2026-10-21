@@ -72,6 +72,7 @@ class TestPOSInvoiceMerging(POSInvoiceTestMixin):
 			{
 				"charge_type": "On Net Total",
 				"account_head": "_Test Account Service Tax - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "Service Tax",
 				"rate": 14,
 				"included_in_print_rate": 1,
@@ -87,6 +88,7 @@ class TestPOSInvoiceMerging(POSInvoiceTestMixin):
 			{
 				"charge_type": "On Net Total",
 				"account_head": "_Test Account Service Tax - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "Service Tax",
 				"rate": 14,
 				"included_in_print_rate": 1,
@@ -127,6 +129,7 @@ class TestPOSInvoiceMerging(POSInvoiceTestMixin):
 			{
 				"charge_type": "On Net Total",
 				"account_head": "_Test Account Service Tax - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "Service Tax",
 				"rate": 14,
 				"included_in_print_rate": 1,
@@ -141,6 +144,7 @@ class TestPOSInvoiceMerging(POSInvoiceTestMixin):
 			{
 				"charge_type": "On Net Total",
 				"account_head": "_Test Account Service Tax - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "Service Tax",
 				"rate": 14,
 				"included_in_print_rate": 1,

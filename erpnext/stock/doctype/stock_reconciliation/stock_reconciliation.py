@@ -49,6 +49,7 @@ class StockReconciliation(StockController):
 
 		amended_from: DF.Link | None
 		company: DF.Link
+		cost_center: DF.Link | None
 		department: DF.Link | None
 		difference_amount: DF.Currency
 		expense_account: DF.Link | None
@@ -81,6 +82,8 @@ class StockReconciliation(StockController):
 			self.expense_account = frappe.get_cached_value(
 				"Company", self.company, "stock_adjustment_account"
 			)
+		if not self.cost_center:
+			self.cost_center = frappe.get_cached_value("Company", self.company, "cost_center")
 		self.validate_posting_time()
 		self.validate_storage_locations()
 		self.validate_inventory_dimension()
@@ -114,6 +117,9 @@ class StockReconciliation(StockController):
 			self.expense_account = frappe.get_cached_value(
 				"Company", self.company, "stock_adjustment_account"
 			)
+		if not self.cost_center:
+			self.cost_center = frappe.get_cached_value("Company", self.company, "cost_center")
+
 		self.validate_posting_time()
 		self.validate_expense_account()
 		AdjustmentEntry(self).validate()
@@ -1281,7 +1287,10 @@ class StockReconciliation(StockController):
 		return new_sl_entries
 
 	def get_gl_entries(self, inventory_account_map=None):
-		return super().get_gl_entries(inventory_account_map, self.expense_account)
+		if not self.cost_center:
+			msgprint(_("Please enter Cost Center"), raise_exception=1)
+
+		return super().get_gl_entries(inventory_account_map, self.expense_account, self.cost_center)
 
 	def validate_expense_account(self):
 		if not cint(erpnext.is_perpetual_inventory_enabled(self.company)):

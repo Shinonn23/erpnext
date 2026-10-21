@@ -26,4 +26,11 @@ def execute():
 
 
 def default_accounting_dimension():
-	pass
+	ADF = DocType("Accounting Dimension Filter")
+	for dim in ("Cost Center", "Project"):
+		(
+			frappe.qb.update(ADF)
+			.set(ADF.fieldname, frappe.scrub(dim))
+			.where(ADF.accounting_dimension == dim)
+			.run()
+		)

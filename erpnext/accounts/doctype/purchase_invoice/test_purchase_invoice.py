@@ -264,6 +264,7 @@ class TestPurchaseInvoice(ERPNextTestSuite, StockTestMixin):
 		pi = make_purchase_invoice(
 			company="_Test Company with perpetual inventory",
 			warehouse="Stores - TCP1",
+			cost_center="Main - TCP1",
 			expense_account="_Test Account Cost for Goods Sold - TCP1",
 			get_taxes_and_charges=True,
 			qty=10,
@@ -565,6 +566,7 @@ class TestPurchaseInvoice(ERPNextTestSuite, StockTestMixin):
 			company="_Test Company with perpetual inventory",
 			supplier_warehouse="Work In Progress - TCP1",
 			warehouse="Stores - TCP1",
+			cost_center="Main - TCP1",
 			get_taxes_and_charges=True,
 		)
 
@@ -572,6 +574,7 @@ class TestPurchaseInvoice(ERPNextTestSuite, StockTestMixin):
 			company="_Test Company with perpetual inventory",
 			supplier_warehouse="Work In Progress - TCP1",
 			warehouse="Stores - TCP1",
+			cost_center="Main - TCP1",
 			expense_account="_Test Account Cost for Goods Sold - TCP1",
 			get_taxes_and_charges=True,
 			qty=10,
@@ -754,6 +757,7 @@ class TestPurchaseInvoice(ERPNextTestSuite, StockTestMixin):
 			item_code="_Test Non Stock Item",
 			company="_Test Company with perpetual inventory",
 			warehouse="Stores - TCP1",
+			cost_center="Main - TCP1",
 			expense_account="_Test Account Cost for Goods Sold - TCP1",
 		)
 
@@ -962,6 +966,7 @@ class TestPurchaseInvoice(ERPNextTestSuite, StockTestMixin):
 		pi = make_purchase_invoice(
 			company="_Test Company with perpetual inventory",
 			warehouse="Stores - TCP1",
+			cost_center="Main - TCP1",
 			expense_account="_Test Account Cost for Goods Sold - TCP1",
 		)
 
@@ -971,6 +976,7 @@ class TestPurchaseInvoice(ERPNextTestSuite, StockTestMixin):
 			qty=-2,
 			company="_Test Company with perpetual inventory",
 			warehouse="Stores - TCP1",
+			cost_center="Main - TCP1",
 			expense_account="_Test Account Cost for Goods Sold - TCP1",
 		)
 
@@ -1011,6 +1017,7 @@ class TestPurchaseInvoice(ERPNextTestSuite, StockTestMixin):
 			rate=100,
 			company=company,
 			warehouse=warehouse,
+			cost_center="Main - TCP1",
 		)
 
 		# assert that stock consumption is with actual rate
@@ -1029,11 +1036,13 @@ class TestPurchaseInvoice(ERPNextTestSuite, StockTestMixin):
 		item = self.make_item().name
 		company = "_Test Company with perpetual inventory"
 		warehouse = "Stores - TCP1"
+		cost_center = "Main - TCP1"
 
 		pi = make_purchase_invoice(
 			item=item,
 			company=company,
 			warehouse=warehouse,
+			cost_center=cost_center,
 			update_stock=1,
 			qty=10,
 			rate=100,
@@ -1131,6 +1140,7 @@ class TestPurchaseInvoice(ERPNextTestSuite, StockTestMixin):
 			company="_Test Company with perpetual inventory",
 			supplier_warehouse="Work In Progress - TCP1",
 			warehouse="Stores - TCP1",
+			cost_center="Main - TCP1",
 			expense_account="_Test Account Cost for Goods Sold - TCP1",
 		)
 
@@ -1165,6 +1175,7 @@ class TestPurchaseInvoice(ERPNextTestSuite, StockTestMixin):
 			company="_Test Company with perpetual inventory",
 			supplier_warehouse="Work In Progress - TCP1",
 			warehouse="Stores - TCP1",
+			cost_center="Main - TCP1",
 			expense_account="_Test Account Cost for Goods Sold - TCP1",
 		)
 
@@ -1422,6 +1433,57 @@ class TestPurchaseInvoice(ERPNextTestSuite, StockTestMixin):
 		pi_doc = frappe.get_doc("Purchase Invoice", pi.name)
 		self.assertEqual(pi_doc.outstanding_amount, 0)
 
+	def test_purchase_invoice_with_cost_center(self):
+		from erpnext.accounts.doctype.cost_center.test_cost_center import create_cost_center
+
+		cost_center = "_Test Cost Center for BS Account - _TC"
+		create_cost_center(cost_center_name="_Test Cost Center for BS Account", company="_Test Company")
+
+		pi = make_purchase_invoice_against_cost_center(cost_center=cost_center, credit_to="Creditors - _TC")
+		self.assertEqual(pi.cost_center, cost_center)
+
+		expected_values = {
+			"Creditors - _TC": {"cost_center": cost_center},
+			"_Test Account Cost for Goods Sold - _TC": {"cost_center": cost_center},
+		}
+
+		gl_entries = frappe.db.sql(
+			"""select account, cost_center, account_currency, debit, credit,
+			debit_in_account_currency, credit_in_account_currency
+			from `tabGL Entry` where voucher_type='Purchase Invoice' and voucher_no=%s
+			order by account asc""",
+			pi.name,
+			as_dict=1,
+		)
+
+		self.assertTrue(gl_entries)
+
+		for gle in gl_entries:
+			self.assertEqual(expected_values[gle.account]["cost_center"], gle.cost_center)
+
+	def test_purchase_invoice_without_cost_center(self):
+		cost_center = "_Test Cost Center - _TC"
+		pi = make_purchase_invoice(credit_to="Creditors - _TC")
+
+		expected_values = {
+			"Creditors - _TC": {"cost_center": None},
+			"_Test Account Cost for Goods Sold - _TC": {"cost_center": cost_center},
+		}
+
+		gl_entries = frappe.db.sql(
+			"""select account, cost_center, account_currency, debit, credit,
+			debit_in_account_currency, credit_in_account_currency
+			from `tabGL Entry` where voucher_type='Purchase Invoice' and voucher_no=%s
+			order by account asc""",
+			pi.name,
+			as_dict=1,
+		)
+
+		self.assertTrue(gl_entries)
+
+		for gle in gl_entries:
+			self.assertEqual(expected_values[gle.account]["cost_center"], gle.cost_center)
+
 	def test_purchase_invoice_with_project_link(self):
 		project = make_project(
 			{
@@ -1450,7 +1512,7 @@ class TestPurchaseInvoice(ERPNextTestSuite, StockTestMixin):
 		}
 
 		gl_entries = frappe.db.sql(
-			"""select account, project, account_currency, debit, credit,
+			"""select account, cost_center, project, account_currency, debit, credit,
 			debit_in_account_currency, credit_in_account_currency
 			from `tabGL Entry` where voucher_type='Purchase Invoice' and voucher_no=%s
 			order by account asc""",
@@ -1567,6 +1629,7 @@ class TestPurchaseInvoice(ERPNextTestSuite, StockTestMixin):
 			do_not_save=1,
 			qty=1,
 		)
+		pi.cost_center = "_Test Cost Center - _TC"
 		pi.advances = []
 		pi.append(
 			"advances",
@@ -1636,6 +1699,7 @@ class TestPurchaseInvoice(ERPNextTestSuite, StockTestMixin):
 			do_not_save=1,
 			qty=1,
 		)
+		pi_2.cost_center = "_Test Cost Center - _TC"
 		pi_2.advances = []
 		pi_2.append(
 			"advances",
@@ -1769,6 +1833,7 @@ class TestPurchaseInvoice(ERPNextTestSuite, StockTestMixin):
 					"sales_incoming_rate": 0,
 					"is_fixed_asset": is_fixed_asset,
 					"expense_account": expense_account,
+					"cost_center": "Main - _TC",
 					"project": None,
 					"precision": lambda fieldname: 2,
 				}
@@ -2647,6 +2712,30 @@ class TestPurchaseInvoice(ERPNextTestSuite, StockTestMixin):
 		self.assertEqual(po.docstatus, 1)
 		self.assertEqual(pi.docstatus, 1)
 
+	def test_default_cost_center_for_purchase(self):
+		from erpnext.accounts.doctype.cost_center.test_cost_center import create_cost_center
+
+		for c_center in ["_Test Cost Center Selling", "_Test Cost Center Buying"]:
+			create_cost_center(cost_center_name=c_center)
+
+		item = create_item(
+			"_Test Cost Center Item For Purchase",
+			is_stock_item=1,
+			buying_cost_center="_Test Cost Center Buying - _TC",
+			selling_cost_center="_Test Cost Center Selling - _TC",
+		)
+
+		pi = make_purchase_invoice(
+			item=item.name, qty=1, rate=1000, update_stock=True, do_not_submit=True, cost_center=""
+		)
+
+		pi.items[0].cost_center = ""
+		pi.set_missing_values()
+		pi.calculate_taxes_and_totals()
+		pi.save()
+
+		self.assertEqual(pi.items[0].cost_center, "_Test Cost Center Buying - _TC")
+
 	def test_debit_note_with_account_mismatch(self):
 		new_creditors = create_account(
 			parent_account="Accounts Payable - _TC",
@@ -3312,7 +3401,8 @@ class TestPurchaseInvoice(ERPNextTestSuite, StockTestMixin):
 		supplier = create_supplier(supplier_name="_Test Common Party Return PI").name
 		# Supplier must be secondary so get_common_party_link finds it via the PI's party_type
 		party_link = create_party_link("Customer", customer, supplier)
-		pi = make_purchase_invoice(supplier=supplier)
+
+		pi = make_purchase_invoice(supplier=supplier, parent_cost_center="_Test Cost Center - _TC")
 
 		return_pi = make_return_doc(pi.doctype, pi.name)
 		return_pi.submit()
@@ -3457,6 +3547,7 @@ def make_purchase_invoice(**args):
 	pi.return_against = args.return_against
 	pi.is_subcontracted = args.is_subcontracted or 0
 	pi.supplier_warehouse = args.supplier_warehouse or "_Test Warehouse 1 - _TC"
+	pi.cost_center = args.parent_cost_center
 
 	bundle_id = None
 	if not args.use_serial_batch_fields and (args.get("batch_no") or args.get("serial_no")):
@@ -3501,6 +3592,7 @@ def make_purchase_invoice(**args):
 			"conversion_factor": 1.0,
 			"serial_and_batch_bundle": bundle_id,
 			"stock_uom": args.uom or "_Test UOM",
+			"cost_center": args.cost_center or "_Test Cost Center - _TC",
 			"project": args.project,
 			"rejected_warehouse": args.rejected_warehouse or "",
 			"asset_location": args.location or "",
@@ -3558,6 +3650,81 @@ def make_purchase_invoice(**args):
 					apply_workflow(pi.as_dict(), action)
 				else:
 					frappe.throw(_("Test Purchase Invoice workflow did not reach submission."))
+	return pi
+
+
+def make_purchase_invoice_against_cost_center(**args):
+	pi = frappe.new_doc("Purchase Invoice")
+	args = frappe._dict(args)
+	pi.posting_date = args.posting_date or today()
+	if args.posting_time:
+		pi.posting_time = args.posting_time
+	if args.update_stock:
+		pi.update_stock = 1
+	if args.is_paid:
+		pi.is_paid = 1
+
+	if args.cash_bank_account:
+		pi.cash_bank_account = args.cash_bank_account
+
+	pi.company = args.company or "_Test Company"
+	pi.cost_center = args.cost_center or "_Test Cost Center - _TC"
+	pi.supplier = args.supplier or "_Test Supplier"
+	pi.currency = args.currency or "INR"
+	pi.conversion_rate = args.conversion_rate or 1
+	pi.is_return = args.is_return
+	pi.is_return = args.is_return
+	pi.credit_to = args.return_against or "Creditors - _TC"
+	pi.is_subcontracted = args.is_subcontracted or 0
+	if args.supplier_warehouse:
+		pi.supplier_warehouse = "_Test Warehouse 1 - _TC"
+
+	bundle_id = None
+	if args.get("batch_no") or args.get("serial_no"):
+		batches = {}
+		qty = args.qty or 5
+		item_code = args.item or args.item_code or "_Test Item"
+		if args.get("batch_no"):
+			batches = frappe._dict({args.batch_no: qty})
+
+		serial_nos = args.get("serial_no") or []
+
+		bundle_id = make_serial_batch_bundle(
+			frappe._dict(
+				{
+					"item_code": item_code,
+					"warehouse": args.warehouse or "_Test Warehouse - _TC",
+					"qty": qty,
+					"batches": batches,
+					"voucher_type": "Purchase Receipt",
+					"serial_nos": serial_nos,
+					"posting_date": args.posting_date or today(),
+					"posting_time": args.posting_time,
+				}
+			)
+		).name
+
+	pi.append(
+		"items",
+		{
+			"item_code": args.item or args.item_code or "_Test Item",
+			"warehouse": args.warehouse or "_Test Warehouse - _TC",
+			"qty": args.qty or 5,
+			"received_qty": args.received_qty or 0,
+			"rejected_qty": args.rejected_qty or 0,
+			"rate": args.rate or 50,
+			"conversion_factor": 1.0,
+			"serial_and_batch_bundle": bundle_id,
+			"stock_uom": "_Test UOM",
+			"cost_center": args.cost_center or "_Test Cost Center - _TC",
+			"project": args.project,
+			"rejected_warehouse": args.rejected_warehouse or "",
+		},
+	)
+	if not args.do_not_save:
+		pi.insert()
+		if not args.do_not_submit:
+			pi.submit()
 	return pi
 
 

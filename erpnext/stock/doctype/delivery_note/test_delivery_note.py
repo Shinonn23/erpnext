@@ -9,6 +9,7 @@ import frappe
 from frappe.utils import add_days, cstr, flt, getdate, nowdate, nowtime, today
 
 from erpnext.accounts.doctype.account.test_account import get_inventory_account
+from erpnext.accounts.doctype.cost_center.test_cost_center import create_cost_center
 from erpnext.accounts.utils import get_balance_on
 from erpnext.controllers.accounts_controller import InvalidQtyError
 from erpnext.selling.doctype.product_bundle.test_product_bundle import make_product_bundle
@@ -110,6 +111,7 @@ class TestDeliveryNote(ERPNextTestSuite):
 			item_code="_Test Product Bundle Item",
 			company="_Test Company with perpetual inventory",
 			warehouse="Stores - TCP1",
+			cost_center="Main - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
 		)
 
@@ -254,6 +256,7 @@ class TestDeliveryNote(ERPNextTestSuite):
 			warehouse=warehouse,
 			company=company,
 			expense_account="Cost of Goods Sold - _TC",
+			cost_center="Main - _TC",
 			do_not_submit=1,
 		)
 
@@ -303,6 +306,7 @@ class TestDeliveryNote(ERPNextTestSuite):
 			warehouse="Stores - TCP1",
 			company=company,
 			expense_account="Cost of Goods Sold - TCP1",
+			cost_center="Main - TCP1",
 		)
 
 		actual_qty_1 = get_qty_after_transaction(warehouse="Stores - TCP1")
@@ -327,6 +331,7 @@ class TestDeliveryNote(ERPNextTestSuite):
 			company=company,
 			warehouse="Stores - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
+			cost_center="Main - TCP1",
 			do_not_submit=1,
 		)
 		dn1.items[0].dn_detail = dn.items[0].name
@@ -402,6 +407,7 @@ class TestDeliveryNote(ERPNextTestSuite):
 			warehouse="Stores - TCP1",
 			company=company,
 			expense_account="Cost of Goods Sold - TCP1",
+			cost_center="Main - TCP1",
 		)
 
 		# return entry
@@ -414,6 +420,7 @@ class TestDeliveryNote(ERPNextTestSuite):
 			company=company,
 			warehouse="Stores - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
+			cost_center="Main - TCP1",
 			do_not_submit=1,
 		)
 		dn1.items[0].dn_detail = dn.items[0].name
@@ -445,6 +452,7 @@ class TestDeliveryNote(ERPNextTestSuite):
 			warehouse="Stores - TCP1",
 			company=company,
 			expense_account="Cost of Goods Sold - TCP1",
+			cost_center="Main - TCP1",
 		)
 
 		dn.submit()
@@ -490,6 +498,7 @@ class TestDeliveryNote(ERPNextTestSuite):
 			rate=500,
 			warehouse="_Test Warehouse - _TC",
 			expense_account="Cost of Goods Sold - _TC",
+			cost_center="Main - _TC",
 			use_serial_batch_fields=0,
 			do_not_submit=1,
 		)
@@ -502,6 +511,7 @@ class TestDeliveryNote(ERPNextTestSuite):
 				"rate": 500,
 				"warehouse": "_Test Warehouse - _TC",
 				"expense_account": "Cost of Goods Sold - _TC",
+				"cost_center": "Main - _TC",
 				"use_serial_batch_fields": 0,
 			},
 		)
@@ -573,6 +583,7 @@ class TestDeliveryNote(ERPNextTestSuite):
 			company=company,
 			warehouse="Stores - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
+			cost_center="Main - TCP1",
 		)
 
 		# Qty after delivery
@@ -598,6 +609,7 @@ class TestDeliveryNote(ERPNextTestSuite):
 			company=company,
 			warehouse="Stores - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
+			cost_center="Main - TCP1",
 		)
 
 		# qty after return
@@ -653,6 +665,7 @@ class TestDeliveryNote(ERPNextTestSuite):
 			company=company,
 			warehouse="Stores - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
+			cost_center="Main - TCP1",
 		)
 
 		# qty after return
@@ -669,6 +682,7 @@ class TestDeliveryNote(ERPNextTestSuite):
 			company=company,
 			warehouse="Stores - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
+			cost_center="Main - TCP1",
 		)
 
 		# qty after return
@@ -919,6 +933,7 @@ class TestDeliveryNote(ERPNextTestSuite):
 			item_code="_Test Product Bundle Item",
 			company="_Test Company with perpetual inventory",
 			customer=customer_name,
+			cost_center="Main - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
 			qty=5,
 			rate=500,
@@ -987,6 +1002,7 @@ class TestDeliveryNote(ERPNextTestSuite):
 		dn = create_delivery_note(
 			company="_Test Company with perpetual inventory",
 			warehouse="Stores - TCP1",
+			cost_center="Main - TCP1",
 			expense_account="Cost of Goods Sold - TCP1",
 			do_not_submit=True,
 		)
@@ -1048,6 +1064,7 @@ class TestDeliveryNote(ERPNextTestSuite):
 				"conversion_factor": 1,
 				"allow_zero_valuation_rate": 1,
 				"expense_account": "Cost of Goods Sold - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 			},
 		)
 		dn.submit()
@@ -1278,6 +1295,66 @@ class TestDeliveryNote(ERPNextTestSuite):
 			dt.submit,
 		)
 
+	def test_delivery_note_with_cost_center(self):
+		from erpnext.accounts.doctype.cost_center.test_cost_center import create_cost_center
+
+		cost_center = "_Test Cost Center for BS Account - TCP1"
+		create_cost_center(
+			cost_center_name="_Test Cost Center for BS Account",
+			company="_Test Company with perpetual inventory",
+		)
+
+		set_valuation_method("_Test Item", "FIFO")
+
+		make_stock_entry(target="Stores - TCP1", qty=5, basic_rate=100)
+
+		stock_in_hand_account = get_inventory_account("_Test Company with perpetual inventory")
+		dn = create_delivery_note(
+			company="_Test Company with perpetual inventory",
+			warehouse="Stores - TCP1",
+			expense_account="Cost of Goods Sold - TCP1",
+			cost_center=cost_center,
+		)
+
+		gl_entries = get_gl_entries("Delivery Note", dn.name)
+		self.assertTrue(gl_entries)
+
+		expected_values = {
+			"Cost of Goods Sold - TCP1": {"cost_center": cost_center},
+			stock_in_hand_account: {"cost_center": cost_center},
+		}
+		for _i, gle in enumerate(gl_entries):
+			self.assertEqual(expected_values[gle.account]["cost_center"], gle.cost_center)
+
+	def test_delivery_note_cost_center_with_balance_sheet_account(self):
+		cost_center = "Main - TCP1"
+
+		set_valuation_method("_Test Item", "FIFO")
+
+		make_stock_entry(target="Stores - TCP1", qty=5, basic_rate=100)
+
+		stock_in_hand_account = get_inventory_account("_Test Company with perpetual inventory")
+		dn = create_delivery_note(
+			company="_Test Company with perpetual inventory",
+			warehouse="Stores - TCP1",
+			cost_center="Main - TCP1",
+			expense_account="Cost of Goods Sold - TCP1",
+			do_not_submit=1,
+		)
+
+		dn.get("items")[0].cost_center = None
+		dn.submit()
+
+		gl_entries = get_gl_entries("Delivery Note", dn.name)
+
+		self.assertTrue(gl_entries)
+		expected_values = {
+			"Cost of Goods Sold - TCP1": {"cost_center": cost_center},
+			stock_in_hand_account: {"cost_center": cost_center},
+		}
+		for _i, gle in enumerate(gl_entries):
+			self.assertEqual(expected_values[gle.account]["cost_center"], gle.cost_center)
+
 	def test_make_sales_invoice_from_dn_for_returned_qty(self):
 		from erpnext.selling.doctype.sales_order.sales_order import make_delivery_note
 		from erpnext.stock.doctype.delivery_note.delivery_note import make_sales_invoice
@@ -1309,6 +1386,7 @@ class TestDeliveryNote(ERPNextTestSuite):
 				"rate": 100,
 				"conversion_factor": 1.0,
 				"expense_account": "Cost of Goods Sold - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 			},
 		)
 		dn.submit()
@@ -1494,6 +1572,7 @@ class TestDeliveryNote(ERPNextTestSuite):
 				"account_head": "_Test Account Service Tax - _TC",
 				"description": "Tax 1",
 				"rate": 14,
+				"cost_center": "_Test Cost Center - _TC",
 				"included_in_print_rate": 1,
 			},
 		)
@@ -1781,6 +1860,8 @@ class TestDeliveryNote(ERPNextTestSuite):
 		warehouse = "Stores - TCP1"
 		target = "Finished Goods - TCP1"
 		customer = create_internal_customer(represents_company=company)
+		create_cost_center(cost_center_name="_Test Cost Center", company=company)
+
 		# average rate = 128.015
 		rates = [101.45, 150.46, 138.25, 121.9]
 
@@ -1794,6 +1875,7 @@ class TestDeliveryNote(ERPNextTestSuite):
 			qty=4,
 			warehouse=warehouse,
 			target_warehouse=target,
+			cost_center="_Test Cost Center - TCP1",
 		)
 		self.assertFalse(frappe.db.exists("GL Entry", {"voucher_no": dn.name, "voucher_type": dn.doctype}))
 
@@ -1941,6 +2023,7 @@ class TestDeliveryNote(ERPNextTestSuite):
 			rate=500,
 			company=dn.company,
 			expense_account="Cost of Goods Sold - _TC",
+			cost_center="Main - _TC",
 			do_not_submit=1,
 			posting_date=add_days(nowdate(), -1),
 		)
@@ -1985,6 +2068,7 @@ class TestDeliveryNote(ERPNextTestSuite):
 			company=dn.company,
 			warehouse="_Test Warehouse - _TC",
 			expense_account="Cost of Goods Sold - _TC",
+			cost_center="Main - _TC",
 			posting_date=add_days(nowdate(), -1),
 		)
 
@@ -2188,6 +2272,7 @@ class TestDeliveryNote(ERPNextTestSuite):
 			warehouse=warehouse,
 			company=company,
 			expense_account="Cost of Goods Sold - _TC",
+			cost_center="Main - _TC",
 			use_serial_batch_fields=1,
 			serial_no="\n".join(serial_nos[0:3]),
 		)
@@ -2210,6 +2295,7 @@ class TestDeliveryNote(ERPNextTestSuite):
 			warehouse=warehouse,
 			company=company,
 			expense_account="Cost of Goods Sold - _TC",
+			cost_center="Main - _TC",
 			use_serial_batch_fields=1,
 			serial_no=serial_nos[-1],
 		)
@@ -3488,6 +3574,7 @@ def create_delivery_note(**args):
 			"serial_and_batch_bundle": bundle_id,
 			"allow_zero_valuation_rate": args.allow_zero_valuation_rate or 1,
 			"expense_account": args.expense_account or "Cost of Goods Sold - _TC",
+			"cost_center": args.cost_center or "_Test Cost Center - _TC",
 			"target_warehouse": args.target_warehouse,
 			"use_serial_batch_fields": args.use_serial_batch_fields,
 			"serial_no": args.serial_no if args.use_serial_batch_fields else None,

@@ -13,8 +13,14 @@ from erpnext.accounts.doctype.payment_entry.payment_entry import (
 	get_payment_entry,
 	get_reference_details,
 )
-from erpnext.accounts.doctype.purchase_invoice.test_purchase_invoice import make_purchase_invoice
-from erpnext.accounts.doctype.sales_invoice.test_sales_invoice import create_sales_invoice
+from erpnext.accounts.doctype.purchase_invoice.test_purchase_invoice import (
+	make_purchase_invoice,
+	make_purchase_invoice_against_cost_center,
+)
+from erpnext.accounts.doctype.sales_invoice.test_sales_invoice import (
+	create_sales_invoice,
+	create_sales_invoice_against_cost_center,
+)
 from erpnext.selling.doctype.sales_order.test_sales_order import make_sales_order
 from erpnext.setup.doctype.employee.test_employee import make_employee
 from erpnext.tests.utils import (
@@ -346,6 +352,7 @@ class TestPaymentEntry(ERPNextTestSuite):
 			{
 				"charge_type": "On Net Total",
 				"account_head": "_Test Account Service Tax - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "Service Tax",
 				"rate": 18,
 			},
@@ -375,6 +382,7 @@ class TestPaymentEntry(ERPNextTestSuite):
 			{
 				"charge_type": "On Net Total",
 				"account_head": "_Test Account Service Tax - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "Service Tax",
 				"rate": 18,
 			},
@@ -435,6 +443,7 @@ class TestPaymentEntry(ERPNextTestSuite):
 			{
 				"charge_type": "On Net Total",
 				"account_head": "_Test Account Service Tax - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "Service Tax",
 				"rate": 18,
 			},
@@ -484,6 +493,7 @@ class TestPaymentEntry(ERPNextTestSuite):
 			{
 				"charge_type": "On Net Total",
 				"account_head": "_Test Account Service Tax - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "Service Tax",
 				"rate": 18,
 			},
@@ -617,6 +627,7 @@ class TestPaymentEntry(ERPNextTestSuite):
 		# Exchange loss
 		self.assertEqual(pe.deductions[-1].amount, 300.0)
 		pe.deductions[-1].account = "_Test Exchange Gain/Loss - _TC"
+		pe.deductions[-1].cost_center = "_Test Cost Center - _TC"
 
 		pe.insert()
 		pe.submit()
@@ -684,6 +695,7 @@ class TestPaymentEntry(ERPNextTestSuite):
 
 		self.assertEqual(pe.deductions[0].amount, 100)
 		pe.deductions[0].account = "_Test Exchange Gain/Loss - _TC"
+		pe.deductions[0].cost_center = "_Test Cost Center - _TC"
 
 		pe.insert()
 		pe.submit()
@@ -775,6 +787,7 @@ class TestPaymentEntry(ERPNextTestSuite):
 
 		self.assertEqual(pe.deductions[0].amount, 500)
 		pe.deductions[0].account = "_Test Exchange Gain/Loss - _TC"
+		pe.deductions[0].cost_center = "_Test Cost Center - _TC"
 
 		pe.insert()
 		pe.submit()
@@ -838,6 +851,7 @@ class TestPaymentEntry(ERPNextTestSuite):
 				"credit_in_account_currency": 100,
 				"reference_type": si1.doctype,
 				"reference_name": si1.name,
+				"cost_center": si1.items[0].cost_center,
 			},
 		)
 		je.append(
@@ -852,6 +866,7 @@ class TestPaymentEntry(ERPNextTestSuite):
 				"credit_in_account_currency": 0,
 				"reference_type": cr_note.doctype,
 				"reference_name": cr_note.name,
+				"cost_center": cr_note.items[0].cost_center,
 			},
 		)
 		je.save().submit()
@@ -916,7 +931,7 @@ class TestPaymentEntry(ERPNextTestSuite):
 		pe.received_amount = pe.paid_amount = 95
 		pe.append(
 			"deductions",
-			{"account": "_Test Write Off - _TC", "amount": 5},
+			{"account": "_Test Write Off - _TC", "cost_center": "_Test Cost Center - _TC", "amount": 5},
 		)
 		pe.save()
 
@@ -970,8 +985,113 @@ class TestPaymentEntry(ERPNextTestSuite):
 		outstanding_amount = flt(frappe.db.get_value("Sales Invoice", si.name, "outstanding_amount"))
 		self.assertEqual(outstanding_amount, 0)
 
+	def test_payment_entry_against_sales_invoice_with_cost_centre(self):
+		from erpnext.accounts.doctype.cost_center.test_cost_center import create_cost_center
 
+		cost_center = "_Test Cost Center for BS Account - _TC"
+		create_cost_center(cost_center_name="_Test Cost Center for BS Account", company="_Test Company")
 
+		si = create_sales_invoice_against_cost_center(cost_center=cost_center, debit_to="Debtors - _TC")
+
+		pe = get_payment_entry("Sales Invoice", si.name, bank_account="_Test Bank - _TC")
+		self.assertEqual(pe.cost_center, si.cost_center)
+
+		pe.reference_no = "112211-1"
+		pe.reference_date = nowdate()
+		pe.paid_to = "_Test Bank - _TC"
+		pe.paid_amount = si.grand_total
+		pe.insert()
+		pe.submit()
+
+		expected_values = {
+			"_Test Bank - _TC": {"cost_center": cost_center},
+			"Debtors - _TC": {"cost_center": cost_center},
+		}
+
+		gl_entries = frappe.db.sql(
+			"""select account, cost_center, account_currency, debit, credit,
+			debit_in_account_currency, credit_in_account_currency
+			from `tabGL Entry` where voucher_type='Payment Entry' and voucher_no=%s
+			order by account asc""",
+			pe.name,
+			as_dict=1,
+		)
+
+		self.assertTrue(gl_entries)
+
+		for gle in gl_entries:
+			self.assertEqual(expected_values[gle.account]["cost_center"], gle.cost_center)
+
+	def test_payment_entry_against_purchase_invoice_with_cost_center(self):
+		from erpnext.accounts.doctype.cost_center.test_cost_center import create_cost_center
+
+		cost_center = "_Test Cost Center for BS Account - _TC"
+		create_cost_center(cost_center_name="_Test Cost Center for BS Account", company="_Test Company")
+
+		pi = make_purchase_invoice_against_cost_center(cost_center=cost_center, credit_to="Creditors - _TC")
+
+		pe = get_payment_entry("Purchase Invoice", pi.name, bank_account="_Test Bank - _TC")
+		self.assertEqual(pe.cost_center, pi.cost_center)
+
+		pe.reference_no = "112222-1"
+		pe.reference_date = nowdate()
+		pe.paid_from = "_Test Bank - _TC"
+		pe.paid_amount = pi.grand_total
+		pe.insert()
+		pe.submit()
+
+		expected_values = {
+			"_Test Bank - _TC": {"cost_center": cost_center},
+			"Creditors - _TC": {"cost_center": cost_center},
+		}
+
+		gl_entries = frappe.db.sql(
+			"""select account, cost_center, account_currency, debit, credit,
+			debit_in_account_currency, credit_in_account_currency
+			from `tabGL Entry` where voucher_type='Payment Entry' and voucher_no=%s
+			order by account asc""",
+			pe.name,
+			as_dict=1,
+		)
+
+		self.assertTrue(gl_entries)
+
+		for gle in gl_entries:
+			self.assertEqual(expected_values[gle.account]["cost_center"], gle.cost_center)
+
+	def test_payment_entry_account_and_party_balance_with_cost_center(self):
+		from erpnext.accounts.doctype.cost_center.test_cost_center import create_cost_center
+		from erpnext.accounts.utils import get_balance_on
+
+		cost_center = "_Test Cost Center for BS Account - _TC"
+		create_cost_center(cost_center_name="_Test Cost Center for BS Account", company="_Test Company")
+
+		si = create_sales_invoice_against_cost_center(cost_center=cost_center, debit_to="Debtors - _TC")
+
+		account_balance = get_balance_on(account="_Test Bank - _TC", cost_center=si.cost_center)
+		party_balance = get_balance_on(party_type="Customer", party=si.customer, cost_center=si.cost_center)
+		party_account_balance = get_balance_on(si.debit_to, cost_center=si.cost_center)
+
+		pe = get_payment_entry("Sales Invoice", si.name, bank_account="_Test Bank - _TC")
+		pe.reference_no = "112211-1"
+		pe.reference_date = nowdate()
+		pe.paid_to = "_Test Bank - _TC"
+		pe.paid_amount = si.grand_total
+		pe.insert()
+		pe.submit()
+
+		expected_account_balance = account_balance + si.grand_total
+		expected_party_balance = party_balance - si.grand_total
+		expected_party_account_balance = party_account_balance - si.grand_total
+
+		account_balance = get_balance_on(account=pe.paid_to, cost_center=pe.cost_center)
+		party_balance = get_balance_on(party_type="Customer", party=pe.party, cost_center=pe.cost_center)
+		party_account_balance = get_balance_on(account=pe.paid_from, cost_center=pe.cost_center)
+
+		self.assertEqual(pe.cost_center, si.cost_center)
+		self.assertEqual(flt(expected_account_balance), account_balance)
+		self.assertEqual(flt(expected_party_balance), party_balance)
+		self.assertEqual(flt(expected_party_account_balance, 2), flt(party_account_balance, 2))
 
 	def test_gl_of_multi_currency_payment_transaction(self):
 		from erpnext.setup.doctype.currency_exchange.test_currency_exchange import save_new_records
@@ -1687,6 +1807,7 @@ class TestPaymentEntry(ERPNextTestSuite):
 			"deductions",
 			{
 				"account": "Write Off - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 				"amount": 50,
 			},
 		)
@@ -1695,6 +1816,7 @@ class TestPaymentEntry(ERPNextTestSuite):
 			"deductions",
 			{
 				"account": "Write Off - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 				"amount": 30,
 			},
 		)
@@ -1729,6 +1851,7 @@ class TestPaymentEntry(ERPNextTestSuite):
 			"deductions",
 			{
 				"account": "Write Off - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 				"amount": 50,
 			},
 		)
@@ -1737,6 +1860,7 @@ class TestPaymentEntry(ERPNextTestSuite):
 			"deductions",
 			{
 				"account": "Write Off - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 				"amount": 30,
 			},
 		)
@@ -2055,6 +2179,7 @@ class TestPaymentEntry(ERPNextTestSuite):
 			"deductions",
 			{
 				"account": "_Test Exchange Gain/Loss - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 				"amount": 2710,
 			},
 		)

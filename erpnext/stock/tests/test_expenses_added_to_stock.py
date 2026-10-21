@@ -189,7 +189,8 @@ class TestExpensesAddedToStock(ERPNextTestSuite):
 			qty=1,
 			rate=500,
 			update_stock=1,
-			expense_account="Cost of Goods Sold - TCP1"
+			expense_account="Cost of Goods Sold - TCP1",
+			cost_center="Main - TCP1",
 		)
 
 		self.assertEqual(pi.docstatus, 1)

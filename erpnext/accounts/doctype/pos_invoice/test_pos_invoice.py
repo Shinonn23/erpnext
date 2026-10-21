@@ -89,6 +89,7 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 			{
 				"charge_type": "On Net Total",
 				"account_head": "_Test Account Service Tax - _TC",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "Service Tax",
 				"rate": 14,
 				"included_in_print_rate": 1,
@@ -134,6 +135,7 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 			{
 				"account_head": "_Test Account VAT - _TC",
 				"charge_type": "On Net Total",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "VAT",
 				"doctype": "Sales Taxes and Charges",
 				"rate": 19,
@@ -169,6 +171,7 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 			{
 				"account_head": "_Test Account Excise Duty - _TC",
 				"charge_type": "On Net Total",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "Excise Duty",
 				"doctype": "Sales Taxes and Charges",
 				"rate": 11,
@@ -179,6 +182,7 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 			{
 				"account_head": "_Test Account Education Cess - _TC",
 				"charge_type": "On Net Total",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "Education Cess",
 				"doctype": "Sales Taxes and Charges",
 				"rate": 0,
@@ -189,6 +193,7 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 			{
 				"account_head": "_Test Account S&H Education Cess - _TC",
 				"charge_type": "On Net Total",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "S&H Education Cess",
 				"doctype": "Sales Taxes and Charges",
 				"rate": 3,
@@ -228,6 +233,7 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 			{
 				"account_head": "_Test Account VAT - _TC",
 				"charge_type": "On Net Total",
+				"cost_center": "_Test Cost Center - _TC",
 				"description": "VAT",
 				"doctype": "Sales Taxes and Charges",
 				"rate": 24,
@@ -265,6 +271,7 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 			self,
 			company="_Test Company",
 			target_warehouse="Stores - _TC",
+			cost_center="Main - _TC",
 			expense_account="Cost of Goods Sold - _TC",
 		)
 
@@ -277,6 +284,7 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 			warehouse="Stores - _TC",
 			income_account="Sales - _TC",
 			expense_account="Cost of Goods Sold - _TC",
+			cost_center="Main - _TC",
 			item=se.get("items")[0].item_code,
 			serial_no=[serial_nos[0]],
 			rate=1000,
@@ -302,6 +310,7 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 			self,
 			company="_Test Company",
 			target_warehouse="Stores - _TC",
+			cost_center="Main - _TC",
 			expense_account="Cost of Goods Sold - _TC",
 		)
 
@@ -314,6 +323,7 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 			warehouse="Stores - _TC",
 			income_account="Sales - _TC",
 			expense_account="Cost of Goods Sold - _TC",
+			cost_center="Main - _TC",
 			item=se.get("items")[0].item_code,
 			serial_no=serial_nos,
 			qty=2,
@@ -363,6 +373,7 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 			income_account="Sales - _TC",
 			expense_account="Cost of Goods Sold - _TC",
 			rate=105,
+			cost_center="Main - _TC",
 			do_not_save=True,
 		)
 
@@ -489,6 +500,7 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 			self,
 			company="_Test Company",
 			target_warehouse="Stores - _TC",
+			cost_center="Main - _TC",
 			expense_account="Cost of Goods Sold - _TC",
 		)
 
@@ -501,6 +513,7 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 			warehouse="Stores - _TC",
 			income_account="Sales - _TC",
 			expense_account="Cost of Goods Sold - _TC",
+			cost_center="Main - _TC",
 			item=se.get("items")[0].item_code,
 			rate=1000,
 			serial_no=[serial_nos[0]],
@@ -518,6 +531,7 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 			warehouse="Stores - _TC",
 			income_account="Sales - _TC",
 			expense_account="Cost of Goods Sold - _TC",
+			cost_center="Main - _TC",
 			item=se.get("items")[0].item_code,
 			rate=1000,
 			serial_no=[serial_nos[0]],
@@ -536,6 +550,7 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 			self,
 			company="_Test Company",
 			target_warehouse="Stores - _TC",
+			cost_center="Main - _TC",
 			expense_account="Cost of Goods Sold - _TC",
 		)
 
@@ -548,6 +563,7 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 			warehouse="Stores - _TC",
 			income_account="Sales - _TC",
 			expense_account="Cost of Goods Sold - _TC",
+			cost_center="Main - _TC",
 			item=se.get("items")[0].item_code,
 			rate=1000,
 			update_stock=1,
@@ -565,6 +581,7 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 			warehouse="Stores - _TC",
 			income_account="Sales - _TC",
 			expense_account="Cost of Goods Sold - _TC",
+			cost_center="Main - _TC",
 			item=se.get("items")[0].item_code,
 			rate=1000,
 			serial_no=[serial_nos[0]],
@@ -584,6 +601,7 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 			self,
 			company="_Test Company",
 			target_warehouse="Stores - _TC",
+			cost_center="Main - _TC",
 			expense_account="Cost of Goods Sold - _TC",
 		)
 		serial_nos = get_serial_nos_from_bundle(se.get("items")[0].serial_and_batch_bundle)[0] + "wrong"
@@ -595,6 +613,7 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 			warehouse="Stores - _TC",
 			income_account="Sales - _TC",
 			expense_account="Cost of Goods Sold - _TC",
+			cost_center="Main - _TC",
 			item=se.get("items")[0].item_code,
 			rate=1000,
 			qty=2,
@@ -613,6 +632,7 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 			self,
 			company="_Test Company",
 			target_warehouse="Stores - _TC",
+			cost_center="Main - _TC",
 			expense_account="Cost of Goods Sold - _TC",
 		)
 		serial_nos = get_serial_nos_from_bundle(se.get("items")[0].serial_and_batch_bundle)
@@ -625,6 +645,7 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 			warehouse="Stores - _TC",
 			income_account="Sales - _TC",
 			expense_account="Cost of Goods Sold - _TC",
+			cost_center="Main - _TC",
 			item=se.get("items")[0].item_code,
 			rate=1000,
 			serial_no=[serial_nos[0]],
@@ -651,6 +672,7 @@ class TestPOSInvoice(POSInvoiceTestMixin):
 			warehouse="Stores - _TC",
 			income_account="Sales - _TC",
 			expense_account="Cost of Goods Sold - _TC",
+			cost_center="Main - _TC",
 			item=se.get("items")[0].item_code,
 			rate=1000,
 			serial_no=[serial_nos[0]],
@@ -1138,6 +1160,7 @@ def create_pos_invoice(**args):
 		"rate": args.rate if args.get("rate") is not None else 100,
 		"income_account": args.income_account or "Sales - _TC",
 		"expense_account": args.expense_account or "Cost of Goods Sold - _TC",
+		"cost_center": args.cost_center or "_Test Cost Center - _TC",
 		"serial_and_batch_bundle": bundle_id,
 		"use_serial_batch_fields": args.use_serial_batch_fields,
 		"serial_no": args.serial_no if args.use_serial_batch_fields else None,

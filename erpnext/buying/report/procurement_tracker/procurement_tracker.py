@@ -31,6 +31,13 @@ def get_columns(filters):
 			"width": 140,
 		},
 		{
+			"label": _("Cost Center"),
+			"options": "Cost Center",
+			"fieldname": "cost_center",
+			"fieldtype": "Link",
+			"width": 140,
+		},
+		{
 			"label": _("Project"),
 			"options": "Project",
 			"fieldname": "project",
@@ -126,6 +133,9 @@ def apply_filters_on_query(filters, parent, child, query):
 	if filters.get("company"):
 		query = query.where(parent.company == filters.get("company"))
 
+	if filters.get("cost_center"):
+		query = query.where(child.cost_center == filters.get("cost_center"))
+
 	if filters.get("project"):
 		query = query.where(child.project == filters.get("project"))
 
@@ -157,6 +167,7 @@ def get_data(filters):
 		for mr_record in material_requests:
 			procurement_detail = {
 				"material_request_date": mr_record.get("transaction_date"),
+				"cost_center": po.cost_center,
 				"project": po.project,
 				"requesting_site": po.warehouse,
 				"requestor": mr_record.get("owner", po.owner),
@@ -240,6 +251,7 @@ def get_mapped_mr_details(filters, request_items):
 			child.uom,
 			parent.status,
 			child.project,
+			child.cost_center,
 		)
 		.where(
 			(parent.per_ordered >= 0)
@@ -269,6 +281,7 @@ def get_mapped_mr_details(filters, request_items):
 			purchase_order_amt=0,
 			purchase_order_amt_in_company_currency=0,
 			project=record.project,
+			cost_center=record.cost_center,
 		)
 		procurement_record_against_mr.append(procurement_record_details)
 	return mr_records, procurement_record_against_mr
@@ -328,6 +341,7 @@ def get_po_entries(filters):
 		.select(
 			child.name,
 			child.parent,
+			child.cost_center,
 			child.project,
 			child.warehouse,
 			child.material_request,

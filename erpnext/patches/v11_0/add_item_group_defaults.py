@@ -9,7 +9,7 @@ def execute():
 	"""
 
 	Fields to move from item group to item defaults child table
-	[ default_expense_account, default_income_account ]
+	[ default_cost_center, default_expense_account, default_income_account ]
 
 	"""
 
@@ -18,8 +18,8 @@ def execute():
 
 	companies = frappe.get_all("Company")
 	item_groups = frappe.db.sql(
-		"""select name, default_income_account, default_expense_account
-		from `tabItem Group`""",
+		"""select name, default_income_account, default_expense_account,\
+		default_cost_center from `tabItem Group`""",
 		as_dict=True,
 	)
 
@@ -32,7 +32,8 @@ def execute():
 					"company": companies[0].name,
 					"income_account": item_group.get("default_income_account"),
 					"expense_account": item_group.get("default_expense_account"),
-
+					"buying_cost_center": item_group.get("default_cost_center"),
+					"selling_cost_center": item_group.get("default_cost_center"),
 				}
 			)
 			doc.extend("item_group_defaults", item_group_defaults)
@@ -42,6 +43,7 @@ def execute():
 		item_group_dict = {
 			"default_expense_account": ["expense_account"],
 			"default_income_account": ["income_account"],
+			"default_cost_center": ["buying_cost_center", "selling_cost_center"],
 		}
 		for item_group in item_groups:
 			item_group_defaults = []
@@ -62,6 +64,7 @@ def execute():
 			for d in [
 				["default_expense_account", "Account"],
 				["default_income_account", "Account"],
+				["default_cost_center", "Cost Center"],
 			]:
 				if item_group.get(d[0]):
 					company = frappe.get_value(d[1], item_group.get(d[0]), "company", cache=True)
