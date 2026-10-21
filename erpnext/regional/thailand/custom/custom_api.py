@@ -489,6 +489,8 @@ def clear_invoice_undue_tax(doc, method):
 						"charge_type": "Actual",
 						"account_head": account_undue,
 						"tax_amount": -undue_tax,
+						# the pair moves tax between two tax accounts and nets to zero: no bank (paid account) lines
+						"included_in_paid_amount": 1,
 					},
 				)
 				tax_total += undue_tax
@@ -508,6 +510,7 @@ def clear_invoice_undue_tax(doc, method):
 			"charge_type": "Actual",
 			"account_head": account,
 			"tax_amount": tax_total,
+			"included_in_paid_amount": 1,
 		},
 	)
 	doc.tax_base_amount = base_total
