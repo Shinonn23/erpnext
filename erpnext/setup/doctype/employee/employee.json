@@ -15,6 +15,7 @@
   "basic_information",
   "employee",
   "naming_series",
+  "salutation",
   "first_name",
   "middle_name",
   "last_name",
@@ -22,11 +23,9 @@
   "column_break_9",
   "gender",
   "date_of_birth",
-  "salutation",
-  "column_break1",
   "date_of_joining",
-  "image",
   "status",
+  "image",
   "erpnext_user",
   "user_id",
   "create_user_permission",
@@ -192,12 +191,6 @@
    "hidden": 1,
    "label": "Image",
    "no_copy": 1
-  },
-  {
-   "allow_in_quick_entry": 1,
-   "fieldname": "column_break1",
-   "fieldtype": "Column Break",
-   "width": "50%"
   },
   {
    "fieldname": "company",
@@ -856,7 +849,7 @@
  "image_field": "image",
  "is_tree": 1,
  "links": [],
- "modified": "2026-10-05 19:23:03.678690",
+ "modified": "2026-10-24 16:00:00.000000",
  "modified_by": "Administrator",
  "module": "Setup",
  "name": "Employee",
