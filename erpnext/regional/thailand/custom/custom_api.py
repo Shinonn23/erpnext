@@ -169,9 +169,7 @@ def validate_splitted_tax_invoices(voucher, tax_account):
 		)
 
 
-def create_tax_invoice(
-	doc, doctype, base_amount, tax_amount, voucher, split_tax_invoice=False
-):
+def create_tax_invoice(doc, doctype, base_amount, tax_amount, voucher, split_tax_invoice=False):
 	tinv_dict = {}
 	# For sales invoice / purchase invoice / payment and journal entry, we can get the party from GL
 	gl = frappe.db.get_all(
@@ -222,6 +220,7 @@ def create_tax_invoice(
 	# Create Tax Invoice
 	tinv_dict.update(
 		{
+			"company_tax_address": voucher_company_tax_address(doc.voucher_type, voucher),
 			"doctype": doctype,
 			"company": doc.company,
 			"gl_entry": doc.name,
@@ -253,20 +252,22 @@ def create_tax_invoice(
 		return tinvs
 
 
+def voucher_company_tax_address(voucher_type, voucher):
+	"""The company branch address a voucher is filed under (None when it has none)."""
+	# From Sales Invoice and Purchase Invoice, use voucher address
+	if voucher_type == "Sales Invoice":
+		return voucher.get("company_address")
+	if voucher_type == "Purchase Invoice":
+		return voucher.get("billing_address")
+	# From Payment Entry, Expense Claim and Journal Entry (its tax invoice detail row)
+	return voucher.get("company_tax_address")
+
+
 def update_voucher_tinv(doctype, voucher, tinv, split_tax_invoice=False):
 	# Set company tax address
-	def update_company_tax_address(voucher, tinv):
-		# From Sales Invoice and Purchase Invoice, use voucher address
-		if tinv.voucher_type == "Sales Invoice":
-			tinv.company_tax_address = voucher.company_address
-		elif tinv.voucher_type == "Purchase Invoice":
-			tinv.company_tax_address = voucher.billing_address
-		else:  # From Payment Entry, Expense Claim and Journal Entry
-			tinv.company_tax_address = voucher.company_tax_address
-		if not tinv.company_tax_address:
-			frappe.throw(_("No Company Billing/Tax Address"))
-
-	update_company_tax_address(voucher, tinv)
+	tinv.company_tax_address = voucher_company_tax_address(tinv.voucher_type, voucher)
+	if not tinv.company_tax_address:
+		frappe.throw(_("No Company Billing/Tax Address"))
 
 	# Use data in tax detail table
 	if split_tax_invoice:
@@ -303,25 +304,87 @@ def update_voucher_tinv(doctype, voucher, tinv, split_tax_invoice=False):
 	return tinv
 
 
+def normalise_branch_code(code):
+	"""'0' -> '00000'; blank stays blank."""
+	code = (code or "").strip()
+	return code.zfill(5) if code.isdigit() else code
+
+
 def get_company_tax_address(company):
-	"""The company's own address: its Billing address, else its only address (e.g. the head office, type Office)."""
-	addresses = frappe.db.get_all(
-		"Address",
-		filters=[
+	"""The company's own address, chosen deterministically when it has several (branches): the head office
+	(branch code 00000), else the only address. Billing, then primary, only break a tie between several
+	head offices (or between addresses when none is a head office). Disabled addresses count only when the
+	company has no enabled one. None when there is no address or nothing tells them apart."""
+
+	def company_addresses(enabled_only):
+		filters = [
 			["is_your_company_address", "=", 1],
 			["Dynamic Link", "link_doctype", "=", "Company"],
 			["Dynamic Link", "link_name", "=", company],
-		],
-		fields=["name", "address_type"],
-		distinct=True,
-	)
-	billing = [a for a in addresses if a.address_type == "Billing"]
-	candidates = billing or addresses
-	return candidates[0]["name"] if len(candidates) == 1 else None
+		]
+		if enabled_only:
+			filters.append(["disabled", "=", 0])
+		return frappe.db.get_all(
+			"Address",
+			filters=filters,
+			fields=["name", "address_type", "branch_code", "is_primary_address"],
+			distinct=True,
+			order_by="name",
+		)
+
+	pool = company_addresses(True) or company_addresses(False)
+	head_offices = [a for a in pool if normalise_branch_code(a.get("branch_code")) == "00000"]
+	pool = head_offices or pool
+	for matches in (
+		lambda a: a.get("address_type") == "Billing",
+		lambda a: a.get("is_primary_address"),
+	):
+		if len(pool) == 1:
+			break
+		found = [a for a in pool if matches(a)]
+		if found:
+			pool = found
+	return pool[0]["name"] if len(pool) == 1 else None
+
+
+# reference doctype -> its company branch address field
+BRANCH_ADDRESS_FIELDS = {
+	"Sales Invoice": "company_address",
+	"Sales Order": "company_address",
+	"Purchase Invoice": "billing_address",
+	"Purchase Order": "billing_address",
+	"Expense Claim": "company_tax_address",
+	"Journal Entry": "company_tax_address",
+}
+
+
+def referenced_company_addresses(doc):
+	"""The branch addresses of the invoices, orders and claims a Payment Entry refers to (blanks ignored)."""
+	addresses = set()
+	for ref in doc.get("references") or []:
+		field = BRANCH_ADDRESS_FIELDS.get(ref.reference_doctype)
+		if not field:
+			continue
+		address = frappe.db.get_value(ref.reference_doctype, ref.reference_name, field)
+		if address:
+			addresses.add(address)
+	return addresses
 
 
 def validate_company_address(doc, method):
-	if not doc.company_tax_address:
+	"""A Payment Entry belongs to one branch: that of the documents it settles, else the head office.
+	Each branch files its own VAT, so a payment spanning several branches is refused."""
+	addresses = referenced_company_addresses(doc)
+	if len(addresses) > 1:
+		frappe.throw(
+			_(
+				"Receipt covers invoices of different company branches ({0}). "
+				"Please make a separate Payment Entry for each branch."
+			).format(", ".join(sorted(addresses)))
+		)
+	if addresses:
+		(doc.company_tax_address,) = addresses
+	elif not doc.company_tax_address:
 		doc.company_tax_address = get_company_tax_address(doc.company)
 
 
@@ -350,16 +413,9 @@ def validate_tax_invoice(doc, method):
 def validate_sales_tax_invoice_zero_tax(doc, method):
 	"""When manual key-in is enabled, require Tax Invoice Number/Date on zero-tax Sales Invoices."""
 	setting = get_thai_tax_settings(doc.company)
-	if not (
-		setting.create_sales_taxinv_on_zero_tax
-		and setting.get("manual_keyin_sales_taxinv_on_zero_tax")
-	):
+	if not (setting.create_sales_taxinv_on_zero_tax and setting.get("manual_keyin_sales_taxinv_on_zero_tax")):
 		return
-	zero_taxes = [
-		t
-		for t in doc.taxes
-		if (t.account_head == setting.sales_tax_account and t.tax_amount == 0)
-	]
+	zero_taxes = [t for t in doc.taxes if (t.account_head == setting.sales_tax_account and t.tax_amount == 0)]
 	if zero_taxes:
 		if not doc.tax_invoice_number:
 			frappe.throw(_("This document requires Tax Invoice Number"))
@@ -470,8 +526,7 @@ def clear_invoice_undue_tax(doc, method):
 		if ref.reference_doctype in ("Sales Invoice", "Purchase Invoice", "Expense Claim")
 	]
 	if not references or any(
-		ref.reference_doctype in ("Purchase Invoice", "Expense Claim")
-		and not doc.has_purchase_tax_invoice
+		ref.reference_doctype in ("Purchase Invoice", "Expense Claim") and not doc.has_purchase_tax_invoice
 		for ref in references
 	):
 		return
@@ -517,9 +572,7 @@ def clear_invoice_undue_tax(doc, method):
 				tax_total += undue_tax
 	if not tax_total:
 		if doc.has_purchase_tax_invoice:
-			frappe.throw(
-				_("No undue tax amount to clear. Please uncheck 'Has Purchase Tax Invoice'")
-			)
+			frappe.throw(_("No undue tax amount to clear. Please uncheck 'Has Purchase Tax Invoice'"))
 		return
 	# To due tax
 	doc.append(
@@ -628,9 +681,7 @@ def prepare_journal_entry_tax_invoice_detail(doc, method):
 		for tax_line in filter(lambda l: l.account in tax_accounts, doc.accounts):
 			tax_rate = frappe.get_cached_value("Account", tax_line.account, "tax_rate")
 			tax_amount = abs(tax_line.debit - tax_line.credit)
-			tax_base_amount = tax_line.tax_base_amount or (
-				tax_rate > 0 and tax_amount * 100 / tax_rate or 0
-			)
+			tax_base_amount = tax_line.tax_base_amount or (tax_rate > 0 and tax_amount * 100 / tax_rate or 0)
 			# the entry's company address, not "the only company address" (each company has its own)
 			company_tax_address = doc.company_tax_address or get_company_tax_address(doc.company) or ""
 			party_name = ""
@@ -680,9 +731,7 @@ def create_sales_tax_invoice_on_zero_tax(doc, method):
 	)
 	base_amount = sum(tax.base_total for tax in zero_taxes)
 	if base_amount:
-		tinv = create_sales_tax_invoice_zero_tax(
-			doc, doctype, base_amount, zero_taxes[0].account_head
-		)
+		tinv = create_sales_tax_invoice_zero_tax(doc, doctype, base_amount, zero_taxes[0].account_head)
 		tinv = update_voucher_tinv(doctype, doc, tinv)
 		tinv.submit()
 
