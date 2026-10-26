@@ -4,14 +4,13 @@ from frappe.utils import getdate
 
 def parse_naming_series_variable(doc, variable):
 	"""Use date to get part"""
+	if variable == "BRANCH":
+		from erpnext.regional.thailand.custom.naming_branch import get_branch_code
+
+		return get_branch_code(doc)
 	date = getdate()
 	if doc:
-		date = (
-			doc.get("posting_date")
-			or doc.get("transaction_date")
-			or doc.get("date")
-			or getdate()
-		)
+		date = doc.get("posting_date") or doc.get("transaction_date") or doc.get("date") or getdate()
 		if isinstance(date, str):
 			date = getdate(date)
 	if variable == "YYYY-DATE":

@@ -996,7 +996,7 @@ auto_cancel_exempted_doctypes = list(
 naming_series_variables.update(
 	{
 		variable: "erpnext.regional.thailand.custom.naming.parse_naming_series_variable"
-		for variable in ("YYYY-DATE", "YY-DATE", "MM-DATE", "DD-DATE", "WW-DATE")
+		for variable in ("YYYY-DATE", "YY-DATE", "MM-DATE", "DD-DATE", "WW-DATE", "BRANCH")
 	}
 )
 after_migrate.append("erpnext.regional.thailand.migration.transfer_thailand_module_ownership")
