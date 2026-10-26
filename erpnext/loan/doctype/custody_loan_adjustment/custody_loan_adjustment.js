@@ -11,6 +11,7 @@ frappe.ui.form.on("Custody Loan Adjustment", {
 			},
 		}));
 		frm.set_query("custody_loan_item", "items", () => ({
+			query: "erpnext.loan.doctype.custody_loan.custody_loan_core.custody_loan_item_query",
 			filters: { parent: frm.doc.custody_loan },
 		}));
 		frm.set_query("batch_no", "items", (doc, cdt, cdn) => {
@@ -31,7 +32,13 @@ frappe.ui.form.on("Custody Loan Adjustment Item", {
 		const row = locals[cdt][cdn];
 		if (!row.custody_loan_item) return;
 		frappe.db
-			.get_value("Custody Loan Item", row.custody_loan_item, ["item_code", "batch_no", "serial_no"])
+			.get_value(
+				"Custody Loan Item",
+				row.custody_loan_item,
+				["item_code", "batch_no", "serial_no"],
+				null,
+				"Custody Loan"
+			)
 			.then(({ message }) => {
 				if (!message) return;
 				frappe.model.set_value(cdt, cdn, {

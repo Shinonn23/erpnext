@@ -5,6 +5,8 @@
  "field_order": [
   "custody_loan_item",
   "item_code",
+  "has_batch_no",
+  "has_serial_no",
   "qty",
   "batch_no",
   "serial_no",
@@ -28,6 +30,22 @@
    "in_list_view": 1
   },
   {
+   "fetch_from": "item_code.has_batch_no",
+   "fieldname": "has_batch_no",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "Has Batch No",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "item_code.has_serial_no",
+   "fieldname": "has_serial_no",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "Has Serial No",
+   "read_only": 1
+  },
+  {
    "fieldname": "qty",
    "fieldtype": "Float",
    "label": "Adjusted Qty",
@@ -39,13 +57,13 @@
    "fieldtype": "Link",
    "label": "Batch No",
    "options": "Batch",
-   "depends_on": "eval:frappe.get_meta('Item', doc.item_code).has_batch_no"
+   "depends_on": "eval:doc.has_batch_no"
   },
   {
    "fieldname": "serial_no",
    "fieldtype": "Small Text",
    "label": "Serial Nos",
-   "depends_on": "eval:frappe.get_meta('Item', doc.item_code).has_serial_no"
+   "depends_on": "eval:doc.has_serial_no"
   },
   {
    "fieldname": "reason",

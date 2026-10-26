@@ -2076,3 +2076,29 @@ def check_custody_loan_source(source_doctype, source_name, loan_name):
 	if source_doctype == "Custody Loan":
 		return source_name == loan_name
 	return frappe.db.get_value(source_doctype, source_name, "custody_loan") == loan_name
+
+
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def custody_loan_item_query(doctype, txt, searchfield, start, page_len, filters):
+	"""Loan Item picker for Return and Adjustment rows.
+
+	Custody Loan Item is a child table, so Frappe's generic link search and validation check its permission
+	without a parent type and refuse every user. Read rights on the parent loan decide instead.
+	"""
+	parent = (filters or {}).get("parent") if isinstance(filters, dict) else None
+	if (
+		not parent
+		or not frappe.db.exists("Custody Loan", parent)
+		or not frappe.has_permission("Custody Loan", "read", parent)
+	):
+		return []
+	return frappe.get_all(
+		"Custody Loan Item",
+		filters={"parent": parent, "parenttype": "Custody Loan", "name": ["like", f"%{txt}%"]},
+		fields=["name", "item_code"],
+		order_by="idx",
+		limit_start=start,
+		limit_page_length=page_len,
+		as_list=True,
+	)
