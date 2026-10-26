@@ -701,6 +701,10 @@ ERP_PROPERTY_SETTERS = {
 	"Sales Invoice": [
 		("naming_series", "depends_on", "eval:!doc.amended_from", "Data"),
 	],
+	# named by company, branch and month in code (custom/tax_invoice_series.py), the series is not used
+	("Sales Tax Invoice", "Purchase Tax Invoice"): [
+		("naming_series", "hidden", "1", "Check"),
+	],
 	("Quotation", "Sales Order", "Delivery Note", "Sales Invoice"): [
 		("company_address", "label", "Company Branch (Company Address)", "Data"),
 	],

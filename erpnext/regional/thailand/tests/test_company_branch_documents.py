@@ -186,6 +186,7 @@ class TestSnapshot(unittest.TestCase):
 			custom_api.create_sales_tax_invoice_zero_tax(invoice, "Sales Tax Invoice", 100, "VAT")
 		self.assertEqual(inserted[0]["company_branch_code"], "00004")
 		self.assertEqual(inserted[0]["company_tax_address"], "B4")
+		self.assertEqual(inserted[0]["company"], "CD")  # the abbreviation of its number is the company's
 
 
 class TestAmendedSnapshot(unittest.TestCase):

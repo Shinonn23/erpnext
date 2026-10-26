@@ -1,25 +1,11 @@
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.model.naming import make_autoname
-from frappe.utils import add_months, getdate, nowdate
+from frappe.utils import add_months
 
 from erpnext.regional.thailand.custom.company_branch import set_company_branch_snapshot
 from erpnext.regional.thailand.custom.custom_api import get_thai_tax_settings
-
-
-def sales_tax_invoice_series(doc):
-	"""Owner decision 22-10-2026: each company numbers its own tax invoices, CD-CI2600001, CD-CI2600002, ... and
-	UB-CI2600001, ...: the company's abbreviation, CI and the year of the tax invoice's date (an invoice dated in
-	December keeps its year), then a running number per company and year (getseries keys it by the text before
-	the hashes)."""
-	abbr = frappe.get_cached_value("Company", doc.company, "abbr")
-	date = (
-		doc.date
-		or (doc.gl_entry and frappe.db.get_value("GL Entry", doc.gl_entry, "posting_date"))
-		or nowdate()
-	)
-	return f"{abbr}-CI{getdate(date).strftime('%y')}.#####"
+from erpnext.regional.thailand.custom.tax_invoice_series import make_tax_invoice_name
 
 
 class SalesTaxInvoice(Document):
@@ -37,7 +23,7 @@ class SalesTaxInvoice(Document):
 			if voucher.tax_invoice_number:
 				self.name = voucher.tax_invoice_number
 		if not self.name:
-			self.name = make_autoname(sales_tax_invoice_series(self), "Sales Tax Invoice", self)
+			self.name = make_tax_invoice_name(self)
 
 	def validate(self):
 		self.validate_account()

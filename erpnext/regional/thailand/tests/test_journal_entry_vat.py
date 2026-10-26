@@ -453,14 +453,16 @@ class TestJournalSalesTaxInvoice(unittest.TestCase):
 		"""A journal's voucher is its Tax Invoice Detail row; the settings come from the tax invoice's company."""
 		detail = _DetailRow(company_tax_address="CD-Office", save=Mock())
 		tinv = SimpleNamespace(
-			name="CD-CI2600009", date="2026-10-22", company=CD, voucher_type="Journal Entry"
+			name="CD00000-STI6910009", date="2026-10-22", company=CD, voucher_type="Journal Entry"
 		)
 		tinv.save = Mock()
 		settings = SimpleNamespace(create_sales_taxinv_on_zero_tax=0, get=lambda field: 0)
 		with patch.object(custom_api, "get_thai_tax_settings", return_value=settings) as thai_tax_settings:
 			custom_api.update_voucher_tinv("Sales Tax Invoice", detail, tinv)
 		thai_tax_settings.assert_called_once_with(CD)
-		self.assertEqual((detail.tax_invoice_number, detail.tax_invoice_date), ("CD-CI2600009", "2026-10-22"))
+		self.assertEqual(
+			(detail.tax_invoice_number, detail.tax_invoice_date), ("CD00000-STI6910009", "2026-10-22")
+		)
 		self.assertEqual(tinv.company_tax_address, "CD-Office")
 		detail.save.assert_called_once()
 

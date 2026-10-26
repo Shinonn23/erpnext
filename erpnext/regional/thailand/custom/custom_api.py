@@ -741,6 +741,7 @@ def create_sales_tax_invoice_zero_tax(doc, doctype, base_amount, account):
 	tinv_dict = {
 		"date": doc.posting_date,
 		"doctype": doctype,
+		"company": doc.company,
 		"tax_amount": 0,
 		"tax_base": base_amount,
 		"party": doc.customer,

@@ -7,9 +7,15 @@ from frappe.utils import add_months
 
 from erpnext.regional.thailand.custom.company_branch import set_company_branch_snapshot
 from erpnext.regional.thailand.custom.custom_api import get_thai_tax_settings
+from erpnext.regional.thailand.custom.tax_invoice_series import make_tax_invoice_name
 
 
 class PurchaseTaxInvoice(Document):
+	def autoname(self):
+		"""Our internal tax invoice number (the document name) follows the branch series; the supplier's own
+		invoice number stays in `number`."""
+		self.name = make_tax_invoice_name(self)
+
 	def submit(self):
 		if self.against_voucher_type == "Payment Entry":
 			frappe.db.set_value("Payment Entry", self.against_voucher, "has_purchase_tax_invoice", 1)
