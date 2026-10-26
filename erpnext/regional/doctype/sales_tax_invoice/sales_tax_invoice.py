@@ -4,6 +4,7 @@ from frappe.model.document import Document
 from frappe.model.naming import make_autoname
 from frappe.utils import add_months, getdate, nowdate
 
+from erpnext.regional.thailand.custom.company_branch import set_company_branch_snapshot
 from erpnext.regional.thailand.custom.custom_api import get_thai_tax_settings
 
 
@@ -42,6 +43,7 @@ class SalesTaxInvoice(Document):
 		self.validate_account()
 		self.compute_report_date()
 		self.compute_tax_percent()
+		set_company_branch_snapshot(self)
 
 	def on_update_after_submit(self):
 		if self.get_doc_before_save():  # Some change is made

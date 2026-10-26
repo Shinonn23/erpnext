@@ -5,27 +5,25 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.utils import add_months
 
+from erpnext.regional.thailand.custom.company_branch import set_company_branch_snapshot
 from erpnext.regional.thailand.custom.custom_api import get_thai_tax_settings
 
 
 class PurchaseTaxInvoice(Document):
 	def submit(self):
 		if self.against_voucher_type == "Payment Entry":
-			frappe.db.set_value(
-				"Payment Entry", self.against_voucher, "has_purchase_tax_invoice", 1
-			)
+			frappe.db.set_value("Payment Entry", self.against_voucher, "has_purchase_tax_invoice", 1)
 		super().submit()
 
 	def cancel(self):
 		if self.against_voucher_type == "Payment Entry":
-			frappe.db.set_value(
-				"Payment Entry", self.against_voucher, "has_purchase_tax_invoice", 0
-			)
+			frappe.db.set_value("Payment Entry", self.against_voucher, "has_purchase_tax_invoice", 0)
 		super().cancel()
 
 	def validate(self):
 		self.validate_account()
 		self.compute_report_date()
+		set_company_branch_snapshot(self)
 
 	def on_update_after_submit(self):
 		if self.get_doc_before_save():  # Some change is made
@@ -34,9 +32,7 @@ class PurchaseTaxInvoice(Document):
 				origin_doc = frappe.get_doc(self.voucher_type, self.voucher_no)
 				if self.voucher_type == "Journal Entry":
 					gl = frappe.get_doc("GL Entry", self.gl_entry)
-					origin_doc = frappe.get_doc(
-						"Journal Entry Tax Invoice Detail", gl.voucher_detail_no
-					)
+					origin_doc = frappe.get_doc("Journal Entry Tax Invoice Detail", gl.voucher_detail_no)
 				if not origin_doc.get("split_tax_invoice", False):
 					origin_doc.tax_invoice_number = self.number
 					origin_doc.tax_invoice_date = self.date
