@@ -188,6 +188,13 @@
 	}
 </style>
 
+{% var first = data[0] || {} %}
+{% if (first.filing_notice) { %}
+	<p class="title text-center">
+		<strong>Select a Company Branch to print the per-branch filing report (PND3)</strong>
+	</p>
+{% } else { %}
+
 {% var number = 0 %}
 {% var sum_total_base = 0 %}
 {% var sum_total_amount = 0 %}
@@ -206,7 +213,7 @@
 		<!-- Company Tax -->
 		<div class="company-tax-group">
 			<div class="company-tax">
-				{% var company_tax = data[0].company_tax_id %}
+				{% var company_tax = first.company_tax_id %}
 				{% if(company_tax) { %}
 					<div class="box-tax">
 						{%= company_tax.substring(0, 1) %}
@@ -250,7 +257,7 @@
 				{% } %}
 			</div>
 			<div class="company-branch">
-				{% var company_branch = data[0].company_branch %}
+				{% var company_branch = first.company_branch %}
 				{% if (company_branch) { %}
 					<div class="box-tax">
 						{%= company_branch.substring(0, 1) %}
@@ -423,4 +430,5 @@
 			</div>
 		{% endif %}
 	</div>
+{% } %}
 {% } %}

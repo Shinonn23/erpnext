@@ -5,11 +5,14 @@ import frappe
 from frappe import _
 from frappe.query_builder import CustomFunction
 
+from erpnext.regional.thailand.tax_report_branch import branch_criterion, finish_tax_report
+
 
 def execute(filters=None):
 	columns = get_columns()
-	data = get_data(filters)
-	return columns, data, None, None, None
+	filters = frappe._dict(filters or {})
+	data, report_summary = finish_tax_report(get_data(filters), filters, summary=True)
+	return columns, data, None, None, report_summary
 
 
 def get_columns():
@@ -60,6 +63,12 @@ def get_columns():
 			"width": 0,
 		},
 		{
+			"label": _("Our Branch"),
+			"fieldname": "company_branch_code",
+			"fieldtype": "Data",
+			"width": 90,
+		},
+		{
 			"label": _("Supplier Address"),
 			"fieldname": "supplier_address",
 			"fieldtype": "Data",
@@ -105,7 +114,6 @@ def get_columns():
 
 
 def get_data(filters):
-
 	tinv = frappe.qb.DocType("Purchase Tax Invoice")
 	sup = frappe.qb.DocType("Supplier")
 	addr = frappe.qb.DocType("Address")
@@ -113,6 +121,8 @@ def get_data(filters):
 	addr_company = addr.as_("company_address")
 	round = CustomFunction("round", ["value", "digit"])
 	coalesce = CustomFunction("coalesce", ["value1", "value2"])
+	coalesce3 = CustomFunction("coalesce", ["value1", "value2", "value3"])
+	nullif = CustomFunction("nullif", ["value1", "value2"])
 	month = CustomFunction("month", ["date"])
 	year = CustomFunction("year", ["date"])
 	concat_ws = CustomFunction("concat_ws", ["separator", "1", "2", "3", "4", "5", "6"])
@@ -137,7 +147,10 @@ def get_data(filters):
 			addr_company.county.as_("company_county"),
 			addr_company.state.as_("company_state"),
 			addr_company.pincode.as_("company_pincode"),
-			addr_company.branch_code.as_("company_branch_code"),
+			# our branch: the snapshot on the tax invoice, the live address only for old documents
+			coalesce3(nullif(tinv.company_branch_code, ""), addr_company.branch_code, "").as_(
+				"company_branch_code"
+			),
 			coalesce(tinv.number, tinv.name).as_("name"),
 			sup.supplier_name.as_("party_name"),
 			sup.tax_id.as_("tax_id"),
@@ -157,11 +170,20 @@ def get_data(filters):
 			tinv.voucher_no.as_("voucher_no"),
 			tinv.name.as_("tax_invoice"),
 			comp.company_name.as_("company_name"),
-			comp.tax_id.as_("company_tax_id"),
+			coalesce3(nullif(tinv.company_tax_id, ""), nullif(addr_company.tax_id, ""), comp.tax_id).as_(
+				"company_tax_id"
+			),
 		)
 		.where(tinv.docstatus == 1)
-		.orderby(tinv.date)
 	)
+
+	if not filters.get("company_tax_address"):
+		# all branches: grouped by branch first
+		query = query.orderby(tinv.company_tax_address)
+	query = query.orderby(tinv.date).orderby(tinv.name)
+
+	if filters.get("company"):
+		query = query.where(tinv.company == filters.get("company"))
 
 	if filters.get("filter_based_on") == "Fiscal Year":
 		query = query.where(month(tinv.report_date) == filters.get("month"))
@@ -172,7 +194,7 @@ def get_data(filters):
 		query = query.where(tinv.report_date <= filters.get("end_date"))
 
 	if filters.get("company_tax_address"):
-		query = query.where(tinv.company_tax_address == filters.get("company_tax_address"))
+		query = query.where(branch_criterion(tinv.company_tax_address, filters.get("company_tax_address")))
 
 	result = query.run(as_dict=True)
 

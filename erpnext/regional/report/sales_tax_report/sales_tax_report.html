@@ -117,6 +117,12 @@
 	"11": "November",
 	"12": "December",
 } %}
+{% var first = data[0] || {} %}
+{% if (first.filing_notice) { %}
+	<p class="title text-center">
+		<strong>Select a Company Branch to print the per-branch filing report (PP30)</strong>
+	</p>
+{% } else { %}
 <div id="header-html" class="hidden-pdf">
 	<p class="title text-center">
 		<strong>Sales Tax Report</strong>
@@ -124,18 +130,22 @@
 	<p class="month text-center">
 		<strong>Tax Month {%= month_dict[filters.month] %} Year (B.E.) {%= parseInt(filters.year) + 543 %}</strong>
 	</p>
+	{% var first_code = (first.company_branch_code || "").trim() %}
+	<p class="month text-center">
+		<strong>{%= (!first_code || first_code == "-" || first_code == "00000") ? "Head Office" : "Branch " + first_code %}</strong>
+	</p>
 	<div class="row section-break">
 		<div class="col-xs-2">
 			Business Name
 		</div>
 		<div class="col-xs-4">
-			{%= data[0].company_name %}
+			{%= first.company_name %}
 		</div>
 		<div class="col-xs-2">
 			Tax ID
 		</div>
 		<div class="col-xs-4">
-			{%= data[0].company_tax_id %}
+			{%= first.company_tax_id %}
 		</div>
 	</div>
 	<div class="row section-break">
@@ -143,23 +153,23 @@
 			Establishment Name
 		</div>
 		<div class="col-xs-4">
-			{%= data[0].company_name %}
+			{%= first.company_name %}
 		</div>
 		<div class="col-xs-4">
-			{% if (!data[0].company_branch_code || data[0].company_branch_code == "-" || data[0].company_branch_code == "00000") { %}
+			{% if (!first.company_branch_code || first.company_branch_code == "-" || first.company_branch_code == "00000") { %}
 				<span class="checkbox"></span>
 			{% } else { %}
 				<span class="uncheckbox"></span>
 			{% } %}
 			Head Office &nbsp;&nbsp;&nbsp;&nbsp;
-			{% if (data[0].company_branch_code && data[0].company_branch_code != "-" && data[0].company_branch_code != "00000") { %}
+			{% if (first.company_branch_code && first.company_branch_code != "-" && first.company_branch_code != "00000") { %}
 				<span class="checkbox"></span>
 			{% } else { %}
 				<span class="uncheckbox"></span>
 			{% } %}
 			Branch No.
-			{% if (data[0].company_branch_code && data[0].company_branch_code != "-" && data[0].company_branch_code != "00000") { %}
-				{%= data[0].company_branch_code %}
+			{% if (first.company_branch_code && first.company_branch_code != "-" && first.company_branch_code != "00000") { %}
+				{%= first.company_branch_code %}
 			{% } %}
 		</div>
 		<div class="col-xs-2 text-right">
@@ -171,12 +181,12 @@
 			Address
 		</div>
 		<div class="col-xs-10">
-			{{ data[0].company_address_line1 }}
-			{{ data[0].company_address_line2 }}
-			{{ data[0].company_city }}
-			{{ data[0].company_county }}
-			{{ data[0].company_state }}
-			{{ data[0].company_pincode }}
+			{{ first.company_address_line1 }}
+			{{ first.company_address_line2 }}
+			{{ first.company_city }}
+			{{ first.company_county }}
+			{{ first.company_state }}
+			{{ first.company_pincode }}
 		</div>
 	</div>
 </div>
@@ -370,3 +380,4 @@
 		</td>
 	</tr>
 </table>
+{% } %}

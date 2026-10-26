@@ -6,11 +6,21 @@ from frappe import _
 from frappe.query_builder import Case, CustomFunction
 from frappe.query_builder.custom import ConstantColumn
 
+from erpnext.regional.thailand.tax_report_branch import branch_criterion, finish_tax_report
+
 
 def execute(filters=None):
 	columns = get_columns()
-	data = get_data(filters)
-	return columns, data, None, None, None
+	filters = frappe._dict(filters or {})
+	data, report_summary = finish_tax_report(
+		get_data(filters), _wht_filters(filters), summary=True, tax_name="WHT"
+	)
+	return columns, data, None, None, report_summary
+
+
+def _wht_filters(filters):
+	"""The cert rows carry company_address, not company_tax_address; give the helper the same keys."""
+	return frappe._dict(filters, company_tax_address=filters.get("company_address"))
 
 
 def get_columns():
@@ -32,6 +42,12 @@ def get_columns():
 			"fieldname": "branch",
 			"fieldtype": "Data",
 			"width": 0,
+		},
+		{
+			"label": _("Our Branch"),
+			"fieldname": "company_branch_code",
+			"fieldtype": "Data",
+			"width": 90,
 		},
 		{
 			"label": _("Title"),
@@ -143,7 +159,6 @@ def get_columns():
 
 
 def get_data(filters):
-
 	#   SUBSTRING(s.supplier_name, 1, CHAR_LENGTH(s.supplier_name) - LOCATE(' ', REVERSE(s.supplier_name))+1) as firstname,
 	#   SUBSTRING_INDEX(s.supplier_name, " ", -1) as lastname,
 
@@ -153,6 +168,8 @@ def get_data(filters):
 	address = frappe.qb.DocType("Address")
 	company_address = address.as_("company_address")
 	round = CustomFunction("round", ["value", "digit"])
+	coalesce = CustomFunction("coalesce", ["value1", "value2"])
+	nullif = CustomFunction("nullif", ["value1", "value2"])
 	month = CustomFunction("month", ["date"])
 	year = CustomFunction("year", ["date"])
 	substring = CustomFunction("substring", ["string", "pos1", "pos2"])
@@ -172,15 +189,13 @@ def get_data(filters):
 		.left_join(company_address)
 		.on(company_address.name == wht_cert.company_address)
 		.select(
-			supplier.tax_id.as_("supplier_tax_id"),
-			supplier.branch_code.as_("branch"),
+			coalesce(nullif(wht_cert.supplier_tax_id, ""), supplier.tax_id).as_("supplier_tax_id"),
+			coalesce(nullif(address.branch_code, ""), supplier.branch_code).as_("branch"),
 			ConstantColumn("").as_("title"),
 			substring(
 				supplier.supplier_name,
 				1,
-				char_length(supplier.supplier_name)
-				- locate(" ", reverse(supplier.supplier_name))
-				+ 1,
+				char_length(supplier.supplier_name) - locate(" ", reverse(supplier.supplier_name)) + 1,
 			).as_("firstname"),
 			substring_index(supplier.supplier_name, " ", -1).as_("lastname"),
 			address.address_line1.as_("address_line1"),
@@ -202,8 +217,10 @@ def get_data(filters):
 			wht_cert.name.as_("name"),
 			wht_cert.voucher_type.as_("voucher_type"),
 			wht_cert.voucher_no.as_("voucher_no"),
+			wht_cert.company_address.as_("company_tax_address"),
 			wht_cert.company_tax_id.as_("company_tax_id"),
 			company_address.branch_code.as_("company_branch"),
+			company_address.branch_code.as_("company_branch_code"),
 		)
 		.distinct()
 		.where(
@@ -212,11 +229,18 @@ def get_data(filters):
 			& (month(wht_cert.date) == filters.get("month"))
 			& (year(wht_cert.date) == filters.get("year"))
 		)
-		.orderby(wht_cert.date, wht_cert.name)
 	)
 
+	if not filters.get("company_address"):
+		# all branches: grouped by branch first
+		query = query.orderby(wht_cert.company_address)
+	query = query.orderby(wht_cert.date, wht_cert.name)
+
+	if filters.get("company"):
+		query = query.where(wht_cert.company == filters.get("company"))
+
 	if filters.get("company_address"):
-		query = query.where(wht_cert.company_address == filters.get("company_address"))
+		query = query.where(branch_criterion(wht_cert.company_address, filters.get("company_address")))
 
 	result = query.run(as_dict=True)
 

@@ -5,6 +5,18 @@
 frappe.query_reports["Sales Tax Report"] = {
 	filters: [
 		{
+			fieldname: "company",
+			label: __("Company"),
+			fieldtype: "Link",
+			options: "Company",
+			default: frappe.defaults.get_user_default("Company"),
+			reqd: 1,
+			on_change: function () {
+				frappe.query_report.set_filter_value("company_tax_address", "");
+				frappe.query_report.refresh();
+			},
+		},
+		{
 			fieldname: "filter_based_on",
 			label: __("Filter Based On"),
 			fieldtype: "Select",
@@ -13,22 +25,10 @@ frappe.query_reports["Sales Tax Report"] = {
 			reqd: 1,
 			on_change: function () {
 				let filter_based_on = frappe.query_report.get_filter_value("filter_based_on");
-				frappe.query_report.toggle_filter_display(
-					"year",
-					filter_based_on === "Date Range"
-				);
-				frappe.query_report.toggle_filter_display(
-					"month",
-					filter_based_on === "Date Range"
-				);
-				frappe.query_report.toggle_filter_display(
-					"start_date",
-					filter_based_on === "Fiscal Year"
-				);
-				frappe.query_report.toggle_filter_display(
-					"end_date",
-					filter_based_on === "Fiscal Year"
-				);
+				frappe.query_report.toggle_filter_display("year", filter_based_on === "Date Range");
+				frappe.query_report.toggle_filter_display("month", filter_based_on === "Date Range");
+				frappe.query_report.toggle_filter_display("start_date", filter_based_on === "Fiscal Year");
+				frappe.query_report.toggle_filter_display("end_date", filter_based_on === "Fiscal Year");
 
 				frappe.query_report.refresh();
 			},
@@ -63,12 +63,15 @@ frappe.query_reports["Sales Tax Report"] = {
 		},
 		{
 			fieldname: "company_tax_address",
-			label: __("Company Address"),
+			label: __("Company Branch"),
 			fieldtype: "Link",
 			options: "Address",
 			get_query: () => {
 				return {
+					query: "frappe.contacts.doctype.address.address.address_query",
 					filters: {
+						link_doctype: "Company",
+						link_name: frappe.query_report.get_filter_value("company"),
 						is_your_company_address: 1,
 					},
 				};

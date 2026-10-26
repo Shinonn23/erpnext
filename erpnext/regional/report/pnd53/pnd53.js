@@ -5,6 +5,18 @@
 frappe.query_reports["PND53"] = {
 	filters: [
 		{
+			fieldname: "company",
+			label: __("Company"),
+			fieldtype: "Link",
+			options: "Company",
+			default: frappe.defaults.get_user_default("Company"),
+			reqd: 1,
+			on_change: function () {
+				frappe.query_report.set_filter_value("company_address", "");
+				frappe.query_report.refresh();
+			},
+		},
+		{
 			fieldname: "year",
 			label: __("Year"),
 			fieldtype: "Link",
@@ -18,12 +30,15 @@ frappe.query_reports["PND53"] = {
 		},
 		{
 			fieldname: "company_address",
-			label: __("Company Address"),
+			label: __("Company Branch"),
 			fieldtype: "Link",
 			options: "Address",
 			get_query: () => {
 				return {
+					query: "frappe.contacts.doctype.address.address.address_query",
 					filters: {
+						link_doctype: "Company",
+						link_name: frappe.query_report.get_filter_value("company"),
 						is_your_company_address: 1,
 					},
 				};

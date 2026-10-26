@@ -98,11 +98,12 @@ class TestEnglishSystemOutput(unittest.TestCase):
 
 	def test_tax_report_templates_and_system_help_have_no_thai(self):
 		regional = Path(__file__).resolve().parents[2]
-		for name in ("purchase_tax_report", "sales_tax_report"):
+		for name in ("purchase_tax_report", "sales_tax_report", "pnd3", "pnd53"):
 			text = (regional / f"report/{name}/{name}.html").read_text()
 			self.assertNotRegex(text, "[\u0e00-\u0e7f]")
-			self.assertIn("Year (B.E.)", text)
-			self.assertIn("Grand Total", text)
+			if name.endswith("_report"):
+				self.assertIn("Year (B.E.)", text)
+				self.assertIn("Grand Total", text)
 		metadata = json.loads((regional / "doctype/withholding_tax_items/withholding_tax_items.json").read_text())
 		self.assertNotRegex(json.dumps(metadata, ensure_ascii=False), "[\u0e00-\u0e7f]")
 
