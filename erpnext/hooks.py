@@ -213,8 +213,14 @@ _thailand_doc_events = {
 		],
 	},
 	"Unreconcile Payment": {"on_submit": "erpnext.regional.thailand.custom.unreconcile_payment.unreconcile_undue_tax"},
+	"Quotation": {"validate": "erpnext.regional.thailand.custom.branches.validate_company_branch"},
+	"Sales Order": {"validate": "erpnext.regional.thailand.custom.branches.validate_company_branch"},
+	"Delivery Note": {"validate": "erpnext.regional.thailand.custom.branches.validate_company_branch"},
 	"Sales Invoice": {
-		"validate": "erpnext.regional.thailand.custom.custom_api.validate_sales_tax_invoice_zero_tax",
+		"validate": [
+			"erpnext.regional.thailand.custom.custom_api.validate_sales_tax_invoice_zero_tax",
+			"erpnext.regional.thailand.custom.branches.validate_company_branch",
+		],
 		"on_submit": "erpnext.regional.thailand.custom.custom_api.create_sales_tax_invoice_on_zero_tax",
 		"before_cancel": "erpnext.regional.thailand.custom.custom_api.cancel_related_tax_invoice",
 		"before_validate": [

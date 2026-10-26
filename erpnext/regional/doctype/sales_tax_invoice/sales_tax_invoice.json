@@ -22,6 +22,8 @@
   "voucher_type",
   "voucher_no",
   "company_tax_address",
+  "company_branch_code",
+  "company_tax_id",
   "customer_section",
   "party",
   "party_name",
@@ -123,11 +125,24 @@
    "search_index": 1
   },
   {
-   "allow_on_submit": 1,
    "fieldname": "company_tax_address",
    "fieldtype": "Link",
    "label": "Company Tax Address",
    "options": "Address"
+  },
+  {
+   "fieldname": "company_branch_code",
+   "fieldtype": "Data",
+   "label": "Company Branch Code",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "company_tax_id",
+   "fieldtype": "Data",
+   "label": "Company Tax ID",
+   "no_copy": 1,
+   "read_only": 1
   },
   {
    "fieldname": "customer_section",

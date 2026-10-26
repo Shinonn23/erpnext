@@ -5,7 +5,7 @@ from unittest import mock
 
 import frappe
 
-from erpnext.regional.thailand.custom import custom_api
+from erpnext.regional.thailand.custom import branches, custom_api
 from erpnext.regional.thailand.custom.custom_api import (
 	create_tax_invoice,
 	get_company_tax_address,
@@ -205,8 +205,12 @@ class TestCreateTaxInvoiceAddress(unittest.TestCase):
 		doc = frappe._dict(
 			voucher_type="Sales Invoice", voucher_no="SI-3", name="GL-1", party_type="Customer", company="CD"
 		)
+		fake.db.get_value.side_effect = lambda doctype, name, fields, **kwargs: (
+			frappe._dict(branch_code="3", tax_id="0105555000001") if doctype == "Address" else "0105555999999"
+		)
 		with (
 			mock.patch.object(custom_api, "frappe", fake),
+			mock.patch.object(branches, "frappe", fake),
 			mock.patch.object(custom_api, "_", lambda text: text),
 		):
 			create_tax_invoice(doc, "Sales Tax Invoice", 100, 7, voucher, split)

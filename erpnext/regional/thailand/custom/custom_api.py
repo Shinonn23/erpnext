@@ -4,6 +4,11 @@ from frappe import _
 from frappe.model.meta import get_field_precision
 from frappe.utils import flt
 
+from erpnext.regional.thailand.custom.branches import (
+	get_company_branch_snapshot,
+	normalise_branch_code,
+)
+
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
@@ -217,10 +222,12 @@ def create_tax_invoice(doc, doctype, base_amount, tax_amount, voucher, split_tax
 		party = voucher.supplier
 	if not party:
 		frappe.throw(_("Please fill in Supplier for Purchase Tax Invoice"))
-	# Create Tax Invoice
+	# Create Tax Invoice, freezing our branch (code, tax id) as it is now
+	company_tax_address = voucher_company_tax_address(doc.voucher_type, voucher)
+	tinv_dict.update(get_company_branch_snapshot(doc.company, company_tax_address))
 	tinv_dict.update(
 		{
-			"company_tax_address": voucher_company_tax_address(doc.voucher_type, voucher),
+			"company_tax_address": company_tax_address,
 			"doctype": doctype,
 			"company": doc.company,
 			"gl_entry": doc.name,
@@ -302,12 +309,6 @@ def update_voucher_tinv(doctype, voucher, tinv, split_tax_invoice=False):
 	voucher.save()
 	tinv.save()
 	return tinv
-
-
-def normalise_branch_code(code):
-	"""'0' -> '00000'; blank stays blank."""
-	code = (code or "").strip()
-	return code.zfill(5) if code.isdigit() else code
 
 
 def get_company_tax_address(company):
@@ -725,7 +726,7 @@ def create_sales_tax_invoice_on_zero_tax(doc, method):
 	doctype = "Sales Tax Invoice"
 	zero_taxes = list(
 		filter(
-			lambda t: (t.account_head == setting.sales_tax_account and t.tax_amount == 0),
+			lambda t: t.account_head == setting.sales_tax_account and t.tax_amount == 0,
 			doc.taxes,
 		)
 	)
@@ -746,7 +747,9 @@ def create_sales_tax_invoice_zero_tax(doc, doctype, base_amount, account):
 		"voucher_type": doc.doctype,
 		"voucher_no": doc.name,
 		"account": account,
+		"company_tax_address": voucher_company_tax_address("Sales Invoice", doc),
 	}
+	tinv_dict.update(get_company_branch_snapshot(doc.company, tinv_dict["company_tax_address"]))
 	tinv = frappe.get_doc(tinv_dict)
 	tinv.insert(ignore_permissions=True)
 	return tinv

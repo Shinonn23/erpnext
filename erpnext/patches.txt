@@ -547,3 +547,4 @@ erpnext.patches.v16_0.replace_legacy_print_formats_with_classic
 execute:frappe.db.set_value("Report", "Negative Batch Report", "prepared_report", 1)
 erpnext.patches.v16_0.set_user_on_timesheets
 erpnext.patches.v16_0.restore_cost_center
+erpnext.patches.v16_0.snapshot_company_branch_on_tax_invoices

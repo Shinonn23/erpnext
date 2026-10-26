@@ -685,6 +685,9 @@ ERP_PROPERTY_SETTERS = {
 	"Sales Invoice": [
 		("naming_series", "depends_on", "eval:!doc.amended_from", "Data"),
 	],
+	("Quotation", "Sales Order", "Delivery Note", "Sales Invoice"): [
+		("company_address", "label", "Company Branch (Company Address)", "Data"),
+	],
 	"Purchase Invoice": [
 		("naming_series", "depends_on", "eval:!doc.amended_from", "Data"),
 	],
