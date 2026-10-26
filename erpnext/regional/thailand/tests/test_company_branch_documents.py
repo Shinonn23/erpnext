@@ -6,7 +6,7 @@ from unittest import mock
 
 import frappe
 
-from erpnext.regional.thailand.custom import branches, custom_api
+from erpnext.regional.thailand.custom import company_branch, custom_api
 
 
 class ThrowError(Exception):
@@ -48,20 +48,20 @@ def document(doctype="Sales Invoice", items=(), **values):
 
 def run(doc, addresses=ADDRESSES):
 	with (
-		mock.patch.object(branches, "frappe", fake_frappe(addresses)),
-		mock.patch.object(branches, "_", lambda text: text),
+		mock.patch.object(company_branch, "frappe", fake_frappe(addresses)),
+		mock.patch.object(company_branch, "_", lambda text: text),
 	):
-		branches.validate_company_branch(doc, "validate")
+		company_branch.validate_company_branch(doc, "validate")
 	return doc
 
 
 class TestSellingBranch(unittest.TestCase):
 	def test_branch_code_normalisation(self):
-		self.assertEqual(branches.normalise_branch_code("3"), "00003")
-		self.assertTrue(branches.is_valid_branch_code("0"))
-		self.assertFalse(branches.is_valid_branch_code("HO"))
-		self.assertFalse(branches.is_valid_branch_code(""))
-		self.assertFalse(branches.is_valid_branch_code("123456"))
+		self.assertEqual(company_branch.normalise_company_branch_code("3"), "00003")
+		self.assertTrue(company_branch.is_valid_branch_code("0"))
+		self.assertFalse(company_branch.is_valid_branch_code("HO"))
+		self.assertFalse(company_branch.is_valid_branch_code(""))
+		self.assertFalse(company_branch.is_valid_branch_code("123456"))
 
 	def test_valid_branch_passes_on_every_selling_doctype(self):
 		for doctype in ("Quotation", "Sales Order", "Delivery Note", "Sales Invoice"):
@@ -149,8 +149,8 @@ class TestSnapshot(unittest.TestCase):
 		fake.db.get_value.side_effect = lambda doctype, name, fields, **kwargs: (
 			row if doctype == "Address" else company_tax_id
 		)
-		with mock.patch.object(branches, "frappe", fake):
-			return branches.get_company_branch_snapshot("CD", "B3")
+		with mock.patch.object(company_branch, "frappe", fake):
+			return company_branch.get_company_branch_snapshot("CD", "B3")
 
 	def test_address_branch_and_tax_id(self):
 		row = frappe._dict(branch_code="3", tax_id="0105555000001")
@@ -165,8 +165,8 @@ class TestSnapshot(unittest.TestCase):
 	def test_no_address_has_no_branch(self):
 		fake = mock.MagicMock()
 		fake.db.get_value.return_value = "0105555999999"
-		with mock.patch.object(branches, "frappe", fake):
-			snapshot = branches.get_company_branch_snapshot("CD", None)
+		with mock.patch.object(company_branch, "frappe", fake):
+			snapshot = company_branch.get_company_branch_snapshot("CD", None)
 		self.assertEqual(snapshot, {"company_branch_code": "", "company_tax_id": "0105555999999"})
 
 	def test_zero_tax_sales_tax_invoice_is_snapshotted_at_insert(self):
@@ -181,7 +181,7 @@ class TestSnapshot(unittest.TestCase):
 		)
 		with (
 			mock.patch.object(custom_api, "frappe", fake),
-			mock.patch.object(branches, "frappe", fake),
+			mock.patch.object(company_branch, "frappe", fake),
 		):
 			custom_api.create_sales_tax_invoice_zero_tax(invoice, "Sales Tax Invoice", 100, "VAT")
 		self.assertEqual(inserted[0]["company_branch_code"], "00004")
@@ -207,8 +207,8 @@ class TestAmendedSnapshot(unittest.TestCase):
 		fake.db.get_value.side_effect = lambda doctype, name, fields, **kwargs: (
 			frappe._dict(branch_code="3", tax_id="T3") if doctype == "Address" else "T"
 		)
-		with mock.patch.object(branches, "frappe", fake):
-			branches.set_company_branch_snapshot(doc)
+		with mock.patch.object(company_branch, "frappe", fake):
+			company_branch.set_company_branch_snapshot(doc)
 		return doc
 
 	def test_amended_copy_gets_the_snapshot_back(self):

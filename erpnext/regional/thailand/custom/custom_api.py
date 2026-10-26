@@ -4,9 +4,9 @@ from frappe import _
 from frappe.model.meta import get_field_precision
 from frappe.utils import flt
 
-from erpnext.regional.thailand.custom.branches import (
+from erpnext.regional.thailand.custom.company_branch import (
 	get_company_branch_snapshot,
-	normalise_branch_code,
+	normalise_company_branch_code,
 )
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -334,7 +334,7 @@ def get_company_tax_address(company):
 		)
 
 	pool = company_addresses(True) or company_addresses(False)
-	head_offices = [a for a in pool if normalise_branch_code(a.get("branch_code")) == "00000"]
+	head_offices = [a for a in pool if normalise_company_branch_code(a.get("branch_code")) == "00000"]
 	pool = head_offices or pool
 	for matches in (
 		lambda a: a.get("address_type") == "Billing",

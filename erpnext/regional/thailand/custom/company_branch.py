@@ -22,14 +22,14 @@ SOURCE_FIELDS = {
 }
 
 
-def normalise_branch_code(code):
+def normalise_company_branch_code(code):
 	"""'0' -> '00000'; blank stays blank."""
 	code = (code or "").strip()
 	return code.zfill(5) if code.isdigit() else code
 
 
 def is_valid_branch_code(code):
-	return bool(re.fullmatch(r"\d{5}", normalise_branch_code(code)))
+	return bool(re.fullmatch(r"\d{5}", normalise_company_branch_code(code)))
 
 
 def get_company_addresses(company):
@@ -54,7 +54,7 @@ def get_company_branch_snapshot(company, address, default_branch_code=""):
 	snapshot = {"company_branch_code": "", "company_tax_id": ""}
 	if address:
 		row = frappe.db.get_value("Address", address, ["branch_code", "tax_id"], as_dict=True) or {}
-		snapshot["company_branch_code"] = normalise_branch_code(row.get("branch_code")) or default_branch_code
+		snapshot["company_branch_code"] = normalise_company_branch_code(row.get("branch_code")) or default_branch_code
 		snapshot["company_tax_id"] = (row.get("tax_id") or "").strip()
 	if not snapshot["company_tax_id"] and company:
 		snapshot["company_tax_id"] = (frappe.db.get_value("Company", company, "tax_id") or "").strip()

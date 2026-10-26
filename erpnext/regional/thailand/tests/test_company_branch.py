@@ -5,7 +5,7 @@ from unittest import mock
 
 import frappe
 
-from erpnext.regional.thailand.custom import branches, custom_api
+from erpnext.regional.thailand.custom import company_branch, custom_api
 from erpnext.regional.thailand.custom.custom_api import (
 	create_tax_invoice,
 	get_company_tax_address,
@@ -210,7 +210,7 @@ class TestCreateTaxInvoiceAddress(unittest.TestCase):
 		)
 		with (
 			mock.patch.object(custom_api, "frappe", fake),
-			mock.patch.object(branches, "frappe", fake),
+			mock.patch.object(company_branch, "frappe", fake),
 			mock.patch.object(custom_api, "_", lambda text: text),
 		):
 			create_tax_invoice(doc, "Sales Tax Invoice", 100, 7, voucher, split)

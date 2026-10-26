@@ -5,7 +5,7 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.utils import add_months
 
-from erpnext.regional.thailand.custom.branches import set_company_branch_snapshot
+from erpnext.regional.thailand.custom.company_branch import set_company_branch_snapshot
 from erpnext.regional.thailand.custom.custom_api import get_thai_tax_settings
 
 

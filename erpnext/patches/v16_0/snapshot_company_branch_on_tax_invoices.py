@@ -1,6 +1,6 @@
 import frappe
 
-from erpnext.regional.thailand.custom.branches import (
+from erpnext.regional.thailand.custom.company_branch import (
 	get_company_addresses,
 	get_company_branch_snapshot,
 )

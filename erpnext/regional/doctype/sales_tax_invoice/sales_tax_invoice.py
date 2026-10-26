@@ -4,7 +4,7 @@ from frappe.model.document import Document
 from frappe.model.naming import make_autoname
 from frappe.utils import add_months, getdate, nowdate
 
-from erpnext.regional.thailand.custom.branches import set_company_branch_snapshot
+from erpnext.regional.thailand.custom.company_branch import set_company_branch_snapshot
 from erpnext.regional.thailand.custom.custom_api import get_thai_tax_settings
 
 
