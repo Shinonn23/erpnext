@@ -702,7 +702,9 @@ ERP_PROPERTY_SETTERS = {
 		("naming_series", "depends_on", "eval:!doc.amended_from", "Data"),
 	],
 	# named by company, branch and month in code (custom/tax_invoice_series.py), the series is not used
+	# (reqd first: every Property Setter validates the DocType at once and refuses hidden + reqd without a default)
 	("Sales Tax Invoice", "Purchase Tax Invoice"): [
+		("naming_series", "reqd", "0", "Check"),
 		("naming_series", "hidden", "1", "Check"),
 	],
 	("Quotation", "Sales Order", "Delivery Note", "Sales Invoice"): [
