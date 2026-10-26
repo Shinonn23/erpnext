@@ -55,6 +55,7 @@ app_include_js = [
 	"/assets/erpnext/js/thailand/print_format.js",
 	"/assets/erpnext/js/thailand/deposit_utils.js",
 	"/assets/erpnext/js/thailand/tax_popups.js",
+	"/assets/erpnext/js/thailand/party_branches.js",
 ]
 app_include_css = "erpnext.bundle.css"
 web_include_css = "erpnext-web.bundle.css"
@@ -212,7 +213,9 @@ _thailand_doc_events = {
 			"erpnext.regional.thailand.custom.withholding_cert.cancel_withholding_certificates",
 		],
 	},
-	"Unreconcile Payment": {"on_submit": "erpnext.regional.thailand.custom.unreconcile_payment.unreconcile_undue_tax"},
+	"Unreconcile Payment": {
+		"on_submit": "erpnext.regional.thailand.custom.unreconcile_payment.unreconcile_undue_tax"
+	},
 	"Sales Invoice": {
 		"validate": "erpnext.regional.thailand.custom.custom_api.validate_sales_tax_invoice_zero_tax",
 		"on_submit": "erpnext.regional.thailand.custom.custom_api.create_sales_tax_invoice_on_zero_tax",
@@ -247,10 +250,16 @@ _thailand_doc_events = {
 		],
 		"on_cancel": "erpnext.regional.thailand.custom.withholding_cert.cancel_withholding_certificates",
 	},
-	"Print Format": {"before_validate": "erpnext.regional.thailand.custom.print_format.allow_update_standard"},
+	"Print Format": {
+		"before_validate": "erpnext.regional.thailand.custom.print_format.allow_update_standard"
+	},
 	"Address": {"on_update": "erpnext.regional.thailand.custom.address.update_tax_info_in_linked_doc"},
+	"Customer": {"onload": "erpnext.regional.thailand.custom.branches.onload"},
+	"Supplier": {"onload": "erpnext.regional.thailand.custom.branches.onload"},
 	"Item": {"validate": "erpnext.regional.thailand.custom.item.validate_deposit_item"},
-	"Currency": {"on_update": "erpnext.regional.thailand.custom.currency_exchange_bot_api.clear_exchange_rate_cache"},
+	"Currency": {
+		"on_update": "erpnext.regional.thailand.custom.currency_exchange_bot_api.clear_exchange_rate_cache"
+	},
 }
 
 _regulatory_affairs_doc_events = {
@@ -936,11 +945,24 @@ fixtures = [
 				"name",
 				"in",
 				(
-					"1", "2", "3", "4", "4.1.1", "4.1.2", "4.1.3", "4.1.4",
-					"4.2.1", "4.2.2", "4.2.3", "4.2.4", "4.2.5", "5", "6",
+					"1",
+					"2",
+					"3",
+					"4",
+					"4.1.1",
+					"4.1.2",
+					"4.1.3",
+					"4.1.4",
+					"4.2.1",
+					"4.2.2",
+					"4.2.3",
+					"4.2.4",
+					"4.2.5",
+					"5",
+					"6",
 				),
 			],
-		]
+		],
 	},
 ]
 
@@ -975,8 +997,14 @@ after_migrate.append("erpnext.regional.thailand.migration.transfer_thailand_modu
 
 # Resolve defaults on stock vouchers before their controllers calculate balances or costs.
 for _doctype in (
-	"Stock Entry", "Delivery Note", "Purchase Receipt", "Sales Invoice", "POS Invoice",
-	"Purchase Invoice", "Stock Reconciliation", "Asset Capitalization",
+	"Stock Entry",
+	"Delivery Note",
+	"Purchase Receipt",
+	"Sales Invoice",
+	"POS Invoice",
+	"Purchase Invoice",
+	"Stock Reconciliation",
+	"Asset Capitalization",
 	"Subcontracting Receipt",
 ):
 	_events = doc_events.setdefault(_doctype, {})

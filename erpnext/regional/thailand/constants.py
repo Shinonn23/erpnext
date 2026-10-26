@@ -215,7 +215,15 @@ ERP_CUSTOM_FIELDS = {
 			"fieldtype": "Data",
 			"insert_after": "tax_id",
 			"label": "Branch Code",
-		}
+		},
+		{
+			"fieldname": "branch_html",
+			"fieldtype": "HTML",
+			"insert_after": "address_html",
+			"label": "Branches / สาขา",
+			"depends_on": "eval: !doc.__islocal",
+			"read_only": 1,
+		},
 	],
 	"Customer": [
 		{
@@ -224,6 +232,14 @@ ERP_CUSTOM_FIELDS = {
 			"fieldtype": "Data",
 			"insert_after": "tax_id",
 			"label": "Branch Code",
+		},
+		{
+			"fieldname": "branch_html",
+			"fieldtype": "HTML",
+			"insert_after": "address_html",
+			"label": "Branches / สาขา",
+			"depends_on": "eval: !doc.__islocal",
+			"read_only": 1,
 		},
 	],
 	"Journal Entry": [
