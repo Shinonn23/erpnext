@@ -1208,19 +1208,19 @@ class ReceivablePayableReport:
 			sticky=True,
 		)
 
-		if self.party_naming_by == "Naming Series":
-			if self.account_type == "Payable":
-				label = _("Supplier Name")
-				fieldname = "supplier_name"
-			else:
-				label = _("Customer Name")
-				fieldname = "customer_name"
-			self.add_column(
-				label=label,
-				fieldname=fieldname,
-				fieldtype="Data",
-				sticky=True,
-			)
+		# Always show the party name next to the code (Connect Diagnostics), whatever the naming rule.
+		if self.account_type == "Payable":
+			label = _("Supplier Name")
+			fieldname = "supplier_name"
+		else:
+			label = _("Customer Name")
+			fieldname = "customer_name"
+		self.add_column(
+			label=label,
+			fieldname=fieldname,
+			fieldtype="Data",
+			sticky=True,
+		)
 
 		if self.account_type == "Receivable":
 			self.add_column(

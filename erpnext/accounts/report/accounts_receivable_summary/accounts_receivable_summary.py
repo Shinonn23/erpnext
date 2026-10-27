@@ -62,14 +62,14 @@ class AccountsReceivableSummary(ReceivablePayableReport):
 			row = frappe._dict()
 
 			row.party = party
-			if self.party_naming_by == "Naming Series":
-				if self.account_type == "Payable":
-					doctype = "Supplier"
-					fieldname = "supplier_name"
-				else:
-					doctype = "Customer"
-					fieldname = "customer_name"
-				row.party_name = frappe.get_cached_value(doctype, party, fieldname)
+			# Always show the party name next to the code (Connect Diagnostics), whatever the naming rule.
+			if self.account_type == "Payable":
+				doctype = "Supplier"
+				fieldname = "supplier_name"
+			else:
+				doctype = "Customer"
+				fieldname = "customer_name"
+			row.party_name = frappe.get_cached_value(doctype, party, fieldname)
 
 			row.update(party_dict)
 
@@ -152,12 +152,11 @@ class AccountsReceivableSummary(ReceivablePayableReport):
 			width=180,
 		)
 
-		if self.party_naming_by == "Naming Series":
-			self.add_column(
-				label=_("Supplier Name") if self.account_type == "Payable" else _("Customer Name"),
-				fieldname="party_name",
-				fieldtype="Data",
-			)
+		self.add_column(
+			label=_("Supplier Name") if self.account_type == "Payable" else _("Customer Name"),
+			fieldname="party_name",
+			fieldtype="Data",
+		)
 
 		credit_debit_label = "Credit Note" if self.account_type == "Receivable" else "Debit Note"
 
