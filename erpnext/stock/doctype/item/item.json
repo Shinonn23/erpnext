@@ -1223,6 +1223,18 @@
    "share": 1
   },
   {
+   "read": 1,
+   "role": "Regulatory Viewer"
+  },
+  {
+   "read": 1,
+   "role": "Regulatory Operator"
+  },
+  {
+   "read": 1,
+   "role": "Regulatory Approver"
+  },
+  {
    "permlevel": 1,
    "read": 1,
    "role": "Item Manager"

@@ -13,10 +13,11 @@ class TestEnsureConfiguration(unittest.TestCase):
 			patch.object(install, "ensure_module_def", lambda: calls.append("module")),
 			patch.object(install, "ensure_roles", lambda: calls.append("roles")),
 			patch.object(install, "ensure_custom_fields", lambda: calls.append("fields")),
+			patch.object(install, "ensure_item_category_permissions", lambda: calls.append("item perms")),
 			patch.object(install, "ensure_settings", lambda: calls.append("settings")),
 		):
 			install.ensure_configuration()
-		self.assertEqual(calls, ["module", "roles", "fields", "settings"])
+		self.assertEqual(calls, ["module", "roles", "fields", "item perms", "settings"])
 
 
 class TestEnsureModuleDef(unittest.TestCase):
@@ -87,3 +88,45 @@ class TestEnsureSettings(unittest.TestCase):
 
 if __name__ == "__main__":
 	unittest.main()
+
+
+class TestEnsureItemCategoryPermissions(unittest.TestCase):
+	def run_with(self, custom_rows, existing):
+		"""custom_rows: roles reading Item at level 0 (None: Item has no Custom DocPerm); existing: set of (role, level)."""
+		db = MagicMock()
+		db.exists.side_effect = lambda doctype, filters=None: (
+			(custom_rows is not None)
+			if filters == {"parent": "Item"}
+			else ((filters["role"], filters["permlevel"]) in existing)
+		)
+		db.get_value.side_effect = lambda doctype, filters, fieldname=None: "row" if fieldname is None else 1
+		added = []
+		with (
+			patch.object(frappe, "db", db),
+			patch.object(frappe, "get_all", return_value=list(custom_rows or [])),
+			patch.object(frappe, "clear_cache"),
+			patch(
+				"frappe.permissions.add_permission",
+				lambda *a, **k: added.append((a[1], k["permlevel"], k["ptype"])),
+			),
+		):
+			install.ensure_item_category_permissions()
+		return added
+
+	def test_a_site_on_standard_permissions_is_left_alone(self):
+		self.assertEqual(self.run_with(None, set()), [])
+
+	def test_custom_permissions_get_level_one_read_for_readers_and_write_for_operator_and_approver(self):
+		added = self.run_with(["Item Manager", "Stock User"], set())
+		self.assertIn(("Item Manager", 1, "read"), added)
+		self.assertIn(("Stock User", 1, "read"), added)
+		self.assertIn(("Regulatory Operator", 1, "write"), added)
+		self.assertIn(("Regulatory Approver", 1, "write"), added)
+		self.assertNotIn(("Item Manager", 1, "write"), added)
+		for role in ("Regulatory Viewer", "Regulatory Operator", "Regulatory Approver"):
+			self.assertIn((role, 0, "read"), added)
+
+	def test_existing_rows_are_not_added_again(self):
+		existing = {("Item Manager", 1), ("Item Manager", 0)}
+		added = self.run_with(["Item Manager"], existing)
+		self.assertFalse([a for a in added if a[0] == "Item Manager"])

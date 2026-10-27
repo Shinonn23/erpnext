@@ -343,6 +343,10 @@ The Product Category decides whether an Item is checked at all, so it is guarded
 * `item.validate` (`check_category_change`) refuses any other path: a **Regulatory Operator** (or Approver) may set or change the
   category, only a **Regulatory Approver** may clear it. Administrator, System Manager-as-approver and install/patch/migrate runs pass.
 
+On a site whose Item permissions are Custom DocPerms (the privacy layer creates them, so the UAT/live sites have them) the rows of
+`item.json` are ignored; `install.ensure_item_category_permissions` (run by `after_migrate`, idempotent, never lowers a right) adds the
+same level-1 read/write rows and the level-0 read the Regulatory roles need there.
+
 Regulatory roles have no write right on the rest of the Item, so they use *Regulatory > Set Product Category* on the Item form
 (`item.set_product_category`, whitelisted, needs read on the Item); that method saves with `ignore_permissions` and `validate` still
 enforces the role rule. Because an Item Manager can no longer set the category, an Item that must become regulated is passed to RA.

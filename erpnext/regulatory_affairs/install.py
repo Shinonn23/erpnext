@@ -7,8 +7,15 @@ import frappe
 from frappe.cache_manager import clear_global_cache
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
-from erpnext.regulatory_affairs.constants import MANAGED_ROLES, MODULE, SETTINGS
-from erpnext.regulatory_affairs.custom_fields import CUSTOM_FIELDS
+from erpnext.regulatory_affairs.constants import (
+	MANAGED_ROLES,
+	MODULE,
+	ROLE_APPROVER,
+	ROLE_OPERATOR,
+	ROLE_VIEWER,
+	SETTINGS,
+)
+from erpnext.regulatory_affairs.custom_fields import CUSTOM_FIELDS, ITEM_CATEGORY_PERMLEVEL
 
 DEFAULT_ALERT_RULES = (
 	(365, "Info", "Create Renewal Action"),
@@ -44,6 +51,7 @@ def ensure_configuration():
 	ensure_module_def()
 	ensure_roles()
 	ensure_custom_fields()
+	ensure_item_category_permissions()
 	ensure_settings()
 
 
@@ -71,6 +79,39 @@ def ensure_roles():
 
 def ensure_custom_fields():
 	create_custom_fields(CUSTOM_FIELDS, ignore_validate=True)
+
+
+def ensure_item_category_permissions():
+	"""Level-1 rights for the Product Category on a site whose Item permissions are Custom DocPerms.
+
+	`item.json` carries them for a site that uses the standard permissions; once any Custom DocPerm exists for
+	Item (the privacy layer creates them) the JSON rows are ignored, so the same rows are added there:
+	level-1 read for every role that reads Item, level-1 write for Operator and Approver, and the level-0 read
+	a level-1 rule needs for the Regulatory roles. Idempotent; it never removes or lowers a right.
+	"""
+	from frappe.permissions import add_permission
+
+	if not frappe.db.exists("Custom DocPerm", {"parent": "Item"}):
+		return
+	readers = set(
+		frappe.get_all(
+			"Custom DocPerm",
+			filters={"parent": "Item", "permlevel": 0, "read": 1, "if_owner": 0},
+			pluck="role",
+		)
+	)
+	regulatory = (ROLE_VIEWER, ROLE_OPERATOR, ROLE_APPROVER)
+	wanted = {(role, 0, "read") for role in regulatory}
+	wanted |= {(role, ITEM_CATEGORY_PERMLEVEL, "read") for role in readers | set(regulatory)}
+	wanted |= {(role, ITEM_CATEGORY_PERMLEVEL, "write") for role in (ROLE_OPERATOR, ROLE_APPROVER)}
+	for role, permlevel, ptype in sorted(wanted, key=lambda w: (w[1], w[0], w[2])):
+		filters = {"parent": "Item", "role": role, "permlevel": permlevel, "if_owner": 0}
+		if not frappe.db.exists("Custom DocPerm", filters):
+			add_permission("Item", role, permlevel=permlevel, ptype=ptype)
+		name = frappe.db.get_value("Custom DocPerm", filters)
+		if name and not frappe.db.get_value("Custom DocPerm", name, ptype):
+			frappe.db.set_value("Custom DocPerm", name, ptype, 1, update_modified=False)
+	frappe.clear_cache(doctype="Item")
 
 
 def ensure_settings():
