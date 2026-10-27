@@ -182,8 +182,8 @@ frappe.ui.form.on("Project", {
 						prev_doc: frm.doc,
 						project_name: data.value,
 					})
-					.then(() => {
-						frappe.set_route("Form", "Project", data.value);
+					.then((name) => {
+						frappe.set_route("Form", "Project", name);
 						frappe.show_alert(__("Duplicate project has been created"));
 					});
 				resolve();

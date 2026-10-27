@@ -632,9 +632,12 @@ def create_duplicate_project(prev_doc, project_name):
 	if project_name == source_name:
 		frappe.throw(_("Use a name that is different from previous project name"))
 
-	# change the copied doc name to new project name
-	project = frappe.copy_doc(prev_doc)
-	project.name = project_name
+	# Respect no_copy so workflow_state, status, customer and sales_order are not carried over (copying
+	# sales_order would re-point the original Sales Order to the copy in after_insert). The name comes from the
+	# naming series; the typed name is the project_name field.
+	project = frappe.copy_doc(prev_doc, ignore_no_copy=False)
+	project.sales_order = None
+	project.status = "Open"
 	project.project_template = ""
 	project.project_name = project_name
 	project.insert()
@@ -642,6 +645,7 @@ def create_duplicate_project(prev_doc, project_name):
 	copy_tasks(source_name, project.name)
 
 	project.db_set("project_template", prev_doc.get("project_template"))
+	return project.name
 
 
 def copy_tasks(source_project: str, target_project: str):
@@ -653,7 +657,11 @@ def copy_tasks(source_project: str, target_project: str):
 
 	copied_names = {}
 	for source_task in source_tasks:
-		task = frappe.copy_doc(source_task)
+		task = frappe.copy_doc(source_task, ignore_no_copy=False)
+		task.status = "Open"
+		task.completed_on = None
+		task.closing_date = None
+		task.review_date = None
 		task.project = target_project
 		task.parent_task = copied_names.get(task.parent_task)
 		task.set("depends_on", [])
