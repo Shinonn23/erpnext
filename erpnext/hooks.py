@@ -1000,6 +1000,8 @@ naming_series_variables.update(
 	}
 )
 after_migrate.append("erpnext.regional.thailand.migration.transfer_thailand_module_ownership")
+# Last of erpnext's hooks: sees every Item Custom DocPerm the other migrate steps made (idempotent).
+after_migrate.append("erpnext.regulatory_affairs.install.ensure_item_category_permissions")
 
 # Resolve defaults on stock vouchers before their controllers calculate balances or costs.
 for _doctype in (

@@ -29,6 +29,25 @@ DEFAULT_ALERT_RULES = (
 )
 
 
+# Every right column of a (Custom) DocPerm row
+PERMISSION_TYPES = (
+	"select",
+	"read",
+	"write",
+	"create",
+	"delete",
+	"submit",
+	"cancel",
+	"amend",
+	"report",
+	"export",
+	"import",
+	"share",
+	"print",
+	"email",
+)
+
+
 def before_migrate():
 	"""Rebuild the module map so model sync sees a module added by the code just pulled.
 
@@ -87,7 +106,10 @@ def ensure_item_category_permissions():
 	`item.json` carries them for a site that uses the standard permissions; once any Custom DocPerm exists for
 	Item (the privacy layer creates them) the JSON rows are ignored, so the same rows are added there:
 	level-1 read for every role that reads Item, level-1 write for Operator and Approver, and the level-0 read
-	a level-1 rule needs for the Regulatory roles. Idempotent; it never removes or lowers a right.
+	a level-1 rule needs for the Regulatory roles. A row made here grants only that one right (no export, print,
+	email, share or report); a row that exists keeps its rights. Idempotent. It runs in `ensure_configuration` and
+	again as the last erpnext `after_migrate` hook (hooks.py), so a role that gains Item read from another step of
+	the same migrate is covered; a Custom DocPerm made by a later app's hook is picked up by the next migrate.
 	"""
 	from frappe.permissions import add_permission
 
@@ -107,7 +129,15 @@ def ensure_item_category_permissions():
 	for role, permlevel, ptype in sorted(wanted, key=lambda w: (w[1], w[0], w[2])):
 		filters = {"parent": "Item", "role": role, "permlevel": permlevel, "if_owner": 0}
 		if not frappe.db.exists("Custom DocPerm", filters):
-			add_permission("Item", role, permlevel=permlevel, ptype=ptype)
+			created = add_permission("Item", role, permlevel=permlevel, ptype=ptype)
+			# add_permission leaves the DocPerm defaults (export, print, ...): a row made here grants only `ptype`
+			if created:
+				frappe.db.set_value(
+					"Custom DocPerm",
+					created,
+					{extra: 0 for extra in PERMISSION_TYPES if extra != ptype},
+					update_modified=False,
+				)
 		name = frappe.db.get_value("Custom DocPerm", filters)
 		if name and not frappe.db.get_value("Custom DocPerm", name, ptype):
 			frappe.db.set_value("Custom DocPerm", name, ptype, 1, update_modified=False)

@@ -101,14 +101,17 @@ class TestEnsureItemCategoryPermissions(unittest.TestCase):
 		)
 		db.get_value.side_effect = lambda doctype, filters, fieldname=None: "row" if fieldname is None else 1
 		added = []
+		self.db = db
+
+		def fake_add(*a, **k):
+			added.append((a[1], k["permlevel"], k["ptype"]))
+			return f"row-{a[1]}-{k['permlevel']}"
+
 		with (
 			patch.object(frappe, "db", db),
 			patch.object(frappe, "get_all", return_value=list(custom_rows or [])),
 			patch.object(frappe, "clear_cache"),
-			patch(
-				"frappe.permissions.add_permission",
-				lambda *a, **k: added.append((a[1], k["permlevel"], k["ptype"])),
-			),
+			patch("frappe.permissions.add_permission", fake_add),
 		):
 			install.ensure_item_category_permissions()
 		return added
@@ -130,3 +133,43 @@ class TestEnsureItemCategoryPermissions(unittest.TestCase):
 		existing = {("Item Manager", 1), ("Item Manager", 0)}
 		added = self.run_with(["Item Manager"], existing)
 		self.assertFalse([a for a in added if a[0] == "Item Manager"])
+
+	def test_a_new_row_grants_only_its_own_right(self):
+		self.run_with(["Item Manager"], set())
+		calls = {c.args[1]: c.args[2] for c in self.db.set_value.call_args_list if isinstance(c.args[2], dict)}
+		cleared = calls["row-Regulatory Operator-0"]
+		self.assertEqual(cleared["export"], 0)
+		for extra in ("print", "email", "share", "report", "write", "create", "delete"):
+			self.assertEqual(cleared[extra], 0, extra)
+		self.assertNotIn("read", cleared)
+		self.assertNotIn("write", calls["row-Regulatory Operator-1"])
+		self.assertEqual(calls["row-Regulatory Operator-1"]["export"], 0)
+
+	def test_existing_rows_keep_their_rights(self):
+		self.run_with(["Item Manager"], {("Item Manager", 1), ("Item Manager", 0)})
+		for call in self.db.set_value.call_args_list:
+			self.assertNotIn("row-Item Manager", call.args[1])
+
+
+class TestHookOrder(unittest.TestCase):
+	def test_the_permission_step_is_the_last_after_migrate_hook(self):
+		from erpnext import hooks
+
+		self.assertEqual(
+			hooks.after_migrate[-1], "erpnext.regulatory_affairs.install.ensure_item_category_permissions"
+		)
+
+	def test_item_json_regulatory_level_zero_rows_only_read(self):
+		import json
+		import os
+
+		path = os.path.join(os.path.dirname(__file__), "../../stock/doctype/item/item.json")
+		with open(path) as handle:
+			rows = [
+				p
+				for p in json.load(handle)["permissions"]
+				if p["role"].startswith("Regulatory") and not p.get("permlevel")
+			]
+		self.assertEqual(len(rows), 3)
+		for row in rows:
+			self.assertEqual({k for k, v in row.items() if v == 1}, {"read"})
