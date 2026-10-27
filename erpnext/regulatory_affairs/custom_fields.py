@@ -16,6 +16,10 @@ from erpnext.regulatory_affairs.constants import (
 	TRANSACTION_ITEM_DOCTYPES,
 )
 
+# The Product Category switches the FDA checks on and off, so it sits on its own permission level: every Item
+# reader sees it, only the Regulatory roles change it (through `item.set_product_category`).
+ITEM_CATEGORY_PERMLEVEL = 1
+
 # Last field of each item row's form; the snapshot section is appended after it.
 ITEM_ROW_ANCHORS = {
 	"Purchase Order Item": "job_card",
@@ -61,6 +65,7 @@ def item_fields():
 			"regulatory_tab",
 			options="\n" + "\n".join(PRODUCT_CATEGORIES),
 			in_standard_filter=1,
+			permlevel=ITEM_CATEGORY_PERMLEVEL,
 			description="The Thai FDA product group of this Item. Leave it blank for an Item that needs no "
 			"FDA registration: only Items with a Product Category are validated on transactions.",
 		),

@@ -64,8 +64,8 @@ Users of the guarded documents (Stock, Sales, Purchase and Accounts roles) get *
 Approver-only operations: changing a registration's official status, verifying/rejecting a document (any change to a verified document
 voids the verification), approving an override (never by its requester; audit stamps cannot be edited), editing settings, changing the
 issue date, expiry date or expiry basis of a registration that is no longer Draft. System, import, patch and install writes are not
-restricted. Operators otherwise create and edit registrations, product lines, documents and actions. An Item's Product Category is
-not guarded: anyone who may edit the Item may set or clear it.
+restricted. Operators otherwise create and edit registrations, product lines, documents and actions. The Item's Product Category
+is guarded: only an Operator sets or changes it and only an Approver clears it (see *Product Category permission* below).
 
 ## Registration lifecycle
 
@@ -333,6 +333,20 @@ so with the default **Block** policies an expired or suspended legacy registrati
    Exempt*; Items assessed *Registration Required* without a registration get Other / *Not specified (legacy)*; the Item form no longer
    shows *Thai FDA Assessment Status* and the `tabItem` columns still hold the old values.
 
+## Product Category permission
+
+The Product Category decides whether an Item is checked at all, so it is guarded in two layers:
+
+* The Custom Field sits on **permission level 1** (`ITEM_CATEGORY_PERMLEVEL`). `item.json` gives every Item reading role read access to
+  level 1 (so the field shows read-only) and only Regulatory Operator / Approver write access. Both are applied by `bench migrate`
+  (the Custom Field update in `install.ensure_custom_fields` is idempotent). An Item Manager's form save never changes the field.
+* `item.validate` (`check_category_change`) refuses any other path: a **Regulatory Operator** (or Approver) may set or change the
+  category, only a **Regulatory Approver** may clear it. Administrator, System Manager-as-approver and install/patch/migrate runs pass.
+
+Regulatory roles have no write right on the rest of the Item, so they use *Regulatory > Set Product Category* on the Item form
+(`item.set_product_category`, whitelisted, needs read on the Item); that method saves with `ignore_permissions` and `validate` still
+enforces the role rule. Because an Item Manager can no longer set the category, an Item that must become regulated is passed to RA.
+
 ## Known limits
 
 * The Item dashboard shows no Regulatory connection group; use the Item's *Current Registration* field and the *Coverage Matrix* button.
@@ -342,8 +356,8 @@ so with the default **Block** policies an expired or suspended legacy registrati
 * Overrides are requested from the Override form (or API); the transactions have no shortcut button yet.
 * Product lines of a live registration can still be edited by an Operator (history is kept by version tracking); the issue/expiry
   dates cannot.
-* An Item's Product Category is not guarded: any user who may edit the Item can clear it and so take the Item out of the transaction
-  checks (the change is kept in the Item's version history).
+* Product Category permission: see the section of that name; the Regulatory roles cannot edit other Item fields, so they change the
+  category with the *Regulatory > Set Product Category* button.
 * The new code assumes `bench migrate` has run: submitting a guarded document on a site where the Settings DocType and the Item
   columns do not exist yet fails, like any other schema-dependent ERPNext change.
 * **Not verified end to end.** The DocTypes, patches and reports are checked by unit tests with mocks; run the dry run and

@@ -3,7 +3,7 @@
 import frappe
 from frappe import _
 
-from erpnext.regulatory_affairs.constants import ROLE_APPROVER
+from erpnext.regulatory_affairs.constants import ROLE_APPROVER, ROLE_OPERATOR
 
 
 def is_approver(user: str | None = None) -> bool:
@@ -12,6 +12,14 @@ def is_approver(user: str | None = None) -> bool:
 		return True
 	roles = frappe.get_roles(user)
 	return ROLE_APPROVER in roles or "System Manager" in roles
+
+
+def is_operator(user: str | None = None) -> bool:
+	"""A Regulatory Operator, or anyone who may act as an Approver (an Approver can do all an Operator can)."""
+	user = user or frappe.session.user
+	if is_approver(user):
+		return True
+	return ROLE_OPERATOR in frappe.get_roles(user)
 
 
 def require_approver(message: str) -> None:

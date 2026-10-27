@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import frappe
 
@@ -12,6 +12,10 @@ COVERAGE = dict(
 	current_registration_expiry="2027-01-01",
 	current_registration_status="Active",
 )
+
+
+def _raise(exc):
+	raise (exc or frappe.ValidationError)
 
 
 def item(category=None, **values):
@@ -31,7 +35,10 @@ class TestIsRegulated(unittest.TestCase):
 
 class TestValidate(unittest.TestCase):
 	def run_validate(self, doc):
-		with patch.object(ra_item.coverage, "refresh_item_coverage") as refresh:
+		with (
+			patch.object(ra_item, "check_category_change"),
+			patch.object(ra_item.coverage, "refresh_item_coverage") as refresh,
+		):
 			ra_item.validate(doc)
 		return refresh
 
@@ -63,3 +70,98 @@ class TestValidate(unittest.TestCase):
 			self.assertEqual(doc.item_name, "Gloves")
 			for fieldname, value in values.items():
 				self.assertEqual(doc[fieldname], value, (category, fieldname))
+
+
+class TestCategoryChange(unittest.TestCase):
+	"""Operator sets or changes the Product Category, Approver clears it, everyone else is refused."""
+
+	def check(self, old, new, roles, user="someone@example.com", **flags):
+		doc = MagicMock()
+		doc.get.side_effect = lambda fieldname: new if fieldname == ITEM_CATEGORY_FIELD else None
+		doc.get_doc_before_save.return_value = (
+			None if old is None else frappe._dict({ITEM_CATEGORY_FIELD: old})
+		)
+		session = frappe._dict(user=user)
+		with (
+			patch.object(frappe, "session", session, create=True),
+			patch.object(frappe, "flags", frappe._dict(flags), create=True),
+			patch.object(frappe, "get_roles", return_value=list(roles)),
+			patch.object(frappe, "throw", side_effect=lambda message, exc=None: _raise(exc)),
+		):
+			ra_item.check_category_change(doc)
+
+	def test_an_item_editor_without_a_regulatory_role_cannot_set_the_category(self):
+		for old in (None, "", "Drug"):
+			with self.assertRaises(frappe.PermissionError, msg=repr(old)):
+				self.check(old, "Medical Device", ["Item Manager", "Stock Manager"])
+
+	def test_an_item_editor_cannot_clear_the_category(self):
+		for roles in (["Item Manager"], ["Regulatory Operator"], ["Regulatory Viewer"]):
+			with self.assertRaises(frappe.PermissionError, msg=repr(roles)):
+				self.check("Drug", "  ", roles)
+
+	def test_an_operator_sets_and_changes_the_category(self):
+		self.check(None, "Drug", ["Regulatory Operator"])
+		self.check("Drug", "Food", ["Regulatory Operator"])
+
+	def test_an_approver_sets_changes_and_clears_the_category(self):
+		self.check(None, "Drug", ["Regulatory Approver"])
+		self.check("Drug", "Food", ["Regulatory Approver"])
+		self.check("Drug", "", ["Regulatory Approver"])
+		self.check("Drug", None, ["Regulatory Approver"])
+
+	def test_an_unchanged_category_passes_for_any_editor(self):
+		self.check("Drug", "Drug", ["Item Manager"])
+		self.check("Drug", " Drug ", ["Item Manager"])
+		self.check(None, None, ["Item Manager"])
+		self.check("", None, ["Item Manager"])
+
+	def test_administrator_and_install_runs_pass(self):
+		self.check("Drug", "", ["Item Manager"], user="Administrator")
+		for flag in ("in_install", "in_patch", "in_migrate"):
+			self.check(None, "Drug", ["Item Manager"], **{flag: True})
+
+	def test_validate_runs_the_category_check_first(self):
+		doc = item("Drug")
+		with (
+			patch.object(ra_item, "check_category_change", side_effect=frappe.PermissionError) as check,
+			patch.object(ra_item.coverage, "refresh_item_coverage") as refresh,
+		):
+			with self.assertRaises(frappe.PermissionError):
+				ra_item.validate(doc)
+		check.assert_called_once_with(doc)
+		refresh.assert_not_called()
+
+
+class TestSetProductCategory(unittest.TestCase):
+	def test_saves_the_stripped_category_without_form_permissions(self):
+		doc = MagicMock()
+		doc.get.return_value = "Drug"
+		with (
+			patch.object(frappe, "has_permission") as has_permission,
+			patch.object(frappe, "get_doc", return_value=doc),
+		):
+			result = ra_item.set_product_category("ITEM-1", " Drug ")
+		has_permission.assert_called_once_with("Item", "read", "ITEM-1", throw=True)
+		doc.set.assert_called_once_with(ITEM_CATEGORY_FIELD, "Drug")
+		self.assertTrue(doc.flags.ignore_permissions)
+		doc.save.assert_called_once_with()
+		self.assertEqual(result, "Drug")
+
+	def test_method_is_whitelisted(self):
+		self.assertIn(ra_item.set_product_category, frappe.whitelisted)
+
+	def test_category_field_is_on_permission_level_one_for_the_regulatory_roles(self):
+		import json
+		import os
+
+		from erpnext.regulatory_affairs.custom_fields import ITEM_CATEGORY_PERMLEVEL, item_fields
+
+		field = next(f for f in item_fields() if f["fieldname"] == ITEM_CATEGORY_FIELD)
+		self.assertEqual(field["permlevel"], ITEM_CATEGORY_PERMLEVEL)
+		path = os.path.join(os.path.dirname(__file__), "../../stock/doctype/item/item.json")
+		with open(path) as handle:
+			rows = [p for p in json.load(handle)["permissions"] if p.get("permlevel") == 1]
+		writers = {p["role"] for p in rows if p.get("write")}
+		self.assertEqual(writers, {"Regulatory Operator", "Regulatory Approver"})
+		self.assertIn("Item Manager", {p["role"] for p in rows if p.get("read")})
