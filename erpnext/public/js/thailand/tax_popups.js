@@ -23,22 +23,47 @@ erpnext.regional.thailand.tax_popups.get_withholding_choices = async function (c
 };
 
 // Ask for the supplier tax invoice, then save again. `values` are the defaults; `apply(values)` writes them.
-erpnext.regional.thailand.tax_popups.ask_tax_invoice = function (frm, { vat_amount, party, ask_supplier, defaults, apply }) {
+erpnext.regional.thailand.tax_popups.ask_tax_invoice = function (
+	frm,
+	{ vat_amount, party, ask_supplier, defaults, apply }
+) {
 	const dialog = new frappe.ui.Dialog({
 		title: __("Purchase Tax Invoice"),
 		fields: [
 			{
 				fieldtype: "HTML",
 				fieldname: "info",
-				options: `<p>${__("This document records input VAT {0}. Enter the supplier's tax invoice for the input VAT report.", [
-					format_currency(vat_amount, frm.doc.currency),
-				])}</p>${party ? `<p>${__("Supplier")}: <b>${frappe.utils.escape_html(party)}</b></p>` : ""}`,
+				options: `<p>${__(
+					"This document records input VAT {0}. Enter the supplier's tax invoice for the input VAT report.",
+					[format_currency(vat_amount, frm.doc.currency)]
+				)}</p>${party ? `<p>${__("Supplier")}: <b>${frappe.utils.escape_html(party)}</b></p>` : ""}`,
 			},
 			...(ask_supplier
-				? [{ fieldtype: "Link", fieldname: "supplier", label: __("Supplier"), options: "Supplier", reqd: 1, default: defaults.supplier }]
+				? [
+						{
+							fieldtype: "Link",
+							fieldname: "supplier",
+							label: __("Supplier"),
+							options: "Supplier",
+							reqd: 1,
+							default: defaults.supplier,
+						},
+				  ]
 				: []),
-			{ fieldtype: "Data", fieldname: "tax_invoice_number", label: __("Tax Invoice Number"), reqd: 1, default: defaults.tax_invoice_number },
-			{ fieldtype: "Date", fieldname: "tax_invoice_date", label: __("Tax Invoice Date"), reqd: 1, default: defaults.tax_invoice_date },
+			{
+				fieldtype: "Data",
+				fieldname: "tax_invoice_number",
+				label: __("Tax Invoice Number"),
+				reqd: 1,
+				default: defaults.tax_invoice_number,
+			},
+			{
+				fieldtype: "Date",
+				fieldname: "tax_invoice_date",
+				label: __("Tax Invoice Date"),
+				reqd: 1,
+				default: defaults.tax_invoice_date,
+			},
 		],
 		primary_action_label: __("Save"),
 		primary_action(values) {
@@ -50,10 +75,15 @@ erpnext.regional.thailand.tax_popups.ask_tax_invoice = function (frm, { vat_amou
 };
 
 // Ask which withholding category applies; `on_pick(choice)` gets {name, rate, type_of_income, label}.
-erpnext.regional.thailand.tax_popups.ask_withholding_category = async function (frm, { date, current, on_pick, on_cancel }) {
+erpnext.regional.thailand.tax_popups.ask_withholding_category = async function (
+	frm,
+	{ date, current, on_pick, on_cancel }
+) {
 	const choices = await erpnext.regional.thailand.tax_popups.get_withholding_choices(frm.doc.company, date);
 	if (!choices.length) {
-		frappe.msgprint(__("No Tax Withholding Category has a rate and an account for {0}.", [frm.doc.company]));
+		frappe.msgprint(
+			__("No Tax Withholding Category has a rate and an account for {0}.", [frm.doc.company])
+		);
 		return on_cancel && on_cancel();
 	}
 	let picked = false;
@@ -112,7 +142,13 @@ erpnext.regional.thailand.tax_popups.create_withholding_tax_cert = async functio
 	}
 	frappe.prompt(
 		[
-			{ fieldtype: "Date", label: __("Date"), fieldname: "date", reqd: 1, default: frm.doc.posting_date },
+			{
+				fieldtype: "Date",
+				label: __("Date"),
+				fieldname: "date",
+				reqd: 1,
+				default: frm.doc.posting_date,
+			},
 			{
 				fieldtype: "Select",
 				label: __("Income Tax Form"),
@@ -293,6 +329,20 @@ erpnext.regional.thailand.tax_popups.ask_receive_withholding = async function (f
 		dialog.set_value("withholding_amount", popups.withholding_amount(c, dialog.get_value("base_amount")));
 		dialog.fields_dict.about.$wrapper.html(about(c));
 	};
+	// A new type has its own rate, which changes the base of an advance for services (the money received is net of
+	// the tax): ask the server for the base at that rate, never keep the one worked out for the previous type.
+	const change_category = async () => {
+		if (!dialog) return;
+		const c = choice(dialog.get_value("category"));
+		if (!c) return;
+		const { message: base } = await frappe.call({
+			method: "erpnext.regional.thailand.custom.withholding.get_receive_base_for_category",
+			args: { doc: frm.doc, category: c.name },
+		});
+		if (dialog.get_value("category") !== c.name) return;
+		if (base !== undefined && base !== null) dialog.set_value("base_amount", base);
+		recompute();
+	};
 	dialog = new frappe.ui.Dialog({
 		title: __("Withholding Tax"),
 		fields: [
@@ -306,7 +356,7 @@ erpnext.regional.thailand.tax_popups.ask_receive_withholding = async function (f
 				description: __(
 					"The tax the customer withheld from this receipt, at its rate on the posting date."
 				),
-				onchange: recompute,
+				onchange: change_category,
 			},
 			{ fieldtype: "HTML", fieldname: "about" },
 			{

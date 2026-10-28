@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, Mock, patch
 
 import frappe
+from frappe.utils import flt
 
 import erpnext
 from erpnext.accounts.doctype.payment_entry import payment_entry as erpnext_payment_entry
@@ -474,6 +475,67 @@ class TestAdvanceWithholding(unittest.TestCase):
 			# the popup of a later run, rows in place, is stable
 			receipt.deductions = [frappe._dict(amount=300, thai_withholding_category="Service")]
 			self.assertEqual(withholding.get_receive_base(receipt, 3), 10000)
+
+	def test_a_mixed_receipt_without_rows_works_back_from_the_net_money(self):
+		receipt = frappe._dict(
+			doctype="Payment Entry",
+			company="CD",
+			references=[],
+			base_paid_amount=0,
+			deductions=[],
+			thai_advance_for="Services",
+			unallocated_amount=10400,
+			source_exchange_rate=1,
+		)
+		source = frappe._dict(base_net_total=5000, grand_total=5350, currency="THB")
+		sources = [
+			frappe._dict(
+				doctype="Sales Order", name="SO-1", allocated=5350, total=5350, account_currency="THB"
+			)
+		]
+		with (
+			patch.object(custom_api, "get_thai_tax_settings", return_value=SETTINGS),
+			patch.object(withholding.frappe, "get_cached_value", return_value=7),
+			patch.object(withholding, "receive_sources", return_value=sources),
+			patch.object(withholding, "_source", return_value=source),
+		):
+			# the order by its share, the advance: 10,400 = 10,000 + 700 VAT - 300 withheld (3%)
+			self.assertEqual(withholding.get_receive_base(receipt, 3), 15000)
+			# a different type has a different rate: 10,400 / (1.07 - 0.05)
+			self.assertEqual(withholding.get_receive_base(receipt, 5), flt(5000 + 10400 / 1.02, 2))
+			# once the rows are on the entry, Unallocated holds the tax: stable whatever the rate
+			receipt.deductions = [frappe._dict(amount=300, thai_withholding_category="Service")]
+			receipt.unallocated_amount = 10700
+			self.assertEqual(withholding.get_receive_base(receipt, 3), 15000)
+
+	def test_the_popup_base_follows_the_chosen_type(self):
+		receipt = frappe._dict(
+			doctype="Payment Entry",
+			company="CD",
+			posting_date="2026-10-28",
+			references=[],
+			base_paid_amount=10400,
+			deductions=[],
+			thai_advance_for="Services",
+		)
+		rates = {"Service": 3, "Advertising": 2}
+		with (
+			patch.object(withholding.frappe, "parse_json", side_effect=lambda value: value),
+			patch.object(withholding.frappe, "get_doc", return_value=receipt),
+			patch.object(withholding, "check_draft_permission"),
+			patch.object(
+				withholding,
+				"receive_category",
+				side_effect=lambda category, company, date: frappe._dict(rate=rates[category]),
+			),
+			patch.object(custom_api, "get_thai_tax_settings", return_value=SETTINGS),
+			patch.object(withholding.frappe, "get_cached_value", return_value=7),
+		):
+			self.assertEqual(withholding.get_receive_base_for_category({}, "Service"), 10000)
+			# 10,400 / (1.07 - 0.02)
+			self.assertEqual(
+				withholding.get_receive_base_for_category({}, "Advertising"), flt(10400 / 1.05, 2)
+			)
 
 	def test_a_receipt_that_settles_a_document_and_holds_an_advance_adds_the_advance_base(self):
 		receipt = frappe._dict(

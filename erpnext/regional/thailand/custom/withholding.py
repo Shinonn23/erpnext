@@ -367,7 +367,8 @@ def get_receive_base(doc, withholding_rate=None):
 
 	An advance for services (Advance For = Services) holds VAT in what it received that no document names: that part
 	counts without its VAT. withholding_rate (the % of the type being applied) is for a first run, when the money
-	received is net of the tax still to be withheld: base = received / (1 + VAT% - withholding%)."""
+	received is net of the tax still to be withheld: base = received / (1 + VAT% - withholding%), also for the part
+	of a receipt that settles documents and holds an advance."""
 	sources = receive_sources(doc)
 	base = 0.0
 	for ref in sources:
@@ -395,11 +396,13 @@ def get_receive_base(doc, withholding_rate=None):
 
 def _services_base(doc, amount, withholding_rate, withheld):
 	"""The base of an amount received for services. withheld: the amount is the money received, and the tax already
-	withheld (the entry's rows) is added back; without rows the money is net of the tax still to be withheld."""
+	withheld (the entry's rows) is added back; otherwise it is the entry's Unallocated, which holds the rows. Without
+	rows either is net of the tax still to be withheld."""
 	rows = withholding_rows(doc)
 	if withheld:
 		amount += sum(flt(row.get("amount")) for row in rows)
-	rate = flt(withholding_rate) if (withheld and not rows) else 0
+	# no tax withheld on the entry yet: the money is net of the tax still to be withheld
+	rate = flt(withholding_rate) if not rows else 0
 	return _without_vat(doc, amount, rate)
 
 
@@ -411,6 +414,17 @@ def _without_vat(doc, amount, withholding_rate=0):
 	settings = get_thai_tax_settings(doc.company)
 	rate = flt(frappe.get_cached_value("Account", settings.sales_tax_account, "tax_rate"))
 	return amount * 100 / (100 + rate - flt(withholding_rate))
+
+
+@frappe.whitelist()
+def get_receive_base_for_category(doc, category):
+	"""The base the Withhold Tax popup shows for a type of income: get_receive_base at the type's rate on the posting
+	date (the popup asks again when the user changes the type)."""
+	doc = frappe.get_doc(frappe.parse_json(doc))
+	if doc.doctype not in ("Payment Entry", "Journal Entry"):
+		frappe.throw(_("Withhold Tax works on a Payment Entry or a Journal Entry."))
+	check_draft_permission(doc)
+	return get_receive_base(doc, receive_category(category, doc.company, doc.posting_date).rate)
 
 
 def get_receive_item_bases(doc):
