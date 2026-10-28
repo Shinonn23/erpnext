@@ -360,25 +360,32 @@ def receive_sources(doc):
 	]
 
 
-def get_receive_base(doc):
+def get_receive_base(doc, withholding_rate=None):
 	"""The amount before VAT the customer withheld on, in company currency: each Sales Invoice / Sales Order the
 	entry settles counts its net total times the share settled now. A receipt that settles none counts what it
-	received; a journal's customer line that names none counts its credit."""
+	received; a journal's customer line that names none counts its credit.
+
+	An advance for services (Advance For = Services) holds VAT in what it received that no document names: that part
+	counts without its VAT. withholding_rate (the % of the type being applied) is for a first run, when the money
+	received is net of the tax still to be withheld: base = received / (1 + VAT% - withholding%)."""
 	sources = receive_sources(doc)
 	base = 0.0
 	for ref in sources:
 		source = _source(ref.doctype, ref.name, doc.company)
 		total = ref.total or _source_total(source, ref.account_currency)
 		base += flt(source.get("base_net_total")) * _share(ref.allocated, total)
+	services = doc.doctype == "Payment Entry" and doc.get("thai_advance_for") == "Services"
 	if doc.doctype == "Payment Entry":
 		if not sources:
 			base = flt(doc.get("base_paid_amount")) or flt(doc.get("paid_amount")) * flt(
 				doc.get("source_exchange_rate") or 1
 			)
-			if doc.get("thai_advance_for") == "Services":
-				# an advance for services holds its VAT, which the customer does not withhold on: the money received
-				# plus the tax withheld is the price with VAT, the base is the price without it
-				base = _without_vat(doc, base + sum(flt(row.get("amount")) for row in withholding_rows(doc)))
+			if services:
+				base = _services_base(doc, base, withholding_rate, withheld=True)
+		elif services and flt(doc.get("unallocated_amount")) > 0:
+			# what the documents do not take: unallocated already holds the tax withheld on the rows
+			unallocated = flt(doc.get("unallocated_amount")) * flt(doc.get("source_exchange_rate") or 1)
+			base += _services_base(doc, unallocated, withholding_rate, withheld=False)
 	else:
 		for row in customer_credit_lines(doc):
 			if not (row.get("reference_type") in SOURCE_DOCTYPES and row.get("reference_name")):
@@ -386,13 +393,24 @@ def get_receive_base(doc):
 	return flt(base, 2)
 
 
-def _without_vat(doc, amount):
-	"""The amount without the VAT it holds, at the tax rate of the company's output VAT account."""
+def _services_base(doc, amount, withholding_rate, withheld):
+	"""The base of an amount received for services. withheld: the amount is the money received, and the tax already
+	withheld (the entry's rows) is added back; without rows the money is net of the tax still to be withheld."""
+	rows = withholding_rows(doc)
+	if withheld:
+		amount += sum(flt(row.get("amount")) for row in rows)
+	rate = flt(withholding_rate) if (withheld and not rows) else 0
+	return _without_vat(doc, amount, rate)
+
+
+def _without_vat(doc, amount, withholding_rate=0):
+	"""The amount without the VAT it holds, at the tax rate of the company's output VAT account; with a withholding
+	rate the amount is net of that tax too."""
 	from erpnext.regional.thailand.custom.custom_api import get_thai_tax_settings
 
 	settings = get_thai_tax_settings(doc.company)
 	rate = flt(frappe.get_cached_value("Account", settings.sales_tax_account, "tax_rate"))
-	return amount * 100 / (100 + rate)
+	return amount * 100 / (100 + rate - flt(withholding_rate))
 
 
 def get_receive_item_bases(doc):
@@ -431,7 +449,8 @@ def plan_receive_rows(doc, based_on=MANUAL, category=None, base_amount=None, wit
 	elif based_on == MANUAL:
 		if not category:
 			frappe.throw(_("Choose the type of income withheld."), title=_("Withhold Tax"))
-		base = get_receive_base(doc) if base_amount in (None, "") else flt(base_amount)
+		rate = receive_category(category, doc.company, doc.posting_date).rate
+		base = get_receive_base(doc, rate) if base_amount in (None, "") else flt(base_amount)
 		wanted = [(category, base, withholding_amount)]
 	else:
 		frappe.throw(_("Withhold Tax works Based On Manual Selection or on the line items."))
@@ -666,9 +685,14 @@ def get_receive_withholding_dialog(doc):
 		frappe.throw(_("Withhold Tax works on a Payment Entry or a Journal Entry."))
 	check_draft_permission(doc)
 	current = next((row.get(ROW_CATEGORY) for row in withholding_rows(doc)), None)
+	choices = get_choices(doc.company, doc.posting_date, RECEIVE)
+	# the type the popup opens on: the one applied before, else the first
+	first = (
+		current if any(c["name"] == current for c in choices) else (choices[0]["name"] if choices else None)
+	)
 	return {
-		"choices": get_choices(doc.company, doc.posting_date, RECEIVE),
-		"base": get_receive_base(doc),
+		"choices": choices,
+		"base": get_receive_base(doc, next((c["rate"] for c in choices if c["name"] == first), None)),
 		"settles_documents": bool(receive_sources(doc)),
 		"current": current,
 	}

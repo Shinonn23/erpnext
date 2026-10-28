@@ -6,7 +6,7 @@ Payment Entry tax code (calculate_taxes, add_tax_gl_entries) on the same in-memo
 
 import unittest
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import frappe
 
@@ -179,11 +179,29 @@ class TestAdvanceOrder(unittest.TestCase):
 		self.assertEqual(_rows(payment), before)
 
 	def test_a_submitted_entry_and_a_locked_review_are_left_alone(self):
-		for fields in ({"docstatus": 1}, {"workflow_state": "Pending Approval"}):
+		locked = (
+			{"docstatus": 1},
+			{"workflow_state": "Payment Entry Pending Bank Verification"},
+			{"workflow_state": "Payment Entry Pending Amount Approval"},
+			{"workflow_state": "Payment Entry Verified"},
+		)
+		for fields in locked:
 			payment = _Advance("Receive", "Customer", [_order_ref("Sales Order", 10700)])
 			payment.__dict__.update(fields)
 			_World().run(payment)
 			self.assertEqual(payment.taxes, [], fields)
+
+	def test_the_rows_are_made_in_the_preparers_states_of_the_workflow(self):
+		for state in (
+			"Payment Entry Draft",
+			"Payment Entry Amount Rejected",
+			"Payment Entry Refund Rejected",
+		):
+			payment = _Advance(
+				"Receive", "Customer", [_order_ref("Sales Order", 10700)], workflow_state=state
+			)
+			_World().run(payment)
+			self.assertEqual(len(payment.taxes), 2, state)
 
 
 class TestAdvanceUnallocated(unittest.TestCase):
@@ -265,6 +283,42 @@ class TestAdvanceWithInvoice(unittest.TestCase):
 		self.assertEqual(payment.tax_base_amount, 60000)
 
 
+class TestClearVatJournalForSales(unittest.TestCase):
+	def test_the_customer_is_on_the_output_vat_row(self):
+		receipt = frappe._dict(
+			name="PAY-1",
+			company="CD",
+			payment_type="Receive",
+			party_type="Customer",
+			party="CUST-1",
+			company_tax_address="",
+			references=[_ref("Sales Invoice", 53500)],
+			check_permission=Mock(),
+		)
+		journal = MagicMock()
+		rows = []
+		journal.append.side_effect = lambda table, row: rows.append(row)
+		with (
+			patch.object(custom_api.frappe, "get_doc", return_value=receipt),
+			patch.object(custom_api.frappe, "has_permission", return_value=True),
+			patch.object(custom_api.frappe, "new_doc", return_value=journal),
+			patch.object(
+				custom_api.frappe, "db", SimpleNamespace(get_all=Mock(return_value=SERVICE_INVOICE))
+			),
+			patch.object(custom_api.frappe, "get_cached_value", side_effect=_report_type),
+			patch.object(custom_api, "get_thai_tax_settings", return_value=SETTINGS),
+			patch.object(custom_api, "_", side_effect=lambda text: text),
+		):
+			self.assertIs(custom_api.make_clear_vat_journal_entry("Payment Entry", "PAY-1"), journal)
+		# Dr 2135-01 (undue) / Cr 2135-00, base positive; the Journal Entry has no header customer
+		self.assertEqual([r["account"] for r in rows], ["2135-01", "2135-00"])
+		self.assertEqual(rows[0]["debit_in_account_currency"], 3500)
+		self.assertEqual(rows[1]["credit_in_account_currency"], 3500)
+		self.assertEqual(rows[1]["customer"], "CUST-1")
+		self.assertNotIn("customer", rows[0])
+		self.assertEqual(rows[1]["tax_base_amount"], 50000)
+
+
 def _order_amounts(doctype, name):
 	return {"Purchase Invoice": (10700, 10000), "Purchase Order": (21400, 20000)}[doctype]
 
@@ -301,6 +355,26 @@ class TestValidateAdvanceFor(unittest.TestCase):
 			advance_vat.validate_advance_vat(self._doc(payment_type="Pay"))
 			# a submitted entry is not asked again
 			advance_vat.validate_advance_vat(self._doc(docstatus=1))
+
+	def test_only_the_preparers_states_and_the_way_out_of_draft_are_asked(self):
+		with patch.object(advance_vat.frappe, "throw", side_effect=_throw), patch.object(
+			advance_vat, "_", side_effect=lambda text: text
+		):
+			asked = self._doc(workflow_state="Payment Entry Draft")
+			with self.assertRaises(frappe.ValidationError):
+				advance_vat.validate_advance_vat(asked)
+			# the transition out of Draft: the saved document is still a draft
+			leaving = self._doc(workflow_state="Payment Entry Pending Bank Verification")
+			leaving.get_doc_before_save = lambda: self._doc(workflow_state="Payment Entry Draft")
+			with self.assertRaises(frappe.ValidationError):
+				advance_vat.validate_advance_vat(leaving)
+			# already in review: not stuck
+			for state in ("Payment Entry Pending Bank Verification", "Payment Entry Verified"):
+				stuck = self._doc(workflow_state=state)
+				stuck.get_doc_before_save = lambda state=state: self._doc(workflow_state=state)
+				advance_vat.validate_advance_vat(stuck)
+			pending = self._doc(workflow_state="Payment Entry Pending Amount Approval")
+			advance_vat.validate_advance_vat(pending)
 
 	def test_without_the_custom_field_nothing_is_asked(self):
 		advance_vat.validate_advance_vat(self._doc(meta=SimpleNamespace(has_field=lambda name: False)))
@@ -381,6 +455,52 @@ class TestAdvanceWithholding(unittest.TestCase):
 				payment_entry.get_payment_entry_tax_withholding_categories(doc),
 				[{"tax_withholding_category": "Sales Service", "taxable_amount": 10000}],
 			)
+
+	def test_the_first_withhold_tax_of_a_services_advance_works_back_from_the_money_received(self):
+		receipt = frappe._dict(
+			doctype="Payment Entry",
+			company="CD",
+			references=[],
+			base_paid_amount=10400,
+			deductions=[],
+			thai_advance_for="Services",
+		)
+		with (
+			patch.object(custom_api, "get_thai_tax_settings", return_value=SETTINGS),
+			patch.object(withholding.frappe, "get_cached_value", return_value=7),
+		):
+			# 10,400 received = 10,000 + 700 VAT - 300 withheld (3%)
+			self.assertEqual(withholding.get_receive_base(receipt, 3), 10000)
+			# the popup of a later run, rows in place, is stable
+			receipt.deductions = [frappe._dict(amount=300, thai_withholding_category="Service")]
+			self.assertEqual(withholding.get_receive_base(receipt, 3), 10000)
+
+	def test_a_receipt_that_settles_a_document_and_holds_an_advance_adds_the_advance_base(self):
+		receipt = frappe._dict(
+			doctype="Payment Entry",
+			company="CD",
+			references=[],
+			base_paid_amount=0,
+			deductions=[],
+			thai_advance_for="Services",
+			unallocated_amount=10700,
+			source_exchange_rate=1,
+		)
+		source = frappe._dict(base_net_total=5000, grand_total=5350, currency="THB")
+		sources = [
+			frappe._dict(
+				doctype="Sales Invoice", name="SI-1", allocated=5350, total=5350, account_currency="THB"
+			)
+		]
+		with (
+			patch.object(custom_api, "get_thai_tax_settings", return_value=SETTINGS),
+			patch.object(withholding.frappe, "get_cached_value", return_value=7),
+			patch.object(withholding, "receive_sources", return_value=sources),
+			patch.object(withholding, "_source", return_value=source),
+		):
+			self.assertEqual(withholding.get_receive_base(receipt), 15000)
+			receipt.thai_advance_for = "Goods"
+			self.assertEqual(withholding.get_receive_base(receipt), 5000)
 
 	def test_the_receive_base_of_a_services_advance_leaves_the_vat_out(self):
 		def receipt(**fields):

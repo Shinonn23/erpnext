@@ -8,6 +8,7 @@ from erpnext.regional.thailand.custom.advance_vat import (
 	ADVANCE_FOR,
 	ADVANCE_VAT,
 	advance_vat_pairs,
+	is_editable_state,
 	order_references,
 )
 from erpnext.regional.thailand.custom.company_branch import (
@@ -463,10 +464,9 @@ def make_clear_vat_journal_entry(dt, dn):
 	je.entry_type = "Journal Entry"
 	je.create_tax_invoice = 1
 	je.supplier = doc.party_type == "Supplier" and doc.party or False
-	# an advance settled later against a service Sales Invoice (Payment Reconciliation): its output VAT stayed undue
+	# an advance settled later against a service Sales Invoice (Payment Reconciliation): its output VAT stayed undue;
+	# the customer goes on the output VAT row (the Sales Tax Invoice reads it there)
 	sales_side = doc.payment_type == "Receive" and doc.party_type == "Customer"
-	if sales_side:
-		je.customer = doc.party
 	je.company_tax_address = doc.company_tax_address
 	je.for_payment = doc.name
 	je.user_remark = _("Clear Undue Tax on %s" % doc.name)
@@ -513,6 +513,7 @@ def make_clear_vat_journal_entry(dt, dn):
 			"account": account,
 			"credit_in_account_currency": tax_total < 0 and abs(tax_total),
 			"debit_in_account_currency": tax_total > 0 and tax_total,
+			**({"customer": doc.party, "tax_base_amount": abs(base_total)} if sales_side else {}),
 		},
 	)
 	return je
@@ -522,8 +523,6 @@ def make_clear_vat_journal_entry(dt, dn):
 CLEAR_UNDUE_TAX = "Clear Undue Tax"
 # the rows this module makes (the advance pair is advance_vat.ADVANCE_VAT); other tax rows are the user's
 OWN_TAX_ROWS = (CLEAR_UNDUE_TAX, ADVANCE_VAT)
-# the workflow states in which the Payment Entry is still the preparer's: later states lock the document
-EDITABLE_STATES = ("", "Draft", "Rejected")
 
 
 def _advance_signature(doc):
@@ -549,8 +548,7 @@ def clear_invoice_undue_tax(doc, method):
 	# a submitted entry keeps its rows; a draft in review is locked by its workflow
 	if doc.docstatus in (1, 2):
 		return
-	state = doc.get("workflow_state")
-	if isinstance(state, str) and state not in EDITABLE_STATES:
+	if not is_editable_state(doc):
 		return
 	old_doc = doc.get_doc_before_save()
 	if old_doc and _advance_signature(old_doc) == _advance_signature(doc):

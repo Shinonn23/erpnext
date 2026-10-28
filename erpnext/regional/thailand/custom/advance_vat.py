@@ -33,6 +33,20 @@ ORDER_DOCTYPES = {SALES: "Sales Order", PURCHASE: "Purchase Order"}
 TAX_ROW_DOCTYPES = {SALES: "Sales Taxes and Charges", PURCHASE: "Purchase Taxes and Charges"}
 
 
+def state_is_editable(state):
+	"""The workflow states in which the Payment Entry is still the preparer's (Draft, Rejected; the app prefixes
+	them: Payment Entry Draft, Payment Entry Amount Rejected, Payment Entry Refund Rejected). Any later state
+	(Pending Bank Verification, Verified, Pending Amount Approval ...) locks the business details."""
+	if not isinstance(state, str):
+		# no workflow state field (or a stand-in): the document is free
+		return True
+	return not state or state.endswith(("Draft", "Rejected"))
+
+
+def is_editable_state(doc):
+	return state_is_editable(doc.get("workflow_state"))
+
+
 def advance_side(doc):
 	"""SALES for an advance received from a customer, PURCHASE for one paid to a supplier, else None."""
 	return SIDES.get((doc.get("payment_type"), doc.get("party_type")))
@@ -114,6 +128,12 @@ def validate_advance_vat(doc):
 	"""A draft that receives from a customer / pays a supplier more than it allocates must say what the rest is for:
 	the VAT of services falls due with the payment, that of goods with the invoice."""
 	if doc.docstatus != 0 or not advance_side(doc):
+		return
+	# only while the preparer edits it, or on the transition out of Draft: an entry already in review (bank
+	# verification, amount approval) that holds an unallocated amount must not get stuck
+	loader = getattr(doc, "get_doc_before_save", None)
+	previous = loader() if callable(loader) else None
+	if not (is_editable_state(doc) or (previous and is_editable_state(previous))):
 		return
 	# the custom field is made by connect_diagnostics_setup; without it nothing can be asked
 	meta = getattr(doc, "meta", None)
