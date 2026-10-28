@@ -13,6 +13,12 @@ try:
 except ImportError:
 	origin_get_payment_entry_for_employee = None
 	_hrms_installed = False
+from erpnext.regional.thailand.custom.advance_vat import (
+	ADVANCE_FOR,
+	ADVANCE_VAT,
+	SERVICES,
+	validate_advance_vat,
+)
 from erpnext.regional.thailand.custom.custom_api import CLEAR_UNDUE_TAX, get_thai_tax_settings
 from erpnext.regional.thailand.custom.withholding import apply_receive_withholding, validate_receive_rows
 from erpnext.regional.thailand.custom.withholding_cert import (
@@ -24,6 +30,9 @@ from erpnext.regional.thailand.custom.withholding_cert import (
 )
 
 REF_DOCTYPES = ["Purchase Invoice", "Expense Claim", "Journal Entry"]
+# what a payment to a supplier / a receipt from a customer settles that names its amount before VAT
+PAYABLE_DOCTYPES = ("Purchase Invoice", "Purchase Order")
+RECEIVABLE_DOCTYPES = ("Sales Invoice", "Sales Order")
 
 
 class PaymentEntry:
@@ -65,14 +74,18 @@ class PaymentEntry:
 				}
 			)
 		validate_receive_rows(self)
+		validate_advance_vat(self)
 
 	def add_tax_gl_entries(self, gl_entries):
-		"""The Clear Undue Tax rows move VAT from the undue to the due account and net to zero, so they move no money.
+		"""The Clear Undue Tax / Advance VAT Due rows move VAT from the undue to the due account and net to zero, so
+		they move no money.
 		ERPNext gives every tax row not included in the paid amount a paid-account counter-line, and an Actual charge
 		cannot be included (validate_inclusive_tax): the pair would show on the bank as Dr and Cr lines that bank
 		reconciliation adds to the payment. Build the pair's GL as included, so the bank gets only what moved."""
 		pair = [
-			d for d in self.get("taxes") if d.description == CLEAR_UNDUE_TAX and not d.included_in_paid_amount
+			d
+			for d in self.get("taxes")
+			if d.description in (CLEAR_UNDUE_TAX, ADVANCE_VAT) and not d.included_in_paid_amount
 		]
 		if not pair or round(sum(flt(d.tax_amount) for d in pair), self.precision("paid_amount")):
 			return super().add_tax_gl_entries(gl_entries)
@@ -103,9 +116,7 @@ class PaymentEntry:
 
 
 @frappe.whitelist()
-def get_payment_entry_for_employee(
-	dt, dn, party_amount=None, bank_account=None, bank_amount=None
-):
+def get_payment_entry_for_employee(dt, dn, party_amount=None, bank_account=None, bank_amount=None):
 	if not _hrms_installed:
 		frappe.throw(_("hrms is required for this feature"))
 	pe = origin_get_payment_entry_for_employee(
@@ -136,7 +147,9 @@ def make_withholding_tax_cert(filters, doc):
 	filters = frappe.parse_json(filters)
 	pay = frappe.parse_json(doc)
 	# a Payment Entry, or a Journal Entry that withholds (Consider for Tax Withholding)
-	voucher_type = pay.get("doctype") if pay.get("doctype") in ("Payment Entry", "Journal Entry") else "Payment Entry"
+	voucher_type = (
+		pay.get("doctype") if pay.get("doctype") in ("Payment Entry", "Journal Entry") else "Payment Entry"
+	)
 	frappe.get_doc(voucher_type, pay.get("name")).check_permission("read")
 	frappe.has_permission("Withholding Tax Cert", "create", throw=True)
 	existing = existing_certificates(voucher_type, pay.get("name"))
@@ -150,7 +163,9 @@ def make_withholding_tax_cert(filters, doc):
 		)
 	cert = frappe.new_doc("Withholding Tax Cert")
 	if voucher_type == "Journal Entry":
-		party = next((r for r in pay.get("accounts") or [] if r.get("party_type") == "Supplier" and r.get("party")), {})
+		party = next(
+			(r for r in pay.get("accounts") or [] if r.get("party_type") == "Supplier" and r.get("party")), {}
+		)
 		cert.supplier = party.get("party") or ""
 	else:
 		cert.supplier = pay.get("party_type") == "Supplier" and pay.get("party") or ""
@@ -158,14 +173,22 @@ def make_withholding_tax_cert(filters, doc):
 		supplier = frappe.get_doc("Supplier", cert.supplier)
 		cert.supplier_name = supplier.supplier_name
 		# the primary address, else the supplier's own address (suppliers often have one address not marked primary)
-		cert.supplier_address = supplier.supplier_primary_address or _linked_address("Supplier", cert.supplier)
+		cert.supplier_address = supplier.supplier_primary_address or _linked_address(
+			"Supplier", cert.supplier
+		)
 	cert.voucher_type = voucher_type
 	cert.voucher_no = pay.get("name")
 	cert.company = pay.get("company")
-	cert.company_address = filters.get("company_address") or _linked_address("Company", cert.company, own=True)
+	cert.company_address = filters.get("company_address") or _linked_address(
+		"Company", cert.company, own=True
+	)
 	cert.income_tax_form = filters.get("income_tax_form") or (
 		cert.supplier
-		and ("PND3" if frappe.db.get_value("Supplier", cert.supplier, "supplier_type") == "Individual" else "PND53")
+		and (
+			"PND3"
+			if frappe.db.get_value("Supplier", cert.supplier, "supplier_type") == "Individual"
+			else "PND53"
+		)
 	)
 	cert.date = filters.get("date") or pay.get("posting_date")
 	category_forms = set()
@@ -224,34 +247,44 @@ def make_withholding_tax_cert(filters, doc):
 
 @frappe.whitelist()
 def get_payment_withholding_base(doc):
-	"""Withholding base of a payment to a supplier, before VAT: each Purchase Invoice paid contributes its net total
-	(company currency) times the share allocated; an unallocated (advance) amount counts as it is."""
+	"""Withholding base of a payment to a supplier, before VAT: each Purchase Invoice / Purchase Order paid contributes
+	its net total (company currency) times the share allocated; an unallocated (advance) amount counts as it is, or,
+	when Advance For says Services, without the VAT it holds (the VAT of a service advance is not withheld on)."""
 	payment = frappe.parse_json(doc)
 	base = 0
 	for reference in payment.get("references") or []:
-		if reference.get("reference_doctype") != "Purchase Invoice" or not reference.get("reference_name"):
+		if reference.get("reference_doctype") not in PAYABLE_DOCTYPES or not reference.get("reference_name"):
 			continue
-		invoice = frappe.get_doc("Purchase Invoice", reference.get("reference_name"))
-		invoice.check_permission("read")
-		total = frappe.utils.flt(invoice.grand_total)
+		source = frappe.get_doc(reference.get("reference_doctype"), reference.get("reference_name"))
+		source.check_permission("read")
+		total = frappe.utils.flt(source.grand_total)
 		if total:
-			base += invoice.base_net_total * abs(frappe.utils.flt(reference.get("allocated_amount")) / total)
-	base += frappe.utils.flt(payment.get("unallocated_amount")) * frappe.utils.flt(payment.get("target_exchange_rate") or 1)
+			base += source.base_net_total * abs(frappe.utils.flt(reference.get("allocated_amount")) / total)
+	unallocated = frappe.utils.flt(payment.get("unallocated_amount")) * frappe.utils.flt(
+		payment.get("target_exchange_rate") or 1
+	)
+	if unallocated and payment.get(ADVANCE_FOR) == SERVICES:
+		settings = get_thai_tax_settings(payment.get("company"))
+		rate = frappe.utils.flt(frappe.get_cached_value("Account", settings.purchase_tax_account, "tax_rate"))
+		unallocated = unallocated * 100 / (100 + rate)
+	base += unallocated
 	return frappe.utils.flt(base, 2)
 
 
 @frappe.whitelist()
 def get_payment_entry_tax_withholding_categories(doc):
-	"""Build core withholding-category rows from item-level invoice defaults."""
+	"""Build core withholding-category rows from item-level invoice (and order) defaults."""
 	payment = frappe.parse_json(doc)
 	if payment.get("payment_type") not in ("Pay", "Receive"):
 		return []
 
-	allowed_doctype = "Purchase Invoice" if payment.payment_type == "Pay" else "Sales Invoice"
+	# the invoices, and the orders an advance is paid on, of the side
+	allowed_doctypes = PAYABLE_DOCTYPES if payment.payment_type == "Pay" else RECEIVABLE_DOCTYPES
 	category_totals = {}
 	for reference in payment.get("references") or []:
-		if reference.reference_doctype != allowed_doctype or not reference.reference_name:
+		if reference.reference_doctype not in allowed_doctypes or not reference.reference_name:
 			continue
+		allowed_doctype = reference.reference_doctype
 
 		invoice = frappe.get_doc(allowed_doctype, reference.reference_name)
 		invoice.check_permission("read")
@@ -272,7 +305,7 @@ def get_payment_entry_tax_withholding_categories(doc):
 				item = frappe.get_cached_doc("Item", row.item_code)
 				category = (
 					item.purchase_tax_withholding_category
-					if allowed_doctype == "Purchase Invoice"
+					if allowed_doctype in PAYABLE_DOCTYPES
 					else item.sales_tax_withholding_category
 				)
 			if not category:
@@ -285,6 +318,7 @@ def get_payment_entry_tax_withholding_categories(doc):
 		{"tax_withholding_category": category, "taxable_amount": amount}
 		for category, amount in sorted(category_totals.items())
 	]
+
 
 def reconcile_undue_tax(doc, method):
 	"""If bs_reconcile is installed, unreconcile undue tax gls"""

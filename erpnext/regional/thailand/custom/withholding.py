@@ -375,11 +375,24 @@ def get_receive_base(doc):
 			base = flt(doc.get("base_paid_amount")) or flt(doc.get("paid_amount")) * flt(
 				doc.get("source_exchange_rate") or 1
 			)
+			if doc.get("thai_advance_for") == "Services":
+				# an advance for services holds its VAT, which the customer does not withhold on: the money received
+				# plus the tax withheld is the price with VAT, the base is the price without it
+				base = _without_vat(doc, base + sum(flt(row.get("amount")) for row in withholding_rows(doc)))
 	else:
 		for row in customer_credit_lines(doc):
 			if not (row.get("reference_type") in SOURCE_DOCTYPES and row.get("reference_name")):
 				base += _customer_credit(row) * (flt(row.get("exchange_rate")) or 1)
 	return flt(base, 2)
+
+
+def _without_vat(doc, amount):
+	"""The amount without the VAT it holds, at the tax rate of the company's output VAT account."""
+	from erpnext.regional.thailand.custom.custom_api import get_thai_tax_settings
+
+	settings = get_thai_tax_settings(doc.company)
+	rate = flt(frappe.get_cached_value("Account", settings.sales_tax_account, "tax_rate"))
+	return amount * 100 / (100 + rate)
 
 
 def get_receive_item_bases(doc):

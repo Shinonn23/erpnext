@@ -2,8 +2,14 @@ import frappe
 import urllib3
 from frappe import _
 from frappe.model.meta import get_field_precision
-from frappe.utils import flt
+from frappe.utils import cint, flt
 
+from erpnext.regional.thailand.custom.advance_vat import (
+	ADVANCE_FOR,
+	ADVANCE_VAT,
+	advance_vat_pairs,
+	order_references,
+)
 from erpnext.regional.thailand.custom.company_branch import (
 	get_company_branch_snapshot,
 	normalise_company_branch_code,
@@ -437,8 +443,10 @@ def to_clear_undue_tax(dt, dn):
 
 def is_tax_invoice_exists(dt, dn):
 	doc = frappe.get_doc(dt, dn)
+	# a receipt from a customer settles a Sales Invoice: its VAT makes a Sales Tax Invoice
+	tax_invoice = "Sales Tax Invoice" if doc.get("party_type") == "Customer" else "Purchase Tax Invoice"
 	ptax = frappe.get_all(
-		"Purchase Tax Invoice",
+		tax_invoice,
 		or_filters={"voucher_no": doc.name, "against_voucher": doc.name},
 		pluck="name",
 	)
@@ -455,15 +463,18 @@ def make_clear_vat_journal_entry(dt, dn):
 	je.entry_type = "Journal Entry"
 	je.create_tax_invoice = 1
 	je.supplier = doc.party_type == "Supplier" and doc.party or False
+	# an advance settled later against a service Sales Invoice (Payment Reconciliation): its output VAT stayed undue
+	sales_side = doc.payment_type == "Receive" and doc.party_type == "Customer"
+	if sales_side:
+		je.customer = doc.party
 	je.company_tax_address = doc.company_tax_address
 	je.for_payment = doc.name
 	je.user_remark = _("Clear Undue Tax on %s" % doc.name)
 	# Loop through all paid doc, pick only ones with Undue Tax
 	base_total = 0
 	tax_total = 0
-	references = filter(
-		lambda x: x.reference_doctype in ("Purchase Invoice", "Expense Claim"), doc.references
-	)
+	clearable = ("Purchase Invoice", "Expense Claim") + (("Sales Invoice",) if sales_side else ())
+	references = filter(lambda x: x.reference_doctype in clearable, doc.references)
 	for ref in references:
 		if not ref.allocated_amount or not ref.total_amount:
 			continue
@@ -478,7 +489,7 @@ def make_clear_vat_journal_entry(dt, dn):
 		)
 		for gl in gl_entries:
 			(undue_tax, base_amount, account_undue, account) = get_undue_tax(doc, ref, gl, tax)
-			if ref.reference_doctype in ("Purchase Invoice", "Expense Claim"):
+			if ref.reference_doctype in clearable:
 				undue_tax = -undue_tax
 				base_amount = -base_amount
 			base_total += base_amount
@@ -489,7 +500,7 @@ def make_clear_vat_journal_entry(dt, dn):
 						"account": account_undue,
 						"credit_in_account_currency": undue_tax > 0 and undue_tax,
 						"debit_in_account_currency": undue_tax < 0 and abs(undue_tax),
-						"tax_base_amount": base_total,
+						"tax_base_amount": abs(base_total) if sales_side else base_total,
 					},
 				)
 				tax_total += undue_tax
@@ -509,34 +520,70 @@ def make_clear_vat_journal_entry(dt, dn):
 
 # the description of the two tax rows that move a paid invoice's undue VAT to due VAT on its Payment Entry
 CLEAR_UNDUE_TAX = "Clear Undue Tax"
+# the rows this module makes (the advance pair is advance_vat.ADVANCE_VAT); other tax rows are the user's
+OWN_TAX_ROWS = (CLEAR_UNDUE_TAX, ADVANCE_VAT)
+# the workflow states in which the Payment Entry is still the preparer's: later states lock the document
+EDITABLE_STATES = ("", "Draft", "Rejected")
+
+
+def _advance_signature(doc):
+	"""What the rows depend on: the amounts, the invoices / orders paid and Advance For. A save that leaves it
+	alone leaves the rows alone."""
+	return (
+		flt(doc.get("total_allocated_amount")),
+		cint(doc.get("has_purchase_tax_invoice")),
+		flt(doc.get("paid_amount")),
+		flt(doc.get("unallocated_amount")),
+		doc.get(ADVANCE_FOR) or "",
+		round(sum(flt(row.get("amount")) for row in doc.get("deductions") or []), 2),
+		tuple(
+			(row.reference_doctype, row.reference_name, flt(row.allocated_amount))
+			for row in doc.get("references") or []
+		),
+	)
 
 
 def clear_invoice_undue_tax(doc, method):
 	if frappe.flags.get("in_clear_invoice_undue_tax"):
 		return
+	# a submitted entry keeps its rows; a draft in review is locked by its workflow
+	if doc.docstatus in (1, 2):
+		return
+	state = doc.get("workflow_state")
+	if isinstance(state, str) and state not in EDITABLE_STATES:
+		return
 	old_doc = doc.get_doc_before_save()
-	if (
-		old_doc
-		and old_doc.total_allocated_amount == doc.total_allocated_amount
-		and old_doc.has_purchase_tax_invoice == doc.has_purchase_tax_invoice
-	):
+	if old_doc and _advance_signature(old_doc) == _advance_signature(doc):
 		return
 	references = [
 		ref
 		for ref in doc.references
 		if ref.reference_doctype in ("Sales Invoice", "Purchase Invoice", "Expense Claim")
 	]
-	if not references or any(
+	invoice_part = bool(references) and not any(
 		ref.reference_doctype in ("Purchase Invoice", "Expense Claim") and not doc.has_purchase_tax_invoice
 		for ref in references
-	):
+	)
+	has_pairs = False
+	order_refs = order_references(doc)
+	if invoice_part or order_refs or doc.get(ADVANCE_FOR):
+		tax = get_thai_tax_settings(doc.company)
+		advance_pairs = advance_vat_pairs(doc, tax)
+		has_pairs = bool(advance_pairs)
+	own_rows = [row for row in doc.get("taxes") or [] if row.description in OWN_TAX_ROWS]
+	if not (invoice_part or has_pairs or own_rows or (order_refs and doc.has_purchase_tax_invoice)):
 		return
 
-	doc.taxes = []
-	tax = get_thai_tax_settings(doc.company)
+	# the user's own tax rows stay; only the rows this makes are rebuilt
+	if own_rows:
+		kept = [row for row in doc.taxes if row.description not in OWN_TAX_ROWS]
+		for idx, row in enumerate(kept, 1):
+			row.idx = idx
+		doc.taxes = kept
 	base_total = 0
 	tax_total = 0
-	for ref in references:
+	account = None
+	for ref in references if invoice_part else []:
 		if not ref.allocated_amount or not ref.total_amount:
 			continue
 		# Find gl entry of ref doc that has undue amount
@@ -571,23 +618,43 @@ def clear_invoice_undue_tax(doc, method):
 					},
 				)
 				tax_total += undue_tax
+	# The VAT of an advance paid before its invoice (advance_vat.py): the same pair, its base joins the invoice base
+	# so that the payment makes one tax invoice
+	description = CLEAR_UNDUE_TAX if tax_total else ADVANCE_VAT
+	for account_undue, account_due, advance_tax, advance_base in advance_pairs if has_pairs else []:
+		doc.append(
+			"taxes",
+			{
+				"add_deduct_tax": "Add",
+				"description": ADVANCE_VAT,
+				"charge_type": "Actual",
+				"account_head": account_undue,
+				"tax_amount": -advance_tax,
+			},
+		)
+		account = account_due
+		tax_total += advance_tax
+		base_total += advance_base
 	if not tax_total:
-		if doc.has_purchase_tax_invoice:
+		if doc.has_purchase_tax_invoice and (invoice_part or order_refs):
 			frappe.throw(_("No undue tax amount to clear. Please uncheck 'Has Purchase Tax Invoice'"))
-		return
-	# To due tax
-	doc.append(
-		"taxes",
-		{
-			# 'add_deduct_tax': tax_total > 0 and 'Add' or 'Deduct',
-			"add_deduct_tax": "Add",
-			"description": CLEAR_UNDUE_TAX,
-			"charge_type": "Actual",
-			"account_head": account,
-			"tax_amount": tax_total,
-		},
-	)
-	doc.tax_base_amount = base_total
+		if not own_rows:
+			return
+		doc.tax_base_amount = 0
+	else:
+		# To due tax
+		doc.append(
+			"taxes",
+			{
+				# 'add_deduct_tax': tax_total > 0 and 'Add' or 'Deduct',
+				"add_deduct_tax": "Add",
+				"description": description,
+				"charge_type": "Actual",
+				"account_head": account,
+				"tax_amount": tax_total,
+			},
+		)
+		doc.tax_base_amount = base_total
 	doc.calculate_taxes()
 	frappe.flags.in_clear_invoice_undue_tax = True
 	try:
