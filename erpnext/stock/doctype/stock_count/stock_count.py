@@ -24,17 +24,23 @@ class StockCount(Document):
 
 		from erpnext.stock.doctype.stock_count_dimension.stock_count_dimension import StockCountDimension
 		from erpnext.stock.doctype.stock_count_item.stock_count_item import StockCountItem
+		from erpnext.stock.doctype.stock_count_selected_item.stock_count_selected_item import (
+			StockCountSelectedItem,
+		)
 
 		company: DF.Link
+		count_template: DF.Link | None
 		count_type: DF.Literal["", "Monthly", "Annual"]
 		dimensions: DF.Table[StockCountDimension]
 		item_count: DF.Int | None
+		item_selection: DF.Literal["Random Sample", "Selected Items"]
 		items: DF.Table[StockCountItem]
 		naming_series: DF.Literal["STOCK-COUNT-.YYYY.-"]
 		quarantine_storage_location: DF.Link | None
 		quarantine_warehouse: DF.Link | None
 		scan_barcode: DF.Data | None
 		scan_storage_location: DF.Link | None
+		selected_items: DF.Table[StockCountSelectedItem]
 		snapshot_datetime: DF.Datetime | None
 		status: DF.Literal["", "Draft", "In Progress", "Completed"]
 		stock_entry: DF.Link | None
@@ -59,11 +65,15 @@ class StockCount(Document):
 
 		if self.docstatus == 0 and not self.snapshot_datetime and self.items:
 			frappe.throw(
-				_("Stock Count items are generated from the stock snapshot. Do not add items manually.")
+				_(
+					"Stock Count items are generated from the stock snapshot. Do not add items manually. "
+					"To choose the items, use Items to Count (Monthly count, Selected Items)."
+				)
 			)
 
+		self.validate_item_selection()
 		if self.count_type == "Monthly":
-			if flt(self.item_count) <= 0:
+			if not self.selects_items() and flt(self.item_count) <= 0:
 				frappe.throw(_("Number of Item Codes to Sample must be greater than zero."))
 			self.validate_quarantine_warehouse()
 
@@ -76,6 +86,63 @@ class StockCount(Document):
 			if self.status != "In Progress" or not self.snapshot_datetime:
 				frappe.throw(_("Prepare this Stock Count before submitting it."))
 			self.validate_count_lines()
+
+	def selects_items(self):
+		"""True for a Monthly count whose items are chosen; every other count samples or counts all."""
+		return self.count_type == "Monthly" and self.item_selection == "Selected Items"
+
+	def validate_item_selection(self):
+		before = self.get_doc_before_save()
+		prepared = bool(before and before.get("snapshot_datetime"))
+		if prepared and selection_signature(self) != selection_signature(before):
+			frappe.throw(_("The item selection cannot be changed after the count is prepared."))
+		if prepared or self.snapshot_datetime:
+			return
+		if self.count_type != "Monthly":
+			# An Annual count always counts every item with stock; nothing chosen can stay on it.
+			self.item_selection = "Random Sample"
+			self.count_template = None
+			self.set("selected_items", [])
+			return
+		if not self.item_selection:
+			self.item_selection = "Random Sample"
+		if self.item_selection != "Selected Items":
+			self.count_template = None
+			self.set("selected_items", [])
+			return
+		if self.count_template:
+			self.validate_count_template()
+		if not self.selected_items:
+			frappe.throw(_("Add at least one item to Items to Count, or choose a Count Template."))
+		validate_countable_item_rows(self.selected_items)
+
+	def validate_count_template(self):
+		template = frappe.db.get_value(
+			"Stock Count Template", self.count_template, ["company", "warehouse", "disabled"], as_dict=True
+		)
+		if not template:
+			frappe.throw(_("Count Template {0} does not exist.").format(self.count_template))
+		if template.disabled:
+			frappe.throw(_("Count Template {0} is disabled.").format(self.count_template))
+		if template.company != self.company:
+			frappe.throw(_("Count Template {0} belongs to another Company.").format(self.count_template))
+		if template.warehouse and template.warehouse != self.warehouse:
+			frappe.throw(
+				_("Count Template {0} is for Warehouse {1}.").format(self.count_template, template.warehouse)
+			)
+
+	def copy_template_items(self):
+		"""Rows chosen by hand stay; a template fills an empty list, so a later template edit never alters a prepared count."""
+		if not self.selects_items() or not self.count_template or self.selected_items:
+			return
+		self.validate_count_template()
+		for item_code in frappe.get_all(
+			"Stock Count Template Item",
+			filters={"parent": self.count_template, "parenttype": "Stock Count Template"},
+			order_by="idx",
+			pluck="item_code",
+		):
+			self.append("selected_items", {"item_code": item_code})
 
 	def validate_quarantine_warehouse(self):
 		if not self.quarantine_warehouse:
@@ -270,7 +337,8 @@ class StockCount(Document):
 			frappe.throw(_("Company, Count Type, and Warehouse are required."))
 		if self.count_type == "Monthly":
 			self.validate_quarantine_warehouse()
-			if flt(self.item_count) <= 0:
+			self.copy_template_items()
+			if not self.selects_items() and flt(self.item_count) <= 0:
 				frappe.throw(_("Number of Item Codes to Sample must be greater than zero."))
 
 		self.validate()
@@ -280,8 +348,20 @@ class StockCount(Document):
 		for item_code in item_codes:
 			self.append_snapshot_rows(item_code, snapshot)
 
+		skipped = self.flags.get("not_counted_items") or []
 		if not self.items:
+			if skipped:
+				frappe.throw(
+					_("None of the selected items has stock in Warehouse {0}: {1}").format(
+						self.warehouse, ", ".join(skipped)
+					)
+				)
 			frappe.throw(_("No stock was found in Warehouse {0}.").format(self.warehouse))
+		if skipped:
+			frappe.msgprint(
+				_("Not counted, no stock in {0}: {1}").format(self.warehouse, ", ".join(skipped)),
+				indicator="orange",
+			)
 
 		self.status = "In Progress"
 		self.save()
@@ -369,8 +449,10 @@ class StockCount(Document):
 		return [frappe._dict(group) for group in grouped.values() if flt(group["qty"]) > 0]
 
 	def get_item_codes_to_count(self, snapshot):
+		self.flags.not_counted_items = []
 		item_codes = sorted({row.item_code for row in self.get_stock_ledger_groups(snapshot)})
 		if not item_codes:
+			self.flags.not_counted_items = self.get_selected_item_codes()
 			return []
 		item_codes = frappe.get_all(
 			"Item",
@@ -383,6 +465,13 @@ class StockCount(Document):
 		)
 		item_codes.sort()
 
+		if self.selects_items():
+			# Only the chosen items that still have stock are counted: a batch item without a positive batch
+			# balance has no row, so no zero row without a batch can appear.
+			chosen = self.get_selected_item_codes()
+			self.flags.not_counted_items = [code for code in chosen if code not in item_codes]
+			return [code for code in item_codes if code in chosen]
+
 		if self.count_type == "Monthly":
 			import random
 
@@ -390,6 +479,9 @@ class StockCount(Document):
 			item_codes = item_codes[: int(self.item_count)]
 
 		return item_codes
+
+	def get_selected_item_codes(self):
+		return list(dict.fromkeys(row.item_code for row in self.get("selected_items") or [] if row.item_code))
 
 	def append_snapshot_rows(self, item_code, snapshot):
 		item = frappe.get_cached_doc("Item", item_code)
@@ -438,8 +530,13 @@ class StockCount(Document):
 			else:
 				self.append("items", base_row)
 
+	def posts_variance(self):
+		"""A Monthly count of a warehouse with a Count Variance Account posts its differences as a Stock
+		Reconciliation (the test cost of a laboratory); others move the counted stock to quarantine."""
+		return self.count_type == "Monthly" and bool(get_count_variance_account(self.warehouse))
+
 	def on_submit(self):
-		if self.count_type == "Monthly":
+		if self.count_type == "Monthly" and not self.posts_variance():
 			stock_entry = self.make_quarantine_stock_entry()
 			if stock_entry:
 				self.db_set("stock_entry", stock_entry.name)
@@ -620,6 +717,61 @@ class StockCount(Document):
 
 		reconciliation.insert(ignore_permissions=True)
 		return reconciliation
+
+
+def selection_signature(doc):
+	return (
+		doc.get("item_selection") or "Random Sample",
+		doc.get("count_template") or "",
+		sorted(row.item_code for row in doc.get("selected_items") or []),
+	)
+
+
+def validate_countable_item_rows(rows):
+	"""Rows of a template or a selection: each item once, an enabled stock item."""
+	seen = set()
+	for row in rows:
+		if not row.item_code:
+			frappe.throw(_("Row {0}: Item Code is required.").format(row.idx))
+		if row.item_code in seen:
+			frappe.throw(_("Row {0}: Item {1} is listed more than once.").format(row.idx, row.item_code))
+		seen.add(row.item_code)
+		item = frappe.db.get_value("Item", row.item_code, ["is_stock_item", "disabled"], as_dict=True)
+		if not item:
+			frappe.throw(_("Row {0}: Item {1} does not exist.").format(row.idx, row.item_code))
+		if not item.is_stock_item or item.disabled:
+			frappe.throw(_("Row {0}: Item {1} must be an enabled stock item.").format(row.idx, row.item_code))
+
+
+def get_count_variance_account(warehouse):
+	"""The Count Variance Account of a warehouse, or None. The field is added by the company policy layer, so
+	without it (or without a value) the count behaves as before."""
+	if not warehouse or not frappe.db.has_column("Warehouse", "stock_adjustment_account"):
+		return None
+	return frappe.db.get_value("Warehouse", warehouse, "stock_adjustment_account") or None
+
+
+@frappe.whitelist()
+def make_count_template(name, title):
+	"""Save the items chosen on a Stock Count as a reusable Stock Count Template."""
+	count = frappe.get_doc("Stock Count", name)
+	count.check_permission("read")
+	frappe.has_permission("Stock Count Template", "create", throw=True)
+	if count.docstatus != 0:
+		frappe.throw(_("Only a draft Stock Count can be saved as a template."))
+	if not count.selects_items() or not count.selected_items:
+		frappe.throw(_("Choose the items to count before saving a template."))
+	template = frappe.get_doc(
+		{
+			"doctype": "Stock Count Template",
+			"title": title,
+			"company": count.company,
+			"warehouse": count.warehouse,
+			"items": [{"item_code": row.item_code} for row in count.selected_items],
+		}
+	)
+	template.insert()
+	return template.name
 
 
 def allow_generated_stock_count_cancellation(doc):

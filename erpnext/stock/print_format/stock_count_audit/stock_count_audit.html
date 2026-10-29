@@ -81,6 +81,12 @@
 		<td><strong>{{ _("Count Type") }}:</strong> {{ _(doc.count_type) | e }}</td>
 		<td><strong>{{ _("Snapshot Datetime") }}:</strong> {{ doc.get_formatted("snapshot_datetime") }}</td>
 	</tr>
+	{% if doc.count_type == "Monthly" %}
+	<tr>
+		<td><strong>{{ _("Item Selection") }}:</strong> {{ _(doc.get("item_selection") or "Random Sample") | e }}{% if doc.get("item_selection") != "Selected Items" and doc.item_count %} ({{ doc.item_count }}){% endif %}</td>
+		<td>{% if doc.get("count_template") %}<strong>{{ _("Count Template") }}:</strong> {{ doc.count_template | e }}{% endif %}</td>
+	</tr>
+	{% endif %}
 	{% if doc.get("workflow_state") %}
 	<tr><td colspan="2"><strong>{{ _("Workflow State") }}:</strong> {{ _(doc.workflow_state) | e }}</td></tr>
 	{% endif %}

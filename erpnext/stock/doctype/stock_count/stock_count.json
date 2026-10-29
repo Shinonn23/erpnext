@@ -14,10 +14,14 @@
   "count_type",
   "naming_series",
   "count_setup_section",
+  "item_selection",
   "item_count",
   "count_setup_column",
   "quarantine_warehouse",
   "quarantine_storage_location",
+  "selected_items_section",
+  "count_template",
+  "selected_items",
   "dimensions_section",
   "dimensions",
   "counting_tab",
@@ -89,12 +93,24 @@
    "depends_on": "eval:doc.count_type == 'Monthly'"
   },
   {
+   "fieldname": "item_selection",
+   "fieldtype": "Select",
+   "label": "Item Selection",
+   "options": "Random Sample\nSelected Items",
+   "default": "Random Sample",
    "depends_on": "eval:doc.count_type == 'Monthly'",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "Random Sample counts a random number of items with stock; Selected Items counts only the items you choose. An Annual count always counts every item."
+  },
+  {
+   "depends_on": "eval:doc.count_type == 'Monthly' && doc.item_selection != 'Selected Items'",
    "fieldname": "item_count",
    "fieldtype": "Int",
    "label": "Number of Item Codes to Sample",
    "default": "10",
-   "mandatory_depends_on": "eval:doc.count_type == 'Monthly'"
+   "mandatory_depends_on": "eval:doc.count_type == 'Monthly' && doc.item_selection != 'Selected Items'",
+   "description": "Used when Item Selection is Random Sample."
   },
   {
    "fieldname": "count_setup_column",
@@ -115,6 +131,25 @@
    "label": "Quarantine Storage Location",
    "options": "Storage Location",
    "description": "Optional destination location in the Quarantine Warehouse."
+  },
+  {
+   "fieldname": "selected_items_section",
+   "fieldtype": "Section Break",
+   "label": "Items to Count",
+   "depends_on": "eval:doc.count_type == 'Monthly' && doc.item_selection == 'Selected Items'"
+  },
+  {
+   "fieldname": "count_template",
+   "fieldtype": "Link",
+   "label": "Count Template",
+   "options": "Stock Count Template",
+   "description": "Fills Items to Count. Changing the template later does not change a prepared count."
+  },
+  {
+   "fieldname": "selected_items",
+   "fieldtype": "Table",
+   "label": "Items to Count",
+   "options": "Stock Count Selected Item"
   },
   {
    "fieldname": "dimensions_section",

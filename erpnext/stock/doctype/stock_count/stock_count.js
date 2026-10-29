@@ -41,6 +41,16 @@ frappe.ui.form.on("Stock Count", {
 				disabled: 0,
 			},
 		}));
+		frm.set_query("count_template", () => ({
+			filters: {
+				company: frm.doc.company,
+				disabled: 0,
+				warehouse: ["in", ["", frm.doc.warehouse || ""]],
+			},
+		}));
+		frm.set_query("item_code", "selected_items", () => ({
+			filters: { is_stock_item: 1, disabled: 0 },
+		}));
 		frm.set_query("scan_storage_location", () => ({
 			filters: { warehouse: frm.doc.warehouse, disabled: 0 },
 		}));
@@ -58,8 +68,7 @@ frappe.ui.form.on("Stock Count", {
 			frm.doc.status === "In Progress" &&
 			!frm.doc.docstatus &&
 			(!frm.doc.workflow_state || frm.doc.workflow_state === "Stock Count Draft");
-		frm.toggle_display("item_count", frm.doc.count_type === "Monthly");
-		frm.toggle_display("quarantine_warehouse", frm.doc.count_type === "Monthly");
+		frm.trigger("count_type");
 		frm.toggle_display("scan_barcode", can_count);
 		frm.toggle_display("scan_storage_location", can_count);
 		frm.set_df_property("items", "read_only", !can_count);
@@ -70,6 +79,10 @@ frappe.ui.form.on("Stock Count", {
 		frm.set_df_property("warehouse", "read_only", frm.doc.status !== "Draft");
 		frm.set_df_property("count_type", "read_only", frm.doc.status !== "Draft");
 		frm.set_df_property("item_count", "read_only", frm.doc.status !== "Draft");
+		// The selection is frozen once the count is prepared; the server refuses a change as well.
+		for (const fieldname of ["item_selection", "count_template", "selected_items"]) {
+			frm.set_df_property(fieldname, "read_only", frm.doc.status !== "Draft");
+		}
 		frm.set_df_property("quarantine_warehouse", "read_only", frm.doc.status !== "Draft");
 		frm.set_df_property("quarantine_storage_location", "read_only", frm.doc.status !== "Draft");
 
@@ -80,6 +93,33 @@ frappe.ui.form.on("Stock Count", {
 				await frm.reload_doc();
 				frm.scroll_to_field("items");
 				frappe.show_alert({ message: __("Stock snapshot created."), indicator: "green" });
+			});
+		}
+
+		if (
+			!frm.doc.docstatus &&
+			frm.doc.status === "Draft" &&
+			!frm.is_new() &&
+			frm.doc.count_type === "Monthly" &&
+			frm.doc.item_selection === "Selected Items" &&
+			(frm.doc.selected_items || []).length
+		) {
+			frm.add_custom_button(__("Save as Template"), () => {
+				frappe.prompt(
+					{ fieldname: "title", fieldtype: "Data", label: __("Title"), reqd: 1 },
+					async ({ title }) => {
+						if (frm.is_dirty()) await frm.save();
+						const r = await frm.call({
+							method: "erpnext.stock.doctype.stock_count.stock_count.make_count_template",
+							args: { name: frm.doc.name, title },
+						});
+						frappe.show_alert({
+							message: __("Count Template {0} created.", [r.message]),
+							indicator: "green",
+						});
+					},
+					__("Save as Count Template")
+				);
 			});
 		}
 
@@ -96,8 +136,26 @@ frappe.ui.form.on("Stock Count", {
 	},
 
 	count_type(frm) {
-		frm.toggle_display("item_count", frm.doc.count_type === "Monthly");
-		frm.toggle_display("quarantine_warehouse", frm.doc.count_type === "Monthly");
+		const monthly = frm.doc.count_type === "Monthly";
+		frm.toggle_display("item_count", monthly && frm.doc.item_selection !== "Selected Items");
+		frm.toggle_display("quarantine_warehouse", monthly);
+	},
+
+	item_selection(frm) {
+		frm.trigger("count_type");
+	},
+
+	count_template(frm) {
+		if (frm.doc.status !== "Draft" || frm.doc.docstatus) return;
+		frm.clear_table("selected_items");
+		frm.refresh_field("selected_items");
+		if (!frm.doc.count_template) return;
+		frappe.db.get_doc("Stock Count Template", frm.doc.count_template).then((template) => {
+			for (const row of template.items || []) {
+				frm.add_child("selected_items", { item_code: row.item_code, item_name: row.item_name });
+			}
+			frm.refresh_field("selected_items");
+		});
 	},
 
 	scan_barcode(frm) {
