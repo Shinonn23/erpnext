@@ -48,6 +48,43 @@ def execute(filters=None):
 	return ReceivablePayableReport(filters).run(args)
 
 
+PARTY_NAME_FIELDS = {
+	"Customer": "customer_name",
+	"Supplier": "supplier_name",
+	"Employee": "employee_name",
+	"Shareholder": "title",
+}
+
+
+def get_party_names(parties_by_type):
+	"""{(party_type, party): name} with one query per party type; the party code if no name is found.
+
+	Customer / Supplier are read as before; other party types (Employee, Shareholder) only when the
+	session user may read that doctype, so no name is disclosed past the doctype permission."""
+	names = {}
+	for party_type, parties in parties_by_type.items():
+		parties = [p for p in parties if p]
+		if not parties:
+			continue
+		fieldname = PARTY_NAME_FIELDS.get(party_type)
+		found = {}
+		if fieldname and (
+			party_type in ("Customer", "Supplier") or frappe.has_permission(party_type, "read")
+		):
+			found = dict(
+				frappe.get_all(
+					party_type,
+					filters={"name": ("in", parties)},
+					fields=["name", fieldname],
+					as_list=True,
+					limit_page_length=0,
+				)
+			)
+		for party in parties:
+			names[(party_type, party)] = found.get(party) or party
+	return names
+
+
 class ReceivablePayableReport:
 	def __init__(self, filters=None):
 		self.filters = frappe._dict(filters or {})
@@ -93,6 +130,7 @@ class ReceivablePayableReport:
 		self.account_type = self.filters.account_type
 		self.party_type = get_party_types_from_account_type(self.account_type)
 		self.party_details = {}
+		self.party_names = {}
 		self.invoices = set()
 		self.sales_person_records = None
 		self.skip_total_row = 0
@@ -138,7 +176,15 @@ class ReceivablePayableReport:
 		# Build delivery note map against all sales invoices
 		self.build_delivery_note_map()
 
+		self.load_party_names()
 		self.build_data()
+
+	def load_party_names(self):
+		parties_by_type = {}
+		for voucher in self.voucher_balance.values():
+			party_type = voucher.get("party_type") or self.party_type[0]
+			parties_by_type.setdefault(party_type, set()).add(voucher.party)
+		self.party_names = get_party_names(parties_by_type)
 
 	def fetch_ple_in_buffered_cursor(self):
 		self.ple_entries = self.ple_query.run(as_dict=True)
@@ -539,7 +585,10 @@ class ReceivablePayableReport:
 	def set_party_details(self, row):
 		if row.party:
 			# customer / supplier name
-			row.update(self.get_party_details(row.party) or {})
+			row.update(self.get_party_details(row.party, row.get("party_type")) or {})
+			row.party_name = (
+				self.party_names.get((row.get("party_type") or self.party_type[0], row.party)) or row.party
+			)
 
 		if self.filters.get("in_party_currency") or self.filters.get("party_account"):
 			row.currency = row.account_currency
@@ -1156,7 +1205,9 @@ class ReceivablePayableReport:
 		if ple.voucher_type in ("Sales Invoice", "Purchase Invoice"):
 			return True
 
-	def get_party_details(self, party):
+	def get_party_details(self, party, party_type=None):
+		if party_type and party_type not in ("Customer", "Supplier"):
+			return {}
 		if party not in self.party_details:
 			if self.account_type == "Receivable":
 				fields = ["customer_name", "territory", "customer_group", "customer_primary_contact"]
@@ -1193,10 +1244,10 @@ class ReceivablePayableReport:
 			sticky=(self.party_naming_by not in ["Naming Series", "Auto Name"]),
 		)
 		# Always show the party name directly after the Party column (Connect Diagnostics), whatever the
-		# naming rule. The row data stays keyed customer_name / supplier_name.
+		# naming rule. Employee and other party types show their own name field.
 		self.add_column(
 			label=_("Party Name"),
-			fieldname="supplier_name" if self.account_type == "Payable" else "customer_name",
+			fieldname="party_name",
 			fieldtype="Data",
 			sticky=True,
 		)

@@ -1,8 +1,12 @@
 import unittest
+from unittest.mock import patch
 
 import frappe
 
-from erpnext.accounts.report.accounts_receivable.accounts_receivable import ReceivablePayableReport
+from erpnext.accounts.report.accounts_receivable.accounts_receivable import (
+	ReceivablePayableReport,
+	get_party_names,
+)
 from erpnext.accounts.report.accounts_receivable_summary.accounts_receivable_summary import (
 	AccountsReceivableSummary,
 )
@@ -40,9 +44,48 @@ class TestPartyNameColumn(unittest.TestCase):
 			self.assertEqual(fieldnames.index("party_account"), idx + 2)
 
 	def test_detailed(self):
-		self._check(ReceivablePayableReport, "Receivable", "customer_name")
-		self._check(ReceivablePayableReport, "Payable", "supplier_name")
+		self._check(ReceivablePayableReport, "Receivable", "party_name")
+		self._check(ReceivablePayableReport, "Payable", "party_name")
 
 	def test_summary(self):
 		self._check(AccountsReceivableSummary, "Receivable", "party_name")
 		self._check(AccountsReceivableSummary, "Payable", "party_name")
+
+
+class TestPartyNames(unittest.TestCase):
+	def test_names_by_party_type(self):
+		queried = []
+		data = {
+			"Customer": [("C1", "Customer One")],
+			"Supplier": [("S1", "Supplier One")],
+			"Employee": [("6609003", "Somchai")],
+		}
+
+		def fake_get_all(doctype, **kwargs):
+			queried.append((doctype, kwargs["fields"][1]))
+			return [r for r in data[doctype] if r[0] in kwargs["filters"]["name"][1]]
+
+		with (
+			patch("frappe.get_all", fake_get_all),
+			patch("frappe.has_permission", return_value=True),
+		):
+			names = get_party_names(
+				{"Customer": {"C1", "C2"}, "Supplier": {"S1"}, "Employee": {"6609003"}, "Other": {"X"}}
+			)
+		self.assertEqual(names[("Customer", "C1")], "Customer One")
+		self.assertEqual(names[("Customer", "C2")], "C2")
+		self.assertEqual(names[("Supplier", "S1")], "Supplier One")
+		self.assertEqual(names[("Employee", "6609003")], "Somchai")
+		self.assertEqual(names[("Other", "X")], "X")
+		self.assertEqual(
+			sorted(queried),
+			[("Customer", "customer_name"), ("Employee", "employee_name"), ("Supplier", "supplier_name")],
+		)
+
+	def test_employee_name_needs_read_permission(self):
+		with (
+			patch("frappe.get_all", side_effect=AssertionError("must not query")),
+			patch("frappe.has_permission", return_value=False),
+		):
+			names = get_party_names({"Employee": {"6609003"}})
+		self.assertEqual(names[("Employee", "6609003")], "6609003")

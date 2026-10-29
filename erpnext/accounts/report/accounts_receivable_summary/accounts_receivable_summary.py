@@ -7,7 +7,10 @@ from frappe import _, scrub
 from frappe.utils import cint, flt
 
 from erpnext.accounts.party import get_partywise_advanced_payment_amount
-from erpnext.accounts.report.accounts_receivable.accounts_receivable import ReceivablePayableReport
+from erpnext.accounts.report.accounts_receivable.accounts_receivable import (
+	ReceivablePayableReport,
+	get_party_names,
+)
 from erpnext.accounts.utils import get_currency_precision, get_party_types_from_account_type
 
 
@@ -55,6 +58,11 @@ class AccountsReceivableSummary(ReceivablePayableReport):
 		if self.filters.show_gl_balance:
 			gl_balance_map = get_gl_balance(self.filters.report_date, self.filters.company, self.account_type)
 
+		parties_by_type = {}
+		for party, party_dict in self.party_total.items():
+			parties_by_type.setdefault(party_dict.party_type, set()).add(party)
+		party_names = get_party_names(parties_by_type)
+
 		for party, party_dict in self.party_total.items():
 			if flt(party_dict.outstanding, self.currency_precision) == 0:
 				continue
@@ -63,13 +71,7 @@ class AccountsReceivableSummary(ReceivablePayableReport):
 
 			row.party = party
 			# Always show the party name next to the code (Connect Diagnostics), whatever the naming rule.
-			if self.account_type == "Payable":
-				doctype = "Supplier"
-				fieldname = "supplier_name"
-			else:
-				doctype = "Customer"
-				fieldname = "customer_name"
-			row.party_name = frappe.get_cached_value(doctype, party, fieldname)
+			row.party_name = party_names.get((party_dict.party_type, party)) or party
 
 			row.update(party_dict)
 
