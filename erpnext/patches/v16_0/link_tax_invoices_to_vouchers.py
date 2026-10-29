@@ -17,7 +17,9 @@ def set_empty_link(doctype, name, tinv_doctype, tinv_name):
 
 def execute():
 	"""Link the vouchers (Journal Entry row, split row, else header) to their submitted tax invoices and
-	fill Voucher Detail No. Only empty fields are written, so it can run again."""
+	fill Voucher Detail No. Only empty fields are written, so it can run again.
+	Cost: one list query per tax invoice doctype, then per invoice up to three point reads (GL Entry row name,
+	existence, current link) and at most two writes. No schema change."""
 	for doctype in ("Sales Tax Invoice", "Purchase Tax Invoice"):
 		if not frappe.db.has_column(doctype, "voucher_detail_no"):
 			continue

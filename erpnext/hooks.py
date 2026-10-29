@@ -268,6 +268,17 @@ _thailand_doc_events = {
 	},
 }
 
+# vouchers keep their link to the Thai tax invoices made from them: a draft starts without one (Amend, Duplicate),
+# a submitted one is not blanked by a form that does not carry it
+for _doctype in ("Sales Invoice", "Purchase Invoice", "Payment Entry", "Journal Entry", "Expense Claim"):
+	_events = _thailand_doc_events.setdefault(_doctype, {})
+	for _event, _handler in (
+		("validate", "erpnext.regional.thailand.custom.custom_api.reset_draft_tax_invoice_links"),
+		("before_update_after_submit", "erpnext.regional.thailand.custom.custom_api.keep_tax_invoice_links"),
+	):
+		_existing = _events.get(_event, [])
+		_events[_event] = [*(_existing if isinstance(_existing, list) else [_existing]), _handler]
+
 _regulatory_affairs_doc_events = {
 	"Item": {"validate": "erpnext.regulatory_affairs.item.validate"},
 	"Purchase Order": {

@@ -26,6 +26,19 @@ TAX_INVOICE_SOURCE_DOCTYPES = (
 	"Journal Entry",
 	"Expense Claim",
 )
+# the child tables that carry a Tax Invoice link next to the vouchers' headers
+TAX_INVOICE_ROW_DOCTYPES = (
+	"Journal Entry Tax Invoice Detail",
+	"Purchase Invoice Tax Invoice Detail",
+	"Expense Claim Tax Invoice Detail",
+)
+# child table fieldname of each voucher doctype
+TAX_INVOICE_ROW_FIELDS = {
+	"Journal Entry": "tax_invoice_details",
+	"Purchase Invoice": "splitted_tax_invoices",
+	"Expense Claim": "splitted_tax_invoices",
+}
+LINK_FIELDS = ("tax_invoice_ref_type", "tax_invoice_ref")
 SPLIT_ROW_DOCTYPES = {
 	"Purchase Invoice": "Purchase Invoice Tax Invoice Detail",
 	"Expense Claim": "Expense Claim Tax Invoice Detail",
@@ -195,6 +208,9 @@ def link_voucher_to_tax_invoice(gl, voucher, tinv):
 	elif voucher_type and tinv.voucher_no:
 		if not frappe.db.get_value(voucher_type, tinv.voucher_no, "tax_invoice_ref"):
 			frappe.db.set_value(voucher_type, tinv.voucher_no, link, update_modified=False)
+			# the voucher being submitted (zero tax Sales Invoice) is saved again by the caller: keep the link
+			if getattr(voucher, "doctype", None) == voucher_type and voucher.get("name") == tinv.voucher_no:
+				voucher.update(link)
 
 
 def validate_splitted_tax_invoices(voucher, tax_account):
@@ -875,3 +891,54 @@ def cancel_related_tax_invoice(doc, method):
 		# every tax invoice of the voucher (a split invoice makes one per supplier)
 		for name in tinv:
 			frappe.get_doc(doctype, name).cancel()
+	# the tax invoices are cancelled: the voucher forgets them (they keep Voucher No / Voucher Detail No as the
+	# audit trail). Frappe writes this document again after before_cancel, so the memory is cleared too, else a
+	# link to a cancelled record is saved back and an amended copy would carry it.
+	clear_link_values(doc)
+
+
+def clear_link_values(doc):
+	"""Blank the Tax Invoice link on the document in memory: header and the rows of its tax invoice table."""
+	if not hasattr(doc, "tax_invoice_ref"):
+		return
+	doc.tax_invoice_ref_type = None
+	doc.tax_invoice_ref = None
+	for row in doc.get(TAX_INVOICE_ROW_FIELDS.get(doc.doctype, "")) or []:
+		row.tax_invoice_ref_type = None
+		row.tax_invoice_ref = None
+
+
+def clear_tax_invoice_links(tinv_doctype, tinv_name):
+	"""A cancelled tax invoice is dropped from every voucher header and row that pointed at it (database only)."""
+	for doctype in (*TAX_INVOICE_SOURCE_DOCTYPES, *TAX_INVOICE_ROW_DOCTYPES):
+		if not frappe.db.has_column(doctype, "tax_invoice_ref"):
+			continue
+		frappe.db.set_value(
+			doctype,
+			{"tax_invoice_ref_type": tinv_doctype, "tax_invoice_ref": tinv_name},
+			{"tax_invoice_ref_type": None, "tax_invoice_ref": None},
+			update_modified=False,
+		)
+
+
+def reset_draft_tax_invoice_links(doc, method=None):
+	"""A draft has no tax invoice yet: links copied with it (Amend, Duplicate) are dropped on save."""
+	if doc.docstatus == 0:
+		clear_link_values(doc)
+
+
+def keep_tax_invoice_links(doc, method=None):
+	"""Update After Submit: a form that does not carry the link (loaded before the tax invoice was made, or a
+	script) must not blank it. The link is restored from the database while that tax invoice is not cancelled."""
+	if doc.docstatus != 1 or not hasattr(doc, "tax_invoice_ref"):
+		return
+	keep = {}
+	if not doc.tax_invoice_ref:
+		keep[(doc.doctype, doc.name)] = doc
+	for row in doc.get(TAX_INVOICE_ROW_FIELDS.get(doc.doctype, "")) or []:
+		if not row.tax_invoice_ref and row.name:
+			keep[(row.doctype, row.name)] = row
+	for (doctype, name), target in keep.items():
+		ref_type, ref = frappe.db.get_value(doctype, name, list(LINK_FIELDS)) or (None, None)
+		if ref_type and ref and frappe.db.get_value(ref_type, ref, "docstatus") != 2:
+			target.tax_invoice_ref_type, target.tax_invoice_ref = ref_type, ref

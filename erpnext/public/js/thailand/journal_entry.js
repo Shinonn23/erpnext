@@ -1,4 +1,7 @@
 frappe.ui.form.on("Journal Entry", {
+	before_load(frm) {
+		erpnext.regional.thailand.clear_tax_invoice_links(frm);
+	},
 	setup(frm) {
 		frm.add_fetch("customer", "customer_name", "party_name");
 		frm.add_fetch("supplier", "supplier_name", "party_name");

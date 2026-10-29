@@ -10,7 +10,11 @@ def add_tax_invoice_connections(data, doctype, tax_invoice_doctypes, billing=Non
 		data["non_standard_fieldnames"][linked] = "voucher_no"
 	# voucher_no is a Dynamic Link: count / list only the rows whose Voucher Type is this doctype
 	data["dynamic_links"]["voucher_no"] = [doctype, "voucher_type"]
-	data["transactions"].append({"label": _("Tax Invoice"), "items": list(tax_invoice_doctypes)})
+	# a connection group of the standard dashboard (HRMS lists Purchase Tax Invoice on an Expense Claim) is not repeated
+	listed = {item for group in data["transactions"] for item in group.get("items", [])}
+	missing = [doctype for doctype in tax_invoice_doctypes if doctype not in listed]
+	if missing:
+		data["transactions"].append({"label": _("Tax Invoice"), "items": missing})
 	if billing:
 		for transaction in data["transactions"]:
 			if transaction["label"] == _("Reference"):
