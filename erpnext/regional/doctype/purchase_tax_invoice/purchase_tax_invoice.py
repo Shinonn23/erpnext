@@ -6,7 +6,11 @@ from frappe.model.document import Document
 from frappe.utils import add_months
 
 from erpnext.regional.thailand.custom.company_branch import set_company_branch_snapshot
-from erpnext.regional.thailand.custom.custom_api import get_thai_tax_settings
+from erpnext.regional.thailand.custom.custom_api import (
+	TAX_INVOICE_SOURCE_DOCTYPES,
+	clear_tax_invoice_links,
+	get_thai_tax_settings,
+)
 from erpnext.regional.thailand.custom.tax_invoice_series import make_tax_invoice_name
 
 
@@ -30,6 +34,51 @@ class PurchaseTaxInvoice(Document):
 		self.validate_account()
 		self.compute_report_date()
 		set_company_branch_snapshot(self)
+
+	def before_update_after_submit(self):
+		# the number can be changed after submit (not removed); a record with none from before is left alone
+		self.validate_supplier_number(changed_only=True)
+
+	def before_submit(self):
+		self.validate_supplier_number()
+
+	def before_cancel(self):
+		# the source voucher (still submitted while it is being cancelled) keeps its link to this record
+		self.ignore_linked_doctypes = TAX_INVOICE_SOURCE_DOCTYPES
+
+	def on_cancel(self):
+		# a cancelled record is not kept on the vouchers (this record keeps Voucher No / Voucher Detail No)
+		clear_tax_invoice_links(self)
+
+	def validate_supplier_number(self, changed_only=False):
+		"""The supplier's own tax invoice number is required; the same number of the same supplier twice is
+		warned about (the internal running number is the document name). Once per submit or change."""
+		self.number = (self.number or "").strip()
+		if changed_only:
+			before = self.get_doc_before_save()
+			if before and (before.number or "").strip() == self.number:
+				return
+		if not self.number:
+			frappe.throw(_("Please enter the Supplier's Tax Invoice Number (Number)."), title=_("Missing"))
+		duplicates = frappe.get_all(
+			"Purchase Tax Invoice",
+			filters={
+				"party": self.party,
+				"number": self.number,
+				"docstatus": ["!=", 2],
+				"name": ["!=", self.name],
+			},
+			pluck="name",
+			limit=5,
+		)
+		if duplicates:
+			frappe.msgprint(
+				_("Supplier {0} already has Tax Invoice Number {1} in {2}.").format(
+					frappe.bold(self.party), frappe.bold(self.number), ", ".join(duplicates)
+				),
+				title=_("Duplicate Tax Invoice Number"),
+				indicator="orange",
+			)
 
 	def on_update_after_submit(self):
 		if self.get_doc_before_save():  # Some change is made

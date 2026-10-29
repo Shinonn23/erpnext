@@ -18,6 +18,32 @@ from erpnext.regional.thailand.custom.company_branch import (
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+# vouchers that point at the tax invoices made from them (Tax Invoice Record / row Tax Invoice)
+TAX_INVOICE_SOURCE_DOCTYPES = (
+	"Sales Invoice",
+	"Purchase Invoice",
+	"Payment Entry",
+	"Journal Entry",
+	"Expense Claim",
+)
+# the child tables that carry a Tax Invoice link next to the vouchers' headers
+TAX_INVOICE_ROW_DOCTYPES = (
+	"Journal Entry Tax Invoice Detail",
+	"Purchase Invoice Tax Invoice Detail",
+	"Expense Claim Tax Invoice Detail",
+)
+# child table fieldname of each voucher doctype
+TAX_INVOICE_ROW_FIELDS = {
+	"Journal Entry": "tax_invoice_details",
+	"Purchase Invoice": "splitted_tax_invoices",
+	"Expense Claim": "splitted_tax_invoices",
+}
+LINK_FIELDS = ("tax_invoice_ref_type", "tax_invoice_ref")
+SPLIT_ROW_DOCTYPES = {
+	"Purchase Invoice": "Purchase Invoice Tax Invoice Detail",
+	"Expense Claim": "Expense Claim Tax Invoice Detail",
+}
+
 
 def get_thai_tax_settings(company):
 	settings = frappe.get_single("Thai Tax Settings")
@@ -156,10 +182,35 @@ def create_tax_invoice_on_gl_tax(doc, method):
 				for tinv in tinvs:
 					tinv = update_voucher_tinv(doctype, voucher, tinv, True)
 					tinv.submit()
+					link_voucher_to_tax_invoice(doc, voucher, tinv)
 			else:
 				[tinv] = create_tax_invoice(doc, doctype, base_amount, tax_amount, voucher)
 				tinv = update_voucher_tinv(doctype, voucher, tinv)
 				tinv.submit()
+				link_voucher_to_tax_invoice(doc, voucher, tinv)
+
+
+def link_voucher_to_tax_invoice(gl, voucher, tinv):
+	"""Point the source of a submitted tax invoice back at it: the Journal Entry Tax Invoice Detail row
+	(named by the GL Entry), the split row of a Purchase Invoice / Expense Claim, else the voucher header
+	(a Payment Entry that makes several tax invoices keeps the first; the others show in Connections).
+	Written straight to the database: the voucher is submitted and not saved again."""
+	link = {"tax_invoice_ref_type": tinv.doctype, "tax_invoice_ref": tinv.name}
+	voucher_type = tinv.voucher_type or (gl and gl.voucher_type)
+	if voucher_type == "Journal Entry":
+		row = gl and gl.voucher_detail_no
+		if row:
+			frappe.db.set_value("Journal Entry Tax Invoice Detail", row, link, update_modified=False)
+	elif tinv.splitted_tax_invoice and voucher_type in SPLIT_ROW_DOCTYPES:
+		frappe.db.set_value(
+			SPLIT_ROW_DOCTYPES[voucher_type], tinv.splitted_tax_invoice, link, update_modified=False
+		)
+	elif voucher_type and tinv.voucher_no:
+		if not frappe.db.get_value(voucher_type, tinv.voucher_no, "tax_invoice_ref"):
+			frappe.db.set_value(voucher_type, tinv.voucher_no, link, update_modified=False)
+			# the voucher being submitted (zero tax Sales Invoice) is saved again by the caller: keep the link
+			if getattr(voucher, "doctype", None) == voucher_type and voucher.get("name") == tinv.voucher_no:
+				voucher.update(link)
 
 
 def validate_splitted_tax_invoices(voucher, tax_account):
@@ -238,6 +289,8 @@ def create_tax_invoice(doc, doctype, base_amount, tax_amount, voucher, split_tax
 			"doctype": doctype,
 			"company": doc.company,
 			"gl_entry": doc.name,
+			# the Journal Entry row it came from (the row of a split invoice is named below)
+			"voucher_detail_no": doc.voucher_detail_no if doc.voucher_type == "Journal Entry" else None,
 			"tax_amount": tax_amount,
 			"tax_base": base_amount,
 			"party": party,
@@ -260,6 +313,7 @@ def create_tax_invoice(doc, doctype, base_amount, tax_amount, voucher, split_tax
 						"date": tax.tax_invoice_date,
 						"report_date": tax.tax_invoice_date,
 						"splitted_tax_invoice": tax.name,
+						"voucher_detail_no": tax.name,
 					}
 				)
 				tinvs.append(frappe.get_doc(tinv_dict).insert(ignore_permissions=True))
@@ -800,6 +854,7 @@ def create_sales_tax_invoice_on_zero_tax(doc, method):
 		tinv = create_sales_tax_invoice_zero_tax(doc, doctype, base_amount, zero_taxes[0].account_head)
 		tinv = update_voucher_tinv(doctype, doc, tinv)
 		tinv.submit()
+		link_voucher_to_tax_invoice(None, doc, tinv)
 
 
 def create_sales_tax_invoice_zero_tax(doc, doctype, base_amount, account):
@@ -833,6 +888,78 @@ def cancel_related_tax_invoice(doc, method):
 			},
 			pluck="name",
 		)
-		if tinv:
-			tinv = frappe.get_doc(doctype, tinv[0])
-			tinv.cancel()
+		# every tax invoice of the voucher (a split invoice makes one per supplier)
+		for name in tinv:
+			frappe.get_doc(doctype, name).cancel()
+	# the tax invoices are cancelled: the voucher forgets them (they keep Voucher No / Voucher Detail No as the
+	# audit trail). Frappe writes this document again after before_cancel, so the memory is cleared too, else a
+	# link to a cancelled record is saved back and an amended copy would carry it.
+	clear_link_values(doc)
+
+
+def has_header_link(doc):
+	"""The voucher header has the Tax Invoice link (a Journal Entry has it on its rows only)."""
+	meta = getattr(doc, "meta", None)
+	return bool(meta and meta.has_field("tax_invoice_ref"))
+
+
+def link_rows(doc):
+	"""The rows of the voucher's tax invoice table (Journal Entry, split Purchase Invoice / Expense Claim)."""
+	field = TAX_INVOICE_ROW_FIELDS.get(doc.doctype)
+	return (doc.get(field) or []) if field else []
+
+
+def clear_link_values(doc):
+	"""Blank the Tax Invoice link on the document in memory: header and the rows of its tax invoice table."""
+	if has_header_link(doc):
+		doc.tax_invoice_ref_type = None
+		doc.tax_invoice_ref = None
+	for row in link_rows(doc):
+		row.tax_invoice_ref_type = None
+		row.tax_invoice_ref = None
+
+
+def clear_tax_invoice_links(tinv):
+	"""A cancelled tax invoice is dropped from the voucher header and row it was linked from (database only).
+	Only its own voucher is touched; a tax invoice with no known voucher is looked for in every table."""
+	link = {"tax_invoice_ref_type": tinv.doctype, "tax_invoice_ref": tinv.name}
+	blank = {"tax_invoice_ref_type": None, "tax_invoice_ref": None}
+	targets = []  # (doctype, filters)
+	if tinv.voucher_type and tinv.voucher_no:
+		targets.append((tinv.voucher_type, {"name": tinv.voucher_no, **link}))
+		if tinv.voucher_detail_no:
+			row_doctype = (
+				"Journal Entry Tax Invoice Detail"
+				if tinv.voucher_type == "Journal Entry"
+				else SPLIT_ROW_DOCTYPES.get(tinv.voucher_type)
+			)
+			if row_doctype:
+				targets.append((row_doctype, {"name": tinv.voucher_detail_no, **link}))
+	else:
+		targets = [(d, dict(link)) for d in (*TAX_INVOICE_SOURCE_DOCTYPES, *TAX_INVOICE_ROW_DOCTYPES)]
+	for doctype, filters in targets:
+		if frappe.db.has_column(doctype, "tax_invoice_ref"):
+			frappe.db.set_value(doctype, filters, blank, update_modified=False)
+
+
+def reset_draft_tax_invoice_links(doc, method=None):
+	"""A draft has no tax invoice yet: links copied with it (Amend, Duplicate) are dropped on save."""
+	if doc.docstatus == 0:
+		clear_link_values(doc)
+
+
+def keep_tax_invoice_links(doc, method=None):
+	"""Update After Submit: a form that does not carry the link (loaded before the tax invoice was made, or a
+	script) must not blank it. The link is restored from the database while that tax invoice is not cancelled."""
+	if doc.docstatus != 1:
+		return
+	keep = {}
+	if has_header_link(doc) and not doc.tax_invoice_ref:
+		keep[(doc.doctype, doc.name)] = doc
+	for row in link_rows(doc):
+		if not row.tax_invoice_ref and row.name:
+			keep[(row.doctype, row.name)] = row
+	for (doctype, name), target in keep.items():
+		ref_type, ref = frappe.db.get_value(doctype, name, list(LINK_FIELDS)) or (None, None)
+		if ref_type and ref and frappe.db.get_value(ref_type, ref, "docstatus") != 2:
+			target.tax_invoice_ref_type, target.tax_invoice_ref = ref_type, ref

@@ -1,30 +1,37 @@
 from frappe import _
 
 
-def get_dashboard_data_for_purchase_invoice(data):
-	data["non_standard_fieldnames"].update({"Purchase Tax Invoice": "voucher_no"})
-	data["transactions"].append({"label": _("Tax Invoice"), "items": ["Purchase Tax Invoice"]})
-	for transaction in data["transactions"]:
-		if transaction["label"] == _("Reference"):
-			transaction["items"].append("Purchase Billing")
+def add_tax_invoice_connections(data, doctype, tax_invoice_doctypes, billing=None):
+	"""Connections of an invoice / claim: the tax invoices made from it (Voucher Type / Voucher No)."""
+	data.setdefault("transactions", [])
+	data.setdefault("non_standard_fieldnames", {})
+	data.setdefault("dynamic_links", {})
+	for linked in tax_invoice_doctypes:
+		data["non_standard_fieldnames"][linked] = "voucher_no"
+	# voucher_no is a Dynamic Link: count / list only the rows whose Voucher Type is this doctype
+	data["dynamic_links"]["voucher_no"] = [doctype, "voucher_type"]
+	# a connection group of the standard dashboard (HRMS lists Purchase Tax Invoice on an Expense Claim) is not repeated
+	listed = {item for group in data["transactions"] for item in group.get("items", [])}
+	missing = [doctype for doctype in tax_invoice_doctypes if doctype not in listed]
+	if missing:
+		data["transactions"].append({"label": _("Tax Invoice"), "items": missing})
+	if billing:
+		for transaction in data["transactions"]:
+			if transaction["label"] == _("Reference"):
+				transaction["items"].append(billing)
 	return data
+
+
+def get_dashboard_data_for_purchase_invoice(data):
+	return add_tax_invoice_connections(data, "Purchase Invoice", ["Purchase Tax Invoice"], "Purchase Billing")
 
 
 def get_dashboard_data_for_sales_invoice(data):
-	data["non_standard_fieldnames"].update({"Sales Tax Invoice": "voucher_no"})
-	data["transactions"].append(
-		{"label": _("Tax Invoice"), "items": ["Sales Tax Invoice"]},
-	)
-	for transaction in data["transactions"]:
-		if transaction["label"] == _("Reference"):
-			transaction["items"].append("Sales Billing")
-	return data
+	return add_tax_invoice_connections(data, "Sales Invoice", ["Sales Tax Invoice"], "Sales Billing")
 
 
 def get_dashboard_data_for_expense_claim(data):
-	data["non_standard_fieldnames"].update({"Purchase Tax Invoice": "voucher_no"})
-	data["transactions"].append({"label": _("Tax Invoice"), "items": ["Purchase Tax Invoice"]})
-	return data
+	return add_tax_invoice_connections(data, "Expense Claim", ["Purchase Tax Invoice"])
 
 
 # Thai documents made from a payment or a journal; each names it through Voucher Type / Voucher No

@@ -5,6 +5,19 @@
 //   hire of work 3%, transport 1% ...), which decides the rate and the PND3/PND53 line.
 frappe.provide("erpnext.regional.thailand.tax_popups");
 
+// A new document never carries a Tax Invoice link (Amend and Duplicate copy it; the server drops it on save too)
+erpnext.regional.thailand.clear_tax_invoice_links = function (frm) {
+	if (!frm.doc.__islocal) return;
+	frm.doc.tax_invoice_ref_type = null;
+	frm.doc.tax_invoice_ref = null;
+	for (const table of ["tax_invoice_details", "splitted_tax_invoices"]) {
+		for (const row of frm.doc[table] || []) {
+			row.tax_invoice_ref_type = null;
+			row.tax_invoice_ref = null;
+		}
+	}
+};
+
 erpnext.regional.thailand.tax_popups.get_tax_accounts = async function (company) {
 	if (!company) return {};
 	const r = await frappe.call({

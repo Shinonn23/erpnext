@@ -1,4 +1,7 @@
 frappe.ui.form.on("Payment Entry", {
+	before_load(frm) {
+		erpnext.regional.thailand.clear_tax_invoice_links(frm);
+	},
 	refresh(frm) {
 		// Filter company tax address
 		frm.set_query("company_tax_address", function () {
