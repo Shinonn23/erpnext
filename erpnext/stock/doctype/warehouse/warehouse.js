@@ -141,7 +141,8 @@ function render_warehouse_type_summary(summary) {
 	}
 	const allowed = summary.operations.filter((row) => row.allowed);
 	const blocked = summary.operations.filter((row) => !row.allowed);
-	const name = (row) => __(OPERATION_LABELS[row.operation] || row.operation);
+	const name = (row) =>
+		__(OPERATION_LABELS[row.operation] || row.operation, null, "Warehouse Type Operation");
 	const parts = [
 		allowed.length ? __("Allowed: {0}", [allowed.map(name).join(", ")]) : __("Allowed: nothing"),
 	];
@@ -168,33 +169,57 @@ function render_warehouse_type_detail(summary) {
 		.map(
 			(row) =>
 				`<li>${row.allowed ? "&#10003;" : "&#10007;"} <b>${esc(
-					__(OPERATION_LABELS[row.operation] || row.operation)
+					__(OPERATION_LABELS[row.operation] || row.operation, null, "Warehouse Type Operation")
 				)}</b>: ${esc(row.documents.join("; "))}</li>`
 		)
 		.join("");
 	return `<ul class="list-unstyled small">${rows}</ul>`;
 }
 
+function original_warehouse_type_description() {
+	const df = (frappe.get_meta("Warehouse").fields || []).find(
+		(field) => field.fieldname === "warehouse_type"
+	);
+	return df ? df.description : "";
+}
+
 function show_warehouse_type_summary(frm) {
-	const warehouse_type = frm.doc.is_group ? null : frm.doc.warehouse_type;
+	const current_type = () => (frm.doc.is_group ? null : frm.doc.warehouse_type);
+	const warehouse_type = current_type();
+	const clear_intro = () => {
+		if (frm.__warehouse_type_intro) {
+			frm.set_intro("");
+			frm.__warehouse_type_intro = false;
+		}
+	};
 	const apply = (summary) => {
-		if (warehouse_type !== (frm.doc.is_group ? null : frm.doc.warehouse_type)) {
+		if (warehouse_type !== current_type()) {
 			return; // the type changed while the request was running
 		}
-		const line = render_warehouse_type_summary(summary);
-		frm.set_intro("");
-		if (!frm.doc.is_group) {
-			frm.set_intro(line + render_warehouse_type_detail(summary), "blue");
-			frm.set_df_property("warehouse_type", "description", line);
+		clear_intro();
+		if (frm.doc.is_group) {
+			frm.set_df_property("warehouse_type", "description", original_warehouse_type_description());
+			return;
 		}
+		const line = render_warehouse_type_summary(summary);
+		frm.set_intro(line + render_warehouse_type_detail(summary), "blue");
+		frm.__warehouse_type_intro = true;
+		frm.set_df_property(
+			"warehouse_type",
+			"description",
+			summary && summary.restricted ? line : original_warehouse_type_description()
+		);
 	};
 	if (!warehouse_type) {
 		apply(null);
 		return;
 	}
+	// A failed call keeps the previous state silently.
 	frappe.call({
 		method: "erpnext.stock.warehouse_policy.get_warehouse_type_summary",
 		args: { warehouse_type },
-		callback: (r) => apply(r.message),
+		callback: (r) => r && r.message && apply(r.message),
+		error: () => {},
+		freeze: false,
 	});
 }

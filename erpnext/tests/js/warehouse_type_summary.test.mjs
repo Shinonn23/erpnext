@@ -3,7 +3,7 @@ import fs from "node:fs";
 import { test } from "node:test";
 import vm from "node:vm";
 
-function fixture(doc, summary) {
+function fixture(doc, summary, mode = "sync") {
   const handlers = {};
   const calls = [];
   const intros = [];
@@ -14,9 +14,13 @@ function fixture(doc, summary) {
     frappe: {
       ui: { form: { on: (name, events) => (handlers[name] = events) } },
       utils: { escape_html: (text) => String(text).replace(/</g, "&lt;") },
+      get_meta: () => ({
+        fields: [{ fieldname: "warehouse_type", description: "Static hint" }],
+      }),
       call: (opts) => {
         calls.push(opts);
-        opts.callback({ message: summary });
+        if (mode === "sync") opts.callback({ message: summary });
+        if (mode === "error") opts.error();
       },
       contacts: { clear_address_and_contact() {} },
       boot: { allowed_reports: {} },
@@ -57,7 +61,7 @@ test("no Warehouse Type shows no restriction without a server call", () => {
   f.handlers.Warehouse.warehouse_type(f.frm);
   assert.equal(f.calls.length, 0);
   assert.match(f.intros.at(-1)[0], /No Warehouse Type: no restriction/);
-  assert.match(f.descriptions["warehouse_type:description"], /no restriction/);
+  assert.equal(f.descriptions["warehouse_type:description"], "Static hint");
 });
 
 test("summary lists allowed and blocked operations and the outgoing role", () => {
@@ -82,5 +86,51 @@ test("group warehouse shows no type summary", () => {
   const f = fixture({ name: "WH", is_group: 1, warehouse_type: "Lab" }, null);
   f.handlers.Warehouse.warehouse_type(f.frm);
   assert.equal(f.calls.length, 0);
+  assert.equal(f.intros.length, 0);
+});
+
+test("intro is only cleared when this code set it", () => {
+  const f = fixture({ name: "WH", warehouse_type: null }, null);
+  f.handlers.Warehouse.warehouse_type(f.frm);
+  assert.equal(f.intros.filter(([text]) => text === "").length, 0);
+  f.frm.doc.warehouse_type = "Lab";
+  const summary = { restricted: true, operations: ops(["receipt"]) };
+  const g = fixture({ name: "WH", warehouse_type: "Lab" }, summary);
+  g.handlers.Warehouse.warehouse_type(g.frm);
+  g.frm.doc.warehouse_type = null;
+  g.handlers.Warehouse.warehouse_type(g.frm);
+  assert.equal(g.intros.filter(([text]) => text === "").length, 1);
+});
+
+test("a stale response is ignored", () => {
+  const summary = { restricted: true, operations: ops(["receipt"]) };
+  const f = fixture({ name: "WH", warehouse_type: "Lab" }, summary, "defer");
+  f.handlers.Warehouse.warehouse_type(f.frm);
+  f.frm.doc.warehouse_type = "Other";
+  f.calls[0].callback({ message: summary });
+  assert.equal(f.intros.length, 0);
+  assert.equal(f.descriptions["warehouse_type:description"], undefined);
+});
+
+test("Transit states that loan counts as transfer", () => {
+  const f = fixture(
+    { name: "WH", warehouse_type: "Transit" },
+    {
+      restricted: true,
+      operations: ops(["transfer"]),
+      loan_counts_as_transfer: true,
+    }
+  );
+  f.handlers.Warehouse.warehouse_type(f.frm);
+  assert.match(
+    f.descriptions["warehouse_type:description"],
+    /Loan documents count as Transfer/
+  );
+});
+
+test("a failed call keeps the previous state silently", () => {
+  const f = fixture({ name: "WH", warehouse_type: "Lab" }, null, "error");
+  f.handlers.Warehouse.warehouse_type(f.frm);
+  assert.equal(f.intros.length, 0);
   assert.equal(f.descriptions["warehouse_type:description"], undefined);
 });

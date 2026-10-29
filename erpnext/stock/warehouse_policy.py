@@ -21,19 +21,81 @@ MOVEMENT_DOCTYPES = {
 	"Asset Capitalization",
 }
 
-# Which documents count as which operation. Plain-language mirror of `movement_operation`; keep in sync.
+# Which documents count as which operation, as (operation, text, spec). `spec` is what `movement_operation`
+# receives (doctype, optional purpose / is_return / is_internal_supplier, and the leg direction), so the
+# parity test can prove every line of the summary against the real function.
+OPERATION_RULES = (
+	("receipt", "Purchase Receipt (incoming leg and rejected warehouse)", {"doctype": "Purchase Receipt"}),
+	(
+		"receipt",
+		"Purchase Invoice with Update Stock (incoming leg)",
+		{"doctype": "Purchase Invoice"},
+	),
+	("receipt", "Subcontracting Receipt (finished goods)", {"doctype": "Subcontracting Receipt"}),
+	(
+		"receipt",
+		"Stock Entry incoming leg of any other purpose (Material Receipt, Manufacture, Repack,"
+		" Disassemble, Material Consumption for Manufacture ...)",
+		{"doctype": "Stock Entry", "purpose": "Material Receipt"},
+	),
+	(
+		"issue",
+		"Purchase Receipt / Purchase Invoice returns (stock goes back out)",
+		{"doctype": "Purchase Receipt", "outgoing": True},
+	),
+	(
+		"issue",
+		"Subcontracting Receipt supplied raw materials",
+		{"doctype": "Subcontracting Receipt", "outgoing": True},
+	),
+	(
+		"issue",
+		"Stock Entry outgoing leg of any other purpose (Material Issue, Manufacture raw materials,"
+		" Repack, Disassemble ...)",
+		{"doctype": "Stock Entry", "purpose": "Material Issue", "outgoing": True},
+	),
+	("issue", "Stock to Asset Conversion", {"doctype": "Stock to Asset Conversion", "outgoing": True}),
+	("issue", "Asset Capitalization (stock consumed)", {"doctype": "Asset Capitalization", "outgoing": True}),
+	(
+		"transfer",
+		"Stock Entry: Material Transfer, Material Transfer for Manufacture, Send to Subcontractor,"
+		" Subcontracting Delivery (both legs)",
+		{"doctype": "Stock Entry", "purpose": "Material Transfer"},
+	),
+	("transfer", "Pick List that is not for Delivery", {"doctype": "Pick List", "purpose": "Material Transfer"}),
+	(
+		"transfer",
+		"Documents of an internal supplier, and internal customer lines with a target warehouse",
+		{"doctype": "Delivery Note", "is_internal_supplier": 1},
+	),
+	("sales", "Delivery Note (items and Packed Items)", {"doctype": "Delivery Note", "outgoing": True}),
+	(
+		"sales",
+		"Sales Invoice / POS Invoice with Update Stock",
+		{"doctype": "Sales Invoice", "outgoing": True},
+	),
+	(
+		"sales",
+		"Delivery Note / Sales Invoice / POS Invoice returns (the return into the warehouse also needs"
+		" Sales, not Receipt)",
+		{"doctype": "Delivery Note", "is_return": 1},
+	),
+	("sales", "Pick List for Delivery", {"doctype": "Pick List", "purpose": "Delivery", "outgoing": True}),
+	(
+		"loan",
+		"Custody Loan documents: loan, return and loan adjustment (a Transit warehouse treats these as"
+		" Transfer)",
+		{"doctype": "Stock Entry", "purpose": "Material Issue", "loan": True},
+	),
+	(
+		"reconciliation",
+		"Stock Reconciliation / Stock Count (both increases and decreases)",
+		{"doctype": "Stock Reconciliation"},
+	),
+)
 OPERATION_DOCUMENTS = {
-	"receipt": ["Purchase Receipt", "Purchase Invoice (Update Stock)", "Stock Entry (Material Receipt)"],
-	"issue": ["Stock Entry (Material Issue)"],
-	"transfer": [
-		"Stock Entry (Material Transfer, Material Transfer for Manufacture, Send to Subcontractor,"
-		" Subcontracting Delivery)",
-		"Pick List (not Delivery)",
-		"Internal Customer / Supplier documents",
-	],
-	"sales": ["Delivery Note", "Sales Invoice (Update Stock)", "POS Invoice", "Pick List (Delivery)"],
-	"loan": ["Custody Loan documents (loan, return and loan adjustment)"],
-	"reconciliation": ["Stock Reconciliation", "Stock Count"],
+	operation: [text for op, text, _spec in OPERATION_RULES if op == operation]
+	for operation in ("receipt", "issue", "transfer", "sales", "loan", "reconciliation")
 }
 OPERATION_ORDER = ("receipt", "issue", "transfer", "sales", "loan", "reconciliation")
 
