@@ -146,16 +146,21 @@ frappe.ui.form.on("Stock Count", {
 	},
 
 	count_template(frm) {
-		if (frm.doc.status !== "Draft" || frm.doc.docstatus) return;
-		frm.clear_table("selected_items");
-		frm.refresh_field("selected_items");
-		if (!frm.doc.count_template) return;
-		frappe.db.get_doc("Stock Count Template", frm.doc.count_template).then((template) => {
-			for (const row of template.items || []) {
-				frm.add_child("selected_items", { item_code: row.item_code, item_name: row.item_name });
-			}
-			frm.refresh_field("selected_items");
-		});
+		if (frm.doc.status !== "Draft" || frm.doc.docstatus || !frm.doc.count_template) return;
+		const fill = () => {
+			frm.clear_table("selected_items");
+			frappe.db.get_doc("Stock Count Template", frm.doc.count_template).then((template) => {
+				for (const row of template.items || []) {
+					frm.add_child("selected_items", { item_code: row.item_code, item_name: row.item_name });
+				}
+				frm.refresh_field("selected_items");
+			});
+		};
+		if ((frm.doc.selected_items || []).length) {
+			frappe.confirm(__("Replace the items already chosen with the items of this template?"), fill);
+		} else {
+			fill();
+		}
 	},
 
 	scan_barcode(frm) {

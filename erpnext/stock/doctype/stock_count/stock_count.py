@@ -34,6 +34,7 @@ class StockCount(Document):
 		dimensions: DF.Table[StockCountDimension]
 		item_count: DF.Int | None
 		item_selection: DF.Literal["Random Sample", "Selected Items"]
+		posts_variance_snapshot: DF.Check
 		items: DF.Table[StockCountItem]
 		naming_series: DF.Literal["STOCK-COUNT-.YYYY.-"]
 		quarantine_storage_location: DF.Link | None
@@ -72,10 +73,11 @@ class StockCount(Document):
 			)
 
 		self.validate_item_selection()
+		self.keep_variance_mode()
 		if self.count_type == "Monthly":
 			if not self.selects_items() and flt(self.item_count) <= 0:
 				frappe.throw(_("Number of Item Codes to Sample must be greater than zero."))
-			self.validate_quarantine_warehouse()
+			self.validate_quarantine_if_needed()
 
 		if self.docstatus == 0 and self.status == "In Progress" and not self.snapshot_datetime:
 			frappe.throw(_("Prepare the count to create its stock snapshot."))
@@ -111,7 +113,9 @@ class StockCount(Document):
 			self.set("selected_items", [])
 			return
 		if self.count_template:
+			# Server side, so a template-only save (API, import) is complete without the form's script.
 			self.validate_count_template()
+			self.copy_template_items()
 		if not self.selected_items:
 			frappe.throw(_("Add at least one item to Items to Count, or choose a Count Template."))
 		validate_countable_item_rows(self.selected_items)
@@ -135,7 +139,6 @@ class StockCount(Document):
 		"""Rows chosen by hand stay; a template fills an empty list, so a later template edit never alters a prepared count."""
 		if not self.selects_items() or not self.count_template or self.selected_items:
 			return
-		self.validate_count_template()
 		for item_code in frappe.get_all(
 			"Stock Count Template Item",
 			filters={"parent": self.count_template, "parenttype": "Stock Count Template"},
@@ -143,6 +146,24 @@ class StockCount(Document):
 			pluck="item_code",
 		):
 			self.append("selected_items", {"item_code": item_code})
+
+	def uses_variance(self):
+		"""Fixed at Prepare Count; before that, what the warehouse says now."""
+		if self.snapshot_datetime:
+			return bool(self.posts_variance_snapshot)
+		return self.count_type == "Monthly" and bool(get_count_variance_account(self.warehouse))
+
+	def keep_variance_mode(self):
+		before = self.get_doc_before_save()
+		if before and before.get("snapshot_datetime"):
+			self.posts_variance_snapshot = before.get("posts_variance_snapshot") or 0
+		elif not self.snapshot_datetime:
+			self.posts_variance_snapshot = 0
+
+	def validate_quarantine_if_needed(self):
+		# A count that posts its differences as a Stock Reconciliation moves nothing to quarantine.
+		if self.quarantine_warehouse or not self.uses_variance():
+			self.validate_quarantine_warehouse()
 
 	def validate_quarantine_warehouse(self):
 		if not self.quarantine_warehouse:
@@ -336,14 +357,20 @@ class StockCount(Document):
 		if not self.company or not self.warehouse or not self.count_type:
 			frappe.throw(_("Company, Count Type, and Warehouse are required."))
 		if self.count_type == "Monthly":
-			self.validate_quarantine_warehouse()
-			self.copy_template_items()
+			self.validate_quarantine_if_needed()
 			if not self.selects_items() and flt(self.item_count) <= 0:
 				frappe.throw(_("Number of Item Codes to Sample must be greater than zero."))
 
 		self.validate()
 		snapshot = now_datetime()
 		self.snapshot_datetime = snapshot
+		self.posts_variance_snapshot = 0
+		variance_account = (
+			get_count_variance_account(self.warehouse) if self.count_type == "Monthly" else None
+		)
+		if variance_account:
+			validate_variance_account(variance_account, self.company)
+			self.posts_variance_snapshot = 1
 		item_codes = self.get_item_codes_to_count(snapshot)
 		for item_code in item_codes:
 			self.append_snapshot_rows(item_code, snapshot)
@@ -352,14 +379,16 @@ class StockCount(Document):
 		if not self.items:
 			if skipped:
 				frappe.throw(
-					_("None of the selected items has stock in Warehouse {0}: {1}").format(
-						self.warehouse, ", ".join(skipped)
-					)
+					_(
+						"None of the selected items has stock in Warehouse {0} for the chosen filters: {1}"
+					).format(self.warehouse, ", ".join(skipped))
 				)
 			frappe.throw(_("No stock was found in Warehouse {0}.").format(self.warehouse))
 		if skipped:
 			frappe.msgprint(
-				_("Not counted, no stock in {0}: {1}").format(self.warehouse, ", ".join(skipped)),
+				_("Not counted, no stock in {0} for the chosen filters: {1}").format(
+					self.warehouse, ", ".join(skipped)
+				),
 				indicator="orange",
 			)
 
@@ -532,8 +561,8 @@ class StockCount(Document):
 
 	def posts_variance(self):
 		"""A Monthly count of a warehouse with a Count Variance Account posts its differences as a Stock
-		Reconciliation (the test cost of a laboratory); others move the counted stock to quarantine."""
-		return self.count_type == "Monthly" and bool(get_count_variance_account(self.warehouse))
+		Reconciliation (the test cost of a laboratory); others move the counted stock to quarantine. Decided at Prepare Count."""
+		return self.count_type == "Monthly" and bool(self.posts_variance_snapshot)
 
 	def on_submit(self):
 		if self.count_type == "Monthly" and not self.posts_variance():
@@ -663,6 +692,17 @@ class StockCount(Document):
 		stock_entry.insert(ignore_permissions=True)
 		return stock_entry
 
+	def set_variance_account(self, reconciliation):
+		account = get_count_variance_account(self.warehouse)
+		if not account:
+			frappe.throw(_("Warehouse {0} no longer has a Count Variance Account.").format(self.warehouse))
+		validate_variance_account(account, self.company)
+		reconciliation.expense_account = account
+		if frappe.db.has_column("Warehouse", "department"):
+			department = frappe.db.get_value("Warehouse", self.warehouse, "department")
+			if department and reconciliation.meta.has_field("department"):
+				reconciliation.department = department
+
 	def make_stock_reconciliation(self):
 		reconciliation_rows = defaultdict(lambda: {"system_qty": 0.0, "counted_qty": 0.0, "serial_nos": []})
 		for row in self.items:
@@ -693,6 +733,8 @@ class StockCount(Document):
 		reconciliation.set_posting_time = 1
 		reconciliation.set_warehouse = self.warehouse
 		reconciliation.stock_count = self.name
+		if self.posts_variance():
+			self.set_variance_account(reconciliation)
 		if reconciliation.meta.has_field("stock_adjustment_reason"):
 			reconciliation.stock_adjustment_reason = _("Physical count differences from Stock Count {0}.").format(
 				self.name
@@ -749,6 +791,26 @@ def get_count_variance_account(warehouse):
 	if not warehouse or not frappe.db.has_column("Warehouse", "stock_adjustment_account"):
 		return None
 	return frappe.db.get_value("Warehouse", warehouse, "stock_adjustment_account") or None
+
+
+def validate_variance_account(account, company):
+	data = frappe.db.get_value(
+		"Account", account, ["company", "root_type", "is_group", "account_type", "disabled"], as_dict=True
+	)
+	if (
+		not data
+		or data.company != company
+		or data.root_type != "Expense"
+		or data.is_group
+		or data.disabled
+		or data.account_type == "Stock"
+	):
+		frappe.throw(
+			_(
+				"Count Variance Account {0} must be an enabled expense account of {1}, "
+				"not a group or Stock account."
+			).format(account, company)
+		)
 
 
 @frappe.whitelist()

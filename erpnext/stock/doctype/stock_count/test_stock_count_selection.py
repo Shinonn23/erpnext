@@ -10,6 +10,18 @@ from erpnext.stock.doctype.stock_count import stock_count
 from erpnext.stock.doctype.stock_count.stock_count import StockCount
 
 
+class Doc(frappe._dict):
+	"""A document stub whose `items` is the table, not dict.items."""
+
+	@property
+	def items(self):
+		return self["items"]
+
+	@items.setter
+	def items(self, value):
+		self["items"] = value
+
+
 def fake_db(**methods):
 	db = Mock()
 	for name, value in methods.items():
@@ -40,6 +52,8 @@ def count(**values):
 	doc.selects_items = lambda: StockCount.selects_items(doc)
 	doc.get_selected_item_codes = lambda: StockCount.get_selected_item_codes(doc)
 	doc.validate_count_template = lambda: StockCount.validate_count_template(doc)
+	doc.copy_template_items = lambda: StockCount.copy_template_items(doc)
+	doc.append = lambda field, row: doc[field].append(frappe._dict(row))
 	doc.get_doc_before_save = Mock(return_value=None)
 	doc.set = lambda field, value: doc.__setitem__(field, value)
 	doc.get_stock_ledger_groups = lambda snapshot: [frappe._dict(item_code=c) for c in doc.stock]
@@ -166,15 +180,110 @@ class StockCountSelectionTest(unittest.TestCase):
 		with patch.object(stock_count.frappe, "db", fake_db(has_column=True)):
 			self.assertIsNone(stock_count.get_count_variance_account(None))
 
-	def test_only_monthly_counts_of_a_variance_warehouse_post_a_reconciliation(self):
-		doc = count(count_type="Monthly")
-		with patch.object(stock_count, "get_count_variance_account", return_value="5130-02 - CD"):
-			self.assertTrue(StockCount.posts_variance(doc))
-			doc.count_type = "Annual"
-			self.assertFalse(StockCount.posts_variance(doc))
+	def test_only_a_monthly_count_prepared_with_a_variance_account_posts_a_reconciliation(self):
+		doc = count(posts_variance_snapshot=1)
+		self.assertTrue(StockCount.posts_variance(doc))
+		doc.count_type = "Annual"
+		self.assertFalse(StockCount.posts_variance(doc))
 		doc.count_type = "Monthly"
+		doc.posts_variance_snapshot = 0
+		self.assertFalse(StockCount.posts_variance(doc))
+
+	def test_variance_mode_is_fixed_at_prepare(self):
+		doc = count(snapshot_datetime="2026-10-29 10:00:00", posts_variance_snapshot=0)
+		doc.get_doc_before_save.return_value = frappe._dict(
+			snapshot_datetime="2026-10-29 10:00:00", posts_variance_snapshot=1
+		)
+		StockCount.keep_variance_mode(doc)
+		self.assertEqual(doc.posts_variance_snapshot, 1)
+		fresh = count(posts_variance_snapshot=1)
+		StockCount.keep_variance_mode(fresh)
+		self.assertEqual(fresh.posts_variance_snapshot, 0)
+		preparing = count(snapshot_datetime="2026-10-29 10:00:00", posts_variance_snapshot=1)
+		StockCount.keep_variance_mode(preparing)
+		self.assertEqual(preparing.posts_variance_snapshot, 1)
+
+	def test_quarantine_warehouse_is_optional_only_when_the_count_posts_variance(self):
+		doc = count(quarantine_warehouse=None)
+		doc.validate_quarantine_warehouse = Mock(side_effect=frappe.ValidationError)
+		doc.uses_variance = lambda: True
+		StockCount.validate_quarantine_if_needed(doc)
+		doc.uses_variance = lambda: False
+		with self.assertRaises(frappe.ValidationError):
+			StockCount.validate_quarantine_if_needed(doc)
+		doc.uses_variance = lambda: True
+		doc.quarantine_warehouse = "Q"
+		with self.assertRaises(frappe.ValidationError):
+			StockCount.validate_quarantine_if_needed(doc)
+
+	def test_variance_account_must_be_an_enabled_leaf_expense_account_of_the_company(self):
+		good = {"company": "C", "root_type": "Expense", "is_group": 0, "account_type": "", "disabled": 0}
+		with patch.object(stock_count.frappe, "db", fake_db(get_value=frappe._dict(good))):
+			stock_count.validate_variance_account("A", "C")
+		for change in (
+			{"company": "X"},
+			{"root_type": "Asset"},
+			{"is_group": 1},
+			{"account_type": "Stock"},
+			{"disabled": 1},
+		):
+			with patch.object(stock_count.frappe, "db", fake_db(get_value=frappe._dict(good, **change))):
+				with self.assertRaises(frappe.ValidationError):
+					stock_count.validate_variance_account("A", "C")
+		with patch.object(stock_count.frappe, "db", fake_db(get_value=None)):
+			with self.assertRaises(frappe.ValidationError):
+				stock_count.validate_variance_account("A", "C")
+
+	def test_reconciliation_takes_difference_account_and_department_from_the_warehouse(self):
+		doc = count()
+		reconciliation = frappe._dict(meta=Mock(has_field=lambda field: True))
+		db = fake_db(has_column=True, get_value=lambda dt, name, field, *a, **kw: "Lab Dept")
+		with (
+			patch.object(stock_count, "get_count_variance_account", return_value="5130-02 - CD"),
+			patch.object(stock_count, "validate_variance_account") as validate,
+			patch.object(stock_count.frappe, "db", db),
+		):
+			StockCount.set_variance_account(doc, reconciliation)
+		validate.assert_called_once_with("5130-02 - CD", "C")
+		self.assertEqual(reconciliation.expense_account, "5130-02 - CD")
+		self.assertEqual(reconciliation.department, "Lab Dept")
+		gone = frappe._dict(meta=Mock(has_field=lambda field: True))
 		with patch.object(stock_count, "get_count_variance_account", return_value=None):
-			self.assertFalse(StockCount.posts_variance(doc))
+			with self.assertRaises(frappe.ValidationError):
+				StockCount.set_variance_account(doc, gone)
+
+	def test_template_only_save_is_filled_on_the_server(self):
+		doc = count(count_template="T", selected_items=[])
+		ok = frappe._dict(company="C", warehouse=None, disabled=0)
+		with (
+			patch.object(stock_count.frappe, "db", fake_db(get_value=ok)),
+			patch.object(stock_count.frappe, "get_all", return_value=["A", "B"]),
+			patch.object(stock_count, "validate_countable_item_rows"),
+		):
+			StockCount.validate_item_selection(doc)
+		self.assertEqual([r.item_code for r in doc.selected_items], ["A", "B"])
+
+	def test_hand_chosen_rows_are_kept_when_a_template_is_set(self):
+		doc = count(count_template="T", selected_items=rows("X"))
+		ok = frappe._dict(company="C", warehouse=None, disabled=0)
+		with (
+			patch.object(stock_count.frappe, "db", fake_db(get_value=ok)),
+			patch.object(stock_count.frappe, "get_all", return_value=["A", "B"]) as get_all,
+			patch.object(stock_count, "validate_countable_item_rows"),
+		):
+			StockCount.validate_item_selection(doc)
+		self.assertEqual([r.item_code for r in doc.selected_items], ["X"])
+		get_all.assert_not_called()
+
+	def test_a_bad_template_is_refused_by_validate(self):
+		for template in (
+			{"company": "OTHER", "warehouse": None, "disabled": 0},
+			{"company": "C", "warehouse": None, "disabled": 1},
+		):
+			doc = count(count_template="T", selected_items=[])
+			with patch.object(stock_count.frappe, "db", fake_db(get_value=frappe._dict(template))):
+				with self.assertRaises(frappe.ValidationError):
+					StockCount.validate_item_selection(doc)
 
 	def test_on_submit_chooses_the_voucher(self):
 		for variance, monthly, expected in (
@@ -228,6 +337,107 @@ class StockCountSelectionTest(unittest.TestCase):
 		self.assertEqual(payload["items"], [{"item_code": "A"}, {"item_code": "B"}])
 		self.assertEqual((payload["company"], payload["warehouse"]), ("C", "W"))
 		created.insert.assert_called_once_with()
+
+
+def preparing(**values):
+	doc = Doc(
+		count(
+			docstatus=0,
+			status="Draft",
+			items=[],
+			item_count=0,
+			quarantine_warehouse="Q",
+			**values,
+		)
+	)
+	doc.check_permission = Mock()
+	doc.validate = Mock()
+	doc.save = Mock()
+	doc.get_item_codes_to_count = lambda snapshot: StockCount.get_item_codes_to_count(doc, snapshot)
+	doc.validate_quarantine_if_needed = Mock()
+	doc.append_snapshot_rows = lambda code, snapshot: doc["items"].append(frappe._dict(item_code=code))
+	doc.stock = []
+	return doc
+
+
+class PrepareCountTest(unittest.TestCase):
+	def setUp(self):
+		self.enterContext(patch.object(stock_count, "_", side_effect=lambda text: text))
+		self.enterContext(patch.object(stock_count.frappe, "throw", side_effect=frappe.ValidationError))
+		self.enterContext(patch.object(stock_count, "get_count_variance_account", return_value=None))
+		self.enterContext(patch.object(stock_count, "now_datetime", return_value="2026-10-29 10:00:00"))
+		self.msgprint = self.enterContext(patch.object(stock_count.frappe, "msgprint"))
+
+	def prepare(self, doc, with_stock):
+		doc.stock = with_stock
+		doc.get_stock_ledger_groups = lambda snapshot: [frappe._dict(item_code=c) for c in with_stock]
+		with patch.object(stock_count.frappe, "get_all", return_value=list(with_stock)):
+			return StockCount.prepare_count(doc)
+
+	def test_skipped_items_are_reported_when_some_have_stock(self):
+		doc = preparing(selected_items=rows("A", "GONE"))
+		self.assertEqual(self.prepare(doc, ["A", "B"]), 1)
+		message = self.msgprint.call_args.args[0]
+		self.assertIn("GONE", message)
+		self.assertIn("for the chosen filters", message)
+		self.assertEqual(doc.status, "In Progress")
+		self.assertEqual(doc.posts_variance_snapshot, 0)
+
+	def test_nothing_to_count_throws_with_the_items(self):
+		doc = preparing(selected_items=rows("GONE"))
+		with self.assertRaises(frappe.ValidationError):
+			self.prepare(doc, ["B"])
+		self.msgprint.assert_not_called()
+
+	def test_variance_mode_is_stored_at_prepare(self):
+		doc = preparing(selected_items=rows("A"))
+		with (
+			patch.object(stock_count, "get_count_variance_account", return_value="5130-02 - CD"),
+			patch.object(stock_count, "validate_variance_account") as validate,
+		):
+			self.prepare(doc, ["A"])
+		validate.assert_called_once_with("5130-02 - CD", "C")
+		self.assertEqual(doc.posts_variance_snapshot, 1)
+
+
+class StockCountTemplateTest(unittest.TestCase):
+	def setUp(self):
+		from erpnext.stock.doctype.stock_count_template import stock_count_template as module
+
+		self.module = module
+		self.enterContext(patch.object(module, "_", side_effect=lambda text: text))
+		self.enterContext(patch.object(module.frappe, "throw", side_effect=frappe.ValidationError))
+		self.enterContext(patch.object(stock_count, "_", side_effect=lambda text: text))
+		self.enterContext(patch.object(stock_count.frappe, "throw", side_effect=frappe.ValidationError))
+
+	def template(self, **values):
+		return Doc({"title": "T", "company": "C", "warehouse": None, "items": rows("A"), **values})
+
+	def validate(self, doc, warehouse=None):
+		db = fake_db(get_value=warehouse)
+		with (
+			patch.object(self.module.frappe, "db", db),
+			patch.object(stock_count, "validate_countable_item_rows") as rows_check,
+		):
+			self.module.StockCountTemplate.validate(doc)
+		return rows_check
+
+	def test_valid_template_checks_its_rows(self):
+		self.validate(self.template()).assert_called_once()
+
+	def test_title_and_items_are_required(self):
+		for values in ({"title": "  "}, {"items": []}):
+			with self.assertRaises(frappe.ValidationError):
+				self.validate(self.template(**values))
+
+	def test_warehouse_must_be_an_enabled_leaf_of_the_company(self):
+		good = frappe._dict(company="C", is_group=0, disabled=0)
+		self.validate(self.template(warehouse="W"), good)
+		for change in ({"company": "X"}, {"is_group": 1}, {"disabled": 1}):
+			with self.assertRaises(frappe.ValidationError):
+				self.validate(self.template(warehouse="W"), frappe._dict(good, **change))
+		with self.assertRaises(frappe.ValidationError):
+			self.validate(self.template(warehouse="W"), None)
 
 
 if __name__ == "__main__":

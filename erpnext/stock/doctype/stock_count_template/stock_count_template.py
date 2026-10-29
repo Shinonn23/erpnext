@@ -30,10 +30,10 @@ class StockCountTemplate(Document):
 			frappe.throw(_("Title is required."))
 		if self.warehouse:
 			warehouse = frappe.db.get_value(
-				"Warehouse", self.warehouse, ["company", "is_group"], as_dict=True
+				"Warehouse", self.warehouse, ["company", "is_group", "disabled"], as_dict=True
 			)
-			if not warehouse or warehouse.company != self.company or warehouse.is_group:
-				frappe.throw(_("Select a non-group Warehouse of Company {0}.").format(self.company))
+			if not warehouse or warehouse.company != self.company or warehouse.is_group or warehouse.disabled:
+				frappe.throw(_("Select an enabled, non-group Warehouse of Company {0}.").format(self.company))
 		if not self.items:
 			frappe.throw(_("Add at least one item to the template."))
 		validate_countable_item_rows(self.items)

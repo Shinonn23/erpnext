@@ -36,6 +36,7 @@
   "status",
   "count_status_column",
   "snapshot_datetime",
+  "posts_variance_snapshot",
   "references_section",
   "stock_entry",
   "references_column",
@@ -122,7 +123,7 @@
    "fieldtype": "Link",
    "label": "Quarantine Warehouse",
    "options": "Warehouse",
-   "mandatory_depends_on": "eval:doc.count_type == 'Monthly'"
+   "description": "Required unless the Warehouse posts count differences as a Stock Reconciliation."
   },
   {
    "depends_on": "eval:doc.count_type == 'Monthly'",
@@ -143,7 +144,8 @@
    "fieldtype": "Link",
    "label": "Count Template",
    "options": "Stock Count Template",
-   "description": "Fills Items to Count. Changing the template later does not change a prepared count."
+   "description": "Fills Items to Count. Changing the template later does not change a prepared count.",
+   "in_standard_filter": 1
   },
   {
    "fieldname": "selected_items",
@@ -241,6 +243,14 @@
    "fieldtype": "Datetime",
    "label": "Snapshot Datetime",
    "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "posts_variance_snapshot",
+   "fieldtype": "Check",
+   "label": "Posts Differences as Stock Reconciliation",
+   "read_only": 1,
+   "hidden": 1,
    "no_copy": 1
   },
   {
