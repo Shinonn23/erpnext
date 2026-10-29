@@ -637,9 +637,7 @@ class TestWarehouseTypeSummary(unittest.TestCase):
 		self.assertTrue(by_operation["receipt"]["allowed"])
 		self.assertFalse(by_operation["issue"]["allowed"])
 		self.assertFalse(by_operation["loan"]["allowed"])
-		self.assertEqual(
-			by_operation["issue"]["documents"], warehouse_policy.OPERATION_DOCUMENTS["issue"]
-		)
+		self.assertEqual(by_operation["issue"]["documents"], warehouse_policy.OPERATION_DOCUMENTS["issue"])
 		self.assertEqual(summary["outgoing_role"], "Stock Manager")
 		self.assertFalse(summary["loan_counts_as_transfer"])
 
