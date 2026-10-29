@@ -297,6 +297,9 @@ on_print_pdf = "erpnext.regional.thailand.custom.print_utils.add_comment_on_prin
 override_doctype_dashboards = {
 	"Payment Entry": "erpnext.regional.thailand.custom.dashboard_overrides.get_dashboard_data_for_payment_entry",
 	"Journal Entry": "erpnext.regional.thailand.custom.dashboard_overrides.get_dashboard_data_for_journal_entry",
+	"Sales Invoice": "erpnext.regional.thailand.custom.dashboard_overrides.get_dashboard_data_for_sales_invoice",
+	"Purchase Invoice": "erpnext.regional.thailand.custom.dashboard_overrides.get_dashboard_data_for_purchase_invoice",
+	"Expense Claim": "erpnext.regional.thailand.custom.dashboard_overrides.get_dashboard_data_for_expense_claim",
 }
 on_gle_rename = "erpnext.regional.thailand.custom.gl_entry.rename_gl_entry_in_tax_invoice"
 

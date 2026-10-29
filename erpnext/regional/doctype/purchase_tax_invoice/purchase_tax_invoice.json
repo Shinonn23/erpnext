@@ -21,6 +21,7 @@
   "column_break_10",
   "voucher_type",
   "voucher_no",
+  "voucher_detail_no",
   "company_tax_address",
   "company_branch_code",
   "company_tax_id",
@@ -246,11 +247,18 @@
    "label": "Splitted Tax Invoice",
    "read_only": 1,
    "search_index": 1
+  },
+  {
+   "fieldname": "voucher_detail_no",
+   "fieldtype": "Data",
+   "label": "Voucher Detail No",
+   "read_only": 1,
+   "search_index": 1
   }
  ],
  "is_submittable": 1,
  "links": [],
- "modified": "2025-05-19 15:22:26.907679",
+ "modified": "2026-10-29 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "Regional",
  "name": "Purchase Tax Invoice",
@@ -286,7 +294,7 @@
   }
  ],
  "row_format": "Dynamic",
- "show_title_field_in_link": 1,
+ "show_title_field_in_link": 0,
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],

@@ -21,6 +21,7 @@
   "column_break_15",
   "voucher_type",
   "voucher_no",
+  "voucher_detail_no",
   "company_tax_address",
   "company_branch_code",
   "company_tax_id",
@@ -232,11 +233,18 @@
    "fieldname": "tax_percent",
    "fieldtype": "Percent",
    "label": "Tax Percent"
+  },
+  {
+   "fieldname": "voucher_detail_no",
+   "fieldtype": "Data",
+   "label": "Voucher Detail No",
+   "read_only": 1,
+   "search_index": 1
   }
  ],
  "is_submittable": 1,
  "links": [],
- "modified": "2025-01-06 16:55:31.960482",
+ "modified": "2026-10-29 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "Regional",
  "name": "Sales Tax Invoice",

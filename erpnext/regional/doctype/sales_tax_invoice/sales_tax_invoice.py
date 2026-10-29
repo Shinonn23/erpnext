@@ -4,7 +4,10 @@ from frappe.model.document import Document
 from frappe.utils import add_months
 
 from erpnext.regional.thailand.custom.company_branch import set_company_branch_snapshot
-from erpnext.regional.thailand.custom.custom_api import get_thai_tax_settings
+from erpnext.regional.thailand.custom.custom_api import (
+	TAX_INVOICE_SOURCE_DOCTYPES,
+	get_thai_tax_settings,
+)
 from erpnext.regional.thailand.custom.tax_invoice_series import make_tax_invoice_name
 
 
@@ -30,6 +33,10 @@ class SalesTaxInvoice(Document):
 		self.compute_report_date()
 		self.compute_tax_percent()
 		set_company_branch_snapshot(self)
+
+	def before_cancel(self):
+		# the source voucher (still submitted while it is being cancelled) keeps its link to this record
+		self.ignore_linked_doctypes = TAX_INVOICE_SOURCE_DOCTYPES
 
 	def on_update_after_submit(self):
 		if self.get_doc_before_save():  # Some change is made

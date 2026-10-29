@@ -18,6 +18,19 @@ from erpnext.regional.thailand.custom.company_branch import (
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+# vouchers that point at the tax invoices made from them (Tax Invoice Record / row Tax Invoice)
+TAX_INVOICE_SOURCE_DOCTYPES = (
+	"Sales Invoice",
+	"Purchase Invoice",
+	"Payment Entry",
+	"Journal Entry",
+	"Expense Claim",
+)
+SPLIT_ROW_DOCTYPES = {
+	"Purchase Invoice": "Purchase Invoice Tax Invoice Detail",
+	"Expense Claim": "Expense Claim Tax Invoice Detail",
+}
+
 
 def get_thai_tax_settings(company):
 	settings = frappe.get_single("Thai Tax Settings")
@@ -156,10 +169,32 @@ def create_tax_invoice_on_gl_tax(doc, method):
 				for tinv in tinvs:
 					tinv = update_voucher_tinv(doctype, voucher, tinv, True)
 					tinv.submit()
+					link_voucher_to_tax_invoice(doc, voucher, tinv)
 			else:
 				[tinv] = create_tax_invoice(doc, doctype, base_amount, tax_amount, voucher)
 				tinv = update_voucher_tinv(doctype, voucher, tinv)
 				tinv.submit()
+				link_voucher_to_tax_invoice(doc, voucher, tinv)
+
+
+def link_voucher_to_tax_invoice(gl, voucher, tinv):
+	"""Point the source of a submitted tax invoice back at it: the Journal Entry Tax Invoice Detail row
+	(named by the GL Entry), the split row of a Purchase Invoice / Expense Claim, else the voucher header
+	(a Payment Entry that makes several tax invoices keeps the first; the others show in Connections).
+	Written straight to the database: the voucher is submitted and not saved again."""
+	link = {"tax_invoice_ref_type": tinv.doctype, "tax_invoice_ref": tinv.name}
+	voucher_type = tinv.voucher_type or (gl and gl.voucher_type)
+	if voucher_type == "Journal Entry":
+		row = gl and gl.voucher_detail_no
+		if row:
+			frappe.db.set_value("Journal Entry Tax Invoice Detail", row, link, update_modified=False)
+	elif tinv.splitted_tax_invoice and voucher_type in SPLIT_ROW_DOCTYPES:
+		frappe.db.set_value(
+			SPLIT_ROW_DOCTYPES[voucher_type], tinv.splitted_tax_invoice, link, update_modified=False
+		)
+	elif voucher_type and tinv.voucher_no:
+		if not frappe.db.get_value(voucher_type, tinv.voucher_no, "tax_invoice_ref"):
+			frappe.db.set_value(voucher_type, tinv.voucher_no, link, update_modified=False)
 
 
 def validate_splitted_tax_invoices(voucher, tax_account):
@@ -238,6 +273,8 @@ def create_tax_invoice(doc, doctype, base_amount, tax_amount, voucher, split_tax
 			"doctype": doctype,
 			"company": doc.company,
 			"gl_entry": doc.name,
+			# the Journal Entry row it came from (the row of a split invoice is named below)
+			"voucher_detail_no": doc.voucher_detail_no if doc.voucher_type == "Journal Entry" else None,
 			"tax_amount": tax_amount,
 			"tax_base": base_amount,
 			"party": party,
@@ -260,6 +297,7 @@ def create_tax_invoice(doc, doctype, base_amount, tax_amount, voucher, split_tax
 						"date": tax.tax_invoice_date,
 						"report_date": tax.tax_invoice_date,
 						"splitted_tax_invoice": tax.name,
+						"voucher_detail_no": tax.name,
 					}
 				)
 				tinvs.append(frappe.get_doc(tinv_dict).insert(ignore_permissions=True))
@@ -800,6 +838,7 @@ def create_sales_tax_invoice_on_zero_tax(doc, method):
 		tinv = create_sales_tax_invoice_zero_tax(doc, doctype, base_amount, zero_taxes[0].account_head)
 		tinv = update_voucher_tinv(doctype, doc, tinv)
 		tinv.submit()
+		link_voucher_to_tax_invoice(None, doc, tinv)
 
 
 def create_sales_tax_invoice_zero_tax(doc, doctype, base_amount, account):
@@ -833,6 +872,6 @@ def cancel_related_tax_invoice(doc, method):
 			},
 			pluck="name",
 		)
-		if tinv:
-			tinv = frappe.get_doc(doctype, tinv[0])
-			tinv.cancel()
+		# every tax invoice of the voucher (a split invoice makes one per supplier)
+		for name in tinv:
+			frappe.get_doc(doctype, name).cancel()

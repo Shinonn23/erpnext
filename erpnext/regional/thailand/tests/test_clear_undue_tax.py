@@ -263,6 +263,7 @@ def _tax_invoice_of(payment, account, debit=0, credit=0):
 		patch.object(custom_api.frappe, "get_cached_value", return_value=7),
 		patch.object(custom_api, "create_tax_invoice", side_effect=create),
 		patch.object(custom_api, "update_voucher_tinv", side_effect=lambda doctype, voucher, tinv: tinv),
+		patch.object(custom_api, "link_voucher_to_tax_invoice"),
 	):
 		custom_api.create_tax_invoice_on_gl_tax(gl_entry, None)
 	return made

@@ -548,3 +548,5 @@ execute:frappe.db.set_value("Report", "Negative Batch Report", "prepared_report"
 erpnext.patches.v16_0.set_user_on_timesheets
 erpnext.patches.v16_0.restore_cost_center
 erpnext.patches.v16_0.snapshot_company_branch_on_tax_invoices
+erpnext.patches.v16_0.create_tax_invoice_link_fields
+erpnext.patches.v16_0.link_tax_invoices_to_vouchers
