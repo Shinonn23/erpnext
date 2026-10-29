@@ -3,7 +3,7 @@
 
 frappe.ui.form.on("Sales Billing", {
 	refresh(frm) {
-		if (frm.doc.docstatus == 1) {
+		if (frm.doc.docstatus == 1 && frappe.model.can_write(frm.doctype)) {
 			frm.add_custom_button(frm.doc.closed ? __("Force Open") : __("Force Closed"), () => {
 				frm.set_value("closed", !frm.doc.closed);
 				frm.save("Update");
@@ -162,7 +162,7 @@ frappe.ui.form.on("Sales Billing", {
 						fieldtype: "Check",
 						label: __("Auto allocate amount to each payment"),
 						description: __(
-							"<b>Note:</b> If checked, each payment will submitted immediatelly to ensure that amount is allocted properly."
+							"<b>Note:</b> If checked, the amount of each payment is allocated to the invoices in turn. The Payment Entries are saved as Draft and are never submitted here."
 						),
 						fieldname: "allocate_payment_amount",
 						default: 0,

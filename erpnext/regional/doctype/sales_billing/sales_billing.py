@@ -5,6 +5,7 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 from frappe.query_builder import DocType
+from frappe.utils import flt
 
 
 class SalesBilling(Document):
@@ -16,6 +17,23 @@ class SalesBilling(Document):
 		total_billing_amount = sum(i.grand_total for i in self.sales_billing_line)
 		self.total_outstanding_amount = total_outstanding_amount
 		self.total_billing_amount = total_billing_amount
+		self.set_branch_address()
+
+	def set_branch_address(self):
+		"""One billing, one company branch (each branch files its own VAT): the invoices listed must be of one branch,
+		which names the billing."""
+		from erpnext.regional.thailand.custom.naming_branch import billing_line_addresses
+
+		addresses = billing_line_addresses(self)
+		if len(addresses) > 1:
+			frappe.throw(
+				_(
+					"Invoices of different company branches ({0}) cannot be on one billing. "
+					"Please make a separate billing for each branch."
+				).format(", ".join(sorted(addresses)))
+			)
+		if addresses:
+			self.company_tax_address = addresses[0]
 
 
 @frappe.whitelist()
@@ -76,10 +94,21 @@ def get_due_billing(
 	return invoices
 
 
+def deduct_used_allocations(payment_entry, used):
+	"""Take from each reference row what the earlier entries already allocate to its invoice. A credit note (negative
+	outstanding) is used up the same way; a row is dropped only when its own outstanding is used up, never because it
+	was negative to begin with."""
+	for ref in list(payment_entry.references):
+		original = flt(ref.outstanding_amount)
+		left = original - used.get(ref.reference_name, 0)
+		if (original > 0 and left <= 0) or (original < 0 and left >= 0):
+			payment_entry.remove(ref)
+		else:
+			ref.outstanding_amount = left
+
+
 @frappe.whitelist()
-def create_multi_payment_entries(
-	payment_details, sales_billing_name, posting_date, allocate_amount=0
-):
+def create_multi_payment_entries(payment_details, sales_billing_name, posting_date, allocate_amount=0):
 	import json
 
 	try:
@@ -94,6 +123,9 @@ def create_multi_payment_entries(
 	company_currency = frappe.get_value("Company", company, "default_currency")
 
 	payment_entries = []
+	# Payment Entries stay Draft, so the invoices' outstanding does not fall between them: the amount each earlier
+	# entry took from an invoice is kept here and deducted from the next entry's allocation
+	used = {}
 	for detail in payment_details:
 		detail = frappe._dict(detail)
 		mode_of_payment = detail.mode_of_payment
@@ -139,12 +171,14 @@ def create_multi_payment_entries(
 			)
 		payment_entry.validate()  # Validate to get the total outstanding
 		if int(allocate_amount):
+			deduct_used_allocations(payment_entry, used)
 			payment_entry.allocate_amount_to_references(payment_entry.paid_amount, False, True)
+			for ref in payment_entry.references:
+				used[ref.reference_name] = used.get(ref.reference_name, 0) + flt(ref.allocated_amount)
 		payment_entry.insert()
 		payment_entries.append(payment_entry.name)
-		# If allocated, auto submit is required because potentially there are > 1 payment entries
-		if int(allocate_amount):
-			payment_entry.submit()
+		# The Payment Entry is never submitted here: it stays Draft so the company's approval workflow of the
+		# Payment Entry runs, and its submit closes this billing (update_sales_billing_outstanding_amount).
 
 	res = {"payment_entries": payment_entries, "payment_receipt_name": None}
 
@@ -170,9 +204,7 @@ def create_multi_payment_entries(
 				},
 			)
 		payment_receipt.insert()
-		# If allocated, auto submit it
-		if int(allocate_amount):
-			payment_receipt.submit()
+		# A receipt is submitted by the user once its Payment Entries are submitted
 		res["payment_receipt_name"] = payment_receipt.name
 
 	return res

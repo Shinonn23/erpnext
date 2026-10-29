@@ -11,6 +11,7 @@
   "naming_series",
   "column_break_gcaf",
   "company",
+  "company_tax_address",
   "date",
   "sales_billing",
   "section_break_gvcn",
@@ -130,12 +131,22 @@
    "fieldtype": "Currency",
    "label": "Total Invoice Amount",
    "read_only": 1
+  },
+  {
+   "description": "Set by the system from the invoices or payments listed; the BRANCH part of the document name.",
+   "fieldname": "company_tax_address",
+   "fieldtype": "Link",
+   "label": "Company Branch Address",
+   "no_copy": 1,
+   "options": "Address",
+   "print_hide": 1,
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2024-12-29 22:14:16.790023",
+ "modified": "2026-10-29 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "Regional",
  "name": "Payment Receipt",
@@ -143,6 +154,8 @@
  "owner": "Administrator",
  "permissions": [
   {
+   "amend": 1,
+   "cancel": 1,
    "create": 1,
    "delete": 1,
    "email": 1,
@@ -152,6 +165,7 @@
    "report": 1,
    "role": "Accounts User",
    "share": 1,
+   "submit": 1,
    "write": 1
   },
   {

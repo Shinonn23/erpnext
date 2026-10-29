@@ -3,6 +3,12 @@
 
 frappe.ui.form.on("Purchase Billing", {
 	refresh(frm) {
+		if (frm.doc.docstatus == 1 && frappe.model.can_write(frm.doctype)) {
+			frm.add_custom_button(frm.doc.closed ? __("Force Open") : __("Force Closed"), () => {
+				frm.set_value("closed", !frm.doc.closed);
+				frm.save("Update");
+			});
+		}
 		frm.fields_dict["purchase_billing_line"].grid.get_field("purchase_invoice").get_query =
 			function (doc, cdt, cdn) {
 				return {
