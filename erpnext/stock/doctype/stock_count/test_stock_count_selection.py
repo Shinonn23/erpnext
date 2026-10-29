@@ -192,13 +192,18 @@ class StockCountSelectionTest(unittest.TestCase):
 	def test_variance_mode_is_fixed_at_prepare(self):
 		doc = count(snapshot_datetime="2026-10-29 10:00:00", posts_variance_snapshot=0)
 		doc.get_doc_before_save.return_value = frappe._dict(
-			snapshot_datetime="2026-10-29 10:00:00", posts_variance_snapshot=1
+			snapshot_datetime="2026-10-29 10:00:00",
+			posts_variance_snapshot=1,
+			variance_account_snapshot="5130-02 - CD",
 		)
 		StockCount.keep_variance_mode(doc)
 		self.assertEqual(doc.posts_variance_snapshot, 1)
+		self.assertEqual(doc.variance_account_snapshot, "5130-02 - CD")
 		fresh = count(posts_variance_snapshot=1)
+		fresh.variance_account_snapshot = "FORGED"
 		StockCount.keep_variance_mode(fresh)
 		self.assertEqual(fresh.posts_variance_snapshot, 0)
+		self.assertIsNone(fresh.variance_account_snapshot)
 		preparing = count(snapshot_datetime="2026-10-29 10:00:00", posts_variance_snapshot=1)
 		StockCount.keep_variance_mode(preparing)
 		self.assertEqual(preparing.posts_variance_snapshot, 1)
@@ -234,23 +239,25 @@ class StockCountSelectionTest(unittest.TestCase):
 			with self.assertRaises(frappe.ValidationError):
 				stock_count.validate_variance_account("A", "C")
 
-	def test_reconciliation_takes_difference_account_and_department_from_the_warehouse(self):
-		doc = count()
+	def test_reconciliation_uses_the_account_recorded_at_prepare_not_the_warehouse_now(self):
+		doc = count(variance_account_snapshot="5130-02 - CD")
 		reconciliation = frappe._dict(meta=Mock(has_field=lambda field: True))
 		db = fake_db(has_column=True, get_value=lambda dt, name, field, *a, **kw: "Lab Dept")
 		with (
-			patch.object(stock_count, "get_count_variance_account", return_value="5130-02 - CD"),
+			patch.object(stock_count, "get_count_variance_account", return_value="OTHER - CD") as live,
 			patch.object(stock_count, "validate_variance_account") as validate,
 			patch.object(stock_count.frappe, "db", db),
 		):
 			StockCount.set_variance_account(doc, reconciliation)
+		live.assert_not_called()
 		validate.assert_called_once_with("5130-02 - CD", "C")
 		self.assertEqual(reconciliation.expense_account, "5130-02 - CD")
 		self.assertEqual(reconciliation.department, "Lab Dept")
-		gone = frappe._dict(meta=Mock(has_field=lambda field: True))
-		with patch.object(stock_count, "get_count_variance_account", return_value=None):
-			with self.assertRaises(frappe.ValidationError):
-				StockCount.set_variance_account(doc, gone)
+
+	def test_a_count_without_a_recorded_account_cannot_post_variance(self):
+		doc = count(variance_account_snapshot=None)
+		with self.assertRaises(frappe.ValidationError):
+			StockCount.set_variance_account(doc, frappe._dict())
 
 	def test_template_only_save_is_filled_on_the_server(self):
 		doc = count(count_template="T", selected_items=[])
@@ -398,6 +405,7 @@ class PrepareCountTest(unittest.TestCase):
 			self.prepare(doc, ["A"])
 		validate.assert_called_once_with("5130-02 - CD", "C")
 		self.assertEqual(doc.posts_variance_snapshot, 1)
+		self.assertEqual(doc.variance_account_snapshot, "5130-02 - CD")
 
 
 class StockCountTemplateTest(unittest.TestCase):

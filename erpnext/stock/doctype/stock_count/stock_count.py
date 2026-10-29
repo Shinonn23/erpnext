@@ -35,6 +35,7 @@ class StockCount(Document):
 		item_count: DF.Int | None
 		item_selection: DF.Literal["Random Sample", "Selected Items"]
 		posts_variance_snapshot: DF.Check
+		variance_account_snapshot: DF.Link | None
 		items: DF.Table[StockCountItem]
 		naming_series: DF.Literal["STOCK-COUNT-.YYYY.-"]
 		quarantine_storage_location: DF.Link | None
@@ -157,8 +158,10 @@ class StockCount(Document):
 		before = self.get_doc_before_save()
 		if before and before.get("snapshot_datetime"):
 			self.posts_variance_snapshot = before.get("posts_variance_snapshot") or 0
+			self.variance_account_snapshot = before.get("variance_account_snapshot")
 		elif not self.snapshot_datetime:
 			self.posts_variance_snapshot = 0
+			self.variance_account_snapshot = None
 
 	def validate_quarantine_if_needed(self):
 		# A count that posts its differences as a Stock Reconciliation moves nothing to quarantine.
@@ -365,12 +368,14 @@ class StockCount(Document):
 		snapshot = now_datetime()
 		self.snapshot_datetime = snapshot
 		self.posts_variance_snapshot = 0
+		self.variance_account_snapshot = None
 		variance_account = (
 			get_count_variance_account(self.warehouse) if self.count_type == "Monthly" else None
 		)
 		if variance_account:
 			validate_variance_account(variance_account, self.company)
 			self.posts_variance_snapshot = 1
+			self.variance_account_snapshot = variance_account
 		item_codes = self.get_item_codes_to_count(snapshot)
 		for item_code in item_codes:
 			self.append_snapshot_rows(item_code, snapshot)
@@ -693,9 +698,10 @@ class StockCount(Document):
 		return stock_entry
 
 	def set_variance_account(self, reconciliation):
-		account = get_count_variance_account(self.warehouse)
+		# The account known at Prepare Count: a later change on the warehouse neither flips nor sticks the count.
+		account = self.variance_account_snapshot
 		if not account:
-			frappe.throw(_("Warehouse {0} no longer has a Count Variance Account.").format(self.warehouse))
+			frappe.throw(_("This count has no Count Variance Account recorded. Prepare it again."))
 		validate_variance_account(account, self.company)
 		reconciliation.expense_account = account
 		if frappe.db.has_column("Warehouse", "department"):

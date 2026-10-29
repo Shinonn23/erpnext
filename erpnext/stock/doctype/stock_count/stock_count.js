@@ -64,6 +64,7 @@ frappe.ui.form.on("Stock Count", {
 	},
 
 	refresh(frm) {
+		frm.__previous_template = frm.doc.count_template;
 		const can_count =
 			frm.doc.status === "In Progress" &&
 			!frm.doc.docstatus &&
@@ -146,8 +147,14 @@ frappe.ui.form.on("Stock Count", {
 	},
 
 	count_template(frm) {
-		if (frm.doc.status !== "Draft" || frm.doc.docstatus || !frm.doc.count_template) return;
+		if (frm.__reverting_template) return;
+		if (frm.doc.status !== "Draft" || frm.doc.docstatus || !frm.doc.count_template) {
+			frm.__previous_template = frm.doc.count_template;
+			return;
+		}
+		const previous = frm.__previous_template || "";
 		const fill = () => {
+			frm.__previous_template = frm.doc.count_template;
 			frm.clear_table("selected_items");
 			frappe.db.get_doc("Stock Count Template", frm.doc.count_template).then((template) => {
 				for (const row of template.items || []) {
@@ -156,8 +163,18 @@ frappe.ui.form.on("Stock Count", {
 				frm.refresh_field("selected_items");
 			});
 		};
+		const keep_previous = () => {
+			frm.__reverting_template = true;
+			frm.set_value("count_template", previous).then(() => {
+				frm.__reverting_template = false;
+			});
+		};
 		if ((frm.doc.selected_items || []).length) {
-			frappe.confirm(__("Replace the items already chosen with the items of this template?"), fill);
+			frappe.confirm(
+				__("Replace the items already chosen with the items of this template?"),
+				fill,
+				keep_previous
+			);
 		} else {
 			fill();
 		}

@@ -37,6 +37,7 @@
   "count_status_column",
   "snapshot_datetime",
   "posts_variance_snapshot",
+  "variance_account_snapshot",
   "references_section",
   "stock_entry",
   "references_column",
@@ -249,6 +250,15 @@
    "fieldname": "posts_variance_snapshot",
    "fieldtype": "Check",
    "label": "Posts Differences as Stock Reconciliation",
+   "read_only": 1,
+   "hidden": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "variance_account_snapshot",
+   "fieldtype": "Link",
+   "label": "Count Variance Account at Prepare",
+   "options": "Account",
    "read_only": 1,
    "hidden": 1,
    "no_copy": 1
