@@ -153,7 +153,7 @@ class AccountsReceivableSummary(ReceivablePayableReport):
 		)
 
 		self.add_column(
-			label=_("Supplier Name") if self.account_type == "Payable" else _("Customer Name"),
+			label=_("Party Name"),
 			fieldname="party_name",
 			fieldtype="Data",
 		)

@@ -1192,6 +1192,15 @@ class ReceivablePayableReport:
 			width=180,
 			sticky=(self.party_naming_by not in ["Naming Series", "Auto Name"]),
 		)
+		# Always show the party name directly after the Party column (Connect Diagnostics), whatever the
+		# naming rule. The row data stays keyed customer_name / supplier_name.
+		self.add_column(
+			label=_("Party Name"),
+			fieldname="supplier_name" if self.account_type == "Payable" else "customer_name",
+			fieldtype="Data",
+			sticky=True,
+		)
+
 		if self.account_type == "Receivable":
 			label = _("Receivable Account")
 		elif self.account_type == "Payable":
@@ -1205,20 +1214,6 @@ class ReceivablePayableReport:
 			fieldtype="Link",
 			options="Account",
 			width=180,
-			sticky=True,
-		)
-
-		# Always show the party name next to the code (Connect Diagnostics), whatever the naming rule.
-		if self.account_type == "Payable":
-			label = _("Supplier Name")
-			fieldname = "supplier_name"
-		else:
-			label = _("Customer Name")
-			fieldname = "customer_name"
-		self.add_column(
-			label=label,
-			fieldname=fieldname,
-			fieldtype="Data",
 			sticky=True,
 		)
 
