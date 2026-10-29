@@ -62,7 +62,11 @@ OPERATION_RULES = (
 		" Subcontracting Delivery (both legs)",
 		{"doctype": "Stock Entry", "purpose": "Material Transfer"},
 	),
-	("transfer", "Pick List that is not for Delivery", {"doctype": "Pick List", "purpose": "Material Transfer"}),
+	(
+		"transfer",
+		"Pick List that is not for Delivery",
+		{"doctype": "Pick List", "purpose": "Material Transfer"},
+	),
 	(
 		"transfer",
 		"Documents of an internal supplier, and internal customer lines with a target warehouse",
