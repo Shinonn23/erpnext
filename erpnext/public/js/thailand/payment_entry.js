@@ -23,6 +23,24 @@ frappe.ui.form.on("Payment Entry", {
 		if (frm.doc.docstatus == 1 && frappe.model.can_create("Journal Entry")) {
 			frm.trigger("add_create_undue_vat_journal_entry_button");
 		}
+		// Payment Receipt (ใบเสร็จรับเงิน) of a submitted receipt from a customer
+		if (
+			frm.doc.docstatus == 1 &&
+			frm.doc.payment_type == "Receive" &&
+			frm.doc.party_type == "Customer" &&
+			frappe.model.can_create("Payment Receipt")
+		) {
+			frm.add_custom_button(
+				__("Payment Receipt"),
+				() => {
+					frappe.model.open_mapped_doc({
+						method: "erpnext.regional.doctype.payment_receipt.payment_receipt.make_payment_receipt",
+						frm: frm,
+					});
+				},
+				__("Create")
+			);
+		}
 	},
 
 	add_create_withholding_tax_cert_button: function (frm) {

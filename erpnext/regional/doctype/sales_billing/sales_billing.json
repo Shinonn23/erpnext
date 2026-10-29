@@ -14,6 +14,7 @@
   "naming_series",
   "column_break_1",
   "company",
+  "company_tax_address",
   "date",
   "closed",
   "filters_section",
@@ -188,13 +189,23 @@
    "fieldname": "include_draft_invoices",
    "fieldtype": "Check",
    "label": "Include Draft Invoices"
+  },
+  {
+   "description": "Set by the system from the invoices or payments listed; the BRANCH part of the document name.",
+   "fieldname": "company_tax_address",
+   "fieldtype": "Link",
+   "label": "Company Branch Address",
+   "no_copy": 1,
+   "options": "Address",
+   "print_hide": 1,
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2025-03-31 17:14:05.994883",
+ "modified": "2026-10-29 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "Regional",
  "name": "Sales Billing",

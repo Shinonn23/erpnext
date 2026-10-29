@@ -206,10 +206,12 @@ _thailand_doc_events = {
 		"on_submit": [
 			"erpnext.regional.thailand.custom.payment_entry.reconcile_undue_tax",
 			"erpnext.regional.thailand.custom.payment_entry.update_sales_billing_outstanding_amount",
+			"erpnext.regional.doctype.purchase_billing.purchase_billing.update_purchase_billing_outstanding_amount",
 			"erpnext.regional.thailand.custom.withholding_cert.create_withholding_certificates",
 		],
 		"on_cancel": [
 			"erpnext.regional.thailand.custom.payment_entry.update_sales_billing_outstanding_amount",
+			"erpnext.regional.doctype.purchase_billing.purchase_billing.update_purchase_billing_outstanding_amount",
 			"erpnext.regional.thailand.custom.withholding_cert.cancel_withholding_certificates",
 		],
 	},
