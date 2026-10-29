@@ -15,6 +15,19 @@ def set_empty_link(doctype, name, tinv_doctype, tinv_name):
 	)
 
 
+# columns every tax invoice doctype has / only some have (Sales Tax Invoice has no splitted_tax_invoice)
+INVOICE_FIELDS = ("name", "voucher_type", "voucher_no", "gl_entry", "voucher_detail_no")
+OPTIONAL_INVOICE_FIELDS = ("splitted_tax_invoice",)
+
+
+def invoice_fields(doctype):
+	"""The fields of a tax invoice the backfill reads: only columns the doctype really has."""
+	return [
+		*INVOICE_FIELDS,
+		*(f for f in OPTIONAL_INVOICE_FIELDS if frappe.db.has_column(doctype, f)),
+	]
+
+
 def execute():
 	"""Link the vouchers (Journal Entry row, split row, else header) to their submitted tax invoices and
 	fill Voucher Detail No. Only empty fields are written, so it can run again.
@@ -26,14 +39,7 @@ def execute():
 		invoices = frappe.get_all(
 			doctype,
 			filters={"docstatus": 1},
-			fields=[
-				"name",
-				"voucher_type",
-				"voucher_no",
-				"gl_entry",
-				"splitted_tax_invoice",
-				"voucher_detail_no",
-			],
+			fields=invoice_fields(doctype),
 			order_by="creation asc",
 		)
 		for tinv in invoices:

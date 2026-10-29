@@ -28,7 +28,7 @@ def tinv(doctype="Purchase Tax Invoice", name="CD00003-PTI6910001", **values):
 	values.setdefault("voucher_no", "PE-1")
 	values.setdefault("splitted_tax_invoice", None)
 	values.setdefault("voucher_detail_no", None)
-	return SimpleNamespace(doctype=doctype, name=name, **values)
+	return frappe._dict(doctype=doctype, name=name, **values)
 
 
 class TestLinkHelper(unittest.TestCase):
@@ -508,3 +508,51 @@ class TestSupplierNumberOnce(unittest.TestCase):
 		fake.msgprint.assert_called_once()
 		with self.assertRaises(frappe.ValidationError):
 			self.run_validate(self.doc("", "INV-9", "update_after_submit"), [], "before_update_after_submit")
+
+
+class TestPatchFieldsExistOnEachDoctype(unittest.TestCase):
+	"""The backfill selects only columns the doctype's own definition has (Sales Tax Invoice has no
+	splitted_tax_invoice, which made the first real migrate fail)."""
+
+	def test_the_selected_fields_are_fields_of_each_tax_invoice_doctype(self):
+		patch_module = importlib.import_module("erpnext.patches.v16_0.link_tax_invoices_to_vouchers")
+		for doctype, folder in (
+			("Sales Tax Invoice", "sales_tax_invoice"),
+			("Purchase Tax Invoice", "purchase_tax_invoice"),
+		):
+			columns = {f["fieldname"] for f in doctype_json(folder)["fields"]} | {"name"}
+			fake = mock.MagicMock()
+			fake.db.has_column.side_effect = lambda dt, field, columns=columns: field in columns
+			with mock.patch.object(patch_module, "frappe", fake):
+				selected = patch_module.invoice_fields(doctype)
+			self.assertFalse(set(selected) - columns, f"{doctype}: {set(selected) - columns}")
+			self.assertIn("voucher_detail_no", selected)
+		sales = {f["fieldname"] for f in doctype_json("sales_tax_invoice")["fields"]}
+		self.assertNotIn("splitted_tax_invoice", sales)
+
+	def test_the_patch_runs_on_a_doctype_without_the_split_column(self):
+		columns = {f["fieldname"] for f in doctype_json("sales_tax_invoice")["fields"]} | {"name"}
+		asked = []
+
+		def get_all(doctype, **kw):
+			asked.append(kw["fields"])
+			return []
+
+		patch_module = importlib.import_module("erpnext.patches.v16_0.link_tax_invoices_to_vouchers")
+		fake = mock.MagicMock()
+		fake.db.has_column.side_effect = lambda dt, field: dt == "Purchase Tax Invoice" or field in columns
+		fake.get_all.side_effect = get_all
+		with mock.patch.object(patch_module, "frappe", fake):
+			patch_module.execute()
+		self.assertNotIn("splitted_tax_invoice", asked[0])
+		self.assertIn("splitted_tax_invoice", asked[1])
+
+	def test_a_sales_tax_invoice_document_without_the_split_field_links_its_header(self):
+		invoice = frappe._dict(
+			doctype="Sales Tax Invoice", name="STI-1", voucher_type="Sales Invoice", voucher_no="SINV-1"
+		)
+		fake = mock.MagicMock()
+		fake.db.get_value.return_value = None
+		with mock.patch.object(custom_api, "frappe", fake):
+			custom_api.link_voucher_to_tax_invoice(None, None, invoice)
+		self.assertEqual(fake.db.set_value.call_args.args[:2], ("Sales Invoice", "SINV-1"))

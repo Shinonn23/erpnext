@@ -201,7 +201,7 @@ def link_voucher_to_tax_invoice(gl, voucher, tinv):
 		row = gl and gl.voucher_detail_no
 		if row:
 			frappe.db.set_value("Journal Entry Tax Invoice Detail", row, link, update_modified=False)
-	elif tinv.splitted_tax_invoice and voucher_type in SPLIT_ROW_DOCTYPES:
+	elif tinv.get("splitted_tax_invoice") and voucher_type in SPLIT_ROW_DOCTYPES:
 		frappe.db.set_value(
 			SPLIT_ROW_DOCTYPES[voucher_type], tinv.splitted_tax_invoice, link, update_modified=False
 		)
