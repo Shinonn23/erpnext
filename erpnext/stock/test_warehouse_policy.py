@@ -615,3 +615,91 @@ class TestWarehousePolicy(unittest.TestCase):
 			patch.object(frappe, "get_roles", return_value=["Quality Manager"]),
 		):
 			WarehouseType.validate_policy_permission(frappe._dict())
+
+
+class TestWarehouseTypeSummary(unittest.TestCase):
+	def setUp(self):
+		self.addCleanup(patch.stopall)
+		patch.object(frappe, "has_permission", return_value=True).start()
+		patch.object(warehouse_policy, "_", side_effect=lambda text: text).start()
+
+	def test_no_type_means_no_restriction(self):
+		summary = warehouse_policy.get_warehouse_type_summary(None)
+		self.assertFalse(summary["restricted"])
+		self.assertEqual(summary["operations"], [])
+
+	def test_summary_reports_flags_role_and_documents(self):
+		policy = frappe._dict(name="Lab", outgoing_role="Stock Manager", allow_receipt=1, allow_issue=0)
+		patch.object(frappe, "get_cached_doc", return_value=policy).start()
+		summary = warehouse_policy.get_warehouse_type_summary("Lab")
+		by_operation = {row["operation"]: row for row in summary["operations"]}
+		self.assertEqual(list(by_operation), list(warehouse_policy.OPERATION_ORDER))
+		self.assertTrue(by_operation["receipt"]["allowed"])
+		self.assertFalse(by_operation["issue"]["allowed"])
+		self.assertFalse(by_operation["loan"]["allowed"])
+		self.assertEqual(by_operation["issue"]["documents"], warehouse_policy.OPERATION_DOCUMENTS["issue"])
+		self.assertEqual(summary["outgoing_role"], "Stock Manager")
+		self.assertFalse(summary["loan_counts_as_transfer"])
+
+	def test_transit_loan_counts_as_transfer(self):
+		policy = frappe._dict(name="Transit", outgoing_role=None)
+		patch.object(frappe, "get_cached_doc", return_value=policy).start()
+		self.assertTrue(warehouse_policy.get_warehouse_type_summary("Transit")["loan_counts_as_transfer"])
+
+	def test_requires_read_permission(self):
+		patch.object(frappe, "has_permission", return_value=False).start()
+		patch.object(
+			frappe,
+			"throw",
+			side_effect=lambda message, exc=frappe.ValidationError: (_ for _ in ()).throw(exc(message)),
+		).start()
+		with self.assertRaises(frappe.PermissionError):
+			warehouse_policy.get_warehouse_type_summary("Lab")
+
+	def test_every_operation_has_documents(self):
+		self.assertEqual(set(warehouse_policy.OPERATION_DOCUMENTS), set(warehouse_policy.OPERATION_ORDER))
+
+	def test_summary_documents_match_movement_operation(self):
+		"""Every line of the summary is proven against the real classifier, so the two cannot drift."""
+		for operation, text, spec in warehouse_policy.OPERATION_RULES:
+			with self.subTest(text=text):
+				fields = {k: v for k, v in spec.items() if k not in ("outgoing", "loan")}
+				doc = frappe._dict(fields)
+				row = frappe._dict(target_warehouse="WH-T") if spec.get("is_internal_customer") else None
+				self.assertEqual(
+					warehouse_policy.movement_operation(
+						doc, bool(spec.get("outgoing")), bool(spec.get("loan")), row
+					),
+					operation,
+				)
+
+	def test_summary_covers_branches_of_movement_operation(self):
+		cases = [
+			# (doc fields, outgoing, expected)
+			({"doctype": "Stock Entry", "purpose": "Manufacture"}, True, "issue"),
+			({"doctype": "Stock Entry", "purpose": "Manufacture"}, False, "receipt"),
+			({"doctype": "Stock Entry", "purpose": "Repack"}, True, "issue"),
+			({"doctype": "Stock Entry", "purpose": "Material Consumption for Manufacture"}, True, "issue"),
+			({"doctype": "Stock Entry", "purpose": "Send to Subcontractor"}, False, "transfer"),
+			({"doctype": "Stock Entry", "purpose": "Subcontracting Delivery"}, True, "transfer"),
+			({"doctype": "Purchase Receipt", "is_return": 1}, True, "issue"),
+			({"doctype": "Delivery Note", "is_return": 1}, False, "sales"),
+			({"doctype": "Sales Invoice", "is_return": 1}, False, "sales"),
+			({"doctype": "POS Invoice", "is_return": 1}, False, "sales"),
+			({"doctype": "Subcontracting Receipt"}, False, "receipt"),
+			({"doctype": "Subcontracting Receipt"}, True, "issue"),
+			({"doctype": "Pick List", "purpose": "Delivery"}, True, "sales"),
+			({"doctype": "Pick List", "purpose": "Material Transfer"}, True, "transfer"),
+		]
+		for fields, outgoing, expected in cases:
+			with self.subTest(fields=fields, outgoing=outgoing):
+				self.assertEqual(
+					warehouse_policy.movement_operation(frappe._dict(fields), outgoing), expected
+				)
+				self.assertIn(expected, warehouse_policy.OPERATION_DOCUMENTS)
+
+		internal = frappe._dict(doctype="Sales Invoice", is_internal_customer=1)
+		self.assertEqual(
+			warehouse_policy.movement_operation(internal, True, row=frappe._dict(target_warehouse="T")),
+			"transfer",
+		)

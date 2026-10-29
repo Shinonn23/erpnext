@@ -36,6 +36,10 @@ frappe.ui.form.on("Warehouse", {
 		});
 	},
 
+	warehouse_type: function (frm) {
+		show_warehouse_type_summary(frm);
+	},
+
 	company: function (frm) {
 		if (frm.doc.account) {
 			frm.set_value("account", "");
@@ -101,6 +105,7 @@ frappe.ui.form.on("Warehouse", {
 		}
 
 		frm.toggle_enable(["is_group", "company"], false);
+		show_warehouse_type_summary(frm);
 
 		if (frm.doc.customer) {
 			frm.set_df_property("customer", "read_only", frm.doc.__onload.stock_exists);
@@ -118,5 +123,103 @@ function convert_to_group_or_ledger(frm) {
 		callback: function () {
 			frm.refresh();
 		},
+	});
+}
+
+const OPERATION_LABELS = {
+	receipt: "Receipt",
+	issue: "Issue",
+	transfer: "Transfer",
+	sales: "Sales",
+	loan: "Loan",
+	reconciliation: "Reconciliation",
+};
+
+function render_warehouse_type_summary(summary) {
+	if (!summary || !summary.restricted) {
+		return __("No Warehouse Type: no restriction");
+	}
+	const allowed = summary.operations.filter((row) => row.allowed);
+	const blocked = summary.operations.filter((row) => !row.allowed);
+	const name = (row) =>
+		__(OPERATION_LABELS[row.operation] || row.operation, null, "Warehouse Type Operation");
+	const parts = [
+		allowed.length ? __("Allowed: {0}", [allowed.map(name).join(", ")]) : __("Allowed: nothing"),
+	];
+	if (blocked.length) {
+		parts.push(__("Not allowed: {0}", [blocked.map(name).join(", ")]));
+	}
+	if (summary.outgoing_role) {
+		parts.push(
+			__("Moving stock out requires the {0} role", [frappe.utils.escape_html(summary.outgoing_role)])
+		);
+	}
+	if (summary.loan_counts_as_transfer) {
+		parts.push(__("Loan documents count as Transfer"));
+	}
+	return parts.join(". ");
+}
+
+function render_warehouse_type_detail(summary) {
+	if (!summary || !summary.restricted) {
+		return "";
+	}
+	const esc = frappe.utils.escape_html;
+	const rows = summary.operations
+		.map(
+			(row) =>
+				`<li>${row.allowed ? "&#10003;" : "&#10007;"} <b>${esc(
+					__(OPERATION_LABELS[row.operation] || row.operation, null, "Warehouse Type Operation")
+				)}</b>: ${esc(row.documents.join("; "))}</li>`
+		)
+		.join("");
+	return `<ul class="list-unstyled small">${rows}</ul>`;
+}
+
+function original_warehouse_type_description() {
+	const df = (frappe.get_meta("Warehouse").fields || []).find(
+		(field) => field.fieldname === "warehouse_type"
+	);
+	return df ? df.description : "";
+}
+
+function show_warehouse_type_summary(frm) {
+	const current_type = () => (frm.doc.is_group ? null : frm.doc.warehouse_type);
+	const warehouse_type = current_type();
+	const clear_intro = () => {
+		if (frm.__warehouse_type_intro) {
+			frm.set_intro("");
+			frm.__warehouse_type_intro = false;
+		}
+	};
+	const apply = (summary) => {
+		if (warehouse_type !== current_type()) {
+			return; // the type changed while the request was running
+		}
+		clear_intro();
+		if (frm.doc.is_group) {
+			frm.set_df_property("warehouse_type", "description", original_warehouse_type_description());
+			return;
+		}
+		const line = render_warehouse_type_summary(summary);
+		frm.set_intro(line + render_warehouse_type_detail(summary), "blue");
+		frm.__warehouse_type_intro = true;
+		frm.set_df_property(
+			"warehouse_type",
+			"description",
+			summary && summary.restricted ? line : original_warehouse_type_description()
+		);
+	};
+	if (!warehouse_type) {
+		apply(null);
+		return;
+	}
+	// A failed call keeps the previous state silently.
+	frappe.call({
+		method: "erpnext.stock.warehouse_policy.get_warehouse_type_summary",
+		args: { warehouse_type },
+		callback: (r) => r && r.message && apply(r.message),
+		error: () => {},
+		freeze: false,
 	});
 }

@@ -21,6 +21,88 @@ MOVEMENT_DOCTYPES = {
 	"Asset Capitalization",
 }
 
+# Which documents count as which operation, as (operation, text, spec). `spec` is what `movement_operation`
+# receives (doctype, optional purpose / is_return / is_internal_supplier, and the leg direction), so the
+# parity test can prove every line of the summary against the real function.
+OPERATION_RULES = (
+	("receipt", "Purchase Receipt (incoming leg and rejected warehouse)", {"doctype": "Purchase Receipt"}),
+	(
+		"receipt",
+		"Purchase Invoice with Update Stock (incoming leg)",
+		{"doctype": "Purchase Invoice"},
+	),
+	("receipt", "Subcontracting Receipt (finished goods)", {"doctype": "Subcontracting Receipt"}),
+	(
+		"receipt",
+		"Stock Entry incoming leg of any other purpose (Material Receipt, Manufacture, Repack,"
+		" Disassemble, Material Consumption for Manufacture ...)",
+		{"doctype": "Stock Entry", "purpose": "Material Receipt"},
+	),
+	(
+		"issue",
+		"Purchase Receipt / Purchase Invoice returns (stock goes back out)",
+		{"doctype": "Purchase Receipt", "outgoing": True},
+	),
+	(
+		"issue",
+		"Subcontracting Receipt supplied raw materials",
+		{"doctype": "Subcontracting Receipt", "outgoing": True},
+	),
+	(
+		"issue",
+		"Stock Entry outgoing leg of any other purpose (Material Issue, Manufacture raw materials,"
+		" Repack, Disassemble ...)",
+		{"doctype": "Stock Entry", "purpose": "Material Issue", "outgoing": True},
+	),
+	("issue", "Stock to Asset Conversion", {"doctype": "Stock to Asset Conversion", "outgoing": True}),
+	("issue", "Asset Capitalization (stock consumed)", {"doctype": "Asset Capitalization", "outgoing": True}),
+	(
+		"transfer",
+		"Stock Entry: Material Transfer, Material Transfer for Manufacture, Send to Subcontractor,"
+		" Subcontracting Delivery (both legs)",
+		{"doctype": "Stock Entry", "purpose": "Material Transfer"},
+	),
+	(
+		"transfer",
+		"Pick List that is not for Delivery",
+		{"doctype": "Pick List", "purpose": "Material Transfer"},
+	),
+	(
+		"transfer",
+		"Documents of an internal supplier, and internal customer lines with a target warehouse",
+		{"doctype": "Delivery Note", "is_internal_supplier": 1},
+	),
+	("sales", "Delivery Note (items and Packed Items)", {"doctype": "Delivery Note", "outgoing": True}),
+	(
+		"sales",
+		"Sales Invoice / POS Invoice with Update Stock",
+		{"doctype": "Sales Invoice", "outgoing": True},
+	),
+	(
+		"sales",
+		"Delivery Note / Sales Invoice / POS Invoice returns (the return into the warehouse also needs"
+		" Sales, not Receipt)",
+		{"doctype": "Delivery Note", "is_return": 1},
+	),
+	("sales", "Pick List for Delivery", {"doctype": "Pick List", "purpose": "Delivery", "outgoing": True}),
+	(
+		"loan",
+		"Custody Loan documents: loan, return and loan adjustment (a Transit warehouse treats these as"
+		" Transfer)",
+		{"doctype": "Stock Entry", "purpose": "Material Issue", "loan": True},
+	),
+	(
+		"reconciliation",
+		"Stock Reconciliation / Stock Count (both increases and decreases)",
+		{"doctype": "Stock Reconciliation"},
+	),
+)
+OPERATION_DOCUMENTS = {
+	operation: [text for op, text, _spec in OPERATION_RULES if op == operation]
+	for operation in ("receipt", "issue", "transfer", "sales", "loan", "reconciliation")
+}
+OPERATION_ORDER = ("receipt", "issue", "transfer", "sales", "loan", "reconciliation")
+
 
 def _current_doc(doctype, name):
 	"""Current (shared-lock) read, so a policy cannot change while the ledger is being posted."""
@@ -269,3 +351,34 @@ def validate_document(doc):
 	doc.flags.clear()
 	doc._action = "save"
 	validate_document_policy(doc)
+
+
+@frappe.whitelist()
+def get_warehouse_type_summary(warehouse_type=None):
+	"""What a Warehouse Type allows, for display on the Warehouse form. No type means no restriction."""
+	if not warehouse_type:
+		return {"warehouse_type": None, "restricted": False, "operations": [], "outgoing_role": None}
+	if not (
+		frappe.has_permission("Warehouse Type", "read", warehouse_type)
+		or frappe.has_permission("Warehouse", "read")
+	):
+		frappe.throw(
+			_("Not permitted to read Warehouse Type {0}.").format(warehouse_type), frappe.PermissionError
+		)
+	policy = frappe.get_cached_doc("Warehouse Type", warehouse_type)
+	operations = [
+		{
+			"operation": operation,
+			"allowed": bool(cint(policy.get(f"allow_{operation}"))),
+			"documents": OPERATION_DOCUMENTS[operation],
+		}
+		for operation in OPERATION_ORDER
+	]
+	return {
+		"warehouse_type": policy.name,
+		"restricted": True,
+		"operations": operations,
+		"outgoing_role": policy.outgoing_role or None,
+		# validate_warehouse_operation treats loan as transfer for this type
+		"loan_counts_as_transfer": policy.name == "Transit",
+	}
