@@ -82,10 +82,26 @@ class TestPartyNames(unittest.TestCase):
 			[("Customer", "customer_name"), ("Employee", "employee_name"), ("Supplier", "supplier_name")],
 		)
 
-	def test_employee_name_needs_read_permission(self):
+	def test_employee_name_without_employee_read(self):
+		calls = []
+
+		def fake_get_all(doctype, **kwargs):
+			calls.append(kwargs)
+			return [("6609003", "Somchai")]
+
+		with (
+			patch("frappe.get_all", fake_get_all),
+			patch("frappe.has_permission", return_value=False),
+		):
+			names = get_party_names({"Employee": {"6609003"}})
+		self.assertEqual(names[("Employee", "6609003")], "Somchai")
+		self.assertEqual(calls[0]["fields"], ["name", "employee_name"])
+		self.assertTrue(calls[0]["ignore_permissions"])
+
+	def test_shareholder_needs_read_permission(self):
 		with (
 			patch("frappe.get_all", side_effect=AssertionError("must not query")),
 			patch("frappe.has_permission", return_value=False),
 		):
-			names = get_party_names({"Employee": {"6609003"}})
-		self.assertEqual(names[("Employee", "6609003")], "6609003")
+			names = get_party_names({"Shareholder": {"SH-1"}})
+		self.assertEqual(names[("Shareholder", "SH-1")], "SH-1")

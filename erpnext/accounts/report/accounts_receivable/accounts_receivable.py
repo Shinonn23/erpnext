@@ -59,8 +59,11 @@ PARTY_NAME_FIELDS = {
 def get_party_names(parties_by_type):
 	"""{(party_type, party): name} with one query per party type; the party code if no name is found.
 
-	Customer / Supplier are read as before; other party types (Employee, Shareholder) only when the
-	session user may read that doctype, so no name is disclosed past the doctype permission."""
+	Customer, Supplier and Employee names are read without a doctype permission check, and only the
+	one name field (customer_name / supplier_name / employee_name) is ever requested: accountants
+	cannot identify an employee payable by its code, and see employee_name on Payment Entry, Expense
+	Claim and Employee Advance already. Which rows appear stays with the report's own permission
+	rules. Other party types (Shareholder) are read only when the user may read that doctype."""
 	names = {}
 	for party_type, parties in parties_by_type.items():
 		parties = [p for p in parties if p]
@@ -69,7 +72,7 @@ def get_party_names(parties_by_type):
 		fieldname = PARTY_NAME_FIELDS.get(party_type)
 		found = {}
 		if fieldname and (
-			party_type in ("Customer", "Supplier") or frappe.has_permission(party_type, "read")
+			party_type in ("Customer", "Supplier", "Employee") or frappe.has_permission(party_type, "read")
 		):
 			found = dict(
 				frappe.get_all(
@@ -78,6 +81,7 @@ def get_party_names(parties_by_type):
 					fields=["name", fieldname],
 					as_list=True,
 					limit_page_length=0,
+					ignore_permissions=True,
 				)
 			)
 		for party in parties:
