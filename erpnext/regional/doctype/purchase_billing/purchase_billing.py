@@ -5,6 +5,7 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 from frappe.query_builder import DocType
+from frappe.utils import flt
 
 
 class PurchaseBilling(Document):
@@ -19,11 +20,20 @@ class PurchaseBilling(Document):
 		self.set_branch_address()
 
 	def set_branch_address(self):
-		"""The company branch of the first invoice listed (the BRANCH part of the name)."""
-		from erpnext.regional.thailand.custom.naming_branch import billing_document_address
+		"""One billing, one company branch (each branch files its own VAT): the invoices listed must be of one branch,
+		which names the billing."""
+		from erpnext.regional.thailand.custom.naming_branch import billing_line_addresses
 
-		if not self.company_tax_address:
-			self.company_tax_address = billing_document_address(self)
+		addresses = billing_line_addresses(self)
+		if len(addresses) > 1:
+			frappe.throw(
+				_(
+					"Invoices of different company branches ({0}) cannot be on one billing. "
+					"Please make a separate billing for each branch."
+				).format(", ".join(sorted(addresses)))
+			)
+		if addresses:
+			self.company_tax_address = addresses[0]
 
 
 @frappe.whitelist()
@@ -97,19 +107,24 @@ def update_purchase_billing_outstanding_amount(doc, method=None):
 			)
 		)
 	for name in sorted(names):
-		bill = frappe.get_doc("Purchase Billing", name)
-		if bill.docstatus != 1:
+		if frappe.db.get_value("Purchase Billing", name, "docstatus") != 1:
 			continue
-		total_outstanding_amount = 0
+		bill = frappe.get_doc("Purchase Billing", name)
+		total_outstanding_amount, changed = 0, False
 		for bill_line in bill.purchase_billing_line:
-			outstanding = frappe.db.get_value(
-				"Purchase Invoice", bill_line.purchase_invoice, "outstanding_amount"
+			outstanding = flt(
+				frappe.db.get_value("Purchase Invoice", bill_line.purchase_invoice, "outstanding_amount")
 			)
-			bill_line.outstanding_amount = outstanding or 0
-			total_outstanding_amount += bill_line.outstanding_amount
+			changed = changed or flt(bill_line.outstanding_amount) != outstanding
+			bill_line.outstanding_amount = outstanding
+			total_outstanding_amount += outstanding
+		closed = 0 if total_outstanding_amount else 1
+		if not changed and int(bill.closed or 0) == closed:
+			continue
 		bill.total_outstanding_amount = total_outstanding_amount
-		bill.closed = 0 if bill.total_outstanding_amount else 1
-		bill.save()
+		bill.closed = closed
+		# without the acting user's rights: whoever approves the payment may not write billings
+		bill.save(ignore_permissions=True)
 
 
 # the name this function had while it was not hooked to anything

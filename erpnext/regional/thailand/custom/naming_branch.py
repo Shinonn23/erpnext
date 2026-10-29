@@ -103,18 +103,25 @@ def _resolve_branch_address(doc):
 	)
 
 
+def billing_line_addresses(doc):
+	"""The branch addresses of the invoices a billing lists, in row order, each once (blanks ignored)."""
+	table, invoice_field, invoice_doctype, address_field = BILLING_LINES[doc.get("doctype")]
+	found = []
+	for row in doc.get(table) or []:
+		if row.get(invoice_field):
+			address = frappe.db.get_value(invoice_doctype, row.get(invoice_field), address_field)
+			if address and address not in found:
+				found.append(address)
+	return found
+
+
 def billing_document_address(doc):
 	"""The branch of a billing or receipt from what it lists: the first invoice of a billing, the single branch of the
 	Payment Entries of a receipt (None when the rows name none, or a receipt spans several)."""
 	doctype = doc.get("doctype")
 	if doctype in BILLING_LINES:
-		table, invoice_field, invoice_doctype, address_field = BILLING_LINES[doctype]
-		for row in doc.get(table) or []:
-			if row.get(invoice_field):
-				address = frappe.db.get_value(invoice_doctype, row.get(invoice_field), address_field)
-				if address:
-					return address
-		return None
+		addresses = billing_line_addresses(doc)
+		return addresses[0] if addresses else None
 	addresses = {
 		frappe.db.get_value("Payment Entry", row.get("payment_entry"), "company_tax_address")
 		for row in doc.get("payment_references") or []

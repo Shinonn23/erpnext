@@ -20,11 +20,20 @@ class SalesBilling(Document):
 		self.set_branch_address()
 
 	def set_branch_address(self):
-		"""The company branch of the first invoice listed (the BRANCH part of the name)."""
-		from erpnext.regional.thailand.custom.naming_branch import billing_document_address
+		"""One billing, one company branch (each branch files its own VAT): the invoices listed must be of one branch,
+		which names the billing."""
+		from erpnext.regional.thailand.custom.naming_branch import billing_line_addresses
 
-		if not self.company_tax_address:
-			self.company_tax_address = billing_document_address(self)
+		addresses = billing_line_addresses(self)
+		if len(addresses) > 1:
+			frappe.throw(
+				_(
+					"Invoices of different company branches ({0}) cannot be on one billing. "
+					"Please make a separate billing for each branch."
+				).format(", ".join(sorted(addresses)))
+			)
+		if addresses:
+			self.company_tax_address = addresses[0]
 
 
 @frappe.whitelist()
@@ -83,6 +92,19 @@ def get_due_billing(
 	excluded_invoices = [d[0] for d in excluded_invoices]
 	invoices = [inv for inv in invoices if inv["name"] not in excluded_invoices]
 	return invoices
+
+
+def deduct_used_allocations(payment_entry, used):
+	"""Take from each reference row what the earlier entries already allocate to its invoice. A credit note (negative
+	outstanding) is used up the same way; a row is dropped only when its own outstanding is used up, never because it
+	was negative to begin with."""
+	for ref in list(payment_entry.references):
+		original = flt(ref.outstanding_amount)
+		left = original - used.get(ref.reference_name, 0)
+		if (original > 0 and left <= 0) or (original < 0 and left >= 0):
+			payment_entry.remove(ref)
+		else:
+			ref.outstanding_amount = left
 
 
 @frappe.whitelist()
@@ -149,10 +171,7 @@ def create_multi_payment_entries(payment_details, sales_billing_name, posting_da
 			)
 		payment_entry.validate()  # Validate to get the total outstanding
 		if int(allocate_amount):
-			for ref in list(payment_entry.references):
-				ref.outstanding_amount = flt(ref.outstanding_amount) - used.get(ref.reference_name, 0)
-				if ref.outstanding_amount <= 0:
-					payment_entry.remove(ref)
+			deduct_used_allocations(payment_entry, used)
 			payment_entry.allocate_amount_to_references(payment_entry.paid_amount, False, True)
 			for ref in payment_entry.references:
 				used[ref.reference_name] = used.get(ref.reference_name, 0) + flt(ref.allocated_amount)

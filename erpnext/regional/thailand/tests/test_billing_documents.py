@@ -1,5 +1,6 @@
 """Offline tests of the Thai billing documents: Purchase Billing, Payment Receipt and the BRANCH of their names."""
 
+import importlib
 import json
 import unittest
 from pathlib import Path
@@ -72,6 +73,7 @@ class TestDoctypeJson(unittest.TestCase):
 		hooks = (DOCTYPES.parents[1] / "hooks.py").read_text()
 		handler = "purchase_billing.update_purchase_billing_outstanding_amount"
 		self.assertEqual(hooks.count(handler), 2)
+		self.assertEqual(hooks.count("payment_entry.update_sales_billing_outstanding_amount"), 2)
 
 
 class TestPurchaseBillingDue(unittest.TestCase):
@@ -198,34 +200,150 @@ class TestMultiPaymentsLeaveDraft(unittest.TestCase):
 		self.assertIn("used", body)
 
 
-class TestPurchaseBillingHook(unittest.TestCase):
-	def run_hook(self, outstanding):
-		bill = mock.MagicMock(docstatus=1)
-		bill.purchase_billing_line = [
-			SimpleNamespace(purchase_invoice=i, outstanding_amount=9) for i in outstanding
-		]
-		fake = mock.MagicMock()
-		fake.get_all.return_value = ["PUR-BIL-1"]
-		fake.get_doc.return_value = bill
-		fake.db.get_value.side_effect = lambda doctype, name, field: outstanding[name]
-		doc = frappe._dict(
-			purchase_billing=None,
-			references=[frappe._dict(reference_doctype="Purchase Invoice", reference_name="PI-1")],
-		)
-		with mock.patch.object(purchase_billing, "frappe", fake):
-			purchase_billing.update_purchase_billing_outstanding_amount(doc, "on_submit")
-		return bill
+class Line:
+	def __init__(self, invoice, outstanding):
+		self.purchase_invoice = self.sales_invoice = invoice
+		self.outstanding_amount = outstanding
+		self.name = invoice
 
-	def test_closes_when_paid_and_opens_when_not(self):
-		bill = self.run_hook({"PI-1": 0, "PI-2": 0})
-		self.assertEqual((bill.closed, bill.total_outstanding_amount), (1, 0))
-		bill.save.assert_called_once()
-		bill = self.run_hook({"PI-1": 0, "PI-2": 50})
-		self.assertEqual((bill.closed, bill.total_outstanding_amount), (0, 50))
+
+class Bill:
+	"""A submitted billing as a Document: save() records the rights it was saved with."""
+
+	def __init__(self, outstanding, closed=0):
+		self.lines = [Line(i, o) for i, o in outstanding.items()]
+		self.purchase_billing_line = self.sales_billing_line = self.lines
+		self.total_outstanding_amount = sum(outstanding.values())
+		self.closed = closed
+		self.saved = []
+
+	def save(self, *args, **kwargs):
+		self.saved.append(kwargs)
+
+
+class TestBillingHooks(unittest.TestCase):
+	def run_hook(self, module, function, doctype, invoice_doctype, bill, paid, docstatus=1, named=None):
+		fake = mock.MagicMock()
+		fake.get_all.return_value = ["B-1"]
+		fake.get_doc.return_value = bill
+
+		def get_value(dt, name, field=None):
+			if dt == doctype:
+				return docstatus
+			return paid[name]
+
+		fake.db.get_value.side_effect = get_value
+		doc = frappe._dict(
+			purchase_billing=named,
+			sales_billing=named,
+			references=[frappe._dict(reference_doctype=invoice_doctype, reference_name="INV-1")],
+		)
+		with mock.patch.object(module, "frappe", fake):
+			getattr(module, function)(doc, "on_submit")
+		return fake
+
+	def both(self):
+		from erpnext.regional.thailand.custom import payment_entry
+
+		return (
+			(
+				purchase_billing,
+				"update_purchase_billing_outstanding_amount",
+				"Purchase Billing",
+				"Purchase Invoice",
+			),
+			(payment_entry, "update_sales_billing_outstanding_amount", "Sales Billing", "Sales Invoice"),
+		)
+
+	def test_closes_when_paid_and_opens_when_not_saved_without_the_users_rights(self):
+		for module, function, doctype, invoice_doctype in self.both():
+			with self.subTest(function):
+				bill = Bill({"INV-1": 100, "INV-2": 50})
+				self.run_hook(module, function, doctype, invoice_doctype, bill, {"INV-1": 0, "INV-2": 0})
+				self.assertEqual((bill.closed, bill.total_outstanding_amount), (1, 0))
+				self.assertEqual(bill.saved, [{"ignore_permissions": True}])
+				bill = Bill({"INV-1": 0, "INV-2": 0}, closed=1)
+				self.run_hook(module, function, doctype, invoice_doctype, bill, {"INV-1": 0, "INV-2": 50})
+				self.assertEqual((bill.closed, bill.total_outstanding_amount), (0, 50))
 
 	def test_the_billing_is_found_through_its_invoices_without_the_payment_link(self):
-		bill = self.run_hook({"PI-1": 0})
-		self.assertEqual(bill.closed, 1)
+		for module, function, doctype, invoice_doctype in self.both():
+			bill = Bill({"INV-1": 10})
+			fake = self.run_hook(module, function, doctype, invoice_doctype, bill, {"INV-1": 0})
+			fake.get_all.assert_called_once()
+			self.assertEqual(bill.closed, 1)
+
+	def test_cancelled_or_draft_billings_and_unchanged_ones_are_left_alone(self):
+		for module, function, doctype, invoice_doctype in self.both():
+			for docstatus in (0, 2):
+				bill = Bill({"INV-1": 10})
+				self.run_hook(module, function, doctype, invoice_doctype, bill, {"INV-1": 0}, docstatus)
+				self.assertEqual(bill.saved, [])
+			bill = Bill({"INV-1": 10})
+			self.run_hook(module, function, doctype, invoice_doctype, bill, {"INV-1": 10})
+			self.assertEqual(bill.saved, [])
+
+
+class Ref:
+	def __init__(self, name, outstanding):
+		self.reference_name = name
+		self.outstanding_amount = outstanding
+
+
+class Entry:
+	def __init__(self, rows):
+		self.references = [Ref(n, o) for n, o in rows]
+
+	def remove(self, ref):
+		self.references.remove(ref)
+
+
+class TestMultiPaymentAllocation(unittest.TestCase):
+	def test_two_payments_and_a_credit_note(self):
+		rows = [("SI-1", 100.0), ("SI-2", 60.0), ("CN-1", -30.0)]
+		used = {}
+		first = Entry(rows)
+		sales_billing.deduct_used_allocations(first, used)
+		self.assertEqual([r.reference_name for r in first.references], ["SI-1", "SI-2", "CN-1"])
+		# the first payment takes SI-1 in full, 10 of SI-2 and the whole credit note
+		used.update({"SI-1": 100.0, "SI-2": 10.0, "CN-1": -30.0})
+		second = Entry(rows)
+		sales_billing.deduct_used_allocations(second, used)
+		self.assertEqual(
+			[(r.reference_name, r.outstanding_amount) for r in second.references], [("SI-2", 50.0)]
+		)
+
+	def test_a_credit_note_nothing_has_used_stays(self):
+		entry = Entry([("SI-1", 100.0), ("CN-1", -30.0)])
+		sales_billing.deduct_used_allocations(entry, {"SI-1": 40.0})
+		self.assertEqual(
+			[(r.reference_name, r.outstanding_amount) for r in entry.references],
+			[("SI-1", 60.0), ("CN-1", -30.0)],
+		)
+
+
+class TestBillingBranches(unittest.TestCase):
+	def test_invoices_of_two_branches_are_refused(self):
+		for cls, _line in (
+			(sales_billing.SalesBilling, "sales_billing_line"),
+			(purchase_billing.PurchaseBilling, "purchase_billing_line"),
+		):
+			with self.subTest(cls.__name__):
+				stub = SimpleNamespace(company_tax_address=None)
+				module = importlib.import_module(cls.__module__)
+				fake = mock.MagicMock()
+				fake.throw.side_effect = throw
+				with (
+					mock.patch.object(module, "frappe", fake),
+					mock.patch.object(module, "_", lambda m: m),
+					mock.patch.object(naming_branch, "billing_line_addresses", return_value=["B3", "B7"]),
+				):
+					with self.assertRaises(Thrown) as ctx:
+						cls.set_branch_address(stub)
+				self.assertIn("different company branches", str(ctx.exception))
+				with mock.patch.object(naming_branch, "billing_line_addresses", return_value=["B3"]):
+					cls.set_branch_address(stub)
+				self.assertEqual(stub.company_tax_address, "B3")
 
 
 if __name__ == "__main__":

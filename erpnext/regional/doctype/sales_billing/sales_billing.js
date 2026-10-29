@@ -3,7 +3,7 @@
 
 frappe.ui.form.on("Sales Billing", {
 	refresh(frm) {
-		if (frm.doc.docstatus == 1) {
+		if (frm.doc.docstatus == 1 && frappe.model.can_write(frm.doctype)) {
 			frm.add_custom_button(frm.doc.closed ? __("Force Open") : __("Force Closed"), () => {
 				frm.set_value("closed", !frm.doc.closed);
 				frm.save("Update");

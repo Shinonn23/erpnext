@@ -344,20 +344,42 @@ def reconcile_undue_tax_gls(vouchers, company, unreconcile=False):
 		utils.reconcile_gl(undue_tax_gls)
 
 
-def update_sales_billing_outstanding_amount(doc, method):
-	# Document: Payment Entry
-	total_outstanding_amount = 0
-	if not doc.sales_billing:
-		return
-	bill = frappe.get_doc("Sales Billing", doc.sales_billing)
-	for bill_line in bill.sales_billing_line:
-		invoice = frappe.get_doc("Sales Invoice", bill_line.sales_invoice)
-		bill_line.outstanding_amount = invoice.outstanding_amount
-		total_outstanding_amount += invoice.outstanding_amount
-	bill.total_outstanding_amount = total_outstanding_amount
-	# Status closed
-	bill.closed = 0 if bill.total_outstanding_amount else 1
-	bill.save()
+def update_sales_billing_outstanding_amount(doc, method=None):
+	"""Document: Payment Entry (on submit and on cancel). Refreshes the outstanding amounts of the Sales Billing the
+	entry names and of every other submitted one that lists an invoice the entry pays; a billing whose invoices are
+	all paid is closed, and opens again when the payment is cancelled. A cancelled or draft billing (for example one
+	a Draft entry of Create Multi-Payments still names) is skipped. The billing is saved without the acting user's
+	rights: whoever approves the payment may not write billings."""
+	names = {doc.get("sales_billing")} if doc.get("sales_billing") else set()
+	invoices = [
+		ref.reference_name for ref in doc.get("references") or [] if ref.reference_doctype == "Sales Invoice"
+	]
+	if invoices:
+		names |= set(
+			frappe.get_all(
+				"Sales Billing Line",
+				filters={"sales_invoice": ["in", invoices], "parenttype": "Sales Billing"},
+				pluck="parent",
+			)
+		)
+	for name in sorted(names):
+		if frappe.db.get_value("Sales Billing", name, "docstatus") != 1:
+			continue
+		bill = frappe.get_doc("Sales Billing", name)
+		total_outstanding_amount, changed = 0, False
+		for bill_line in bill.sales_billing_line:
+			outstanding = flt(
+				frappe.db.get_value("Sales Invoice", bill_line.sales_invoice, "outstanding_amount")
+			)
+			changed = changed or flt(bill_line.outstanding_amount) != outstanding
+			bill_line.outstanding_amount = outstanding
+			total_outstanding_amount += outstanding
+		closed = 0 if total_outstanding_amount else 1
+		if not changed and int(bill.closed or 0) == closed:
+			continue
+		bill.total_outstanding_amount = total_outstanding_amount
+		bill.closed = closed
+		bill.save(ignore_permissions=True)
 
 
 @frappe.whitelist()
