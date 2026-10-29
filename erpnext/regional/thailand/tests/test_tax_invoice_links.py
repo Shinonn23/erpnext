@@ -27,6 +27,7 @@ def tinv(doctype="Purchase Tax Invoice", name="CD00003-PTI6910001", **values):
 	values.setdefault("voucher_type", "Payment Entry")
 	values.setdefault("voucher_no", "PE-1")
 	values.setdefault("splitted_tax_invoice", None)
+	values.setdefault("voucher_detail_no", None)
 	return SimpleNamespace(doctype=doctype, name=name, **values)
 
 
@@ -80,9 +81,7 @@ class TestCancelAll(unittest.TestCase):
 		docs = []
 		fake.get_doc.side_effect = lambda doctype, name: docs.append(name) or mock.MagicMock()
 		with mock.patch.object(custom_api, "frappe", fake):
-			custom_api.cancel_related_tax_invoice(
-				SimpleNamespace(doctype="Purchase Invoice", name="P1"), None
-			)
+			custom_api.cancel_related_tax_invoice(frappe._dict(doctype="Purchase Invoice", name="P1"), None)
 		self.assertEqual(docs, ["PTI-1", "PTI-2"])
 
 
@@ -278,6 +277,7 @@ def voucher(**values):
 		tax_invoice_ref_type="Purchase Tax Invoice",
 		tax_invoice_ref="PTI-1",
 		splitted_tax_invoices=[row],
+		meta=SimpleNamespace(has_field=lambda fieldname: True),
 	)
 	doc.update(values)
 	return doc
@@ -308,22 +308,73 @@ class TestLinksFollowTheLifeOfTheTaxInvoice(unittest.TestCase):
 		self.assertIsNone(doc.tax_invoice_ref)
 		self.assertIsNone(doc.splitted_tax_invoices[0].tax_invoice_ref)
 
-	def test_a_cancelled_tax_invoice_is_dropped_from_every_voucher_table(self):
+	def clear(self, **values):
 		fake = mock.MagicMock()
 		fake.db.has_column.return_value = True
+		invoice = tinv(**values)
 		with mock.patch.object(custom_api, "frappe", fake):
-			custom_api.clear_tax_invoice_links("Purchase Tax Invoice", "PTI-1")
-		tables = [c.args[0] for c in fake.db.set_value.call_args_list]
+			custom_api.clear_tax_invoice_links(invoice)
+		return [(c.args[0], c.args[1]) for c in fake.db.set_value.call_args_list], fake
+
+	def test_a_cancelled_tax_invoice_is_dropped_from_its_own_voucher_only(self):
+		link = {"tax_invoice_ref_type": "Purchase Tax Invoice", "tax_invoice_ref": "CD00003-PTI6910001"}
+		calls, fake = self.clear()
+		self.assertEqual(calls, [("Payment Entry", {"name": "PE-1", **link})])
 		self.assertEqual(
-			tables,
+			fake.db.set_value.call_args.args[2], {"tax_invoice_ref_type": None, "tax_invoice_ref": None}
+		)
+		self.assertIs(fake.db.set_value.call_args.kwargs["update_modified"], False)
+
+	def test_its_journal_entry_or_split_row_is_cleared_too(self):
+		calls, _ = self.clear(voucher_type="Journal Entry", voucher_no="JV-1", voucher_detail_no="ROW1")
+		self.assertEqual(
+			[(d, f["name"]) for d, f in calls],
+			[("Journal Entry", "JV-1"), ("Journal Entry Tax Invoice Detail", "ROW1")],
+		)
+		calls, _ = self.clear(voucher_type="Purchase Invoice", voucher_no="P-1", voucher_detail_no="SPL1")
+		self.assertEqual(calls[1][0], "Purchase Invoice Tax Invoice Detail")
+
+	def test_without_a_known_voucher_every_table_is_looked_at(self):
+		calls, _ = self.clear(voucher_type=None, voucher_no=None)
+		self.assertEqual(
+			[d for d, _ in calls],
 			[*custom_api.TAX_INVOICE_SOURCE_DOCTYPES, *custom_api.TAX_INVOICE_ROW_DOCTYPES],
 		)
-		first = fake.db.set_value.call_args_list[0]
-		self.assertEqual(
-			first.args[1], {"tax_invoice_ref_type": "Purchase Tax Invoice", "tax_invoice_ref": "PTI-1"}
+
+	def test_a_journal_entry_has_links_on_its_rows_only(self):
+		class Journal:
+			doctype = "Journal Entry"
+			docstatus = 0
+			name = "JV-1"
+			meta = SimpleNamespace(has_field=lambda fieldname: False)
+
+			def __init__(self):
+				self.tax_invoice_details = [
+					SimpleNamespace(
+						doctype="Journal Entry Tax Invoice Detail",
+						name="ROW1",
+						tax_invoice_ref_type="Sales Tax Invoice",
+						tax_invoice_ref="STI-1",
+					)
+				]
+
+			def get(self, key):
+				return getattr(self, key, None)
+
+		journal = Journal()
+		custom_api.reset_draft_tax_invoice_links(journal)
+		self.assertIsNone(journal.tax_invoice_details[0].tax_invoice_ref)
+		self.assertFalse(hasattr(journal, "tax_invoice_ref"))
+		# submitted: the guard restores the row from the database, and sets no header
+		journal.docstatus = 1
+		fake = mock.MagicMock()
+		fake.db.get_value.side_effect = lambda doctype, name, fields=None: (
+			("Sales Tax Invoice", "STI-1") if doctype == "Journal Entry Tax Invoice Detail" else 1
 		)
-		self.assertEqual(first.args[2], {"tax_invoice_ref_type": None, "tax_invoice_ref": None})
-		self.assertIs(first.kwargs["update_modified"], False)
+		with mock.patch.object(custom_api, "frappe", fake):
+			custom_api.keep_tax_invoice_links(journal)
+		self.assertEqual(journal.tax_invoice_details[0].tax_invoice_ref, "STI-1")
+		self.assertFalse(hasattr(journal, "tax_invoice_ref"))
 
 	def test_the_tax_invoices_clear_the_links_when_cancelled(self):
 		for controller, doctype in (
@@ -333,7 +384,7 @@ class TestLinksFollowTheLifeOfTheTaxInvoice(unittest.TestCase):
 			doc = SimpleNamespace(doctype=doctype, name="X-1")
 			with mock.patch(f"{controller.__module__}.clear_tax_invoice_links") as clear:
 				controller.on_cancel(doc)
-			clear.assert_called_once_with(doctype, "X-1")
+			clear.assert_called_once_with(doc)
 
 	def run_guard(self, db_link, doc, cancelled=False):
 		fake = mock.MagicMock()
@@ -418,7 +469,7 @@ class TestSupplierNumberOnce(unittest.TestCase):
 		doc.validate_supplier_number = lambda **kw: PurchaseTaxInvoice.validate_supplier_number(doc, **kw)
 		return doc
 
-	def run_validate(self, doc, duplicates):
+	def run_validate(self, doc, duplicates, method="validate"):
 		fake = mock.MagicMock()
 		fake.get_all.return_value = duplicates
 		fake.throw.side_effect = lambda message, *a, **kw: (_ for _ in ()).throw(
@@ -427,7 +478,7 @@ class TestSupplierNumberOnce(unittest.TestCase):
 		fake.bold.side_effect = lambda value: value
 		module = PurchaseTaxInvoice.__module__
 		with mock.patch(f"{module}.frappe", fake), mock.patch(f"{module}.set_company_branch_snapshot"):
-			PurchaseTaxInvoice.validate(doc)
+			getattr(PurchaseTaxInvoice, method)(doc)
 		return fake
 
 	def test_submit_warns_once(self):
@@ -444,12 +495,16 @@ class TestSupplierNumberOnce(unittest.TestCase):
 
 	def test_an_unchanged_number_after_submit_is_left_alone_even_when_empty(self):
 		for number in ("", "INV-9"):
-			fake = self.run_validate(self.doc(number, number, "update_after_submit"), ["PTI-1"])
+			fake = self.run_validate(
+				self.doc(number, number, "update_after_submit"), ["PTI-1"], "before_update_after_submit"
+			)
 			fake.msgprint.assert_not_called()
 			fake.throw.assert_not_called()
 
 	def test_a_changed_number_after_submit_is_checked_and_warned_once(self):
-		fake = self.run_validate(self.doc("INV-10", "INV-9", "update_after_submit"), ["PTI-1"])
+		fake = self.run_validate(
+			self.doc("INV-10", "INV-9", "update_after_submit"), ["PTI-1"], "before_update_after_submit"
+		)
 		fake.msgprint.assert_called_once()
 		with self.assertRaises(frappe.ValidationError):
-			self.run_validate(self.doc("", "INV-9", "update_after_submit"), [])
+			self.run_validate(self.doc("", "INV-9", "update_after_submit"), [], "before_update_after_submit")

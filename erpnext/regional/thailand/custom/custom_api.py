@@ -897,28 +897,49 @@ def cancel_related_tax_invoice(doc, method):
 	clear_link_values(doc)
 
 
+def has_header_link(doc):
+	"""The voucher header has the Tax Invoice link (a Journal Entry has it on its rows only)."""
+	meta = getattr(doc, "meta", None)
+	return bool(meta and meta.has_field("tax_invoice_ref"))
+
+
+def link_rows(doc):
+	"""The rows of the voucher's tax invoice table (Journal Entry, split Purchase Invoice / Expense Claim)."""
+	field = TAX_INVOICE_ROW_FIELDS.get(doc.doctype)
+	return (doc.get(field) or []) if field else []
+
+
 def clear_link_values(doc):
 	"""Blank the Tax Invoice link on the document in memory: header and the rows of its tax invoice table."""
-	if not hasattr(doc, "tax_invoice_ref"):
-		return
-	doc.tax_invoice_ref_type = None
-	doc.tax_invoice_ref = None
-	for row in doc.get(TAX_INVOICE_ROW_FIELDS.get(doc.doctype, "")) or []:
+	if has_header_link(doc):
+		doc.tax_invoice_ref_type = None
+		doc.tax_invoice_ref = None
+	for row in link_rows(doc):
 		row.tax_invoice_ref_type = None
 		row.tax_invoice_ref = None
 
 
-def clear_tax_invoice_links(tinv_doctype, tinv_name):
-	"""A cancelled tax invoice is dropped from every voucher header and row that pointed at it (database only)."""
-	for doctype in (*TAX_INVOICE_SOURCE_DOCTYPES, *TAX_INVOICE_ROW_DOCTYPES):
-		if not frappe.db.has_column(doctype, "tax_invoice_ref"):
-			continue
-		frappe.db.set_value(
-			doctype,
-			{"tax_invoice_ref_type": tinv_doctype, "tax_invoice_ref": tinv_name},
-			{"tax_invoice_ref_type": None, "tax_invoice_ref": None},
-			update_modified=False,
-		)
+def clear_tax_invoice_links(tinv):
+	"""A cancelled tax invoice is dropped from the voucher header and row it was linked from (database only).
+	Only its own voucher is touched; a tax invoice with no known voucher is looked for in every table."""
+	link = {"tax_invoice_ref_type": tinv.doctype, "tax_invoice_ref": tinv.name}
+	blank = {"tax_invoice_ref_type": None, "tax_invoice_ref": None}
+	targets = []  # (doctype, filters)
+	if tinv.voucher_type and tinv.voucher_no:
+		targets.append((tinv.voucher_type, {"name": tinv.voucher_no, **link}))
+		if tinv.voucher_detail_no:
+			row_doctype = (
+				"Journal Entry Tax Invoice Detail"
+				if tinv.voucher_type == "Journal Entry"
+				else SPLIT_ROW_DOCTYPES.get(tinv.voucher_type)
+			)
+			if row_doctype:
+				targets.append((row_doctype, {"name": tinv.voucher_detail_no, **link}))
+	else:
+		targets = [(d, dict(link)) for d in (*TAX_INVOICE_SOURCE_DOCTYPES, *TAX_INVOICE_ROW_DOCTYPES)]
+	for doctype, filters in targets:
+		if frappe.db.has_column(doctype, "tax_invoice_ref"):
+			frappe.db.set_value(doctype, filters, blank, update_modified=False)
 
 
 def reset_draft_tax_invoice_links(doc, method=None):
@@ -930,12 +951,12 @@ def reset_draft_tax_invoice_links(doc, method=None):
 def keep_tax_invoice_links(doc, method=None):
 	"""Update After Submit: a form that does not carry the link (loaded before the tax invoice was made, or a
 	script) must not blank it. The link is restored from the database while that tax invoice is not cancelled."""
-	if doc.docstatus != 1 or not hasattr(doc, "tax_invoice_ref"):
+	if doc.docstatus != 1:
 		return
 	keep = {}
-	if not doc.tax_invoice_ref:
+	if has_header_link(doc) and not doc.tax_invoice_ref:
 		keep[(doc.doctype, doc.name)] = doc
-	for row in doc.get(TAX_INVOICE_ROW_FIELDS.get(doc.doctype, "")) or []:
+	for row in link_rows(doc):
 		if not row.tax_invoice_ref and row.name:
 			keep[(row.doctype, row.name)] = row
 	for (doctype, name), target in keep.items():

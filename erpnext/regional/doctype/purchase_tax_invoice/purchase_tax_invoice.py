@@ -34,9 +34,10 @@ class PurchaseTaxInvoice(Document):
 		self.validate_account()
 		self.compute_report_date()
 		set_company_branch_snapshot(self)
-		if self._action == "update_after_submit":
-			# the number can be changed after submit (not removed); a record with none from before is left alone
-			self.validate_supplier_number(changed_only=True)
+
+	def before_update_after_submit(self):
+		# the number can be changed after submit (not removed); a record with none from before is left alone
+		self.validate_supplier_number(changed_only=True)
 
 	def before_submit(self):
 		self.validate_supplier_number()
@@ -47,7 +48,7 @@ class PurchaseTaxInvoice(Document):
 
 	def on_cancel(self):
 		# a cancelled record is not kept on the vouchers (this record keeps Voucher No / Voucher Detail No)
-		clear_tax_invoice_links(self.doctype, self.name)
+		clear_tax_invoice_links(self)
 
 	def validate_supplier_number(self, changed_only=False):
 		"""The supplier's own tax invoice number is required; the same number of the same supplier twice is

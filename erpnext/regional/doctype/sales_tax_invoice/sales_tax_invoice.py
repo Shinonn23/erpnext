@@ -41,7 +41,7 @@ class SalesTaxInvoice(Document):
 
 	def on_cancel(self):
 		# a cancelled record is not kept on the vouchers (this record keeps Voucher No / Voucher Detail No)
-		clear_tax_invoice_links(self.doctype, self.name)
+		clear_tax_invoice_links(self)
 
 	def on_update_after_submit(self):
 		if self.get_doc_before_save():  # Some change is made
