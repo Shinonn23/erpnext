@@ -21,6 +21,22 @@ MOVEMENT_DOCTYPES = {
 	"Asset Capitalization",
 }
 
+# Which documents count as which operation. Plain-language mirror of `movement_operation`; keep in sync.
+OPERATION_DOCUMENTS = {
+	"receipt": ["Purchase Receipt", "Purchase Invoice (Update Stock)", "Stock Entry (Material Receipt)"],
+	"issue": ["Stock Entry (Material Issue)"],
+	"transfer": [
+		"Stock Entry (Material Transfer, Material Transfer for Manufacture, Send to Subcontractor,"
+		" Subcontracting Delivery)",
+		"Pick List (not Delivery)",
+		"Internal Customer / Supplier documents",
+	],
+	"sales": ["Delivery Note", "Sales Invoice (Update Stock)", "POS Invoice", "Pick List (Delivery)"],
+	"loan": ["Custody Loan documents (loan, return and loan adjustment)"],
+	"reconciliation": ["Stock Reconciliation", "Stock Count"],
+}
+OPERATION_ORDER = ("receipt", "issue", "transfer", "sales", "loan", "reconciliation")
+
 
 def _current_doc(doctype, name):
 	"""Current (shared-lock) read, so a policy cannot change while the ledger is being posted."""
@@ -269,3 +285,34 @@ def validate_document(doc):
 	doc.flags.clear()
 	doc._action = "save"
 	validate_document_policy(doc)
+
+
+@frappe.whitelist()
+def get_warehouse_type_summary(warehouse_type=None):
+	"""What a Warehouse Type allows, for display on the Warehouse form. No type means no restriction."""
+	if not warehouse_type:
+		return {"warehouse_type": None, "restricted": False, "operations": [], "outgoing_role": None}
+	if not (
+		frappe.has_permission("Warehouse Type", "read", warehouse_type)
+		or frappe.has_permission("Warehouse", "read")
+	):
+		frappe.throw(
+			_("Not permitted to read Warehouse Type {0}.").format(warehouse_type), frappe.PermissionError
+		)
+	policy = frappe.get_cached_doc("Warehouse Type", warehouse_type)
+	operations = [
+		{
+			"operation": operation,
+			"allowed": bool(cint(policy.get(f"allow_{operation}"))),
+			"documents": OPERATION_DOCUMENTS[operation],
+		}
+		for operation in OPERATION_ORDER
+	]
+	return {
+		"warehouse_type": policy.name,
+		"restricted": True,
+		"operations": operations,
+		"outgoing_role": policy.outgoing_role or None,
+		# validate_warehouse_operation treats loan as transfer for this type
+		"loan_counts_as_transfer": policy.name == "Transit",
+	}

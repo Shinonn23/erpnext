@@ -36,6 +36,10 @@ frappe.ui.form.on("Warehouse", {
 		});
 	},
 
+	warehouse_type: function (frm) {
+		show_warehouse_type_summary(frm);
+	},
+
 	company: function (frm) {
 		if (frm.doc.account) {
 			frm.set_value("account", "");
@@ -101,6 +105,7 @@ frappe.ui.form.on("Warehouse", {
 		}
 
 		frm.toggle_enable(["is_group", "company"], false);
+		show_warehouse_type_summary(frm);
 
 		if (frm.doc.customer) {
 			frm.set_df_property("customer", "read_only", frm.doc.__onload.stock_exists);
@@ -118,5 +123,78 @@ function convert_to_group_or_ledger(frm) {
 		callback: function () {
 			frm.refresh();
 		},
+	});
+}
+
+const OPERATION_LABELS = {
+	receipt: "Receipt",
+	issue: "Issue",
+	transfer: "Transfer",
+	sales: "Sales",
+	loan: "Loan",
+	reconciliation: "Reconciliation",
+};
+
+function render_warehouse_type_summary(summary) {
+	if (!summary || !summary.restricted) {
+		return __("No Warehouse Type: no restriction");
+	}
+	const allowed = summary.operations.filter((row) => row.allowed);
+	const blocked = summary.operations.filter((row) => !row.allowed);
+	const name = (row) => __(OPERATION_LABELS[row.operation] || row.operation);
+	const parts = [
+		allowed.length ? __("Allowed: {0}", [allowed.map(name).join(", ")]) : __("Allowed: nothing"),
+	];
+	if (blocked.length) {
+		parts.push(__("Not allowed: {0}", [blocked.map(name).join(", ")]));
+	}
+	if (summary.outgoing_role) {
+		parts.push(
+			__("Moving stock out requires the {0} role", [frappe.utils.escape_html(summary.outgoing_role)])
+		);
+	}
+	if (summary.loan_counts_as_transfer) {
+		parts.push(__("Loan documents count as Transfer"));
+	}
+	return parts.join(". ");
+}
+
+function render_warehouse_type_detail(summary) {
+	if (!summary || !summary.restricted) {
+		return "";
+	}
+	const esc = frappe.utils.escape_html;
+	const rows = summary.operations
+		.map(
+			(row) =>
+				`<li>${row.allowed ? "&#10003;" : "&#10007;"} <b>${esc(
+					__(OPERATION_LABELS[row.operation] || row.operation)
+				)}</b>: ${esc(row.documents.join("; "))}</li>`
+		)
+		.join("");
+	return `<ul class="list-unstyled small">${rows}</ul>`;
+}
+
+function show_warehouse_type_summary(frm) {
+	const warehouse_type = frm.doc.is_group ? null : frm.doc.warehouse_type;
+	const apply = (summary) => {
+		if (warehouse_type !== (frm.doc.is_group ? null : frm.doc.warehouse_type)) {
+			return; // the type changed while the request was running
+		}
+		const line = render_warehouse_type_summary(summary);
+		frm.set_intro("");
+		if (!frm.doc.is_group) {
+			frm.set_intro(line + render_warehouse_type_detail(summary), "blue");
+			frm.set_df_property("warehouse_type", "description", line);
+		}
+	};
+	if (!warehouse_type) {
+		apply(null);
+		return;
+	}
+	frappe.call({
+		method: "erpnext.stock.warehouse_policy.get_warehouse_type_summary",
+		args: { warehouse_type },
+		callback: (r) => apply(r.message),
 	});
 }
