@@ -218,12 +218,12 @@ class StockCountSelectionTest(unittest.TestCase):
 		doc = count(docstatus=0, selected_items=rows("A", "B"))
 		doc.check_permission = Mock()
 		created = Mock()
-		created.name = "CNT-TPL-00001"
+		created.name = "Monthly set"
 		with (
 			patch.object(stock_count.frappe, "has_permission", return_value=True),
 			patch.object(stock_count.frappe, "get_doc", side_effect=[doc, created]) as get_doc,
 		):
-			self.assertEqual(stock_count.make_count_template("SC", "Monthly set"), "CNT-TPL-00001")
+			self.assertEqual(stock_count.make_count_template("SC", "Monthly set"), "Monthly set")
 		payload = get_doc.call_args_list[1].args[0]
 		self.assertEqual(payload["items"], [{"item_code": "A"}, {"item_code": "B"}])
 		self.assertEqual((payload["company"], payload["warehouse"]), ("C", "W"))

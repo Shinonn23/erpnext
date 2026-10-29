@@ -1,6 +1,6 @@
 {
  "actions": [],
- "autoname": "format:CNT-TPL-{#####}",
+ "autoname": "field:title",
  "creation": "2026-10-29 00:00:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
@@ -20,7 +20,7 @@
    "in_list_view": 1,
    "label": "Title",
    "reqd": 1,
-   "unique": 0
+   "unique": 1
   },
   {
    "fieldname": "company",
@@ -69,7 +69,7 @@
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Stock Count Template",
- "naming_rule": "Expression",
+ "naming_rule": "By fieldname",
  "owner": "Administrator",
  "permissions": [
   {
@@ -87,9 +87,7 @@
   }
  ],
  "row_format": "Dynamic",
- "show_title_field_in_link": 1,
  "sort_field": "modified",
  "sort_order": "DESC",
- "states": [],
- "title_field": "title"
+ "states": []
 }

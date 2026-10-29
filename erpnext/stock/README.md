@@ -9,7 +9,7 @@ stock and has no selection.
 - **Items to Count** (Selected Items only): the chosen enabled stock items, each once. At Prepare Count only the
   chosen items that have stock in the warehouse (and in the Inventory Dimension filters) get count rows; the
   others are listed in the message "Not counted, no stock in ...". If none has stock, the count is not prepared.
-- **Count Template** (Stock Count Template: title, company, optional warehouse, items): choosing one fills Items
+- **Count Template** (Stock Count Template: the title is its name, company, optional warehouse, items): choosing one fills Items
   to Count in Draft. The items are copied; editing the template later does not change a prepared count. Rows
   chosen by hand are never overwritten at Prepare Count; an empty list is filled from the template.
 - **Save as Template** (Draft button): saves the chosen items as a new template of the count's Company and

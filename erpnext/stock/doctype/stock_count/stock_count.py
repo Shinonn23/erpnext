@@ -754,6 +754,9 @@ def get_count_variance_account(warehouse):
 @frappe.whitelist()
 def make_count_template(name, title):
 	"""Save the items chosen on a Stock Count as a reusable Stock Count Template."""
+	title = (title or "").strip()
+	if not title:
+		frappe.throw(_("Title is required."))
 	count = frappe.get_doc("Stock Count", name)
 	count.check_permission("read")
 	frappe.has_permission("Stock Count Template", "create", throw=True)
