@@ -32,7 +32,7 @@ Tests: `test_ledger_preview.py` (offline, mocks only).
   Capitalization do: when a later Stock Ledger Entry exists a Repost Item Valuation is created and the later
   vouchers get their stock value and journal rebuilt. `Repost Item Valuation` is in `ignore_linked_doctypes`
   so it does not block the cancellation.
-- **Serial and Batch Bundle**: only Stock Manager may submit a bundle, but the Managing Director, Accounts
+- **Serial and Batch Bundle**: the approver roles (Managing Director, Accounts Manager, Accounts User) cannot submit a bundle by their own rights, but the Managing Director, Accounts
   Manager or Accounts User approves the conversion. `SerialBatchBundle.submit_serial_and_batch_bundle`
   (`erpnext/stock/serial_batch_bundle.py`) submits the bundle with `ignore_permissions` only when the Stock
   Ledger Entry being posted belongs to a Stock to Asset Conversion and the bundle is linked to that same
