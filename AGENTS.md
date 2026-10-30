@@ -1,6 +1,13 @@
+## Shared bench coordination
+
+Read `.agent/WORKFLOW.md` before delegating. `.agent` and `.codex` link to the
+shared source in the sibling `connect_diagnostics_setup` checkout, which must be
+present in this bench. Follow current user directions and this repository's
+conventions and local guidance; setup app conventions do not apply to this app.
+
 # ERPNext agent coordination
 
-Explicitly use subagents for suitable independent work. Keep small or dependent work with the Coordinator. Shared role configs live in `.codex/agents/`; `.codex/config.toml` sets Coordinator defaults and the three-child limit. Project configs define this repository's role defaults; keep credentials and machine permissions in user config.
+Explicitly use subagents for suitable independent work. Keep small or dependent work with the Coordinator. Shared role configs live in `.codex/agents/`; `.codex/config.toml` sets Coordinator defaults and the ten-child limit. Project configs define this repository's role defaults; keep credentials and machine permissions in user config.
 
 ## Roles and orchestration
 - Coordinator: gpt-6.1-sol, medium reasoning; plans, assigns ownership, integrates results, and validates completion.
@@ -14,7 +21,7 @@ Keep role models fixed. If Explorer evidence is insufficient, explain why and sp
 
 Before implementation, trace relevant DocTypes, controllers, hooks, document lifecycle (validate, submit, cancel), permissions, and persisted effects. Check accounting and stock invariants when affected. Assign disjoint file ownership, preserve existing uncommitted work, and never revert another agent's or the user's changes.
 
-Explorer and Reviewer are read-only. Implementer edits only assigned scope. The Coordinator integrates results, resolves review findings, and runs necessary checks. Keep at most three child agents active; respect a lower runtime limit.
+Explorer and Reviewer are read-only. Implementer edits only assigned scope. The Coordinator integrates results, resolves review findings, and runs necessary checks. Keep at most ten child agents active; respect a lower runtime limit.
 
 Serialize tests that write to the same Frappe site/database. Use a user-designated clean test site for business workflow tests and follow the applicable ERPNext testing skill. Do not infer a development or production site is safe for testing. Migrations and application data changes are controlled by the Coordinator and require applicable user authorization. No migration or application database write is needed to validate agent configuration.
 
