@@ -506,16 +506,6 @@ class SerialBatchBundle:
 		):
 			# the approver's submit of the conversion was checked; the stock user's bundle is part of it
 			doc.flags.ignore_permissions = True
-		elif (
-			self.sle.voucher_type == "Stock Entry"
-			and doc.voucher_type == self.sle.voucher_type
-			and doc.voucher_no == self.sle.voucher_no
-		):
-			from erpnext.assets.doctype.asset_repair.asset_repair import is_repair_consumption_bundle
-
-			if is_repair_consumption_bundle(self.sle.voucher_no, doc.name):
-				# the submit of the Asset Repair was checked; the consumed row's bundle is part of it
-				doc.flags.ignore_permissions = True
 		doc.submit()
 
 	def set_warehouse_and_status_in_serial_nos(self):

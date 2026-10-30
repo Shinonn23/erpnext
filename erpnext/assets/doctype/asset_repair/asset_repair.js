@@ -3,8 +3,7 @@
 
 frappe.ui.form.on("Asset Repair", {
 	setup: function (frm) {
-		// the repair's cancel reverses its own Stock Entry (asset_repair.cancel_stock_entry)
-		frm.ignore_doctypes_on_cancel_all = ["Serial and Batch Bundle", "Stock Entry"];
+		frm.ignore_doctypes_on_cancel_all = ["Serial and Batch Bundle"];
 
 		frm.fields_dict.cost_center.get_query = function (doc) {
 			return {
