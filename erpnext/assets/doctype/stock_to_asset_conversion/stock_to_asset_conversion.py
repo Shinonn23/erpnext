@@ -37,6 +37,85 @@ def get_native_conversion_source(asset):
 		return asset.flags.get("stock_conversion_source")
 
 
+def is_ledger_restatement(doc):
+	"""A submitted conversion's journal rebuilt outside its own submit and outside a ledger preview.
+
+	That is Repost Item Valuation (`accounts.utils.repost_gle_for_stock_vouchers`) after a backdated stock
+	transaction changed the valuation of the conversion's Stock Ledger Entries.
+	"""
+	return doc.docstatus == 1 and not doc.flags.get("submitting") and not doc.flags.get("ledger_preview")
+
+
+def get_repost_difference_entries(doc, stock_value_by_row, cost_center):
+	"""Balance a restated conversion journal without touching its Assets.
+
+	The Inventory credit follows the current Stock Ledger value (that is what a repost is for), while each
+	Asset keeps the value saved at submit: its Fixed Asset (or Low Value Expense) debit must stay equal to the
+	Asset register, and changing an Asset's value is accounting's decision through an Asset Value Adjustment.
+	So the difference per stock row goes to the company's Stock Adjustment Account, the account ERPNext books
+	stock valuation differences on. When the values are unchanged no row is added and the journal equals the
+	submitted one. Returns None when a difference exists but the company has no Stock Adjustment Account.
+	"""
+	precision = doc.precision("total_value")
+	adjustment_account = None
+	entries = []
+	for source_row in doc.stock_items:
+		assigned_value = sum(
+			flt(output.asset_value, precision)
+			for output in doc.assets
+			if output.source_item_row == source_row.name
+		)
+		difference = flt(flt(stock_value_by_row.get(source_row.name)) - assigned_value, precision)
+		if not difference:
+			continue
+		if not adjustment_account:
+			adjustment_account = frappe.get_cached_value("Company", doc.company, "stock_adjustment_account")
+		if not adjustment_account:
+			return None
+		entries.append(
+			doc.get_gl_dict(
+				{
+					"account": adjustment_account,
+					"debit": difference if difference > 0 else 0,
+					"credit": -difference if difference < 0 else 0,
+					"against": "Stock Conversion",
+					"remarks": _(
+						"{0}: stock value restated by a repost; the Asset value is unchanged"
+					).format(doc.name),
+					"cost_center": cost_center,
+				},
+				item=source_row,
+			)
+		)
+	return entries
+
+
+def get_posted_gl_entries(doc):
+	"""Leave a restated conversion's ledger as it is and log why (no Stock Adjustment Account).
+
+	Returning the posted entries makes `repost_gle_for_stock_vouchers` find no difference for this voucher,
+	so it neither deletes nor reposts it and goes on with the other vouchers; raising here would roll back and
+	fail the whole Repost Item Valuation.
+	"""
+	frappe.log_error(
+		title=_("Stock to Asset Conversion {0} not reposted").format(doc.name),
+		message=_(
+			"The stock value of Stock to Asset Conversion {0} changed by a repost, but Company {1} has no Stock"
+			" Adjustment Account to book the difference on without changing its Assets. Its ledger was left"
+			" unchanged: set the account and repost the conversion again."
+		).format(doc.name, doc.company),
+		reference_doctype=doc.doctype,
+		reference_name=doc.name,
+	)
+	posted = frappe.get_all(
+		"GL Entry",
+		filters={"voucher_type": doc.doctype, "voucher_no": doc.name, "is_cancelled": 0},
+		fields=["account", "debit", "credit", "against", "cost_center", "project", "remarks"],
+		order_by="creation asc",
+	)
+	return [doc.get_gl_dict(dict(entry)) for entry in posted]
+
+
 class StocktoAssetConversion(StockController):
 	# begin: auto-generated types
 	# This code is auto-generated. Do not modify anything in this block.
@@ -573,7 +652,13 @@ class StocktoAssetConversion(StockController):
 
 	def on_submit(self):
 		self.update_stock_ledger()
-		self.make_gl_entries()
+		# Process-local: lets get_gl_entries save the balanced Asset values. Without it a submitted
+		# conversion's ledger is only restated (Repost Item Valuation), never written back to its Assets.
+		self.flags.submitting = True
+		try:
+			self.make_gl_entries()
+		finally:
+			self.flags.submitting = False
 		self.submit_generated_assets()
 		self.status = "Submitted"
 		self.db_set("status", self.status)
@@ -692,7 +777,9 @@ class StocktoAssetConversion(StockController):
 		if entries:
 			self.make_sl_entries(entries)
 
-	def make_gl_entries(self):
+	def make_gl_entries(self, gl_entries=None, from_repost=False, via_landed_cost_voucher=False):
+		# Same signature as StockController.make_gl_entries: Repost Item Valuation
+		# (accounts.utils.repost_gle_for_stock_vouchers) passes the rebuilt entries with from_repost=True.
 		from erpnext.accounts.general_ledger import make_gl_entries, make_reverse_gl_entries
 
 		if self.docstatus == 2:
@@ -700,18 +787,27 @@ class StocktoAssetConversion(StockController):
 			return
 		if self.docstatus != 1:
 			return
-		entries = self.get_gl_entries()
+		entries = gl_entries or self.get_gl_entries()
 		if entries:
-			make_gl_entries(entries, merge_entries=False)
+			make_gl_entries(entries, merge_entries=False, from_repost=from_repost)
 
-	def get_gl_entries(self):
+	def get_gl_entries(self, inventory_account_map=None, via_landed_cost_voucher=False):
+		"""Conversion journal: credit Inventory per stock row, debit Fixed Asset / Low Value Expense per Asset.
+
+		On submit (`flags.submitting`) the last Asset of each stock row takes the bundle/rounding difference
+		and that value is saved on the row and its Asset; a ledger preview does the same in memory only.
+		Any other call on a submitted conversion (Repost Item Valuation) is a read-only restatement: see
+		`get_repost_difference_entries`.
+		"""
 		entries = []
+		restating = is_ledger_restatement(self)
 		perpetual = erpnext.is_perpetual_inventory_enabled(self.company)
 		low_value_account = frappe.db.get_value("Company", self.company, "low_value_asset_expense_account")
 		# the conversion has no Cost Center of its own: book it on the company's default
 		cost_center = erpnext.get_default_cost_center(self.company)
-		inventory_map = self.get_inventory_account_map()
+		inventory_map = inventory_account_map or self.get_inventory_account_map()
 		if self.use_item_inventory_account:
+			# the controller's item-wise map reads `items`; the conversion's rows are `stock_items`
 			inventory_map = get_item_wise_inventory_account_map(self.stock_items, self.company)
 		sle_map = self.get_stock_ledger_details()
 		stock_value_by_row = {}
@@ -726,6 +822,9 @@ class StocktoAssetConversion(StockController):
 		# SLE valuation is authoritative. Apply any bundle/rounding difference to
 		# the last Asset for each source row so the conversion journal always balances.
 		for source_row in self.stock_items:
+			if restating:
+				# A repost never rebalances or writes the Assets: see get_repost_difference_entries.
+				break
 			outputs = [output for output in self.assets if output.source_item_row == source_row.name]
 			if outputs:
 				assigned_value = sum(
@@ -735,8 +834,9 @@ class StocktoAssetConversion(StockController):
 					flt(outputs[-1].asset_value) + stock_value_by_row[source_row.name] - assigned_value,
 					self.precision("total_value"),
 				)
-				if self.flags.ledger_preview:
+				if self.flags.ledger_preview or not self.flags.submitting:
 					# Preview: balance the rows in memory only, never write the Conversion or its Assets.
+					# Only the conversion's own submit saves the balanced value.
 					continue
 				outputs[-1].db_set("asset_value", outputs[-1].asset_value)
 				if outputs[-1].asset:
@@ -793,6 +893,11 @@ class StocktoAssetConversion(StockController):
 					item=output,
 				)
 			)
+		if restating:
+			difference_entries = get_repost_difference_entries(self, stock_value_by_row, cost_center)
+			if difference_entries is None:
+				return get_posted_gl_entries(self)
+			entries.extend(difference_entries)
 		return entries
 
 	def get_items_and_warehouses(self):
