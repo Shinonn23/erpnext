@@ -220,6 +220,8 @@ class AssetRepair(AccountsController):
 			if sabb := row.serial_and_batch_bundle:
 				row.db_set("serial_and_batch_bundle", None)
 				doc = frappe.get_doc("Serial and Batch Bundle", sabb)
+				# the canceller's cancel of the repair was checked; reversing its consumed bundle is part of it
+				doc.flags.ignore_permissions = True
 				doc.cancel()
 
 	def on_cancel(self):
@@ -299,6 +301,11 @@ class AssetRepair(AccountsController):
 				},
 			)
 
+		# The submitter's submit of the repair was checked; issuing its consumed stock is part of it (the same pattern
+		# as the Assets a Stock to Asset Conversion generates). Only this Stock Entry skips the permission check, and
+		# it names the repair it belongs to so an approval guard can recognise it.
+		stock_entry.flags.ignore_permissions = True
+		stock_entry.flags.asset_repair_consumption = self.name
 		stock_entry.insert()
 		stock_entry.submit()
 
