@@ -428,7 +428,7 @@ class StockController(AccountsController):
 		if not table_name:
 			table_name = "items"
 
-		if self.doctype == "Asset Capitalization":
+		if self.doctype in ("Asset Capitalization", "Stock to Asset Conversion"):
 			table_name = "stock_items"
 
 		parent_details = frappe._dict()
@@ -440,14 +440,15 @@ class StockController(AccountsController):
 			if not item_code or not self.is_serial_batch_item(item_code):
 				continue
 
+			# get(): Stock to Asset Conversion rows have only a bundle, no old serial / batch fields
 			if (
 				not via_landed_cost_voucher
 				and row.serial_and_batch_bundle
-				and (row.serial_no or row.batch_no)
+				and (row.get("serial_no") or row.get("batch_no"))
 			):
 				self.validate_serial_nos_and_batches_with_bundle(row)
 
-			if not row.serial_no and not row.batch_no and not row.get("rejected_serial_no"):
+			if not row.get("serial_no") and not row.get("batch_no") and not row.get("rejected_serial_no"):
 				continue
 
 			if not row.use_serial_batch_fields and (

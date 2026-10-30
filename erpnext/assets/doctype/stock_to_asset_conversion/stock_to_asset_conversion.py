@@ -659,6 +659,10 @@ class StocktoAssetConversion(StockController):
 			self.make_gl_entries()
 		finally:
 			self.flags.submitting = False
+		# A conversion keeps the posting date of its draft, so an approval made days later is backdated:
+		# repost the later stock vouchers as Stock Entry and Asset Capitalization do. The repost restates
+		# this conversion's journal read only (is_ledger_restatement) and never writes its Assets.
+		self.repost_future_sle_and_gle()
 		self.submit_generated_assets()
 		self.status = "Submitted"
 		self.db_set("status", self.status)
@@ -666,7 +670,13 @@ class StocktoAssetConversion(StockController):
 			frappe.db.set_value("Pick List", self.pick_list, "status", "Completed")
 
 	def on_cancel(self):
-		self.ignore_linked_doctypes = ("GL Entry", "Stock Ledger Entry", "Serial and Batch Bundle", "Asset")
+		self.ignore_linked_doctypes = (
+			"GL Entry",
+			"Stock Ledger Entry",
+			"Repost Item Valuation",
+			"Serial and Batch Bundle",
+			"Asset",
+		)
 		for row in self.assets:
 			if row.asset and frappe.db.get_value("Asset", row.asset, "docstatus") == 1:
 				self.validate_asset_has_no_follow_up_transactions(row.asset)
@@ -703,6 +713,7 @@ class StocktoAssetConversion(StockController):
 					frappe.db.set_value("Serial No", asset_serial, "asset", None)
 		self.update_stock_ledger()
 		self.make_gl_entries()
+		self.repost_future_sle_and_gle()
 		if self.pick_list and frappe.db.get_value("Pick List", self.pick_list, "docstatus") == 1:
 			frappe.get_doc("Pick List", self.pick_list).cancel()
 		self.db_set("status", "Cancelled")

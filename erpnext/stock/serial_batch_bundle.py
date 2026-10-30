@@ -464,9 +464,9 @@ class SerialBatchBundle:
 				)
 			):
 				frappe.throw(
-					_("Serial and Batch Bundle {0} does not belong to the cancelled stock ledger entry.").format(
-						doc.name
-					)
+					_(
+						"Serial and Batch Bundle {0} does not belong to the cancelled stock ledger entry."
+					).format(doc.name)
 				)
 			# The authorized stock cancellation reverses only its own bundle.
 			doc.flags.ignore_permissions = True
@@ -499,6 +499,13 @@ class SerialBatchBundle:
 		self.validate_actual_qty(doc)
 
 		doc.flags.ignore_voucher_validation = True
+		if (
+			self.sle.voucher_type == "Stock to Asset Conversion"
+			and doc.voucher_type == self.sle.voucher_type
+			and doc.voucher_no == self.sle.voucher_no
+		):
+			# the approver's submit of the conversion was checked; the stock user's bundle is part of it
+			doc.flags.ignore_permissions = True
 		doc.submit()
 
 	def set_warehouse_and_status_in_serial_nos(self):
@@ -1512,8 +1519,7 @@ class SerialBatchCreation:
 
 				entry = {
 					"batch_no": batch_no,
-					"qty": flt(batch_qty, precision)
-					* (-1 if self.type_of_transaction == "Outward" else 1),
+					"qty": flt(batch_qty, precision) * (-1 if self.type_of_transaction == "Outward" else 1),
 					"incoming_rate": incoming_rate,
 				}
 				if "storage_location" in self.__dict__:

@@ -12,6 +12,8 @@ two buttons under **Preview**, also to read-only reviewers. They call the standa
   values in memory only and never writes the conversion or its draft Assets. The Immediate Depreciation Journal
   Entry is a separate document created after approval and is not part of this preview.
 - **Stock Ledger**: the outward Stock Ledger Entries `update_stock_ledger` would post for each stock item.
+  `StockController.make_bundle_using_old_serial_batch_fields` reads the conversion's `stock_items` table (as
+  for Asset Capitalization); its rows carry only a Serial and Batch Bundle, no old serial / batch fields.
 - **Permission**: besides read on the doctype, `before_gl_preview` requires Accounts User, Accounts Manager,
   Finance Controller, Managing Director, Chief Executive Officer or System Manager; `before_sl_preview` allows
   the same plus Stock Manager. Custodians and other readers get a permission error and no button.
@@ -24,6 +26,18 @@ Tests: `test_ledger_preview.py` (offline, mocks only).
   `get_gl_entries` give each stock row's bundle/rounding difference to its last Asset and save that value on
   the row and the draft Asset, so the journal balances (credit Inventory = Stock Ledger value, debit Fixed
   Asset or Low Value Asset Expense = Asset values).
+- **Later stock vouchers**: a conversion keeps the posting date of its draft, so an approval made days later
+  is backdated. `on_submit` (after its own Stock Ledger and journal, before the generated Assets are
+  submitted) and `on_cancel` (after reversing them) call `repost_future_sle_and_gle`, as Stock Entry and Asset
+  Capitalization do: when a later Stock Ledger Entry exists a Repost Item Valuation is created and the later
+  vouchers get their stock value and journal rebuilt. `Repost Item Valuation` is in `ignore_linked_doctypes`
+  so it does not block the cancellation.
+- **Serial and Batch Bundle**: only Stock Manager may submit a bundle, but the Managing Director, Accounts
+  Manager or Accounts User approves the conversion. `SerialBatchBundle.submit_serial_and_batch_bundle`
+  (`erpnext/stock/serial_batch_bundle.py`) submits the bundle with `ignore_permissions` only when the Stock
+  Ledger Entry being posted belongs to a Stock to Asset Conversion and the bundle is linked to that same
+  conversion (voucher type and number). The approver's submit of the conversion was checked; the bundle is
+  part of it. The same path lets the ledger preview (rolled back) run for these users.
 - **Repost**: a backdated stock transaction makes Repost Item Valuation rebuild the journal of every later
   stock voucher (`erpnext.accounts.utils.repost_gle_for_stock_vouchers`, which calls
   `get_gl_entries(inventory_account_map)` and `make_gl_entries(gl_entries=..., from_repost=True)`; both
@@ -39,4 +53,4 @@ Tests: `test_ledger_preview.py` (offline, mocks only).
 - Repost Accounting Ledger does not offer this doctype (not in the `repost_allowed_doctypes` hook that fills
   Accounts Settings > Repost Allowed Types), so only Repost Item Valuation reaches it.
 
-Tests: `test_repost_gl_entries.py` (offline, mocks only).
+Tests: `test_repost_gl_entries.py`, `test_backdated_repost_and_bundle.py` (offline, mocks only).
