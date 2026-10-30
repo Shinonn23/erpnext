@@ -1,6 +1,8 @@
 # Copyright (c) 2017, Frappe Technologies Pvt. Ltd. and contributors
 # For license information, please see license.txt
 
+from contextlib import contextmanager
+
 import frappe
 from frappe import _
 from frappe.query_builder import DocType
@@ -18,6 +20,50 @@ from erpnext.assets.doctype.asset_depreciation_schedule.asset_depreciation_sched
 	reschedule_depreciation,
 )
 from erpnext.controllers.accounts_controller import AccountsController
+
+# Only this module marks the Stock Entry a repair's submit posts or its cancel reverses: a flag a request supplies
+# is never this object, so an approval guard can trust get_native_repair_consumption_source.
+_REPAIR_CONSUMPTION_TOKEN = object()
+
+
+def get_native_repair_consumption_source(stock_entry):
+	"""The Asset Repair whose submit or cancel is posting or reversing this Stock Entry, or None."""
+	if stock_entry.flags.get("asset_repair_consumption_token") is _REPAIR_CONSUMPTION_TOKEN:
+		return stock_entry.flags.get("asset_repair_consumption")
+
+
+def is_repair_consumption_bundle(voucher_no, bundle):
+	"""The bundle is a consumed row of the repair whose Stock Entry ``voucher_no`` is being posted or reversed now
+	(process-local, set only around that submit or cancel)."""
+	repair = (getattr(frappe.local, "asset_repair_consumption_entries", None) or {}).get(voucher_no)
+	return bool(
+		repair
+		and bundle
+		and frappe.db.exists(
+			"Asset Repair Consumed Item",
+			{"parenttype": "Asset Repair", "parent": repair, "serial_and_batch_bundle": bundle},
+		)
+	)
+
+
+def _mark_repair_consumption(stock_entry, repair):
+	# The user's submit or cancel of the repair was checked; posting or reversing its consumed stock is part of it
+	# (the same pattern as the Assets a Stock to Asset Conversion generates).
+	stock_entry.flags.ignore_permissions = True
+	stock_entry.flags.asset_repair_consumption = repair
+	stock_entry.flags.asset_repair_consumption_token = _REPAIR_CONSUMPTION_TOKEN
+
+
+@contextmanager
+def _repair_consumption(stock_entry_name, repair):
+	entries = getattr(frappe.local, "asset_repair_consumption_entries", None)
+	if entries is None:
+		entries = frappe.local.asset_repair_consumption_entries = {}
+	entries[stock_entry_name] = repair
+	try:
+		yield
+	finally:
+		entries.pop(stock_entry_name, None)
 
 
 class AssetRepair(AccountsController):
@@ -220,11 +266,38 @@ class AssetRepair(AccountsController):
 			if sabb := row.serial_and_batch_bundle:
 				row.db_set("serial_and_batch_bundle", None)
 				doc = frappe.get_doc("Serial and Batch Bundle", sabb)
-				# the canceller's cancel of the repair was checked; reversing its consumed bundle is part of it
-				doc.flags.ignore_permissions = True
+				if self.owns_consumed_bundle(doc):
+					# the canceller's cancel of the repair was checked; reversing its consumed bundle is part of it
+					doc.flags.ignore_permissions = True
 				doc.cancel()
 
+	def owns_consumed_bundle(self, bundle):
+		"""The bundle's voucher is this repair (its Stock Entry's cancel hands the bundle back to it) or this repair's
+		own Stock Entry; any other bundle named on a row keeps the canceller's permission check."""
+		if bundle.voucher_type == "Asset Repair":
+			return bundle.voucher_no == self.name
+		return bool(
+			bundle.voucher_type == "Stock Entry"
+			and bundle.voucher_no
+			and frappe.db.get_value("Stock Entry", bundle.voucher_no, "asset_repair") == self.name
+		)
+
+	def cancel_stock_entry(self):
+		"""Reverse the consumed stock with the repair: its Stock Entry links back to it, so Frappe refuses the repair's
+		cancel while that entry is submitted. Each entry carries the same process-local mark as at submit."""
+		for name in frappe.get_all(
+			"Stock Entry",
+			filters={"asset_repair": self.name, "docstatus": 1},
+			pluck="name",
+			order_by="creation",
+		):
+			stock_entry = frappe.get_doc("Stock Entry", name)
+			_mark_repair_consumption(stock_entry, self.name)
+			with _repair_consumption(name, self.name):
+				stock_entry.cancel()
+
 	def on_cancel(self):
+		self.cancel_stock_entry()
 		self.asset_doc = frappe.get_doc("Asset", self.asset)
 		if self.get("capitalize_repair_cost"):
 			self.update_asset_value()
@@ -301,13 +374,12 @@ class AssetRepair(AccountsController):
 				},
 			)
 
-		# The submitter's submit of the repair was checked; issuing its consumed stock is part of it (the same pattern
-		# as the Assets a Stock to Asset Conversion generates). Only this Stock Entry skips the permission check, and
-		# it names the repair it belongs to so an approval guard can recognise it.
-		stock_entry.flags.ignore_permissions = True
-		stock_entry.flags.asset_repair_consumption = self.name
+		# Only this Stock Entry skips the permission check, and it carries the process-local mark of the repair it
+		# belongs to so an approval guard can recognise it (get_native_repair_consumption_source).
+		_mark_repair_consumption(stock_entry, self.name)
 		stock_entry.insert()
-		stock_entry.submit()
+		with _repair_consumption(stock_entry.name, self.name):
+			stock_entry.submit()
 
 	def validate_serial_no(self, stock_item):
 		if not stock_item.serial_and_batch_bundle and frappe.get_cached_value(
