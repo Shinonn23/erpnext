@@ -527,6 +527,7 @@ class StocktoAssetConversion(StockController):
 				asset = frappe.get_doc("Asset", row.asset)
 				asset.flags.stock_conversion_token = _GENERATED_ASSET_TOKEN
 				asset.flags.stock_conversion_source = self.name
+				asset.flags.stock_to_asset_conversion_sync = self.name
 				asset.cancel()
 				if asset_serial and frappe.db.get_value("Serial No", asset_serial, "asset") == row.asset:
 					frappe.db.set_value("Serial No", asset_serial, "asset", None)
@@ -631,6 +632,7 @@ class StocktoAssetConversion(StockController):
 				if outputs[-1].asset:
 					asset = frappe.get_doc("Asset", outputs[-1].asset)
 					asset.net_purchase_amount = outputs[-1].asset_value
+					asset.flags.stock_to_asset_conversion_sync = self.name
 					asset.set_missing_values()
 					asset.save(ignore_permissions=True)
 
@@ -725,6 +727,8 @@ class StocktoAssetConversion(StockController):
 				asset.stock_to_asset_accounting_treatment == "Scheduled Depreciation"
 			)
 			asset.booked_fixed_asset = 1
+			# Process-local mark (not settable from a form or REST): this save is the Conversion's own.
+			asset.flags.stock_to_asset_conversion_sync = self.name
 			asset.set_missing_values()
 			if asset.is_new():
 				asset.insert(ignore_permissions=True)
@@ -737,6 +741,7 @@ class StocktoAssetConversion(StockController):
 		for output in self.assets:
 			asset = frappe.get_doc("Asset", output.asset)
 			asset.flags.from_stock_to_asset_conversion = True
+			asset.flags.stock_to_asset_conversion_sync = self.name
 			asset.flags.stock_conversion_token = _GENERATED_ASSET_TOKEN
 			asset.flags.stock_conversion_source = self.name
 			# The conversion approver decided; the generated Asset is submitted by the system, as it was inserted.
@@ -785,13 +790,13 @@ def get_conversion_defaults(company, request=None):
 
 def get_accounting_treatment(asset_value, threshold):
 	"""Legacy tuple API used by the original Customer Demo conversion flow."""
-	if flt(threshold) > 0 and flt(asset_value) < flt(threshold):
+	if flt(threshold) > 0 and flt(asset_value) <= flt(threshold):
 		return "Expense", 0
 	return "Capitalized", 1
 
 
 def get_default_accounting_treatment(asset_value, threshold):
-	if flt(threshold) > 0 and flt(asset_value) < flt(threshold):
+	if flt(threshold) > 0 and flt(asset_value) <= flt(threshold):
 		return "Expense"
 	return "Scheduled Depreciation"
 

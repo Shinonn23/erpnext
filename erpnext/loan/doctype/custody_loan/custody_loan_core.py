@@ -220,19 +220,17 @@ class CustodyLoan(Document):
 					frappe.throw(_("Asset {0} can only be listed once per Loan").format(row.asset))
 				assets_seen.add(row.asset)
 				asset = frappe.db.get_value(
-					"Asset", row.asset, ["item_code", "company", "status", "location", "custodian"], as_dict=True
+					"Asset", row.asset, ["item_code", "company", "status", "location", "custodian"],
+					as_dict=True, for_update=True,
 				)
 				if not asset or asset.company != self.company or asset.item_code != row.item_code:
 					frappe.throw(_("Row {0}: Asset must match the requested item and Company").format(row.idx))
-				if asset.status in ("Draft", "Scrapped", "Sold", "Capitalized") or asset.custodian:
+				if asset.status in (
+					"Draft", "Cancelled", "Scrapped", "Sold", "Capitalized", "In Maintenance", "Out of Order",
+					"Work In Progress",
+				) or asset.custodian:
 					frappe.throw(_("Row {0}: Asset is not available to loan").format(row.idx))
-				if frappe.db.sql(
-					"""select loan.name from `tabCustody Loan Item` item
-					join `tabCustody Loan` loan on loan.name=item.parent
-					where item.asset=%s and loan.docstatus=1
-					and loan.status not in ('Returned', 'Closed', 'Cancelled') limit 1""",
-					row.asset,
-				):
+				if asset_has_unreturned_custody_loan(row.asset, exclude_loan=self.name):
 					frappe.throw(_("Row {0}: Asset is already assigned to an active Custody Loan").format(row.idx))
 				if not asset.location:
 					frappe.throw(_("Row {0}: Asset must have a current Location").format(row.idx))
@@ -1796,19 +1794,56 @@ def get_loan_item_reserved_qty(loan_name, loan_item_name):
 	return sum(flt(qty) for qty in rows)
 
 
-def get_loan_item_balances(loan_name, loan_item_name):
+def _received_asset_return_condition(receipt="receipt"):
+	return f"""{receipt}.docstatus = 1 and {receipt}.status = 'Received' and {receipt}.loan_type = 'Asset' and exists (
+		select 1 from `tabAsset Movement` movement where movement.name = {receipt}.asset_movement
+		and movement.docstatus = 1 and movement.purpose = 'Receipt'
+		and movement.custody_loan = {receipt}.custody_loan
+		and movement.custody_loan_source_doctype = 'Custody Loan Return'
+		and movement.custody_loan_source_name = {receipt}.name
+	)"""
+
+
+def asset_allocation_returned_condition(item="allocation", loan="custody"):
+	"""SQL form of the received-per-object rule for the native MR availability pickers."""
+	return f"""({item}.issued_qty > 0 and {item}.issued_qty >= {item}.qty and (
+		select coalesce(sum(returned.returned_qty), 0) from `tabCustody Loan Return Item` returned
+		join `tabCustody Loan Return` receipt on receipt.name = returned.parent
+		where receipt.custody_loan = {loan}.name and returned.custody_loan_item = {item}.name
+		and {_received_asset_return_condition()}
+	) >= {item}.issued_qty)"""
+
+
+def get_loan_item_returned_qty(loan_name, loan_item_name, *, for_update=False):
+	if for_update:
+		rows = frappe.db.sql(
+			f"""select item.returned_qty from `tabCustody Loan Return Item` item
+			join `tabCustody Loan Return` receipt on receipt.name = item.parent
+			join `tabCustody Loan` loan on loan.name = receipt.custody_loan and loan.loan_type = receipt.loan_type
+			where receipt.custody_loan = %s and item.custody_loan_item = %s
+			and receipt.docstatus = 1 and receipt.status = 'Received'
+			and (receipt.loan_type != 'Asset' or ({_received_asset_return_condition()})) for update""",
+			(loan_name, loan_item_name),
+		)
+		return max(sum(flt(row[0]) for row in rows), 0)
 	return_names = frappe.get_all(
 		"Custody Loan Return",
 		filters={"custody_loan": loan_name, "docstatus": 1, "status": "Received"},
 		pluck="name",
 	)
-	returned = adjusted = sold = 0
+	returned = 0
 	if return_names:
 		returned = sum(flt(qty) for qty in frappe.get_all(
 			"Custody Loan Return Item",
 			filters={"parent": ["in", return_names], "custody_loan_item": loan_item_name},
 			pluck="returned_qty",
 		))
+	return max(returned, 0)
+
+
+def get_loan_item_balances(loan_name, loan_item_name):
+	returned = get_loan_item_returned_qty(loan_name, loan_item_name)
+	adjusted = sold = 0
 	adjustment_names = frappe.get_all(
 		"Custody Loan Adjustment",
 		filters={"custody_loan": loan_name, "docstatus": 1},
@@ -1830,6 +1865,34 @@ def get_loan_item_balances(loan_name, loan_item_name):
 	)
 	sold = flt(invoice_rows[0][0] if invoice_rows else 0)
 	return max(returned, 0), adjusted, max(sold, 0)
+
+
+def get_asset_custody_allocations(asset_name, *, exclude_loan=None):
+	"""Current per-object allocations under the same Asset lock used by issue and receipt."""
+	lock_asset(asset_name)
+	return frappe.db.sql(
+		"""select loan.name, loan.material_request, item.name as loan_item, item.material_request_item,
+		item.qty, item.issued_qty from `tabCustody Loan Item` item
+		join `tabCustody Loan` loan on loan.name = item.parent
+		where item.asset = %s and loan.docstatus = 1 and loan.loan_type = 'Asset' and loan.name != %s
+		order by loan.creation desc for update""",
+		(asset_name, exclude_loan or ""), as_dict=True,
+	)
+
+
+def asset_allocation_is_returned(allocation):
+	issued = flt(allocation.issued_qty)
+	return (
+		issued > 0 and issued >= flt(allocation.qty)
+		and get_loan_item_returned_qty(allocation.name, allocation.loan_item, for_update=True) >= issued
+	)
+
+
+def asset_has_unreturned_custody_loan(asset_name, *, exclude_loan=None):
+	return any(
+		not asset_allocation_is_returned(row)
+		for row in get_asset_custody_allocations(asset_name, exclude_loan=exclude_loan)
+	)
 
 
 def get_received_serials(loan_name, loan_item_name):

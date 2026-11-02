@@ -457,6 +457,13 @@ frappe.ui.form.on("Asset", {
 	},
 
 	setup_chart_and_depr_schedule_view: async function (frm) {
+		// A user who may not read the value (field level) has no chart; posting the submitted document
+		// (get_manual_depreciation_entries) would also need submit permission.
+		const value_df = frappe.meta.get_docfield("Asset", "net_purchase_amount");
+		if (!frm.perm[(value_df && value_df.permlevel) || 0]?.read) {
+			return;
+		}
+
 		// Without an Asset Category there are no depreciation accounts to chart (e.g. supplier-owned equipment).
 		if (!frm.doc.asset_category || frm.doc.finance_books.length > 1) {
 			return;

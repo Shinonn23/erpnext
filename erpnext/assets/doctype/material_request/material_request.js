@@ -342,30 +342,39 @@ frappe.ui.form.on("Material Request Item", {
 		const row = locals[cdt][cdn];
 		if (!row.asset) return;
 		const asset_name = row.asset;
-		return frappe.db.get_value(
-			"Asset", asset_name, ["asset_name", "asset_serial_number", "item_code", "location"]
-		).then(({ message }) => {
-			if (!message || row.asset !== asset_name) return;
-			return frappe.db.get_value("Item", message.item_code, "stock_uom").then(({ message: item }) => {
-				if (!item || row.asset !== asset_name) return;
-				return frappe.model.set_value(cdt, cdn, {
-					asset_name: message.asset_name,
-					asset_serial_number: message.asset_serial_number,
-					item_code: message.item_code,
-					source_location: message.location,
-					target_location:
-						frm.doc.material_request_type === "Customer Demo"
-							? frm.doc.customer_location
-							: frm.doc.material_request_type === "Customer Borrow / Loan"
-								? frm.doc.loan_recipient_location
-								: row.target_location,
-					qty: 1,
-					stock_qty: 1,
-					item_type: "Fixed Asset",
-					uom: item.stock_uom,
-					stock_uom: item.stock_uom,
-					conversion_factor: 1,
-				});
+		const company = frm.doc.company;
+		const purpose = frm.doc.material_request_type;
+		return frappe.call({
+			method: "erpnext.assets.doctype.material_request.material_request.get_asset_request_details",
+			args: {
+				asset_name,
+				company,
+				material_request_type: purpose,
+				item_code: row.item_code || frm.doc.asset_item_filter,
+				acquisition_method: row.demo_acquisition_method,
+			},
+		}).then(({ message }) => {
+			if (
+				!message || row.asset !== asset_name || frm.doc.company !== company ||
+				frm.doc.material_request_type !== purpose
+			) return;
+			return frappe.model.set_value(cdt, cdn, {
+				asset_name: message.asset_name,
+				asset_serial_number: message.asset_serial_number,
+				item_code: message.item_code,
+				source_location: message.location,
+				target_location:
+					frm.doc.material_request_type === "Customer Demo"
+						? frm.doc.customer_location
+						: frm.doc.material_request_type === "Customer Borrow / Loan"
+							? frm.doc.loan_recipient_location
+							: row.target_location,
+				qty: 1,
+				stock_qty: 1,
+				item_type: "Fixed Asset",
+				uom: message.stock_uom,
+				stock_uom: message.stock_uom,
+				conversion_factor: 1,
 			});
 		});
 	},
