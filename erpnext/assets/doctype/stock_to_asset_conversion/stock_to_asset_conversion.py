@@ -785,13 +785,13 @@ def get_conversion_defaults(company, request=None):
 
 def get_accounting_treatment(asset_value, threshold):
 	"""Legacy tuple API used by the original Customer Demo conversion flow."""
-	if flt(threshold) > 0 and flt(asset_value) < flt(threshold):
+	if flt(threshold) > 0 and flt(asset_value) <= flt(threshold):
 		return "Expense", 0
 	return "Capitalized", 1
 
 
 def get_default_accounting_treatment(asset_value, threshold):
-	if flt(threshold) > 0 and flt(asset_value) < flt(threshold):
+	if flt(threshold) > 0 and flt(asset_value) <= flt(threshold):
 		return "Expense"
 	return "Scheduled Depreciation"
 
