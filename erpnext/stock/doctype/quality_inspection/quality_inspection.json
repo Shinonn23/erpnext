@@ -165,7 +165,7 @@
    "fieldtype": "Section Break"
   },
   {
-   "default": "user",
+   "default": "__user",
    "fieldname": "inspected_by",
    "fieldtype": "Link",
    "label": "Inspected By",
