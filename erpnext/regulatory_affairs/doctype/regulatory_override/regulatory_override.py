@@ -6,7 +6,7 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.utils import today
 
-from erpnext.regulatory_affairs.constants import TRANSACTION_DOCTYPES
+from erpnext.regulatory_affairs.constants import ROLE_APPROVER, TRANSACTION_DOCTYPES
 from erpnext.regulatory_affairs.permissions import approver_only_message, is_approver
 
 TRANSITIONS = {
@@ -20,6 +20,12 @@ FROZEN_WHEN_APPROVED = ("transaction_doctype", "transaction_name", "item_code", 
 
 class RegulatoryOverride(Document):
 	"""A document-bound exception; approving it never rewrites the transaction's policy result."""
+
+	def _is_decision_approver(self):
+		return is_approver()
+
+	def _decision_approver_role(self):
+		return ROLE_APPROVER
 
 	def validate(self):
 		if self.transaction_doctype not in TRANSACTION_DOCTYPES:
@@ -60,7 +66,7 @@ class RegulatoryOverride(Document):
 		status = self.status
 		previous_status = previous.status if previous else None
 		if not previous:
-			if status != "Requested" and not is_approver():
+			if status != "Requested" and not self._is_decision_approver():
 				frappe.throw(_("A new override must start as Requested."))
 			if status == "Approved":
 				self._approve()
@@ -75,17 +81,27 @@ class RegulatoryOverride(Document):
 			frappe.throw(_("An override cannot move from {0} to {1}.").format(_(previous_status), _(status)))
 		if status == "Approved":
 			self._approve()
-		elif status == "Rejected" and not is_approver():
-			frappe.throw(approver_only_message(_("reject an override")), frappe.PermissionError)
-		elif status == "Cancelled" and not (is_approver() or frappe.session.user == self.requested_by):
+		elif status == "Rejected" and not self._is_decision_approver():
 			frappe.throw(
-				_("Only the requester or a Regulatory Approver can cancel an override."),
+				approver_only_message(_("reject an override"), self._decision_approver_role()),
+				frappe.PermissionError,
+			)
+		elif status == "Cancelled" and not (
+			self._is_decision_approver() or frappe.session.user == self.requested_by
+		):
+			frappe.throw(
+				_("Only the requester or a {0} can cancel an override.").format(
+					self._decision_approver_role()
+				),
 				frappe.PermissionError,
 			)
 
 	def _approve(self):
-		if not is_approver():
-			frappe.throw(approver_only_message(_("approve a regulatory override")), frappe.PermissionError)
+		if not self._is_decision_approver():
+			frappe.throw(
+				approver_only_message(_("approve a regulatory override"), self._decision_approver_role()),
+				frappe.PermissionError,
+			)
 		if self.requested_by == frappe.session.user and frappe.session.user != "Administrator":
 			frappe.throw(
 				_("The requester cannot approve the same regulatory override."), frappe.PermissionError
