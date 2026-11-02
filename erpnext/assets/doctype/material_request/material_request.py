@@ -16,7 +16,29 @@ MATERIAL_REQUEST_PURPOSES = (
 	"Customer Demo",
 	"Customer Borrow / Loan",
 )
-ASSET_STATUSES_NOT_AVAILABLE = ("Draft", "Scrapped", "Sold", "Capitalized")
+ASSET_STATUSES_NOT_AVAILABLE = (
+	"Draft", "Cancelled", "Scrapped", "Sold", "Capitalized", "In Maintenance", "Out of Order", "Work In Progress",
+)
+
+
+def active_asset_request_condition(asset):
+	from erpnext.loan.doctype.custody_loan.custody_loan_core import asset_allocation_returned_condition
+
+	return f"""exists (select 1 from `tabMaterial Request Item` mri
+		join `tabMaterial Request` mr on mr.name = mri.parent
+		where mri.asset = {asset} and mr.docstatus = 1
+		and ((mr.material_request_type = 'Asset Transfer'
+			and coalesce(mr.asset_transfer_status, '') not in ('Fulfilled', 'Cancelled'))
+		or (mr.material_request_type in ('Customer Demo', 'Customer Borrow / Loan')
+			and (mr.material_request_type = 'Customer Demo' or mr.borrow_item_type = 'Asset')
+			and coalesce(mr.request_progress_status, '') not in ('Returned', 'Closed', 'Cancelled')
+			and not exists (select 1 from `tabCustody Loan Item` allocation
+				join `tabCustody Loan` custody on custody.name = allocation.parent
+				where custody.material_request = mr.name and custody.docstatus = 1 and custody.loan_type = 'Asset'
+				and allocation.material_request_item = mri.name and allocation.asset = mri.asset
+				and {asset_allocation_returned_condition()}
+			))
+		))"""
 
 
 def is_customer_request(request):
@@ -340,8 +362,8 @@ class CustomerMaterialRequest(MaterialRequest):
 
 			asset = frappe.db.get_value(
 				"Asset", row.asset,
-				["item_code", "company", "docstatus", "status", "location", "demo_loan_status"],
-				as_dict=True,
+				["item_code", "company", "docstatus", "status", "location", "demo_loan_status", "custodian"],
+				as_dict=True, for_update=True,
 			)
 			if not asset or asset.docstatus != 1 or asset.company != self.company:
 				frappe.throw(_("Row {0}: Asset must be submitted and belong to Company {1}").format(row.idx, self.company))
@@ -396,20 +418,32 @@ class CustomerMaterialRequest(MaterialRequest):
 					frappe.throw(_("Row {0}: Recipient Location must differ from the Source Location").format(row.idx))
 
 	def has_active_asset_request(self, asset_name):
-		return bool(
-			frappe.db.sql(
-				"""select mr.name from `tabMaterial Request Item` mri
-				join `tabMaterial Request` mr on mr.name=mri.parent
-				where mri.asset=%s and mr.name!=%s and mr.docstatus=1
-				and ((mr.material_request_type='Asset Transfer'
-					and ifnull(mr.asset_transfer_status, '') not in ('Fulfilled', 'Cancelled'))
-				or (mr.material_request_type in ('Customer Demo', 'Customer Borrow / Loan')
-					and (mr.material_request_type='Customer Demo' or mr.borrow_item_type='Asset')
-					and ifnull(mr.request_progress_status, '') not in ('Returned', 'Closed', 'Cancelled')))
-				limit 1""",
-				(asset_name, self.name or ""),
-			)
+		from erpnext.loan.doctype.custody_loan.custody_loan_core import (
+			asset_allocation_is_returned,
+			get_asset_custody_allocations,
+			lock_asset,
 		)
+
+		lock_asset(asset_name)
+		requests = frappe.db.sql(
+			"""select mr.name, mr.material_request_type, mri.name as request_item
+			from `tabMaterial Request Item` mri join `tabMaterial Request` mr on mr.name = mri.parent
+			where mri.asset = %s and mr.name != %s and mr.docstatus = 1
+			and ((mr.material_request_type = 'Asset Transfer'
+				and coalesce(mr.asset_transfer_status, '') not in ('Fulfilled', 'Cancelled'))
+			or (mr.material_request_type in ('Customer Demo', 'Customer Borrow / Loan')
+				and (mr.material_request_type = 'Customer Demo' or mr.borrow_item_type = 'Asset')
+				and coalesce(mr.request_progress_status, '') not in ('Returned', 'Closed', 'Cancelled')))
+			for update""", (asset_name, self.name or ""), as_dict=True,
+		)
+		allocations = get_asset_custody_allocations(asset_name) if requests else []
+		for request in requests:
+			if request.material_request_type == "Asset Transfer":
+				return True
+			matched = [row for row in allocations if row.material_request == request.name and row.material_request_item == request.request_item]
+			if not matched or any(not asset_allocation_is_returned(row) for row in matched):
+				return True
+		return False
 
 	def set_delivery_snapshots(self):
 		if not self.customer:
@@ -820,7 +854,7 @@ class CustomerMaterialRequest(MaterialRequest):
 		return movement
 
 def get_available_assets(item_code, company, demo_only=False, location=None, exclude_custodian=True):
-	filters = ["a.company=%s", "a.docstatus=1", "a.status not in ('Draft','Sold','Scrapped','Capitalized')"]
+	filters = ["a.company=%s", "a.docstatus=1", "a.status not in ('Draft','Cancelled','Sold','Scrapped','Capitalized','In Maintenance','Out of Order','Work In Progress')"]
 	values = [company]
 	if item_code:
 		filters.append("a.item_code=%s")
@@ -837,27 +871,58 @@ def get_available_assets(item_code, company, demo_only=False, location=None, exc
 		where {' and '.join(filters)}
 		and exists (select 1 from `tabItem` item where item.name=a.item_code and item.is_fixed_asset=1)
 		and ifnull(a.demo_loan_status, 'Available') = 'Available'
-		and not exists (
-			select 1 from `tabMaterial Request Item` mri
-			join `tabMaterial Request` mr on mr.name=mri.parent
-			where mri.asset=a.name and mr.docstatus=1
-			and ((mr.material_request_type='Asset Transfer'
-				and ifnull(mr.asset_transfer_status, '') not in ('Fulfilled', 'Cancelled'))
-			or (mr.material_request_type='Customer Demo'
-				and ifnull(mr.request_progress_status, '') not in ('Returned', 'Closed', 'Cancelled'))
-			or (mr.material_request_type='Customer Borrow / Loan' and mr.borrow_item_type='Asset'
-				and ifnull(mr.request_progress_status, '') not in ('Returned', 'Closed', 'Cancelled')))
-		)
+		and not {active_asset_request_condition('a.name')}
 		order by name""",
 		values, as_dict=True,
 	)
 
 
 @frappe.whitelist()
+def get_asset_request_details(
+	asset_name: str, company: str, material_request_type: str,
+	item_code: str | None = None, acquisition_method: str | None = None,
+):
+	"""Physical picker metadata for a selectable Asset; never expose its accounting record."""
+	if material_request_type not in ("Asset Transfer", "Customer Demo", "Customer Borrow / Loan"):
+		frappe.throw(_("Select an Asset Transfer, Demo or Asset Loan request."))
+	if acquisition_method not in (None, "", "Ready Asset", "Wait Return"):
+		frappe.throw(_("Select an Asset acquisition method."))
+	if acquisition_method == "Wait Return" and material_request_type != "Customer Demo":
+		frappe.throw(_("Waiting for return is available only for Customer Demo."))
+	frappe.has_permission("Company", "select", doc=company, throw=True)
+	frappe.has_permission("Asset", "select", doc=asset_name, throw=True)
+	asset = frappe.db.get_value(
+		"Asset", asset_name,
+		["name", "asset_name", "asset_serial_number", "item_code", "company", "location", "docstatus", "status",
+		 "is_demo_asset", "demo_loan_status", "custodian"], as_dict=True,
+	)
+	if not asset or asset.company != company or asset.docstatus != 1 or (item_code and item_code != asset.item_code):
+		frappe.throw(_("Select a submitted Asset matching the requested company and model."))
+	if material_request_type == "Customer Demo" and not asset.is_demo_asset:
+		frappe.throw(_("Customer Demo requires a Demo Asset."))
+	waiting = material_request_type == "Customer Demo" and acquisition_method == "Wait Return"
+	unavailable = {"Draft", "Cancelled", "Sold", "Scrapped", "Capitalized", "Work In Progress"}
+	if not waiting:
+		unavailable.update({"In Maintenance", "Out of Order"})
+	if asset.status in unavailable or not asset.location:
+		frappe.throw(_("This Asset is not available for the selected acquisition method."))
+	if not waiting and (asset.demo_loan_status == "With Customer" or (material_request_type != "Asset Transfer" and asset.custodian)):
+		frappe.throw(_("This Asset is still assigned to another borrower."))
+	frappe.has_permission("Item", "select", doc=asset.item_code, throw=True)
+	item = frappe.db.get_value("Item", asset.item_code, ["is_fixed_asset", "disabled", "stock_uom"], as_dict=True)
+	if not item or not item.is_fixed_asset or item.disabled:
+		frappe.throw(_("Select an enabled Fixed Asset Item."))
+	return {
+		"name": asset.name, "asset_name": asset.asset_name, "asset_serial_number": asset.asset_serial_number,
+		"item_code": asset.item_code, "company": asset.company, "location": asset.location, "stock_uom": item.stock_uom,
+	}
+
+
+@frappe.whitelist()
 def get_assets_for_material_request(company, location, item_code=None):
 	"""Return available Fixed Assets at the selected Source Location."""
-	frappe.has_permission("Asset", "read", throw=True)
-	frappe.has_permission("Company", "read", doc=company, throw=True)
+	frappe.has_permission("Asset", "select", throw=True)
+	frappe.has_permission("Company", "select", doc=company, throw=True)
 	if not location or not frappe.db.exists("Location", location):
 		frappe.throw(_("Select a valid Source Location"))
 	if item_code and not frappe.db.get_value("Item", item_code, "is_fixed_asset"):
@@ -879,7 +944,7 @@ def get_assets_for_material_request(company, location, item_code=None):
 @frappe.validate_and_sanitize_search_inputs
 def asset_query(doctype, txt, searchfield, start, page_len, filters, as_dict=False):
 	"""Search available Fixed Asset records for Material Request asset rows."""
-	frappe.has_permission("Asset", "read", throw=True)
+	frappe.has_permission("Asset", "select", throw=True)
 	filters = frappe._dict(filters or {})
 	if (
 		not filters.company
@@ -887,23 +952,17 @@ def asset_query(doctype, txt, searchfield, start, page_len, filters, as_dict=Fal
 		or filters.material_request_type not in ("Asset Transfer", "Customer Demo", "Customer Borrow / Loan")
 	):
 		return []
-	frappe.has_permission("Company", "read", doc=filters.company, throw=True)
+	frappe.has_permission("Company", "select", doc=filters.company, throw=True)
 
 	from erpnext.controllers.queries import get_match_cond
 
 	conditions = [
 		"tabAsset.company=%(company)s",
 		"tabAsset.docstatus=1",
-		"tabAsset.status not in ('Draft', 'Sold', 'Scrapped', 'Capitalized')",
+		"tabAsset.status not in ('Draft', 'Cancelled', 'Sold', 'Scrapped', 'Capitalized', 'In Maintenance', 'Out of Order', 'Work In Progress')",
 		"tabItem.is_fixed_asset=1",
 		"ifnull(tabAsset.demo_loan_status, 'Available')='Available'",
-		"not exists (select 1 from `tabMaterial Request Item` mri join `tabMaterial Request` mr on mr.name=mri.parent "
-		"where mri.asset=tabAsset.name and mr.docstatus=1 and ((mr.material_request_type='Asset Transfer' "
-		"and ifnull(mr.asset_transfer_status, '') not in ('Fulfilled', 'Cancelled')) or "
-		"(mr.material_request_type='Customer Demo' "
-		"and ifnull(mr.request_progress_status, '') not in ('Returned', 'Closed', 'Cancelled')) or "
-		"(mr.material_request_type='Customer Borrow / Loan' and mr.borrow_item_type='Asset' "
-		"and ifnull(mr.request_progress_status, '') not in ('Returned', 'Closed', 'Cancelled'))))",
+		f"not {active_asset_request_condition('tabAsset.name')}",
 	]
 	if filters.material_request_type == "Customer Borrow / Loan":
 		conditions.append("ifnull(tabAsset.custodian, '')=''")
