@@ -27,5 +27,7 @@ def require_approver(message: str) -> None:
 		frappe.throw(message, frappe.PermissionError)
 
 
-def approver_only_message(action: str) -> str:
-	return _("Only a Regulatory Approver can {0}.").format(action)
+def approver_only_message(action: str, role: str = ROLE_APPROVER) -> str:
+	if role == ROLE_APPROVER:
+		return _("Only a Regulatory Approver can {0}.").format(action)
+	return _("Only a {0} can {1}.").format(role, action)

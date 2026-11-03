@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import frappe
 
+from erpnext.regulatory_affairs import permissions
 from erpnext.regulatory_affairs.doctype.regulatory_document import (
 	regulatory_document as document_module,
 )
@@ -186,6 +187,14 @@ class TestSettingsAndTables(unittest.TestCase):
 		self.assertNotIn("Approved", action_module.STAGE_RENEWAL_STATUS)
 
 
+class MDDecisionOverride(RegulatoryOverride):
+	def _is_decision_approver(self):
+		return "Managing Director" in frappe.get_roles()
+
+	def _decision_approver_role(self):
+		return "Managing Director"
+
+
 class TestOverrideWorkflow(unittest.TestCase):
 	def setUp(self):
 		from erpnext.regulatory_affairs.doctype.regulatory_override import (
@@ -196,7 +205,7 @@ class TestOverrideWorkflow(unittest.TestCase):
 		patcher.start()
 		self.addCleanup(patcher.stop)
 
-	def override(self, **values):
+	def override(self, controller=RegulatoryOverride, **values):
 		defaults = dict(
 			status="Requested",
 			requested_by="maker@example.com",
@@ -206,7 +215,7 @@ class TestOverrideWorkflow(unittest.TestCase):
 			reason="Urgent",
 		)
 		defaults.update(values)
-		return bare(RegulatoryOverride, **defaults)
+		return bare(controller, **defaults)
 
 	def session(self, user):
 		return patch.object(frappe, "session", frappe._dict(user=user), create=True)
@@ -264,6 +273,133 @@ class TestOverrideWorkflow(unittest.TestCase):
 			rejected_before = frappe._dict(status="Rejected", requested_by="maker@example.com")
 			with self.assertRaises(Thrown):
 				self.override(status="Approved")._validate_status(rejected_before)
+
+	def test_native_default_keeps_regulatory_system_and_administrator_approval(self):
+		for user, roles, allowed in (
+			("checker@example.com", ["Regulatory Approver"], True),
+			("manager@example.com", ["System Manager"], True),
+			("Administrator", [], True),
+			("md@example.com", ["Managing Director"], False),
+		):
+			with (
+				self.subTest(user=user),
+				self.session(user),
+				patch.object(frappe, "get_roles", return_value=roles),
+			):
+				self.assertEqual(self.override()._is_decision_approver(), allowed)
+				self.assertEqual(self.override()._decision_approver_role(), "Regulatory Approver")
+				if allowed:
+					doc = self.override(status="Approved")
+					doc._approve()
+					self.assertEqual(doc.approved_by, user)
+				else:
+					with patch.object(frappe, "throw", side_effect=frappe.PermissionError) as throw:
+						with self.assertRaises(frappe.PermissionError):
+							self.override(status="Approved")._approve()
+					self.assertEqual(
+						throw.call_args.args[0],
+						"Only a Regulatory Approver can approve a regulatory override.",
+					)
+
+	def test_company_subclass_decides_approve_reject_cancel_without_changing_fda_helper(self):
+		previous = frappe._dict(status="Requested", requested_by="maker@example.com")
+		for status in ("Approved", "Rejected", "Cancelled"):
+			with self.subTest(status=status):
+				doc = self.override(controller=MDDecisionOverride, status=status)
+				with (
+					self.session("ra@example.com"),
+					patch.object(frappe, "get_roles", return_value=["Regulatory Approver"]),
+				):
+					self.assertTrue(permissions.is_approver())
+					with patch.object(frappe, "throw", side_effect=frappe.PermissionError) as throw:
+						with self.assertRaises(frappe.PermissionError):
+							doc._validate_status(previous)
+					self.assertIn("Managing Director", throw.call_args.args[0])
+					self.assertNotIn("Regulatory Approver", throw.call_args.args[0])
+				with (
+					self.session("md@example.com"),
+					patch.object(frappe, "get_roles", return_value=["Managing Director"]),
+				):
+					self.assertFalse(permissions.is_approver())
+					doc._validate_status(previous)
+				if status == "Approved":
+					self.assertEqual(doc.approved_by, "md@example.com")
+					self.assertEqual(doc.approved_on, "2026-10-18")
+
+	def test_company_subclass_also_controls_initial_non_requested_status(self):
+		with (
+			self.session("ra@example.com"),
+			patch.object(frappe, "get_roles", return_value=["Regulatory Approver"]),
+		):
+			with throws(), self.assertRaises(Thrown):
+				self.override(controller=MDDecisionOverride, status="Rejected")._validate_status(None)
+		with (
+			self.session("md@example.com"),
+			patch.object(frappe, "get_roles", return_value=["Managing Director"]),
+		):
+			self.override(controller=MDDecisionOverride, status="Rejected")._validate_status(None)
+
+	def test_company_subclass_keeps_self_approval_ban_and_requester_cancellation(self):
+		previous = frappe._dict(status="Requested", requested_by="maker@example.com")
+		with (
+			self.session("maker@example.com"),
+			patch.object(frappe, "get_roles", return_value=["Managing Director"]),
+		):
+			with throws(), self.assertRaises(Thrown):
+				self.override(controller=MDDecisionOverride, status="Approved")._validate_status(previous)
+		with (
+			self.session("maker@example.com"),
+			patch.object(frappe, "get_roles", return_value=["Regulatory Operator"]),
+		):
+			self.override(controller=MDDecisionOverride, status="Cancelled")._validate_status(previous)
+			approved = frappe._dict(
+				status="Approved",
+				requested_by="maker@example.com",
+				transaction_doctype="Sales Invoice",
+				transaction_name="SINV-1",
+				item_code=None,
+				reason="Urgent",
+			)
+			self.override(controller=MDDecisionOverride, status="Cancelled")._validate_status(approved)
+
+	def test_company_subclass_preserves_stamps_and_approved_business_binding(self):
+		previous = frappe._dict(
+			status="Approved",
+			requested_by="maker@example.com",
+			requested_on="2026-10-01",
+			approved_by="checker@example.com",
+			approved_on="2026-10-02",
+			transaction_doctype="Sales Invoice",
+			transaction_name="SINV-1",
+			item_code=None,
+			reason="Urgent",
+		)
+		doc = self.override(
+			controller=MDDecisionOverride,
+			status="Approved",
+			requested_by="forged@example.com",
+			requested_on="2030-01-01",
+			approved_by="forged@example.com",
+			approved_on="2030-01-01",
+		)
+		doc._protect_audit_stamps(previous)
+		for field in ("requested_by", "requested_on", "approved_by", "approved_on"):
+			self.assertEqual(doc.get(field), previous[field])
+		for field, value in (
+			("transaction_doctype", "Delivery Note"),
+			("transaction_name", "SINV-2"),
+			("item_code", "ITEM-2"),
+			("reason", "Changed"),
+		):
+			with (
+				self.subTest(field=field),
+				self.session("md@example.com"),
+				patch.object(frappe, "get_roles", return_value=["Managing Director"]),
+			):
+				with throws(), self.assertRaises(Thrown):
+					self.override(
+						controller=MDDecisionOverride, status="Approved", **{field: value}
+					)._validate_status(previous)
 
 
 class TestDocumentVerification(unittest.TestCase):

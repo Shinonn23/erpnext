@@ -67,6 +67,13 @@ issue date, expiry date or expiry basis of a registration that is no longer Draf
 restricted. Operators otherwise create and edit registrations, product lines, documents and actions. The Item's Product Category
 is guarded: only an Operator sets or changes it and only an Approver clears it (see *Product Category permission* below).
 
+The Override controller alone exposes private `_is_decision_approver()` and `_decision_approver_role()`
+methods for a company subclass/mixin to narrow transaction-exception decisions and their role label. Native
+behavior remains Regulatory Approver/System Manager (and Administrator). The shared `permissions.is_approver`
+check for FDA registrations, evidence verification, registration actions and renewals is unchanged. A company
+override must retain the controller's requester self-approval ban, requester cancellation, system-owned stamps
+and approved transaction/Item/reason immutability; it changes neither the transaction binding nor coverage policy.
+
 ## Registration lifecycle
 
 `official_status` is read-only on the form and may change only through `set_official_status` (buttons on the form):
