@@ -676,6 +676,42 @@ class TestWarehousePolicy(unittest.TestCase):
 			WarehouseType.validate_policy_permission(frappe._dict())
 
 
+class TestRejectedLoanReturnIntoQuarantine(unittest.TestCase):
+	"""Goods of a Custody Loan return that failed inspection are received into quarantine (Siwat, 4 Nov 2026): that
+	incoming leg is a receipt, which a Quarantine type allows, not a loan movement, which it does not."""
+
+	def setUp(self):
+		self.doc = frappe._dict(
+			doctype="Delivery Note",
+			company="CD",
+			is_return=1,
+			is_custody_loan_transaction=1,
+			custody_loan_source_doctype="Custody Loan Return",
+		)
+		self.row = frappe._dict(quality_inspection="QI-1", warehouse="QUARANTINE - CD")
+
+	def operation(self, inspection, quarantine=True, outgoing=False, row=None):
+		from erpnext.loan.doctype.custody_loan import custody_loan_core
+
+		db = Mock()
+		db.get_value.return_value = inspection
+		with (
+			patch.object(warehouse_policy.frappe, "db", db),
+			patch.object(custody_loan_core, "is_quarantine_warehouse", return_value=quarantine),
+		):
+			return warehouse_policy.movement_operation(self.doc, outgoing, loan=True, row=row or self.row)
+
+	def test_a_rejected_return_into_quarantine_is_a_receipt(self):
+		self.assertEqual(self.operation(frappe._dict(docstatus=1, status="Rejected")), "receipt")
+
+	def test_every_other_loan_leg_stays_a_loan(self):
+		self.assertEqual(self.operation(frappe._dict(docstatus=1, status="Accepted")), "loan")
+		self.assertEqual(self.operation(frappe._dict(docstatus=0, status="Rejected")), "loan")
+		self.assertEqual(self.operation(frappe._dict(docstatus=1, status="Rejected"), quarantine=False), "loan")
+		self.assertEqual(self.operation(frappe._dict(docstatus=1, status="Rejected"), outgoing=True), "loan")
+		self.assertEqual(self.operation(None, row=frappe._dict(warehouse="QUARANTINE - CD")), "loan")
+
+
 class TestWarehouseTypeSummary(unittest.TestCase):
 	def setUp(self):
 		self.addCleanup(patch.stopall)

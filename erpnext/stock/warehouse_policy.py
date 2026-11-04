@@ -223,6 +223,8 @@ def movement_operation(doc, outgoing, loan=False, row=None):
 		return "loan" if loan else "transfer"
 	if doc.get("is_internal_supplier"):
 		return "loan" if loan else "transfer"
+	if loan and not outgoing and _rejected_loan_return_into_quarantine(doc, row):
+		return "receipt"
 	if loan:
 		return "loan"
 	if doc.doctype == "Stock Reconciliation":
@@ -241,6 +243,29 @@ def movement_operation(doc, outgoing, loan=False, row=None):
 	if doc.doctype in ("Delivery Note", "Sales Invoice", "POS Invoice"):
 		return "sales"
 	return "issue" if outgoing else "receipt"
+
+
+def _rejected_loan_return_into_quarantine(doc, row):
+	"""Goods of a Custody Loan return that failed inspection are received into the company's quarantine warehouse
+	(Siwat, 4 Nov 2026): that leg is a receipt there, not a loan movement, which a Quarantine type does not allow."""
+	if not (row and doc.doctype == "Delivery Note" and row.get("quality_inspection")):
+		return False
+	from erpnext.loan.doctype.custody_loan.custody_loan_core import (
+		is_custody_loan_return_delivery_note,
+		is_quarantine_warehouse,
+	)
+
+	if not is_custody_loan_return_delivery_note(doc):
+		return False
+	inspection = frappe.db.get_value(
+		"Quality Inspection", row.quality_inspection, ["docstatus", "status"], as_dict=True
+	)
+	return bool(
+		inspection
+		and inspection.docstatus == 1
+		and inspection.status == "Rejected"
+		and is_quarantine_warehouse(row.get("warehouse"), doc.company)
+	)
 
 
 def validate_document_policy(doc):
