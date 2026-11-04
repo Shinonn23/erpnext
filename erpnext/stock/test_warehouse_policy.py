@@ -33,6 +33,7 @@ class TestWarehousePolicy(unittest.TestCase):
 			),
 		).start()
 		patch.object(frappe, "get_roles", return_value=["Stock User"]).start()
+		patch.object(frappe, "get_hooks", return_value=[]).start()
 		patch.object(
 			frappe,
 			"throw",
@@ -86,6 +87,64 @@ class TestWarehousePolicy(unittest.TestCase):
 			warehouse_policy.validate_warehouse_operation("WH", "transfer", outgoing=True)
 		with patch.object(frappe, "get_roles", return_value=["Stock Manager"]):
 			warehouse_policy.validate_warehouse_operation("WH", "transfer", outgoing=True)
+
+	def test_an_app_waiver_lifts_the_outgoing_role_only_for_the_document_it_owns(self):
+		self.policy.outgoing_role = "Stock Manager"
+		owned, other = Mock(name="owned"), Mock(name="other")
+		waiver = Mock(side_effect=lambda doc, warehouse, policy: doc is owned)
+		with (
+			patch.object(frappe, "get_hooks", return_value=["app.waiver"]) as hooks,
+			patch.object(frappe, "get_attr", return_value=waiver),
+		):
+			warehouse_policy.validate_warehouse_operation("WH", "transfer", outgoing=True, doc=owned)
+			waiver.assert_called_with(owned, self.warehouse, self.policy)
+			hooks.assert_called_with("warehouse_outgoing_role_waivers")
+			for doc in (other, None):
+				with self.subTest(doc=doc), self.assertRaises(frappe.PermissionError):
+					warehouse_policy.validate_warehouse_operation("WH", "transfer", outgoing=True, doc=doc)
+			# a waiver never opens an operation the type does not allow
+			self.policy.allow_transfer = 0
+			with self.assertRaises(frappe.ValidationError):
+				warehouse_policy.validate_warehouse_operation("WH", "transfer", outgoing=True, doc=owned)
+
+	def test_document_and_ledger_checks_hand_the_document_to_the_waiver(self):
+		self.policy.outgoing_role = "Stock Manager"
+		doc = frappe._dict(
+			doctype="Stock Entry",
+			purpose="Material Transfer",
+			docstatus=1,
+			items=[frappe._dict(name="ROW-1", item_code="ITEM", s_warehouse="WH", t_warehouse="WH2")],
+		)
+		with (
+			patch.object(frappe, "get_cached_value", return_value=1),
+			patch.object(warehouse_policy, "is_verified_pos_consolidation", return_value=False),
+			patch.object(warehouse_policy, "is_loan_movement", return_value=False),
+			patch.object(warehouse_policy, "_is_unchanged_draft_workflow_transition", return_value=False),
+			patch.object(warehouse_policy, "outgoing_role_waived", return_value=True) as waived,
+		):
+			warehouse_policy.validate_document_policy(doc)
+			self.assertIs(waived.call_args.args[0], doc)
+			waived.reset_mock()
+			ledger = frappe._dict(
+				voucher_type="Stock Entry",
+				voucher_no="SE-1",
+				voucher_detail_no="ROW-1",
+				warehouse="WH",
+				actual_qty=-1,
+			)
+			with patch.object(
+				frappe,
+				"get_doc",
+				side_effect=lambda doctype, name=None, **kwargs: (
+					doc
+					if doctype == "Stock Entry"
+					else self.warehouse
+					if doctype == "Warehouse"
+					else self.policy
+				),
+			):
+				warehouse_policy.validate_stock_ledger_policy([ledger])
+			self.assertIs(waived.call_args.args[0], doc)
 
 	def workflow_review_documents(self, **changes):
 		def document(values, children=()):

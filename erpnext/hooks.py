@@ -287,9 +287,19 @@ _regulatory_affairs_doc_events = {
 		"validate": "erpnext.regulatory_affairs.transactions.validate_warning_transaction",
 		"before_submit": "erpnext.regulatory_affairs.transactions.capture_transaction_snapshot",
 	},
+	# A Quotation warns on save, so sales see a marked Item without a registration early, and is checked with
+	# the full policy on submit. It carries no snapshot.
+	"Quotation": {
+		"validate": "erpnext.regulatory_affairs.transactions.validate_warning_transaction",
+		"before_submit": "erpnext.regulatory_affairs.transactions.validate_transaction",
+	},
+	# A Sales Order warns on save and is checked with the full policy on submit.
 	"Sales Order": {
 		"validate": "erpnext.regulatory_affairs.transactions.validate_warning_transaction",
-		"before_submit": "erpnext.regulatory_affairs.transactions.capture_transaction_snapshot",
+		"before_submit": [
+			"erpnext.regulatory_affairs.transactions.validate_transaction",
+			"erpnext.regulatory_affairs.transactions.capture_transaction_snapshot",
+		],
 	},
 	**{
 		_doctype: {

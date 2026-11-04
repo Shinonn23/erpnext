@@ -3,6 +3,10 @@
 Guarded purchase, stock and sales documents are checked row by row against the registration that covers
 each Item on the document's coverage date. Rule evaluation is kept in small functions that only take
 plain values so it can be tested without a database; the hook entry points at the top do the I/O.
+
+An Approved Regulatory Override exempts the rows it covers on the document it is bound to and, on the selling
+side, on the documents made from it (Quotation -> Sales Order -> Delivery Note -> Sales Invoice), resolved per row
+through the row links (`UpstreamOverrides`).
 """
 
 import frappe
@@ -21,6 +25,7 @@ from erpnext.regulatory_affairs.constants import (
 	SETTINGS,
 	SUPERSEDED,
 	SUSPENDED,
+	TRANSACTION_ITEM_DOCTYPES,
 )
 from erpnext.regulatory_affairs.coverage import get_mapping_at_date
 from erpnext.regulatory_affairs.custom_fields import SNAPSHOT_FIELDNAMES
@@ -36,12 +41,29 @@ WARNING_PREFIX = "Warning:"
 STOCK_ENTRY_RECEIPT = "Material Receipt"
 AMBIGUOUS = object()  # a mapping lookup that raised: master data is invalid for that Item and date
 OVERRIDE_FIELDS = ("status", "transaction_doctype", "transaction_name", "item_code")
+# Orders that warn on save and are checked with the full policy on submit (validate_transaction, before_submit).
+SUBMIT_CHECKED_ORDERS = frozenset({"Quotation", "Sales Order"})
+# Set on `doc.flags` by a caller that already ran `validate_transaction` on this save (an app blocking a Quotation
+# when it is sent for approval), so the save-time warning does not report the same rows again.
+POLICY_CHECKED_FLAG = "regulatory_policy_checked"
+
+# Selling rows name the documents they were made from: (document field, row-detail field, upstream doctype),
+# nearest first. The row-detail field leads to the upstream row, which names its own upstream documents.
+UPSTREAM_LINKS = {
+	"Sales Order": (("prevdoc_docname", None, "Quotation"),),
+	"Delivery Note": (("against_sales_order", "so_detail", "Sales Order"),),
+	"Sales Invoice": (
+		("delivery_note", "dn_detail", "Delivery Note"),
+		("sales_order", "so_detail", "Sales Order"),
+	),
+}
 
 # Used when a setting is blank, e.g. before the Single has ever been saved.
 POLICY_DEFAULTS = {
 	"validate_on_purchase_order": 1,
 	"validate_on_purchase_receipt": 1,
 	"validate_on_stock_entry": 1,
+	"validate_on_quotation": 1,
 	"validate_on_sales_order": 1,
 	"validate_on_delivery_note": 1,
 	"validate_on_sales_invoice": 1,
@@ -56,7 +78,16 @@ POLICY_DEFAULTS = {
 
 
 def validate_warning_transaction(doc, method=None):
-	"""Report regulatory gaps on a Purchase Order or Sales Order without ever blocking the save."""
+	"""Report regulatory gaps on a Quotation, Purchase Order or Sales Order without ever blocking the save.
+
+	A Quotation or Sales Order being submitted is skipped here: its `before_submit` runs `validate_transaction`,
+	which reports the same rows (and blocks), so the user does not see every message twice. So is a save on which
+	the caller already ran `validate_transaction` (`POLICY_CHECKED_FLAG`).
+	"""
+	if doc.doctype in SUBMIT_CHECKED_ORDERS and doc.get("docstatus") == 1:
+		return
+	if (getattr(doc, "flags", None) or {}).get(POLICY_CHECKED_FLAG):
+		return
 	_validate(doc, warn_only=True)
 
 
@@ -76,6 +107,7 @@ def capture_transaction_snapshot(doc, method=None):
 		return
 
 	override = get_override(doc, strict=False)
+	upstream = UpstreamOverrides()
 	mappings = {}
 	countries = {}
 	for row in rows:
@@ -89,7 +121,8 @@ def capture_transaction_snapshot(doc, method=None):
 			mappings[key] = _resolve_mapping_for_snapshot(doc, item_code, coverage_date)
 		mapping = mappings[key]
 
-		override_name = override.name if override_covers_row(override, row) else None
+		covering = get_covering_override(doc.doctype, row, override, upstream)
+		override_name = covering.name if covering else None
 		country = _get_manufacturer_country(mapping, countries)
 		row.update(build_snapshot(mapping, coverage_date, override_name, country))
 
@@ -119,11 +152,12 @@ def _validate(doc, *, warn_only):
 	in_scope = get_items_in_scope({row.get("item_code") for row in rows})
 	if not in_scope:
 		if reported:
-			report_messages(reported, [], override, warn_only=True)
+			report_messages(reported, {}, warn_only=True)
 		return
 
+	upstream = UpstreamOverrides()
 	mappings = {}
-	exempted = []
+	exempted = {}
 	for row in rows:
 		item_code = row.get("item_code")
 		if item_code not in in_scope:
@@ -137,10 +171,15 @@ def _validate(doc, *, warn_only):
 			continue
 
 		messages = evaluate_row(doc.doctype, row, mappings[key], coverage_date, settings)
-		target = exempted if override_covers_row(override, row) else reported
-		target.extend(messages)
+		if not messages:
+			continue
+		covering = get_covering_override(doc.doctype, row, override, upstream)
+		if covering:
+			exempted.setdefault(describe_override(covering, doc), []).extend(messages)
+		else:
+			reported.extend(messages)
 
-	report_messages(reported, exempted, override, warn_only=warn_only)
+	report_messages(reported, exempted, warn_only=warn_only)
 
 
 def _lookup_mapping(item_code, coverage_date, warn_only, reported):
@@ -155,13 +194,17 @@ def _lookup_mapping(item_code, coverage_date, warn_only, reported):
 		return AMBIGUOUS
 
 
-def report_messages(reported, exempted, override, *, warn_only):
-	"""Show exempted and warning messages; raise when a blocking message is not exempted."""
+def report_messages(reported, exempted, *, warn_only):
+	"""Show exempted and warning messages; raise when a blocking message is not exempted.
+
+	`exempted` maps the description of each override that applied to the messages it exempted.
+	"""
 	if exempted:
 		frappe.msgprint(
-			_("Regulatory policy was overridden by {0}:").format(frappe.bold(override.name))
-			+ "<br>"
-			+ "<br>".join(exempted),
+			"<br><br>".join(
+				_("Regulatory policy was overridden by {0}:").format(label) + "<br>" + "<br>".join(messages)
+				for label, messages in exempted.items()
+			),
 			title=_("Regulatory override applied"),
 			indicator="orange",
 		)
@@ -287,6 +330,84 @@ def override_covers_row(override, row):
 	if not override:
 		return False
 	return not override.get("item_code") or override.get("item_code") == row.get("item_code")
+
+
+def get_covering_override(doctype, row, override, upstream):
+	"""The override that exempts a row: the document's own first, then one bound to a document the row was made
+	from, nearest first; None when none covers the row."""
+	if override_covers_row(override, row):
+		return override
+	return next(
+		(candidate for candidate in upstream.for_row(doctype, row) if override_covers_row(candidate, row)),
+		None,
+	)
+
+
+def describe_override(override, doc):
+	"""The override's name in bold, with the document it is bound to when that is not `doc`."""
+	label = frappe.bold(escape_html(override.name))
+	doctype, name = override.get("transaction_doctype"), override.get("transaction_name")
+	if doctype and name and (doctype, name) != (doc.doctype, doc.get("name")):
+		label = _("{0} (on {1} {2})").format(label, _(doctype), frappe.bold(escape_html(name)))
+	return label
+
+
+class UpstreamOverrides:
+	"""Approved overrides bound to the documents a selling row was made from, read fresh from the database.
+
+	The sources are resolved per row through the row links (`UPSTREAM_LINKS`), so a document that mixes rows of
+	several Quotations, Sales Orders or Delivery Notes is handled row by row. Each upstream row and each source's
+	overrides are read once per document. A Requested, Rejected or Cancelled override never covers.
+	"""
+
+	def __init__(self):
+		self._rows = {}
+		self._overrides = {}
+
+	def for_row(self, doctype, row):
+		"""Approved overrides of every upstream document of the row, nearest document first."""
+		overrides = []
+		for source in self.sources(doctype, row):
+			overrides.extend(self._approved(*source))
+		return overrides
+
+	def sources(self, doctype, row):
+		"""(doctype, name) of each document the row was made from, nearest first, without repeats."""
+		sources = []
+		for document_field, detail_field, upstream in UPSTREAM_LINKS.get(doctype, ()):
+			detail = row.get(detail_field) if detail_field else None
+			upstream_row = self._row(upstream, detail) if detail else None
+			name = row.get(document_field) or (upstream_row or {}).get("parent")
+			found = [(upstream, name)] if name else []
+			if upstream_row:
+				found.extend(self.sources(upstream, upstream_row))
+			sources.extend(source for source in found if source not in sources)
+		return sources
+
+	def _row(self, doctype, name):
+		key = (doctype, name)
+		if key not in self._rows:
+			fields = {"parent"}
+			for document_field, detail_field, _upstream in UPSTREAM_LINKS.get(doctype, ()):
+				fields.update(field for field in (document_field, detail_field) if field)
+			self._rows[key] = frappe.db.get_value(
+				TRANSACTION_ITEM_DOCTYPES[doctype], name, sorted(fields), as_dict=True
+			)
+		return self._rows[key]
+
+	def _approved(self, doctype, name):
+		key = (doctype, name)
+		if key not in self._overrides:
+			self._overrides[key] = [
+				frappe._dict(row)
+				for row in frappe.get_all(
+					REGULATORY_OVERRIDE,
+					filters={"transaction_doctype": doctype, "transaction_name": name, "status": "Approved"},
+					fields=["name", *OVERRIDE_FIELDS],
+					order_by="name asc",
+				)
+			]
+		return self._overrides[key]
 
 
 # Row evaluation

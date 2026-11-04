@@ -45,8 +45,8 @@ unregulated ones). There is no separate assessment status, exemption reason or N
 registration simply has no Product Category.
 
 The **Regulatory** tab also has `regulatory_other_category` (for Other), `medical_device_category` (only for Medical Device) and
-`regulatory_owner`. The six guarded transactions get `regulatory_override_ref` (Link) and each item row gets a collapsed, read-only
-**Regulatory Snapshot** section (`regulatory_*` fields listed in `custom_fields.SNAPSHOT_FIELDNAMES`). Custom Field definitions live
+`regulatory_owner`. The six guarded transactions and the Quotation get `regulatory_override_ref` (Link); each item row of the six
+(not the Quotation) gets a collapsed, read-only **Regulatory Snapshot** section (`regulatory_*` fields listed in `custom_fields.SNAPSHOT_FIELDNAMES`). Custom Field definitions live
 in `custom_fields.py` (RA is their only owner). The legacy Item fields *Thai FDA Assessment Status* (`custom_thai_fda_applicability`)
 and *Thai FDA Assessment Reason / Notes* (`custom_thai_fda_assessment_note`) are retired by the patch described under
 [Retiring the Thai FDA Assessment Status](#retiring-the-thai-fda-assessment-status). Sites installed before the module was
@@ -114,9 +114,14 @@ conflict because the predecessor and successor have different windows. More than
 
 ## Transaction policy (`transactions.py`)
 
-Hooks: PO and SO `validate` -> `validate_warning_transaction`; `before_submit` of PO, Purchase Receipt, Stock Entry, SO, Delivery
-Note and Sales Invoice -> `capture_transaction_snapshot`; `before_submit` of Purchase Receipt, Stock Entry, Delivery Note and Sales
-Invoice additionally -> `validate_transaction` (run first).
+Hooks: Quotation, PO and SO `validate` -> `validate_warning_transaction`; `before_submit` of PO, Purchase Receipt, Stock Entry, SO,
+Delivery Note and Sales Invoice -> `capture_transaction_snapshot`; `before_submit` of Quotation, Purchase Receipt, Stock Entry, SO,
+Delivery Note and Sales Invoice additionally -> `validate_transaction` (run first). A Quotation and a Sales Order are therefore
+warned on save and blocked on submit like a delivery (`validate_on_quotation` / `validate_on_sales_order`; an Approved override
+covering the rows lets them through); `validate_warning_transaction` skips a Quotation or Sales Order being submitted so its
+messages are not shown twice. A Quotation has no snapshot. A caller that already ran `validate_transaction` on a save sets
+`doc.flags.regulatory_policy_checked` (`POLICY_CHECKED_FLAG`) and the save-time warning steps aside (Connect Diagnostics blocks a
+Quotation when it is sent for approval this way, before any approver is asked).
 
 * Only rows whose Item has a Product Category are checked (any category). Saving a registration that maps an Item without one shows
   an orange alert asking to set it.
@@ -124,9 +129,10 @@ Invoice additionally -> `validate_transaction` (run first).
   snapshot). **Stock Entry** is validated and snapshotted only for purpose *Material Receipt* so transfers, issues and
   write-offs of non-compliant stock stay possible. **Sales Invoice** rows linked to a Delivery Note (`dn_detail` or `delivery_note`)
   are not validated again; when `dn_detail` is set they inherit the Delivery Note row's snapshot.
-* Coverage date: PO row `schedule_date` (then the document's, then `transaction_date`), SO row `delivery_date` (then the document's, then `transaction_date`), otherwise `posting_date`, falling back to `transaction_date`, then today.
-* Consolidated Sales Invoices built by POS closing are not validated (POS Invoices themselves are not guarded). Purchase Order and
-  Sales Order validation never raises: an unusable override or an ambiguous mapping is reported as a warning there.
+* Coverage date: PO row `schedule_date` (then the document's, then `transaction_date`), SO row `delivery_date` (then the document's, then `transaction_date`), otherwise `posting_date`, falling back to `transaction_date`, then today. A Quotation has no `posting_date`, so it is covered on its `transaction_date` (not `valid_till`).
+* Consolidated Sales Invoices built by POS closing are not validated (POS Invoices themselves are not guarded). Saving a Quotation,
+  Purchase Order or Sales Order never raises: an unusable override or an ambiguous mapping is reported as a warning there; submitting
+  a Quotation or Sales Order raises like the other submit checks.
 * Per row checks (message prefix `Block:` or `Warning:` from the policy; `Ignore` drops it): no mapping effective on the date
   (`missing_registration_action`); mapping with neither a NEWCODE nor an Identifier (`missing_newcode_action`, labelled *Missing NEWCODE / Identifier Action*; migrated legacy lines carry only an Identifier, which is accepted); status Suspended / Revoked
   (`suspended_/revoked_registration_action`); any other non-covering status (Cancelled, Draft ...) counts as missing; expired
@@ -137,6 +143,16 @@ Invoice additionally -> `validate_transaction` (run first).
   always message.
 * **Override** (`regulatory_override_ref` on the document): must be Approved, bound to this `doctype` + `name`, and if the
   override has an `item_code`, only rows of that Item are exempted. The snapshot records `regulatory_override` on every in-scope row the override covers, including rows that have no mapping (the audit trail for exactly that case).
+* **Carried-forward override** (`UpstreamOverrides`): on the selling side an Approved override also covers the rows made from the
+  document it is bound to, resolved per row through the row links, nearest document first: Sales Order row `prevdoc_docname`
+  (Quotation); Delivery Note row `against_sales_order` and, through `so_detail`, that Sales Order row's Quotation; Sales Invoice row
+  `delivery_note` (and through `dn_detail` the Delivery Note row's Sales Order and Quotation) and `sales_order` (and through
+  `so_detail` its Quotation). So an override of a Quotation covers its Sales Orders and their Delivery Notes and Sales Invoices, one
+  of a Sales Order its Delivery Notes and Sales Invoices, and one of a Delivery Note the invoice rows made from it. The `item_code`
+  scope applies the same way; a document mixing rows of several sources is judged row by row. Upstream overrides are read from the
+  database on every check (status Approved only, so a Requested, Rejected or Cancelled one never covers); the document's own
+  override is tried first. The message names the override and the document it is bound to ("overridden by RO-1 (on Quotation
+  QTN-1)") and the snapshot records it on the rows it covers. Purchase and stock documents have no upstream overrides.
 * **Snapshot** (never blocks; an ambiguous mapping is logged and left blank): `regulatory_registration`, `regulatory_newcode`,
   `regulatory_identifier`, `regulatory_manufacturer`, `regulatory_manufacturer_country`, `regulatory_registration_status`,
   `regulatory_registration_expiry`, `regulatory_coverage_date`, `regulatory_override`. With no mapping only the coverage date (and a
@@ -331,8 +347,9 @@ so with the default **Block** policies an expired or suspended legacy registrati
    overdue reminder repeats on day 1 and every *Overdue Reminder Interval* days.
 6. Sales Invoice made from a Delivery Note keeps the delivery's snapshot even after the registration expires; a return is never blocked;
    a Stock Entry of type Material Transfer is not checked.
-7. Override: the requester cannot approve; an approved override bound to one Delivery Note lets exactly that document through and is
-   recorded on its rows.
+7. Override: the requester cannot approve; an approved override bound to one Delivery Note lets exactly that document (and the
+   invoice rows made from it) through and is recorded on its rows; one bound to a Quotation also lets the Sales Order, Delivery Note
+   and Sales Invoice made from it through.
 8. Legacy data: on a copy of a site with Thai FDA Registration records, the dry run lists one registration per distinct number and the
    conflicts; the real run creates them (Active ones with a past expiry as Expired, legacy numbers kept, renewal log in *Renewal
    History*, certificate documents attached), shows the Items as covered, copies legacy reminder days and recipients into Settings, and a
@@ -363,7 +380,9 @@ enforces the role rule. Because an Item Manager can no longer set the category, 
 * The Item dashboard shows no Regulatory connection group; use the Item's *Current Registration* field and the *Coverage Matrix* button.
 
 * Establishment licences get expiry alerts but no Renewal Actions; Registration Actions work on product registrations only.
-* Purchase Invoice, Subcontracting and Stock Reconciliation are not guarded; Purchase Order and Sales Order only warn.
+* Purchase Invoice, Subcontracting and Stock Reconciliation are not guarded; Purchase Order only warns.
+* `regulatory_override_ref` is no-copy: an upstream override is found through the row links, not copied onto the document. A row
+  added by hand (no link to a source row) is covered only by the document's own override.
 * Overrides are requested from the Override form (or API); the transactions have no shortcut button yet.
 * Product lines of a live registration can still be edited by an Operator (history is kept by version tracking); the issue/expiry
   dates cannot.
