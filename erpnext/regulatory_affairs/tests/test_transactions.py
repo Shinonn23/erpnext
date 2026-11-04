@@ -55,6 +55,44 @@ def make_override(**values):
 	return override
 
 
+class FakeUpstream:
+	"""The upstream item rows and Regulatory Override rows that `UpstreamOverrides` reads."""
+
+	ITEM_DOCTYPES = frozenset({"Sales Order Item", "Delivery Note Item"})
+
+	def __init__(self, rows=None, overrides=None):
+		self.rows = rows or {}  # (item doctype, row name) -> values
+		self.overrides = overrides or []  # stored Regulatory Override rows, any status
+		self.row_reads = []
+		self.override_reads = []
+
+	def get_value(self, doctype, name, fields=None, as_dict=False):
+		assert doctype in self.ITEM_DOCTYPES, doctype
+		self.row_reads.append((doctype, name))
+		stored = self.rows.get((doctype, name))
+		return frappe._dict({field: stored.get(field) for field in fields}) if stored else None
+
+	def get_all(self, doctype, filters=None, fields=None, order_by=None, **kwargs):
+		assert doctype == "Regulatory Override", doctype
+		self.override_reads.append((filters["transaction_doctype"], filters["transaction_name"]))
+		matches = [
+			row for row in self.overrides if all(row.get(field) == value for field, value in filters.items())
+		]
+		return [
+			{field: row.get(field) for field in fields} for row in sorted(matches, key=lambda r: r["name"])
+		]
+
+
+def stored_override(name, transaction_doctype, transaction_name, item_code=None, status="Approved"):
+	return dict(
+		name=name,
+		status=status,
+		transaction_doctype=transaction_doctype,
+		transaction_name=transaction_name,
+		item_code=item_code,
+	)
+
+
 def evaluate(doctype, mapping, settings=None, **row_values):
 	return transactions.evaluate_row(
 		doctype, make_row(**row_values), mapping, COVERAGE_DATE, settings or make_settings()
@@ -384,12 +422,15 @@ class TestOverride(unittest.TestCase):
 class ValidationHarness:
 	"""Runs the entry points with the database, the policy settings and the messages replaced."""
 
-	def __init__(self, mappings, settings=None, in_scope=None, override=None, override_problem=None):
+	def __init__(
+		self, mappings, settings=None, in_scope=None, override=None, override_problem=None, upstream=None
+	):
 		self.mappings = mappings
 		self.settings = settings or make_settings()
 		self.in_scope = in_scope
 		self.override = override
 		self.override_problem = override_problem
+		self.upstream = upstream or FakeUpstream()
 		self.mapping_error = None
 
 	def _mapping_for(self, item_code, on_date):
@@ -422,6 +463,10 @@ class ValidationHarness:
 					transactions, "load_override", return_value=(self.override, self.override_problem)
 				)
 			)
+			db = MagicMock()
+			db.get_value.side_effect = self.upstream.get_value
+			stack.enter_context(patch.object(frappe, "db", new=db))
+			stack.enter_context(patch.object(frappe, "get_all", side_effect=self.upstream.get_all))
 			self.msgprint = stack.enter_context(patch.object(frappe, "msgprint"))
 			self.throw = stack.enter_context(
 				patch.object(frappe, "throw", side_effect=frappe.ValidationError)
@@ -662,18 +707,23 @@ def snapshot_values(row):
 
 
 class SnapshotHarness:
-	def __init__(self, mappings, in_scope=None, override=None, countries=None, delivery_rows=None):
+	def __init__(
+		self, mappings, in_scope=None, override=None, countries=None, delivery_rows=None, upstream=None
+	):
 		self.mappings = mappings
 		self.in_scope = in_scope
 		self.override = override
 		self.countries = countries or {}
 		self.delivery_rows = delivery_rows or {}
+		self.upstream = upstream or FakeUpstream()
 
 	def lookup(self, doctype, name, fields=None, **kwargs):
 		if doctype == "Manufacturer":
 			return self.countries.get(name)
-		if doctype == "Delivery Note Item":
+		if doctype == "Delivery Note Item" and fields == list(SNAPSHOT_FIELDNAMES):
 			return self.delivery_rows.get(name)
+		if doctype in FakeUpstream.ITEM_DOCTYPES:
+			return self.upstream.get_value(doctype, name, fields, **kwargs)
 		raise AssertionError(f"Unexpected lookup of {doctype}")
 
 	def run(self, doc):
@@ -696,6 +746,7 @@ class SnapshotHarness:
 				)
 			)
 			stack.enter_context(patch.object(transactions, "get_override", return_value=self.override))
+			stack.enter_context(patch.object(frappe, "get_all", side_effect=self.upstream.get_all))
 			self.log_error = stack.enter_context(patch.object(frappe, "log_error"))
 			self.throw = stack.enter_context(
 				patch.object(frappe, "throw", side_effect=frappe.ValidationError)
@@ -985,3 +1036,339 @@ class TestHardening(unittest.TestCase):
 			harness.run_with(make_doc())
 		self.assertTrue(harness.raised)
 		clear.assert_not_called()
+
+
+class TestSalesOrderAndQuotation(unittest.TestCase):
+	"""A Sales Order warns on save and is blocked on submit; a Quotation only warns."""
+
+	def handlers(self, doctype, event):
+		from erpnext import hooks
+
+		value = hooks.doc_events.get(doctype, {}).get(event) or []
+		return value if isinstance(value, list) else [value]
+
+	def sales_order(self, **values):
+		return make_doc("Sales Order", transaction_date="2026-08-09", delivery_date="2026-08-09", **values)
+
+	def test_hooks_warn_on_save_and_check_sales_order_and_quotation_on_submit(self):
+		validate = "erpnext.regulatory_affairs.transactions.validate_transaction"
+		snapshot = "erpnext.regulatory_affairs.transactions.capture_transaction_snapshot"
+		warn = "erpnext.regulatory_affairs.transactions.validate_warning_transaction"
+		handlers = self.handlers("Sales Order", "before_submit")
+		self.assertLess(handlers.index(validate), handlers.index(snapshot))
+		self.assertIn(warn, self.handlers("Sales Order", "validate"))
+		self.assertIn(warn, self.handlers("Quotation", "validate"))
+		self.assertIn(validate, self.handlers("Quotation", "before_submit"))
+		# A Quotation carries no snapshot.
+		self.assertNotIn(snapshot, self.handlers("Quotation", "before_submit"))
+		self.assertNotIn(validate, self.handlers("Quotation", "validate"))
+		self.assertNotIn(validate, self.handlers("Purchase Order", "before_submit"))
+
+	def test_sales_order_submit_blocks_without_a_registration(self):
+		harness = ValidationHarness({}).run_with(self.sales_order(docstatus=1))
+		self.assertTrue(harness.raised)
+		self.assertTrue(harness.throw_calls[0][0][0].startswith("Block:"))
+
+	def test_sales_order_submit_checks_the_row_delivery_date(self):
+		rows = [make_row(delivery_date="2027-01-02")]
+		mapping = make_mapping(in_force=None)
+		harness = ValidationHarness({"DEVICE-1": mapping}).run_with(self.sales_order(rows=rows, docstatus=1))
+		self.assertTrue(harness.raised)
+		self.assertIn("which expired on 2027-01-01", harness.throw_calls[0][0][0])
+		self.assertEqual([call[0][1] for call in harness.mapping_calls], [date(2027, 1, 2)])
+
+	def test_sales_order_submit_passes_with_an_approved_override(self):
+		override = make_override(name="OVR-1", transaction_doctype="Sales Order")
+		harness = ValidationHarness({}, override=override).run_with(self.sales_order(docstatus=1))
+		self.assertFalse(harness.raised)
+		self.assertIn("OVR-1", harness.msgprint_calls[0][0][0])
+
+	def test_sales_order_submit_raises_for_an_unusable_override(self):
+		problem = "Regulatory Override OVR-9 does not belong to this transaction."
+		harness = ValidationHarness({"DEVICE-1": make_mapping()}, override_problem=problem).run_with(
+			self.sales_order(docstatus=1)
+		)
+		self.assertTrue(harness.raised)
+
+	def test_sales_order_switch_off_skips_the_submit_check(self):
+		settings = make_settings(validate_on_sales_order=0)
+		harness = ValidationHarness({}, settings).run_with(self.sales_order(docstatus=1))
+		self.assertFalse(harness.raised)
+		self.assertEqual(harness.mapping_calls, [])
+
+	def test_sales_order_save_warns_and_submit_does_not_warn_twice(self):
+		harness = ValidationHarness({}).run_with(
+			self.sales_order(), transactions.validate_warning_transaction
+		)
+		self.assertFalse(harness.raised)
+		self.assertIn("Block:", harness.msgprint_calls[0][0][0])
+		harness = ValidationHarness({}).run_with(
+			self.sales_order(docstatus=1), transactions.validate_warning_transaction
+		)
+		self.assertEqual((harness.raised, harness.msgprint_calls, harness.mapping_calls), (False, [], []))
+
+	def test_purchase_order_still_warns_when_submitted(self):
+		doc = make_doc("Purchase Order", transaction_date="2026-08-09", docstatus=1)
+		harness = ValidationHarness({}).run_with(doc, transactions.validate_warning_transaction)
+		self.assertFalse(harness.raised)
+		self.assertEqual(len(harness.msgprint_calls), 1)
+
+	def quotation(self, **values):
+		doc = make_doc("Quotation", transaction_date="2026-08-09", **values)
+		doc.pop("posting_date")
+		return doc
+
+	def test_quotation_save_warns_on_its_transaction_date_and_never_raises(self):
+		harness = ValidationHarness({}).run_with(self.quotation(), transactions.validate_warning_transaction)
+		self.assertFalse(harness.raised)
+		self.assertEqual(harness.throw_calls, [])
+		self.assertIn("Block:", harness.msgprint_calls[0][0][0])
+		self.assertEqual([call[0][1] for call in harness.mapping_calls], [COVERAGE_DATE])
+
+	def test_quotation_submit_blocks_on_its_transaction_date_and_does_not_warn_twice(self):
+		doc = self.quotation(docstatus=1, valid_till="2027-12-31")
+		harness = ValidationHarness({}).run_with(doc, transactions.validate_warning_transaction)
+		self.assertEqual((harness.raised, harness.msgprint_calls, harness.mapping_calls), (False, [], []))
+		harness = ValidationHarness({}).run_with(doc)
+		self.assertTrue(harness.raised)
+		self.assertTrue(harness.throw_calls[0][0][0].startswith("Block:"))
+		self.assertEqual([call[0][1] for call in harness.mapping_calls], [COVERAGE_DATE])
+
+	def test_quotation_submit_passes_with_its_own_approved_override(self):
+		override = make_override(name="OVR-Q", transaction_doctype="Quotation")
+		harness = ValidationHarness({}, override=override).run_with(self.quotation(docstatus=1))
+		self.assertFalse(harness.raised)
+		self.assertIn("OVR-Q", harness.msgprint_calls[0][0][0])
+
+	def test_a_save_already_checked_by_the_caller_is_not_warned_again(self):
+		doc = self.quotation(flags=frappe._dict({transactions.POLICY_CHECKED_FLAG: True}))
+		harness = ValidationHarness({}).run_with(doc, transactions.validate_warning_transaction)
+		self.assertEqual((harness.raised, harness.msgprint_calls, harness.mapping_calls), (False, [], []))
+
+	def test_quotation_has_its_own_switch(self):
+		self.assertEqual(make_settings().validate_on_quotation, 1)
+		settings = make_settings(validate_on_quotation=0)
+		for docstatus, entry_point in (
+			(0, transactions.validate_warning_transaction),
+			(1, transactions.validate_transaction),
+		):
+			doc = self.quotation(docstatus=docstatus)
+			harness = ValidationHarness({}, settings).run_with(doc, entry_point)
+			self.assertEqual((harness.raised, harness.msgprint_calls, harness.mapping_calls), (False, [], []))
+
+
+# Upstream item rows of the sales chain QTN-1 -> SO-1 -> DN-1, and two unrelated orders
+UPSTREAM_ROWS = {
+	("Sales Order Item", "SOI-1"): {"parent": "SO-1", "prevdoc_docname": "QTN-1"},
+	("Sales Order Item", "SOI-2"): {"parent": "SO-2", "prevdoc_docname": "QTN-2"},
+	("Sales Order Item", "SOI-3"): {"parent": "SO-3", "prevdoc_docname": None},
+	("Delivery Note Item", "DNI-1"): {
+		"parent": "DN-1",
+		"against_sales_order": "SO-1",
+		"so_detail": "SOI-1",
+	},
+}
+
+
+class TestUpstreamOverrides(unittest.TestCase):
+	"""An Approved override bound to a Quotation, Sales Order or Delivery Note covers the rows made from it."""
+
+	def upstream(self, *overrides):
+		return FakeUpstream(dict(UPSTREAM_ROWS), list(overrides))
+
+	def run_doc(self, doc, *overrides, entry_point=transactions.validate_transaction):
+		return ValidationHarness({}, upstream=self.upstream(*overrides)).run_with(doc, entry_point)
+
+	def overridden(self, harness):
+		return [
+			call[0][0]
+			for call in harness.msgprint_calls
+			if call[1].get("title") == "Regulatory override applied"
+		]
+
+	def test_sources_are_resolved_per_row_nearest_first(self):
+		with patch.object(
+			frappe, "db", new=MagicMock(get_value=MagicMock(side_effect=self.upstream().get_value))
+		):
+			upstream = transactions.UpstreamOverrides()
+			self.assertEqual(
+				upstream.sources("Sales Order", make_row(prevdoc_docname="QTN-1")), [("Quotation", "QTN-1")]
+			)
+			self.assertEqual(
+				upstream.sources("Delivery Note", make_row(against_sales_order="SO-1", so_detail="SOI-1")),
+				[("Sales Order", "SO-1"), ("Quotation", "QTN-1")],
+			)
+			invoice_row = make_row(
+				delivery_note="DN-1", dn_detail="DNI-1", sales_order="SO-1", so_detail="SOI-1"
+			)
+			self.assertEqual(
+				upstream.sources("Sales Invoice", invoice_row),
+				[("Delivery Note", "DN-1"), ("Sales Order", "SO-1"), ("Quotation", "QTN-1")],
+			)
+			# A row-detail link alone still finds the upstream document.
+			self.assertEqual(
+				upstream.sources("Sales Invoice", make_row(so_detail="SOI-2")),
+				[("Sales Order", "SO-2"), ("Quotation", "QTN-2")],
+			)
+			self.assertEqual(upstream.sources("Purchase Receipt", make_row(purchase_order="PO-1")), [])
+			self.assertEqual(upstream.sources("Quotation", make_row()), [])
+
+	def test_a_quotation_override_covers_its_sales_order_delivery_note_and_invoice(self):
+		override = stored_override("RO-Q", "Quotation", "QTN-1")
+		documents = (
+			make_doc(
+				"Sales Order",
+				transaction_date="2026-08-09",
+				rows=[make_row(prevdoc_docname="QTN-1")],
+				docstatus=1,
+			),
+			make_doc("Delivery Note", rows=[make_row(against_sales_order="SO-1", so_detail="SOI-1")]),
+			make_doc("Sales Invoice", rows=[make_row(sales_order="SO-1", so_detail="SOI-1")], update_stock=1),
+		)
+		for doc in documents:
+			with self.subTest(doc.doctype):
+				harness = self.run_doc(doc, override)
+				self.assertFalse(harness.raised)
+				message = self.overridden(harness)[0]
+				self.assertIn("RO-Q", message)
+				self.assertIn("QTN-1", message)
+				self.assertIn("Quotation", message)
+
+	def test_a_sales_order_override_covers_its_delivery_note_and_invoice_not_the_quotation(self):
+		override = stored_override("RO-SO", "Sales Order", "SO-1")
+		delivery = make_doc("Delivery Note", rows=[make_row(against_sales_order="SO-1", so_detail="SOI-1")])
+		self.assertFalse(self.run_doc(delivery, override).raised)
+		invoice = make_doc("Sales Invoice", rows=[make_row(sales_order="SO-1", so_detail="SOI-1")])
+		self.assertFalse(self.run_doc(invoice, override).raised)
+		quotation = make_doc("Quotation", name="QTN-1", docstatus=1)
+		self.assertTrue(self.run_doc(quotation, override).raised)
+
+	def test_a_delivery_note_override_covers_the_invoice_rows_made_from_it(self):
+		override = stored_override("RO-DN", "Delivery Note", "DN-1")
+		rows = [make_row(delivery_note="DN-1", dn_detail="DNI-1")]
+		harness = SnapshotHarness({}, upstream=self.upstream(override)).run(
+			make_doc("Sales Invoice", rows=rows)
+		)
+		self.assertEqual(harness["items"][0].regulatory_override, "RO-DN")
+		# The invoice row was delivered, so the policy is not applied to it again; a row of the DN's Sales Order
+		# that the DN did not deliver is not covered by the DN's override.
+		rows = [make_row(sales_order="SO-1", so_detail="SOI-1")]
+		self.assertTrue(self.run_doc(make_doc("Sales Invoice", rows=rows), override).raised)
+
+	def test_mixed_sources_are_judged_row_by_row(self):
+		override = stored_override("RO-Q1", "Quotation", "QTN-1")
+		rows = [
+			make_row("DEVICE-1", idx=1, against_sales_order="SO-1", so_detail="SOI-1"),
+			make_row("DEVICE-2", idx=2, against_sales_order="SO-2", so_detail="SOI-2"),
+		]
+		harness = self.run_doc(make_doc("Delivery Note", rows=rows), override)
+		self.assertTrue(harness.raised)
+		blocked = harness.throw_calls[0][0][0]
+		self.assertIn("Row 2", blocked)
+		self.assertNotIn("Row 1", blocked)
+		self.assertIn("Row 1", self.overridden(harness)[0])
+
+	def test_an_item_scoped_upstream_override_covers_only_its_item(self):
+		override = stored_override("RO-Q", "Quotation", "QTN-1", item_code="DEVICE-1")
+		rows = [
+			make_row("DEVICE-1", idx=1, prevdoc_docname="QTN-1"),
+			make_row("DEVICE-2", idx=2, prevdoc_docname="QTN-1"),
+		]
+		harness = self.run_doc(
+			make_doc("Sales Order", transaction_date="2026-08-09", rows=rows, docstatus=1), override
+		)
+		self.assertTrue(harness.raised)
+		self.assertIn("DEVICE-2", harness.throw_calls[0][0][0])
+		self.assertNotIn("DEVICE-1", harness.throw_calls[0][0][0])
+		self.assertIn("DEVICE-1", self.overridden(harness)[0])
+
+	def test_a_requested_rejected_or_cancelled_upstream_override_does_not_cover(self):
+		doc = make_doc(
+			"Sales Order",
+			transaction_date="2026-08-09",
+			rows=[make_row(prevdoc_docname="QTN-1")],
+			docstatus=1,
+		)
+		for status in ("Requested", "Rejected", "Cancelled"):
+			with self.subTest(status=status):
+				override = stored_override("RO-Q", "Quotation", "QTN-1", status=status)
+				harness = self.run_doc(doc, override)
+				self.assertTrue(harness.raised)
+				self.assertEqual(self.overridden(harness), [])
+
+	def test_an_override_of_an_unrelated_document_does_not_cover(self):
+		doc = make_doc(
+			"Sales Order",
+			transaction_date="2026-08-09",
+			rows=[make_row(prevdoc_docname="QTN-1")],
+			docstatus=1,
+		)
+		for override in (
+			stored_override("RO-X", "Quotation", "QTN-2"),
+			stored_override("RO-X", "Sales Order", "QTN-1"),
+		):
+			with self.subTest(override=override):
+				self.assertTrue(self.run_doc(doc, override).raised)
+
+	def test_the_document_own_override_still_applies_and_comes_first(self):
+		own = make_override(name="OVR-OWN", transaction_doctype="Sales Order")
+		upstream = stored_override("RO-Q", "Quotation", "QTN-1")
+		doc = make_doc(
+			"Sales Order",
+			transaction_date="2026-08-09",
+			rows=[make_row(prevdoc_docname="QTN-1")],
+			docstatus=1,
+		)
+		harness = ValidationHarness({}, override=own, upstream=self.upstream(upstream)).run_with(doc)
+		self.assertFalse(harness.raised)
+		message = self.overridden(harness)[0]
+		self.assertIn("OVR-OWN", message)
+		self.assertNotIn("RO-Q", message)
+		self.assertEqual(harness.upstream.override_reads, [])
+
+	def test_overrides_are_read_fresh_once_per_source(self):
+		override = stored_override("RO-Q", "Quotation", "QTN-1")
+		rows = [
+			make_row("DEVICE-1", idx=1, prevdoc_docname="QTN-1"),
+			make_row("DEVICE-2", idx=2, prevdoc_docname="QTN-1"),
+		]
+		harness = self.run_doc(
+			make_doc("Sales Order", transaction_date="2026-08-09", rows=rows, docstatus=1), override
+		)
+		self.assertFalse(harness.raised)
+		self.assertEqual(harness.upstream.override_reads, [("Quotation", "QTN-1")])
+
+	def test_a_compliant_row_reads_no_upstream(self):
+		doc = make_doc(
+			"Sales Order",
+			transaction_date="2026-08-09",
+			rows=[make_row(prevdoc_docname="QTN-1")],
+			docstatus=1,
+		)
+		harness = ValidationHarness({"DEVICE-1": make_mapping()}, upstream=self.upstream()).run_with(doc)
+		self.assertEqual((harness.raised, harness.upstream.override_reads), (False, []))
+
+	def test_order_entry_save_reports_the_upstream_override_without_blocking(self):
+		override = stored_override("RO-Q", "Quotation", "QTN-1")
+		doc = make_doc("Sales Order", transaction_date="2026-08-09", rows=[make_row(prevdoc_docname="QTN-1")])
+		harness = self.run_doc(doc, override, entry_point=transactions.validate_warning_transaction)
+		self.assertFalse(harness.raised)
+		self.assertIn("RO-Q", self.overridden(harness)[0])
+
+	def test_snapshot_records_the_upstream_override_on_the_rows_it_covers(self):
+		override = stored_override("RO-Q", "Quotation", "QTN-1", item_code="DEVICE-1")
+		rows = [
+			make_row("DEVICE-1", idx=1, prevdoc_docname="QTN-1"),
+			make_row("DEVICE-2", idx=2, prevdoc_docname="QTN-1"),
+		]
+		doc = SnapshotHarness({}, upstream=self.upstream(override)).run(
+			make_doc("Sales Order", transaction_date="2026-08-09", rows=rows)
+		)
+		self.assertEqual([row.regulatory_override for row in doc["items"]], ["RO-Q", None])
+
+	def test_purchase_documents_have_no_upstream_overrides(self):
+		override = stored_override("RO-PO", "Purchase Order", "PO-1")
+		rows = [make_row(purchase_order="PO-1", purchase_order_item="POI-1")]
+		harness = self.run_doc(make_doc("Purchase Receipt", rows=rows), override)
+		self.assertTrue(harness.raised)
+		self.assertEqual(harness.upstream.override_reads, [])

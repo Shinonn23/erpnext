@@ -143,6 +143,7 @@ NATIVE_JSON = {
 	"Sales Order": "selling/doctype/sales_order/sales_order.json",
 	"Delivery Note": "stock/doctype/delivery_note/delivery_note.json",
 	"Sales Invoice": "accounts/doctype/sales_invoice/sales_invoice.json",
+	"Quotation": "selling/doctype/quotation/quotation.json",
 }
 
 

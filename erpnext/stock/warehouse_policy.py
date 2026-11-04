@@ -130,7 +130,9 @@ def lock_warehouse_policies(warehouse_names):
 		_current_doc("Warehouse Type", name)
 
 
-def validate_warehouse_operation(warehouse, operation, outgoing=False, cancellation=False, for_update=False):
+def validate_warehouse_operation(
+	warehouse, operation, outgoing=False, cancellation=False, for_update=False, doc=None
+):
 	if not warehouse:
 		return
 	location = _current_doc("Warehouse", warehouse) if for_update else frappe.get_doc("Warehouse", warehouse)
@@ -154,11 +156,30 @@ def validate_warehouse_operation(warehouse, operation, outgoing=False, cancellat
 				warehouse, policy.name, _(operation)
 			)
 		)
-	if outgoing and policy.outgoing_role and policy.outgoing_role not in frappe.get_roles():
+	if (
+		outgoing
+		and policy.outgoing_role
+		and policy.outgoing_role not in frappe.get_roles()
+		and not outgoing_role_waived(doc, location, policy)
+	):
 		frappe.throw(
 			_("Moving stock out of warehouse {0} requires the {1} role.").format(warehouse, policy.outgoing_role),
 			frappe.PermissionError,
 		)
+
+
+def outgoing_role_waived(doc, warehouse, policy):
+	"""Whether an app lets this document move stock out of `warehouse` without the type's outgoing role.
+
+	Hook `warehouse_outgoing_role_waivers`: dotted paths called with (doc, warehouse, policy); a waiver must
+	answer True only for the documents it owns (e.g. a release out of quarantine by the Item's QI team).
+	"""
+	if doc is None:
+		return False
+	return any(
+		frappe.get_attr(path)(doc, warehouse, policy)
+		for path in frappe.get_hooks("warehouse_outgoing_role_waivers")
+	)
 
 
 def is_loan_movement(doc):
@@ -193,6 +214,9 @@ def is_loan_movement(doc):
 
 
 def movement_operation(doc, outgoing, loan=False, row=None):
+	# the incoming leg of a return row is its own warehouse (row.warehouse); its target is the loan warehouse it leaves
+	if loan and not outgoing and _rejected_loan_return_into_quarantine(doc, row):
+		return "receipt"
 	if (
 		doc.doctype in ("Delivery Note", "Sales Invoice", "POS Invoice")
 		and doc.get("is_internal_customer")
@@ -220,6 +244,29 @@ def movement_operation(doc, outgoing, loan=False, row=None):
 	if doc.doctype in ("Delivery Note", "Sales Invoice", "POS Invoice"):
 		return "sales"
 	return "issue" if outgoing else "receipt"
+
+
+def _rejected_loan_return_into_quarantine(doc, row):
+	"""Goods of a Custody Loan return that failed inspection are received into the company's quarantine warehouse
+	(Siwat, 4 Nov 2026): that leg is a receipt there, not a loan movement, which a Quarantine type does not allow."""
+	if not (row and doc.doctype == "Delivery Note" and row.get("quality_inspection")):
+		return False
+	from erpnext.loan.doctype.custody_loan.custody_loan_core import (
+		is_custody_loan_return_delivery_note,
+		is_quarantine_warehouse,
+	)
+
+	if not is_custody_loan_return_delivery_note(doc):
+		return False
+	inspection = frappe.db.get_value(
+		"Quality Inspection", row.quality_inspection, ["docstatus", "status"], as_dict=True
+	)
+	return bool(
+		inspection
+		and inspection.docstatus == 1
+		and inspection.status == "Rejected"
+		and is_quarantine_warehouse(row.get("warehouse"), doc.company)
+	)
 
 
 def validate_document_policy(doc):
@@ -263,6 +310,7 @@ def validate_document_policy(doc):
 					movement_operation(doc, outgoing, loan, row),
 					outgoing and not review_only,
 					cancellation or verified_pos,
+					doc=doc,
 				)
 
 
@@ -340,6 +388,7 @@ def validate_stock_ledger_policy(entries, via_landed_cost_voucher=False):
 			or via_landed_cost_voucher
 			or bool(frappe.flags.get("stock_control_reposting")),
 			for_update=True,
+			doc=doc,
 		)
 
 

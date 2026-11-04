@@ -13,6 +13,7 @@
   "validate_on_purchase_receipt",
   "validate_on_stock_entry",
   "validation_column",
+  "validate_on_quotation",
   "validate_on_sales_order",
   "validate_on_delivery_note",
   "validate_on_sales_invoice",
@@ -72,7 +73,7 @@
   },
   {
    "default": "1",
-   "description": "Purchase Orders and Sales Orders are warning-only on save; the policy below applies on submit of the other documents.",
+   "description": "Purchase Orders only warn. Quotations and Sales Orders warn on save; the policy below applies on their submit and on submit of the other documents.",
    "fieldname": "validate_on_purchase_order",
    "fieldtype": "Check",
    "label": "Validate on Purchase Order"
@@ -93,6 +94,13 @@
   {
    "fieldname": "validation_column",
    "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "description": "Warns when a Quotation is saved; the policy below applies when it is submitted.",
+   "fieldname": "validate_on_quotation",
+   "fieldtype": "Check",
+   "label": "Validate on Quotation"
   },
   {
    "default": "1",
@@ -267,7 +275,7 @@
  ],
  "index_web_pages_for_search": 0,
  "issingle": 1,
- "modified": "2026-10-18 12:00:00.000000",
+ "modified": "2026-11-04 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Regulatory Affairs",
  "name": "Regulatory Settings",

@@ -1000,7 +1000,7 @@ class CustodyLoanReturn(Document):
 @frappe.whitelist()
 def make_custody_loan_return_quality_inspections(delivery_note_name):
 	delivery_note = frappe.get_doc("Delivery Note", delivery_note_name)
-	delivery_note.check_permission("write")
+	delivery_note.check_permission("read")
 	frappe.has_permission("Quality Inspection", "create", throw=True)
 	if (
 		delivery_note.docstatus != 0
@@ -1019,10 +1019,12 @@ def make_custody_loan_return_quality_inspections(delivery_note_name):
 	for row in delivery_note.items:
 		if row.custody_loan_item not in return_items:
 			frappe.throw(_("Delivery Note row {0} does not match a Loan Return item").format(row.idx))
+		if not custody_loan_return_row_requires_inspection(row):
+			continue
 		if row.quality_inspection:
 			quality_inspection = frappe.get_doc("Quality Inspection", row.quality_inspection)
 			if quality_inspection.docstatus == 0 or (
-				quality_inspection.docstatus == 1 and quality_inspection.status == "Accepted"
+				quality_inspection.docstatus == 1 and quality_inspection.status in ("Accepted", "Rejected")
 			):
 				validate_custody_loan_return_quality_inspection(quality_inspection, delivery_note.name)
 				quality_inspection_names.append(quality_inspection.name)
@@ -1053,6 +1055,33 @@ def make_custody_loan_return_quality_inspections(delivery_note_name):
 	return_doc.update_status()
 	frappe.get_doc("Custody Loan", return_doc.custody_loan).update_status()
 	return quality_inspection_names
+
+
+def custody_loan_return_row_requires_inspection(row):
+	"""A returned stock row is inspected when its Item is inspected before delivery (the same goods come back)."""
+	return bool(cint(frappe.get_cached_value("Item", row.item_code, "inspection_required_before_delivery")))
+
+
+def is_quarantine_warehouse(warehouse, company):
+	"""A Quarantine (or QA) warehouse of the company: returned goods that fail inspection are received there."""
+	values = frappe.db.get_value("Warehouse", warehouse, ["warehouse_type", "warehouse_name", "company"], as_dict=True)
+	return bool(
+		values
+		and values.company == company
+		and (
+			values.warehouse_type in ("Quarantine", "QA")
+			or (values.warehouse_name or "").casefold() in ("qa", "quarantine")
+		)
+	)
+
+
+def custody_loan_return_row_inspected(delivery_note, row, inspection):
+	"""A submitted inspection lets the row be received: Accepted into the source warehouse, Rejected into quarantine."""
+	if not inspection or inspection.docstatus != 1:
+		return False
+	if inspection.status == "Accepted":
+		return True
+	return inspection.status == "Rejected" and is_quarantine_warehouse(row.warehouse, delivery_note.company)
 
 
 def is_custody_loan_return_delivery_note(doc):
@@ -1109,14 +1138,16 @@ def validate_custody_loan_return_receipt(delivery_note, method=None):
 		if row.custody_loan_item not in return_items or row.custody_loan_item in seen_items:
 			frappe.throw(_("Delivery Note row {0} does not match one unique Loan Return item").format(row.idx))
 		seen_items.add(row.custody_loan_item)
+		if not custody_loan_return_row_requires_inspection(row):
+			continue
 		if not row.quality_inspection:
 			frappe.throw(_("Create and submit an accepted Quality Inspection for Delivery Note row {0} before receiving the Loan Return").format(row.idx))
 		quality_inspection = frappe.get_doc("Quality Inspection", row.quality_inspection)
 		validate_custody_loan_return_quality_inspection(quality_inspection, delivery_note.name)
 		if quality_inspection.child_row_reference != row.name:
 			frappe.throw(_("Quality Inspection must match Delivery Note row {0}").format(row.idx))
-		if quality_inspection.docstatus != 1 or quality_inspection.status != "Accepted":
-			frappe.throw(_("Delivery Note row {0} requires a submitted accepted Quality Inspection").format(row.idx))
+		if not custody_loan_return_row_inspected(delivery_note, row, quality_inspection):
+			frappe.throw(_("Delivery Note row {0} requires a submitted Quality Inspection: Accepted, or Rejected and received into the Quarantine warehouse").format(row.idx))
 	if seen_items != return_items:
 		frappe.throw(_("Loan Return Delivery Note must include every returned item exactly once"))
 
@@ -1386,9 +1417,9 @@ def validate_generated_transaction_cancellation(doc, method=None):
 		and doc.get("custody_loan_shipment")
 	):
 		doc.ignore_linked_doctypes += ("Shipment",)
-	if doc.doctype == "Delivery Note" and source_doctype == "Custody Loan Return":
-		# The owning Return cancels its row inspections after reversing receipt.
-		# Inspections cannot be cancelled while that receipt is still submitted.
+	if doc.doctype == "Delivery Note" and source_doctype in ("Custody Loan Return", "Custody Loan"):
+		# The owning Return (or Loan: cancel_own_inspections) cancels its row inspections after reversing the stock.
+		# Inspections cannot be cancelled while that Delivery Note is still submitted.
 		doc.ignore_linked_doctypes += ("Quality Inspection",)
 
 
@@ -1447,7 +1478,15 @@ def validate_custody_loan_delivery_note(doc, loan, source_doctype, source_name):
 			frappe.throw(_("Loan return Delivery Note row must match a Custody Loan Return item"))
 		if (
 			flt(row.qty) != -flt(return_item.returned_qty)
-			or row.warehouse != loan_item.source_warehouse
+			or (
+				row.warehouse != loan_item.source_warehouse
+				and not (
+					# goods that failed their return inspection are received into quarantine
+					is_quarantine_warehouse(row.warehouse, doc.company)
+					and row.quality_inspection
+					and frappe.db.get_value("Quality Inspection", row.quality_inspection, "status") == "Rejected"
+				)
+			)
 			or row.target_warehouse != loan.customer_loan_warehouse
 			or row.dn_detail != frappe.db.get_value(
 				"Delivery Note Item", {"parent": loan.delivery_note, "custody_loan_item": loan_item.name}, "name"
@@ -1995,6 +2034,25 @@ def transaction_is_received(stock_entry_name, asset_movement_name):
 	return False
 
 
+def cancel_own_inspections(doc):
+	"""Cancel the submitted Quality Inspections of a cancelled loan transaction (its own rows only), as the cancellation
+	of the authorized loan; a draft inspection is deleted."""
+	for name in frappe.get_all(
+		"Quality Inspection",
+		filters={"reference_type": doc.doctype, "reference_name": doc.name, "docstatus": ["<", 2]},
+		pluck="name",
+	):
+		inspection = frappe.get_doc("Quality Inspection", name)
+		if inspection.docstatus == 0:
+			frappe.delete_doc("Quality Inspection", name, force=True, ignore_permissions=True)
+			continue
+		inspection.flags.ignore_permissions = True
+		inspection.docstatus = 2
+		if workflow := inspection.meta.get_workflow():
+			set_workflow_state_on_action(inspection, workflow, "cancel")
+		inspection.cancel()
+
+
 def cancel_source_transaction(source, fieldname):
 	stored_source = frappe.get_doc(source.doctype, source.name)
 	if any(source.get(field) != stored_source.get(field) for field in (fieldname, "company", "custody_loan")):
@@ -2068,6 +2126,9 @@ def cancel_source_transaction(source, fieldname):
 			set(doc.get("ignore_linked_doctypes") or ()) | LOAN_SOURCE_DOCTYPES | {"Material Request"}
 		)
 		doc.cancel()
+		if doctype == "Delivery Note" and source.doctype == "Custody Loan":
+			# its own inspections (QI before delivery) go with it, right after
+			cancel_own_inspections(doc)
 	if shipment:
 		# Shipment callbacks still need the source document, including a draft receipt.
 		if shipment.docstatus == 1:
@@ -2123,12 +2184,14 @@ def custody_loan_return_inspections_are_accepted(delivery_note):
 	if not delivery_note.items:
 		return False
 	for row in delivery_note.items:
+		if not custody_loan_return_row_requires_inspection(row):
+			continue
 		if not row.quality_inspection:
 			return False
 		inspection = frappe.db.get_value(
 			"Quality Inspection", row.quality_inspection, ["docstatus", "status"], as_dict=True
 		)
-		if not inspection or inspection.docstatus != 1 or inspection.status != "Accepted":
+		if not custody_loan_return_row_inspected(delivery_note, row, inspection):
 			return False
 	return True
 
