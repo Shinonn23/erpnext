@@ -299,3 +299,45 @@ class TestClearUndueTaxInvoice(unittest.TestCase):
 
 if __name__ == "__main__":
 	unittest.main()
+
+
+class TestDepositInvoiceBase(unittest.TestCase):
+	"""A deposit invoice credits its base to the deposit account (balance sheet) and the invoice after it deducts the
+	deposit there: the base of the VAT a payment clears counts those rows with the income (Siwat, 5 Nov 2026: the
+	payment of a service deposit invoice could not be submitted, "Tax should be 7.0% of the base amount")."""
+
+	SETTINGS = SimpleNamespace(
+		sales_tax_account_undue="2135-01",
+		sales_tax_account="2135-00",
+		purchase_tax_account_undue="1154-01",
+		purchase_tax_account="1154-00",
+	)
+
+	def undue(self, gl, deposit_accounts):
+		ref = SimpleNamespace(reference_doctype="Sales Invoice", allocated_amount=5350, total_amount=5350)
+		report = {"2134-00": "Balance Sheet", "4100-01": "Profit and Loss", "2135-01": "Balance Sheet"}
+		with patch.object(
+			custom_api.frappe, "get_cached_value", side_effect=lambda dt, name, f: report[name]
+		):
+			return custom_api.get_undue_tax(None, ref, gl, self.SETTINGS, deposit_accounts)
+
+	def test_the_deposit_account_row_is_base_and_other_balance_sheet_rows_are_not(self):
+		deposit = {"account": "2134-00", "credit": 5000, "debit": 0}
+		self.assertEqual(self.undue(deposit, {"2134-00"})[1], 5000)
+		self.assertEqual(self.undue(deposit, set())[1], 0)
+		self.assertEqual(
+			self.undue({"account": "2135-01", "credit": 350, "debit": 0}, {"2134-00"})[:2], (350, 0)
+		)
+
+	def test_the_deposit_accounts_are_those_of_the_deposit_item_rows(self):
+		rows = [
+			{"item_code": "DEPOSIT", "income_account": "2134-00"},
+			{"item_code": "SVC", "income_account": "4100-01"},
+		]
+		db = MagicMock()
+		db.get_all.side_effect = lambda doctype, **kwargs: (
+			rows if doctype == "Sales Invoice Item" else ["DEPOSIT"]
+		)
+		with patch.object(custom_api.frappe, "db", db):
+			self.assertEqual(custom_api._deposit_accounts("Sales Invoice", "SINV-1"), {"2134-00"})
+		self.assertEqual(custom_api._deposit_accounts("Expense Claim", "EC-1"), set())

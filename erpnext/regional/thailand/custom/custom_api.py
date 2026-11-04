@@ -541,8 +541,11 @@ def make_clear_vat_journal_entry(dt, dn):
 			},
 			fields=["*"],
 		)
+		deposit_accounts = _deposit_accounts(ref.reference_doctype, ref.reference_name)
 		for gl in gl_entries:
-			(undue_tax, base_amount, account_undue, account) = get_undue_tax(doc, ref, gl, tax)
+			(undue_tax, base_amount, account_undue, account) = get_undue_tax(
+				doc, ref, gl, tax, deposit_accounts
+			)
 			if ref.reference_doctype in clearable:
 				undue_tax = -undue_tax
 				base_amount = -base_amount
@@ -647,8 +650,11 @@ def clear_invoice_undue_tax(doc, method):
 			},
 			fields=["*"],
 		)
+		deposit_accounts = _deposit_accounts(ref.reference_doctype, ref.reference_name)
 		for gl in gl_entries:
-			(undue_tax, base_amount, account_undue, account) = get_undue_tax(doc, ref, gl, tax)
+			(undue_tax, base_amount, account_undue, account) = get_undue_tax(
+				doc, ref, gl, tax, deposit_accounts
+			)
 			# The pair must debit the undue account by what the invoice credited it (a credit note: credit it by
 			# what it debited). ERPNext posts an "Add" row as a credit on a Receive and as a debit on a Pay
 			# (add_tax_gl_entries), so a Pay takes the opposite signs, whatever it pays: a supplier's invoice or
@@ -715,7 +721,27 @@ def clear_invoice_undue_tax(doc, method):
 		frappe.flags.in_clear_invoice_undue_tax = False
 
 
-def get_undue_tax(doc, ref, gl, tax):
+def _deposit_accounts(doctype, name):
+	"""The accounts the Deposit Item rows of an invoice post to. A deposit invoice credits its base to the deposit
+	account (a balance sheet account) and the invoice after it deducts the deposit there, so the base of the VAT a
+	payment clears counts them with the income (else a deposit invoice clears 350 of VAT on a base of 0 and its payment
+	cannot be submitted, and the last invoice's base is its gross before the deduction)."""
+	if doctype not in ("Sales Invoice", "Purchase Invoice"):
+		return set()
+	field = "income_account" if doctype == "Sales Invoice" else "expense_account"
+	rows = frappe.db.get_all(
+		f"{doctype} Item", filters={"parent": name, "parenttype": doctype}, fields=["item_code", field]
+	)
+	items = sorted({row.get("item_code") for row in rows if row.get("item_code")})
+	if not items:
+		return set()
+	deposit_items = set(
+		frappe.db.get_all("Item", filters={"name": ["in", items], "is_deposit_item": 1}, pluck="name")
+	)
+	return {row.get(field) for row in rows if row.get("item_code") in deposit_items and row.get(field)}
+
+
+def get_undue_tax(doc, ref, gl, tax, deposit_accounts=()):
 	# Prepration
 	undue_tax = 0
 	base_amount = 0
@@ -729,7 +755,7 @@ def get_undue_tax(doc, ref, gl, tax):
 	alloc_percent = ref.allocated_amount / ref.total_amount
 	# Find Base
 	report_type = frappe.get_cached_value("Account", gl["account"], "report_type")
-	if report_type == "Profit and Loss":
+	if report_type == "Profit and Loss" or gl["account"] in deposit_accounts:
 		base_amount = alloc_percent * (credit - debit)
 	# Find Tax
 	if gl["account"] == tax_account_undue:
