@@ -1024,7 +1024,7 @@ def make_custody_loan_return_quality_inspections(delivery_note_name):
 		if row.quality_inspection:
 			quality_inspection = frappe.get_doc("Quality Inspection", row.quality_inspection)
 			if quality_inspection.docstatus == 0 or (
-				quality_inspection.docstatus == 1 and quality_inspection.status == "Accepted"
+				quality_inspection.docstatus == 1 and quality_inspection.status in ("Accepted", "Rejected")
 			):
 				validate_custody_loan_return_quality_inspection(quality_inspection, delivery_note.name)
 				quality_inspection_names.append(quality_inspection.name)
@@ -1060,6 +1060,28 @@ def make_custody_loan_return_quality_inspections(delivery_note_name):
 def custody_loan_return_row_requires_inspection(row):
 	"""A returned stock row is inspected when its Item is inspected before delivery (the same goods come back)."""
 	return bool(cint(frappe.get_cached_value("Item", row.item_code, "inspection_required_before_delivery")))
+
+
+def is_quarantine_warehouse(warehouse, company):
+	"""A Quarantine (or QA) warehouse of the company: returned goods that fail inspection are received there."""
+	values = frappe.db.get_value("Warehouse", warehouse, ["warehouse_type", "warehouse_name", "company"], as_dict=True)
+	return bool(
+		values
+		and values.company == company
+		and (
+			values.warehouse_type in ("Quarantine", "QA")
+			or (values.warehouse_name or "").casefold() in ("qa", "quarantine")
+		)
+	)
+
+
+def custody_loan_return_row_inspected(delivery_note, row, inspection):
+	"""A submitted inspection lets the row be received: Accepted into the source warehouse, Rejected into quarantine."""
+	if not inspection or inspection.docstatus != 1:
+		return False
+	if inspection.status == "Accepted":
+		return True
+	return inspection.status == "Rejected" and is_quarantine_warehouse(row.warehouse, delivery_note.company)
 
 
 def is_custody_loan_return_delivery_note(doc):
@@ -1124,8 +1146,8 @@ def validate_custody_loan_return_receipt(delivery_note, method=None):
 		validate_custody_loan_return_quality_inspection(quality_inspection, delivery_note.name)
 		if quality_inspection.child_row_reference != row.name:
 			frappe.throw(_("Quality Inspection must match Delivery Note row {0}").format(row.idx))
-		if quality_inspection.docstatus != 1 or quality_inspection.status != "Accepted":
-			frappe.throw(_("Delivery Note row {0} requires a submitted accepted Quality Inspection").format(row.idx))
+		if not custody_loan_return_row_inspected(delivery_note, row, quality_inspection):
+			frappe.throw(_("Delivery Note row {0} requires a submitted Quality Inspection: Accepted, or Rejected and received into the Quarantine warehouse").format(row.idx))
 	if seen_items != return_items:
 		frappe.throw(_("Loan Return Delivery Note must include every returned item exactly once"))
 
@@ -1456,7 +1478,15 @@ def validate_custody_loan_delivery_note(doc, loan, source_doctype, source_name):
 			frappe.throw(_("Loan return Delivery Note row must match a Custody Loan Return item"))
 		if (
 			flt(row.qty) != -flt(return_item.returned_qty)
-			or row.warehouse != loan_item.source_warehouse
+			or (
+				row.warehouse != loan_item.source_warehouse
+				and not (
+					# goods that failed their return inspection are received into quarantine
+					is_quarantine_warehouse(row.warehouse, doc.company)
+					and row.quality_inspection
+					and frappe.db.get_value("Quality Inspection", row.quality_inspection, "status") == "Rejected"
+				)
+			)
 			or row.target_warehouse != loan.customer_loan_warehouse
 			or row.dn_detail != frappe.db.get_value(
 				"Delivery Note Item", {"parent": loan.delivery_note, "custody_loan_item": loan_item.name}, "name"
@@ -2139,7 +2169,7 @@ def custody_loan_return_inspections_are_accepted(delivery_note):
 		inspection = frappe.db.get_value(
 			"Quality Inspection", row.quality_inspection, ["docstatus", "status"], as_dict=True
 		)
-		if not inspection or inspection.docstatus != 1 or inspection.status != "Accepted":
+		if not custody_loan_return_row_inspected(delivery_note, row, inspection):
 			return False
 	return True
 
