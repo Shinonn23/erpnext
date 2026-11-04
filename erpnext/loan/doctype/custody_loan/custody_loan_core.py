@@ -1417,9 +1417,9 @@ def validate_generated_transaction_cancellation(doc, method=None):
 		and doc.get("custody_loan_shipment")
 	):
 		doc.ignore_linked_doctypes += ("Shipment",)
-	if doc.doctype == "Delivery Note" and source_doctype == "Custody Loan Return":
-		# The owning Return cancels its row inspections after reversing receipt.
-		# Inspections cannot be cancelled while that receipt is still submitted.
+	if doc.doctype == "Delivery Note" and source_doctype in ("Custody Loan Return", "Custody Loan"):
+		# The owning Return (or Loan: cancel_own_inspections) cancels its row inspections after reversing the stock.
+		# Inspections cannot be cancelled while that Delivery Note is still submitted.
 		doc.ignore_linked_doctypes += ("Quality Inspection",)
 
 
@@ -2034,6 +2034,25 @@ def transaction_is_received(stock_entry_name, asset_movement_name):
 	return False
 
 
+def cancel_own_inspections(doc):
+	"""Cancel the submitted Quality Inspections of a cancelled loan transaction (its own rows only), as the cancellation
+	of the authorized loan; a draft inspection is deleted."""
+	for name in frappe.get_all(
+		"Quality Inspection",
+		filters={"reference_type": doc.doctype, "reference_name": doc.name, "docstatus": ["<", 2]},
+		pluck="name",
+	):
+		inspection = frappe.get_doc("Quality Inspection", name)
+		if inspection.docstatus == 0:
+			frappe.delete_doc("Quality Inspection", name, force=True, ignore_permissions=True)
+			continue
+		inspection.flags.ignore_permissions = True
+		inspection.docstatus = 2
+		if workflow := inspection.meta.get_workflow():
+			set_workflow_state_on_action(inspection, workflow, "cancel")
+		inspection.cancel()
+
+
 def cancel_source_transaction(source, fieldname):
 	stored_source = frappe.get_doc(source.doctype, source.name)
 	if any(source.get(field) != stored_source.get(field) for field in (fieldname, "company", "custody_loan")):
@@ -2107,6 +2126,9 @@ def cancel_source_transaction(source, fieldname):
 			set(doc.get("ignore_linked_doctypes") or ()) | LOAN_SOURCE_DOCTYPES | {"Material Request"}
 		)
 		doc.cancel()
+		if doctype == "Delivery Note" and source.doctype == "Custody Loan":
+			# its own inspections (QI before delivery) go with it, right after
+			cancel_own_inspections(doc)
 	if shipment:
 		# Shipment callbacks still need the source document, including a draft receipt.
 		if shipment.docstatus == 1:
