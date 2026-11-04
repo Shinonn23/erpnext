@@ -214,6 +214,9 @@ def is_loan_movement(doc):
 
 
 def movement_operation(doc, outgoing, loan=False, row=None):
+	# the incoming leg of a return row is its own warehouse (row.warehouse); its target is the loan warehouse it leaves
+	if loan and not outgoing and _rejected_loan_return_into_quarantine(doc, row):
+		return "receipt"
 	if (
 		doc.doctype in ("Delivery Note", "Sales Invoice", "POS Invoice")
 		and doc.get("is_internal_customer")
@@ -223,8 +226,6 @@ def movement_operation(doc, outgoing, loan=False, row=None):
 		return "loan" if loan else "transfer"
 	if doc.get("is_internal_supplier"):
 		return "loan" if loan else "transfer"
-	if loan and not outgoing and _rejected_loan_return_into_quarantine(doc, row):
-		return "receipt"
 	if loan:
 		return "loan"
 	if doc.doctype == "Stock Reconciliation":

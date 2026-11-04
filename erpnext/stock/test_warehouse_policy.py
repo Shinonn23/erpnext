@@ -688,7 +688,11 @@ class TestRejectedLoanReturnIntoQuarantine(unittest.TestCase):
 			is_custody_loan_transaction=1,
 			custody_loan_source_doctype="Custody Loan Return",
 		)
-		self.row = frappe._dict(quality_inspection="QI-1", warehouse="QUARANTINE - CD")
+		# the return of a stock loan is an internal-customer Delivery Note leaving the customer's loan warehouse
+		self.doc.is_internal_customer = 1
+		self.row = frappe._dict(
+			quality_inspection="QI-1", warehouse="QUARANTINE - CD", target_warehouse="Loan & Borrow - CD"
+		)
 
 	def operation(self, inspection, quarantine=True, outgoing=False, row=None):
 		from erpnext.loan.doctype.custody_loan import custody_loan_core
