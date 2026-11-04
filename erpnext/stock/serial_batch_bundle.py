@@ -499,6 +499,10 @@ class SerialBatchBundle:
 		self.validate_actual_qty(doc)
 
 		doc.flags.ignore_voucher_validation = True
+		# The posted voucher submits only its own bundle (as the cancellation reverses only its own): its submission was
+		# already authorized, e.g. a QI team's release from quarantine that the app submits for a reader of the entry.
+		if (doc.voucher_type, doc.voucher_no) == (self.sle.voucher_type, self.sle.voucher_no):
+			doc.flags.ignore_permissions = True
 		doc.submit()
 
 	def set_warehouse_and_status_in_serial_nos(self):
