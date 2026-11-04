@@ -1000,7 +1000,7 @@ class CustodyLoanReturn(Document):
 @frappe.whitelist()
 def make_custody_loan_return_quality_inspections(delivery_note_name):
 	delivery_note = frappe.get_doc("Delivery Note", delivery_note_name)
-	delivery_note.check_permission("write")
+	delivery_note.check_permission("read")
 	frappe.has_permission("Quality Inspection", "create", throw=True)
 	if (
 		delivery_note.docstatus != 0
@@ -1019,6 +1019,8 @@ def make_custody_loan_return_quality_inspections(delivery_note_name):
 	for row in delivery_note.items:
 		if row.custody_loan_item not in return_items:
 			frappe.throw(_("Delivery Note row {0} does not match a Loan Return item").format(row.idx))
+		if not custody_loan_return_row_requires_inspection(row):
+			continue
 		if row.quality_inspection:
 			quality_inspection = frappe.get_doc("Quality Inspection", row.quality_inspection)
 			if quality_inspection.docstatus == 0 or (
@@ -1053,6 +1055,11 @@ def make_custody_loan_return_quality_inspections(delivery_note_name):
 	return_doc.update_status()
 	frappe.get_doc("Custody Loan", return_doc.custody_loan).update_status()
 	return quality_inspection_names
+
+
+def custody_loan_return_row_requires_inspection(row):
+	"""A returned stock row is inspected when its Item is inspected before delivery (the same goods come back)."""
+	return bool(cint(frappe.get_cached_value("Item", row.item_code, "inspection_required_before_delivery")))
 
 
 def is_custody_loan_return_delivery_note(doc):
@@ -1109,6 +1116,8 @@ def validate_custody_loan_return_receipt(delivery_note, method=None):
 		if row.custody_loan_item not in return_items or row.custody_loan_item in seen_items:
 			frappe.throw(_("Delivery Note row {0} does not match one unique Loan Return item").format(row.idx))
 		seen_items.add(row.custody_loan_item)
+		if not custody_loan_return_row_requires_inspection(row):
+			continue
 		if not row.quality_inspection:
 			frappe.throw(_("Create and submit an accepted Quality Inspection for Delivery Note row {0} before receiving the Loan Return").format(row.idx))
 		quality_inspection = frappe.get_doc("Quality Inspection", row.quality_inspection)
@@ -2123,6 +2132,8 @@ def custody_loan_return_inspections_are_accepted(delivery_note):
 	if not delivery_note.items:
 		return False
 	for row in delivery_note.items:
+		if not custody_loan_return_row_requires_inspection(row):
+			continue
 		if not row.quality_inspection:
 			return False
 		inspection = frappe.db.get_value(
