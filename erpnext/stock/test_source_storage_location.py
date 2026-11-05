@@ -33,7 +33,12 @@ class TestSourceStorageLocation(unittest.TestCase):
 		)
 		patch.object(module, "frappe", fake).start()
 		self.places = {}
-		patch.object(module, "location_stock", side_effect=lambda *args: self.places).start()
+		self.unlocated = {}
+		patch.object(
+			module,
+			"location_stock",
+			side_effect=lambda *args, unlocated=False: self.unlocated if unlocated else self.places,
+		).start()
 		patch.object(module, "_", side_effect=lambda text: text).start()
 
 	def row(self, **values):
@@ -58,8 +63,25 @@ class TestSourceStorageLocation(unittest.TestCase):
 		with self.assertRaisesRegex(frappe.ValidationError, r"Row 2.*no single Storage Location.*A-01 \(3\)"):
 			module.source_storage_location(doc(), self.row(), "WH", "ITEM")
 
-	def test_no_stock_at_all_is_refused(self):
-		with self.assertRaisesRegex(frappe.ValidationError, "no single Storage Location.*none"):
+	def test_no_stock_at_any_location_keeps_the_default(self):
+		self.assertIsNone(module.source_storage_location(doc(), self.row(), "WH", "ITEM"))
+
+	def test_stock_without_any_location_keeps_the_default(self):
+		self.unlocated = {"": 8}
+		self.assertIsNone(module.source_storage_location(doc(), self.row(), "WH", "ITEM"))
+		self.places = {"WH / A-01": 1}
+		self.assertIsNone(module.source_storage_location(doc(), self.row(), "WH", "ITEM"))
+
+	def test_unlocated_stock_below_the_need_is_still_refused(self):
+		self.unlocated = {"": 3}
+		self.places = {"WH / A-01": 1}
+		with self.assertRaisesRegex(frappe.ValidationError, "no single Storage Location"):
+			module.source_storage_location(doc(), self.row(), "WH", "ITEM")
+
+	def test_unlocated_stock_does_not_hide_ambiguous_locations(self):
+		self.unlocated = {"": 8}
+		self.places = {"WH / A-01": 8, "WH / A-02": 9}
+		with self.assertRaisesRegex(frappe.ValidationError, "more than one"):
 			module.source_storage_location(doc(), self.row(), "WH", "ITEM")
 
 	def test_negative_stock_allowed_and_non_stock_items_keep_the_default(self):

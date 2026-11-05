@@ -301,9 +301,12 @@ def choose_source_location(places, needed):
 def source_storage_location(doc, row, warehouse, item_code):
 	"""The Storage Location an outgoing row takes its goods from, when its source location is empty (Connect
 	Diagnostics, Siwat, 5 Nov 2026: never a silent STAGING). The location that holds the stock when exactly one
-	location holds enough of it (the row's Serial Nos, its Batch No, or the Item); otherwise the row is refused,
-	naming the row and the locations that hold the stock. None when the stock cannot be read per location (not a
-	stock Item, a row with a Serial and Batch Bundle, negative stock allowed): the warehouse default applies."""
+	location holds enough of it (the row's Serial Nos, its Batch No, or the Item); when located stock exists but no
+	single location holds enough, or several do, the row is refused, naming the row and the locations that hold the
+	stock. None, so the warehouse default applies, when no location holds any of it (no stock, or lab stock and
+	legacy balances without a Storage Location), when the warehouse holds enough of it without a Storage Location,
+	and when the stock cannot be read per location (not a stock Item, a row with a Serial and Batch Bundle,
+	negative stock allowed)."""
 	item = frappe.get_cached_value(
 		"Item", item_code, ["is_stock_item", "has_serial_no", "has_batch_no"], as_dict=True
 	)
@@ -326,6 +329,15 @@ def source_storage_location(doc, row, warehouse, item_code):
 	location, enough = choose_source_location(places, needed)
 	if location:
 		return location
+	if not places:
+		# no stock sits at any Storage Location (none at all, or lab stock and legacy balances without one): the
+		# warehouse default applies and the stock check of the submit decides
+		return None
+	if not enough and not serials:
+		# a balance that carries no Storage Location is enough: the warehouse default applies
+		unlocated = location_stock(item_code, warehouse, row.get("batch_no") or None, unlocated=True)
+		if flt(unlocated.get("")) + 1e-9 >= flt(needed):
+			return None
 	where = ", ".join(f"{name} ({flt(qty):g})" for name, qty in sorted(places.items())) or _("none")
 	if enough:
 		frappe.throw(
@@ -335,9 +347,9 @@ def source_storage_location(doc, row, warehouse, item_code):
 			title=_("Choose the Storage Location"),
 		)
 	frappe.throw(
-		_(
-			"Row {0}: no single Storage Location of {1} holds {2} of {3}. In stock by location: {4}."
-		).format(row.get("idx"), warehouse, f"{flt(needed):g}", item_code, where),
+		_("Row {0}: no single Storage Location of {1} holds {2} of {3}. In stock by location: {4}.").format(
+			row.get("idx"), warehouse, f"{flt(needed):g}", item_code, where
+		),
 		title=_("Not Enough Stock"),
 	)
 
@@ -510,9 +522,10 @@ def validate_item_storage_condition(storage_location, item_code=None, storage_co
 		)
 
 
-def location_stock(item_code, warehouse, batch_no=None):
+def location_stock(item_code, warehouse, batch_no=None, unlocated=False):
 	"""{Storage Location: qty} of ``item_code`` in ``warehouse`` now (submitted, not cancelled ledger), only locations
-	with a balance. With ``batch_no``, the batch's own balance (bundle rows and legacy ledger batch)."""
+	with a balance. With ``batch_no``, the batch's own balance (bundle rows and legacy ledger batch). With
+	``unlocated``, the balance that carries no Storage Location (lab stock, legacy balances) instead."""
 	if not item_code or not warehouse:
 		return {}
 	if batch_no:
@@ -544,8 +557,8 @@ def location_stock(item_code, warehouse, batch_no=None):
 		)
 	totals = {}
 	for row in rows:
-		if row.location:
-			totals[row.location] = totals.get(row.location, 0) + flt(row.qty)
+		if bool(row.location) != bool(unlocated):
+			totals[row.location or ""] = totals.get(row.location or "", 0) + flt(row.qty)
 	return {location: qty for location, qty in totals.items() if qty > 0}
 
 
