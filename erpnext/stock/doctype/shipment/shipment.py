@@ -228,16 +228,7 @@ class Shipment(Document):
 		has_transit_stock = False
 		for entry in self.get("shipment_documents"):
 			if entry.reference_doctype == "Delivery Note":
-				delivery_note = frappe.get_doc("Delivery Note", entry.reference_name)
-				if delivery_note.get("is_custody_loan_transaction") and delivery_note.requires_shipment:
-					if delivery_note.is_return:
-						# A Loan Return is received only after its Quality Inspections pass and
-						# the operator submits the Loan Receive Delivery Note.
-						has_transit_stock = True
-						continue
-					if delivery_note.docstatus == 0:
-						delivery_note.submit()
-					has_transit_stock = True
+				# a Shipment of a Delivery Note, a loan's included, changes nothing in it (Siwat, 5 Nov 2026)
 				continue
 			if entry.reference_doctype != "Stock Entry":
 				continue
@@ -261,13 +252,6 @@ class Shipment(Document):
 		new_receipts = []
 		for entry in self.get("shipment_documents"):
 			if entry.reference_doctype == "Delivery Note":
-				delivery_note = frappe.get_doc("Delivery Note", entry.reference_name)
-				if delivery_note.get("is_custody_loan_transaction") and delivery_note.requires_shipment:
-					if delivery_note.is_return:
-						# Return stock stays out of the ledger until inspection and Loan Receive.
-						continue
-					if delivery_note.docstatus == 0:
-						delivery_note.submit()
 				continue
 			if entry.reference_doctype != "Stock Entry":
 				continue
@@ -303,13 +287,9 @@ class Shipment(Document):
 	def on_cancel(self):
 		for entry in self.get("shipment_documents"):
 			if entry.reference_doctype == "Delivery Note":
-				delivery_note = frappe.get_doc("Delivery Note", entry.reference_name)
-				if delivery_note.requires_shipment and delivery_note.docstatus == 1:
-					frappe.throw(
-						_("A Shipment with posted loan stock cannot be cancelled. Record a Loan Return first.")
-					)
-				if delivery_note.custody_loan_shipment == self.name:
-					delivery_note.db_set("custody_loan_shipment", None)
+				# a Shipment of a Delivery Note can be cancelled whatever the note's state: it changes nothing in it
+				if frappe.db.get_value("Delivery Note", entry.reference_name, "custody_loan_shipment") == self.name:
+					frappe.db.set_value("Delivery Note", entry.reference_name, "custody_loan_shipment", None)
 				continue
 			if entry.reference_doctype != "Stock Entry":
 				continue
@@ -666,31 +646,6 @@ def make_shipment_from_document(source_doctype, source_name):
 			{"reference_doctype": "Stock Entry", "reference_name": source.name},
 		)
 		source.db_set("shipment", shipment.name)
-		shipment.insert(ignore_permissions=True, ignore_mandatory=True)
-		return shipment.as_dict()
-
-	if source_doctype == "Delivery Note" and docstatus == 0:
-		source = frappe.get_doc(source_doctype, source_name)
-		if not source.get("is_custody_loan_transaction") or not source.requires_shipment:
-			frappe.throw(_("Only a draft Custody Loan Delivery Note marked Ship via Shipment can create a Shipment."))
-		if source.custody_loan_shipment and frappe.db.exists("Shipment", source.custody_loan_shipment):
-			return frappe.get_doc("Shipment", source.custody_loan_shipment).as_dict()
-		source.check_permission("write")
-		loan = frappe.get_doc("Custody Loan", source.custody_loan)
-		if loan.docstatus != 1 or loan.loan_type != "Stock":
-			frappe.throw(_("The Delivery Note must reference a submitted Stock Custody Loan."))
-		direction = get_custody_loan_delivery_note_direction(source)
-		shipment = frappe.new_doc("Shipment")
-		shipment.set_new_name()
-		shipment.shipment_type = "Goods"
-		set_custody_loan_shipment_party(shipment, loan, direction, source)
-		shipment.description_of_content = (
-			_("Custody Loan return from {0}").format(loan.borrower)
-			if direction == "Pickup"
-			else _("Custody Loan delivery to {0}").format(loan.borrower)
-		)
-		shipment.append("shipment_documents", {"reference_doctype": "Delivery Note", "reference_name": source.name})
-		source.db_set("custody_loan_shipment", shipment.name)
 		shipment.insert(ignore_permissions=True, ignore_mandatory=True)
 		return shipment.as_dict()
 

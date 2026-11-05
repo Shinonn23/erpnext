@@ -12,6 +12,7 @@
   "warehouse",
   "column_break_1",
   "count_type",
+  "recount_of",
   "naming_series",
   "count_setup_section",
   "item_selection",
@@ -19,6 +20,7 @@
   "count_setup_column",
   "quarantine_warehouse",
   "quarantine_storage_location",
+  "found_warehouse",
   "selected_items_section",
   "count_template",
   "selected_items",
@@ -40,6 +42,10 @@
   "variance_account_snapshot",
   "references_section",
   "stock_entry",
+  "found_stock_entry",
+  "found_transfer_entry",
+  "recount_stock_count",
+  "surplus_notes",
   "references_column",
   "stock_reconciliation"
  ],
@@ -79,6 +85,15 @@
    "label": "Count Type",
    "options": "Monthly\nAnnual",
    "reqd": 1
+  },
+  {
+   "fieldname": "recount_of",
+   "fieldtype": "Link",
+   "label": "Recount Of",
+   "options": "Stock Count",
+   "read_only": 1,
+   "depends_on": "recount_of",
+   "description": "The count whose surplus this count checks again. What both counts find beyond the system quantity is received into the Found Warehouse."
   },
   {
    "fieldname": "naming_series",
@@ -122,17 +137,25 @@
    "depends_on": "eval:doc.count_type == 'Monthly'",
    "fieldname": "quarantine_warehouse",
    "fieldtype": "Link",
-   "label": "Quarantine Warehouse",
+   "label": "Lost Warehouse",
    "options": "Warehouse",
-   "description": "Required unless the Warehouse posts count differences as a Stock Reconciliation."
+   "description": "Where a monthly count moves the quantity it did not find (Warehouse Type Lost; the company's LOST warehouse by default). Not needed when the Warehouse posts count differences as a Stock Reconciliation."
   },
   {
    "depends_on": "eval:doc.count_type == 'Monthly'",
    "fieldname": "quarantine_storage_location",
    "fieldtype": "Link",
-   "label": "Quarantine Storage Location",
+   "label": "Lost Storage Location",
    "options": "Storage Location",
-   "description": "Optional destination location in the Quarantine Warehouse."
+   "description": "Optional destination location in the Lost Warehouse."
+  },
+  {
+   "depends_on": "eval:doc.count_type == 'Monthly'",
+   "fieldname": "found_warehouse",
+   "fieldtype": "Link",
+   "label": "Found Warehouse",
+   "options": "Warehouse",
+   "description": "Where what a recount confirms beyond the system quantity is received, at the Item's current valuation rate (Warehouse Type Found; the company's FOUND warehouse by default). Not needed when the Warehouse posts count differences as a Stock Reconciliation."
   },
   {
    "fieldname": "selected_items_section",
@@ -180,11 +203,10 @@
   {
    "depends_on": "eval:doc.status == 'In Progress' && doc.docstatus == 0 && (!doc.workflow_state || doc.workflow_state == 'Stock Count Draft')",
    "fieldname": "scan_storage_location",
-   "fieldtype": "Link",
+   "fieldtype": "Data",
    "label": "Scan Storage Location",
-   "options": "Storage Location",
    "print_hide": 1,
-   "description": "Select the location being counted before scanning items stored in multiple locations.",
+   "description": "Scan or type the label of the location being counted, then scan its items.",
    "no_copy": 1
   },
   {
@@ -271,10 +293,45 @@
   {
    "fieldname": "stock_entry",
    "fieldtype": "Link",
-   "label": "Quarantine Stock Entry",
+   "label": "Lost Stock Entry",
    "options": "Stock Entry",
    "read_only": 1,
    "allow_on_submit": 1
+  },
+  {
+   "fieldname": "found_stock_entry",
+   "fieldtype": "Link",
+   "label": "Found Stock Entry",
+   "options": "Stock Entry",
+   "read_only": 1,
+   "allow_on_submit": 1,
+   "description": "Draft Material Receipt into the Found Warehouse of what a recount confirmed beyond the system quantity, at the Item's current valuation rate."
+  },
+  {
+   "fieldname": "found_transfer_entry",
+   "fieldtype": "Link",
+   "label": "Serial Transfer Entry",
+   "options": "Stock Entry",
+   "read_only": 1,
+   "allow_on_submit": 1,
+   "description": "Draft Material Transfer into the counted Warehouse of counted serial numbers the system holds in another warehouse (e.g. LOST)."
+  },
+  {
+   "fieldname": "recount_stock_count",
+   "fieldtype": "Link",
+   "label": "Recount",
+   "options": "Stock Count",
+   "read_only": 1,
+   "allow_on_submit": 1,
+   "description": "Draft count of what this count found beyond the system quantity, to be counted again by another person before anything is received."
+  },
+  {
+   "fieldname": "surplus_notes",
+   "fieldtype": "Small Text",
+   "label": "Surplus Notes",
+   "read_only": 1,
+   "allow_on_submit": 1,
+   "description": "Counted serial numbers the system shows as delivered, lent or issued: make the return document instead of receiving them."
   },
   {
    "fieldname": "references_column",
@@ -292,7 +349,7 @@
  "is_submittable": 1,
  "grid_page_length": 50,
  "links": [],
- "modified": "2026-10-05 00:00:00.000000",
+ "modified": "2026-11-05 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Stock Count",

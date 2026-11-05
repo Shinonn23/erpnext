@@ -18,9 +18,11 @@ frappe.query_reports["Custody Loan Register"] = {
 			fieldname: "status",
 			label: __("Status"),
 			fieldtype: "Select",
-			options: "\nDraft\nPending Shipment\nActive\nPartially Returned\nReturned\nClosed\nCancelled",
+			options: "\nDraft\nPending Pick\nPending Delivery Note\nActive\nPartially Returned\nReturned\nClosed\nCancelled",
 		},
 		{ fieldname: "from_date", label: __("Expected Return From"), fieldtype: "Date" },
 		{ fieldname: "to_date", label: __("Expected Return To"), fieldtype: "Date" },
+		{ fieldname: "requested_by", label: __("Requested By"), fieldtype: "Link", options: "Employee" },
+		{ fieldname: "summary_by_requester", label: __("Summary by Requester"), fieldtype: "Check" },
 	],
 };

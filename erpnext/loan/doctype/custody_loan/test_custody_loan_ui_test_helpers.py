@@ -214,7 +214,7 @@ class TestCustodyBrowserHelperBoundaries(unittest.TestCase):
 		documents = {
 			"Material Request": [request],
 			"Delivery Note": [
-				{"docstatus": 1, "is_return": 0, "requires_shipment": 0, "items": [{"qty": 2}]},
+				{"docstatus": 1, "is_return": 0, "items": [{"qty": 2}]},
 				{"docstatus": 1, "is_return": 1, "items": [{"qty": -1}]},
 			],
 			"Custody Loan Adjustment": [{"docstatus": 2, "items": [{"qty": 1}]}],

@@ -27,11 +27,23 @@ frappe.ui.form.on("Stock Count", {
 				disabled: 0,
 			},
 		}));
+		// the Lost Warehouse (the field keeps its old name): where the quantity not found is moved
 		frm.set_query("quarantine_warehouse", () => ({
 			filters: {
 				company: frm.doc.company,
 				is_group: 0,
 				disabled: 0,
+				warehouse_type: "Lost",
+				name: ["!=", frm.doc.warehouse || ""],
+			},
+		}));
+		// the Found Warehouse: where what the count found beyond the system quantity is received
+		frm.set_query("found_warehouse", () => ({
+			filters: {
+				company: frm.doc.company,
+				is_group: 0,
+				disabled: 0,
+				warehouse_type: "Found",
 				name: ["!=", frm.doc.warehouse || ""],
 			},
 		}));
@@ -50,9 +62,6 @@ frappe.ui.form.on("Stock Count", {
 		}));
 		frm.set_query("item_code", "selected_items", () => ({
 			filters: { is_stock_item: 1, disabled: 0 },
-		}));
-		frm.set_query("scan_storage_location", () => ({
-			filters: { warehouse: frm.doc.warehouse, disabled: 0 },
 		}));
 		frm.set_query("storage_location", "items", (doc, cdt, cdn) =>
 			erpnext.queries.storage_location(doc.warehouse, locals[cdt][cdn].item_code)
@@ -86,7 +95,32 @@ frappe.ui.form.on("Stock Count", {
 		}
 		frm.set_df_property("quarantine_warehouse", "read_only", frm.doc.status !== "Draft");
 		frm.set_df_property("quarantine_storage_location", "read_only", frm.doc.status !== "Draft");
+		frm.set_df_property("found_warehouse", "read_only", frm.doc.status !== "Draft");
 
+		if (can_count && (frm.doc.items || []).some((row) => !row.is_counted)) {
+			// explicit, never automatic: the counter says that what was not found is zero
+			frm.add_custom_button(__("Set uncounted rows to 0"), () => {
+				let changed = 0;
+				for (const row of frm.doc.items || []) {
+					if (row.is_counted) continue;
+					row.counted_qty = 0;
+					row.is_counted = 1;
+					row.difference_qty = 0 - flt(row.system_qty);
+					changed += 1;
+				}
+				frm.refresh_field("items");
+				if (changed) frm.dirty();
+				frappe.show_alert({
+					message: __("{0} row(s) set to 0. Save to keep them.", [changed]),
+					indicator: "green",
+				});
+			});
+		}
+		if (!frm.doc.docstatus && frm.doc.status === "Draft" && frm.doc.warehouse) {
+			frm.add_custom_button(__("Add Storage Locations"), () =>
+				erpnext.stock_count.add_storage_locations(frm)
+			);
+		}
 		if (!frm.doc.docstatus && frm.doc.status === "Draft" && !frm.is_new()) {
 			frm.add_custom_button(__("Prepare Count"), async () => {
 				if (frm.is_dirty()) await frm.save();
@@ -125,8 +159,29 @@ frappe.ui.form.on("Stock Count", {
 		}
 
 		if (frm.doc.stock_entry) {
-			frm.add_custom_button(__("Quarantine Stock Entry"), () =>
+			frm.add_custom_button(__("Lost Stock Entry"), () =>
 				frappe.set_route("Form", "Stock Entry", frm.doc.stock_entry)
+			);
+		}
+		if (frm.doc.found_stock_entry) {
+			frm.add_custom_button(__("Found Stock Entry"), () =>
+				frappe.set_route("Form", "Stock Entry", frm.doc.found_stock_entry)
+			);
+		}
+		if (frm.doc.found_transfer_entry) {
+			frm.add_custom_button(__("Serial Transfer Entry"), () =>
+				frappe.set_route("Form", "Stock Entry", frm.doc.found_transfer_entry)
+			);
+		}
+		// what a count found beyond the system quantity is counted again by another person first
+		if (frm.doc.recount_stock_count) {
+			frm.add_custom_button(__("Recount"), () =>
+				frappe.set_route("Form", "Stock Count", frm.doc.recount_stock_count)
+			);
+		}
+		if (frm.doc.recount_of) {
+			frm.add_custom_button(__("First Count"), () =>
+				frappe.set_route("Form", "Stock Count", frm.doc.recount_of)
 			);
 		}
 		if (frm.doc.stock_reconciliation) {
@@ -140,6 +195,34 @@ frappe.ui.form.on("Stock Count", {
 		const monthly = frm.doc.count_type === "Monthly";
 		frm.toggle_display("item_count", monthly && frm.doc.item_selection !== "Selected Items");
 		frm.toggle_display("quarantine_warehouse", monthly);
+		frm.toggle_display("found_warehouse", monthly);
+		// the Lost Storage Location is rarely used: shown only when the count names one
+		frm.toggle_display("quarantine_storage_location", monthly && !!frm.doc.quarantine_storage_location);
+		// the series has one option and the counter never chooses it
+		frm.toggle_display("naming_series", false);
+		// the Accounts, Final and CEO steps exist only on an Annual count (company policy fields)
+		for (const stage of ["accounts_approved", "final_approved", "ceo_acknowledged"]) {
+			for (const suffix of ["by", "on"]) {
+				frm.toggle_display(`${stage}_${suffix}`, !monthly && !!frm.doc[`${stage}_${suffix}`]);
+			}
+		}
+	},
+
+	scan_storage_location(frm) {
+		const value = (frm.doc.scan_storage_location || "").trim();
+		if (!value || !frm.doc.warehouse) return;
+		// a scanned label may be the location's code as well as its full name
+		frappe
+			.call({
+				method: "erpnext.stock.doctype.stock_count.stock_count.resolve_storage_location",
+				args: { warehouse: frm.doc.warehouse, value },
+			})
+			.then((r) => {
+				if (r.message && r.message !== frm.doc.scan_storage_location) {
+					frm.set_value("scan_storage_location", r.message);
+				}
+			})
+			.catch(() => frm.set_value("scan_storage_location", ""));
 	},
 
 	item_selection(frm) {
@@ -285,3 +368,96 @@ frappe.ui.form.on("Stock Count Item", {
 		}
 	},
 });
+
+// Count a whole zone or a range of locations at once: fills the Inventory Dimensions table with one Storage Location
+// row each (Connect Diagnostics, 5 Nov 2026).
+frappe.provide("erpnext.stock_count");
+erpnext.stock_count.add_storage_locations = async (frm) => {
+	const method = "erpnext.stock.doctype.stock_count.stock_count.";
+	const zones =
+		(
+			await frappe.call({
+				method: method + "get_storage_location_zones",
+				args: { warehouse: frm.doc.warehouse },
+			})
+		).message || [];
+	const location_query = () => ({ filters: { warehouse: frm.doc.warehouse, disabled: 0 } });
+	const dialog = new frappe.ui.Dialog({
+		title: __("Add Storage Locations"),
+		fields: [
+			{
+				fieldname: "by",
+				fieldtype: "Select",
+				label: __("Choose by"),
+				options: [
+					{ value: "zone", label: __("Zone") },
+					{ value: "range", label: __("Range of locations") },
+				],
+				default: "zone",
+				reqd: 1,
+			},
+			{
+				fieldname: "zone",
+				fieldtype: "Select",
+				label: __("Zone"),
+				options: ["", ...zones],
+				depends_on: "eval:doc.by === 'zone'",
+			},
+			{
+				fieldname: "from_location",
+				fieldtype: "Link",
+				options: "Storage Location",
+				label: __("From Location"),
+				get_query: location_query,
+				depends_on: "eval:doc.by === 'range'",
+			},
+			{
+				fieldname: "to_location",
+				fieldtype: "Link",
+				options: "Storage Location",
+				label: __("To Location"),
+				get_query: location_query,
+				depends_on: "eval:doc.by === 'range'",
+			},
+		],
+		primary_action_label: __("Add"),
+		async primary_action(values) {
+			const args = { warehouse: frm.doc.warehouse };
+			if (values.by === "zone") {
+				if (!values.zone) return frappe.msgprint(__("Choose a Zone."));
+				args.zone = values.zone;
+			} else {
+				if (!values.from_location || !values.to_location) {
+					return frappe.msgprint(__("Choose the first and last location of the range."));
+				}
+				args.from_location = values.from_location;
+				args.to_location = values.to_location;
+			}
+			const locations =
+				(await frappe.call({ method: method + "get_count_storage_locations", args, freeze: true }))
+					.message || [];
+			const present = new Set(
+				(frm.doc.dimensions || [])
+					.filter((row) => row.inventory_dimension === "Storage Location")
+					.map((row) => row.dimension_value)
+			);
+			let added = 0;
+			for (const location of locations) {
+				if (present.has(location)) continue;
+				const row = frm.add_child("dimensions");
+				row.inventory_dimension = "Storage Location";
+				row.reference_document = "Storage Location";
+				row.dimension_value = location;
+				added += 1;
+			}
+			frm.refresh_field("dimensions");
+			if (added) frm.dirty();
+			dialog.hide();
+			frappe.show_alert({
+				message: __("{0} Storage Location(s) added", [added]),
+				indicator: added ? "green" : "orange",
+			});
+		},
+	});
+	dialog.show();
+};

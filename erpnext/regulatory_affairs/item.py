@@ -11,12 +11,20 @@ import frappe
 from frappe import _
 
 from erpnext.regulatory_affairs import coverage, permissions
-from erpnext.regulatory_affairs.constants import ITEM_CATEGORY_FIELD, ITEM_COVERAGE_FIELDS
+from erpnext.regulatory_affairs.constants import (
+	ITEM_CATEGORIES,
+	ITEM_CATEGORY_FIELD,
+	ITEM_COVERAGE_FIELDS,
+	MEDICAL_DEVICE,
+	NOT_REGULATED,
+	OTHER_CATEGORY,
+)
 
 
 def is_regulated(item: Any) -> bool:
-	"""Whether the Item has a Product Category, i.e. needs an FDA registration."""
-	return bool((item.get(ITEM_CATEGORY_FIELD) or "").strip())
+	"""Whether the Item has a Thai FDA Product Category, i.e. needs an FDA registration (Not Regulated needs none)."""
+	category = (item.get(ITEM_CATEGORY_FIELD) or "").strip()
+	return bool(category) and category != NOT_REGULATED
 
 
 def category_of(value: Any) -> str:
@@ -52,12 +60,54 @@ def check_category_change(doc) -> None:
 
 
 @frappe.whitelist()
-def set_product_category(item_code: str, category: str | None = None) -> str:
-	"""Set (Operator) or clear (Approver) the Product Category of an Item the caller can read.
+def classify_item(
+	item_code: str,
+	category: str | None = None,
+	medical_device_category: str | None = None,
+	regulatory_owner: str | None = None,
+	other_category: str | None = None,
+) -> dict:
+	"""Classify an Item in one step (Regulatory Operator): Product Category, Medical Device Category, Regulatory
+	Owner and, for the category Other, its name. Nobody needs Item write rights: the change goes through this method;
+	`validate` still enforces the role rule (only an Approver clears the category).
 
-	The Regulatory roles cannot edit the Item form, so the change goes through this method; `validate` still
-	enforces the role rule.
+	The Medical Device Category is kept only for a Medical Device; the Other Category only for Other.
 	"""
+	if not permissions.is_operator():
+		frappe.throw(
+			_("Only a Regulatory Operator can set or change the Product Category of an Item."),
+			frappe.PermissionError,
+		)
+	frappe.has_permission("Item", "read", item_code, throw=True)
+	doc = frappe.get_doc("Item", item_code)
+	category = category_of(category)
+	doc.set(ITEM_CATEGORY_FIELD, category)
+	if category == MEDICAL_DEVICE:
+		device = category_of(medical_device_category)
+		if not device:
+			frappe.throw(_("Choose the Medical Device Category (IVD, Non-IVD or Other)."))
+		doc.medical_device_category = device
+	else:
+		doc.medical_device_category = None
+	doc.regulatory_other_category = category_of(other_category) if category == OTHER_CATEGORY else None
+	if category and category not in ITEM_CATEGORIES:
+		frappe.throw(_("Product Category {0} is not valid.").format(frappe.bold(category)))
+	if category == OTHER_CATEGORY and not doc.regulatory_other_category:
+		frappe.throw(_("Enter the Other Category when the Product Category is Other."))
+	if regulatory_owner:
+		doc.regulatory_owner = regulatory_owner
+	doc.flags.ignore_permissions = True
+	doc.save()
+	return {
+		"category": doc.get(ITEM_CATEGORY_FIELD) or "",
+		"medical_device_category": doc.get("medical_device_category"),
+		"regulatory_owner": doc.get("regulatory_owner"),
+	}
+
+
+@frappe.whitelist()
+def set_product_category(item_code: str, category: str | None = None) -> str:
+	"""Set (Operator) or clear (Approver) only the Product Category of an Item the caller can read."""
 	frappe.has_permission("Item", "read", item_code, throw=True)
 	doc = frappe.get_doc("Item", item_code)
 	doc.set(ITEM_CATEGORY_FIELD, category_of(category))
@@ -73,3 +123,29 @@ def validate(doc, method=None):
 		coverage.refresh_item_coverage(doc)
 	else:
 		doc.update(dict.fromkeys(ITEM_COVERAGE_FIELDS))
+
+
+@frappe.whitelist()
+def classify_items(item_codes: str | list, category: str, medical_device_category: str | None = None) -> dict:
+	"""Classify many Items at once (list view bulk action, Regulatory Operator): the same category for each.
+
+	Items that fail (a Medical Device without its Device Category ...) are listed and the rest are saved.
+	"""
+	codes = frappe.parse_json(item_codes) if isinstance(item_codes, str) else item_codes
+	done, failed = [], {}
+	for code in codes or []:
+		try:
+			classify_item(code, category, medical_device_category, frappe.session.user)
+			done.append(code)
+		except Exception as error:
+			frappe.clear_last_message()
+			failed[code] = str(error)
+	return {"done": done, "failed": failed}
+
+
+def unclassified_count() -> int:
+	"""Enabled sales Items that RA has not classified yet."""
+	return frappe.db.count(
+		"Item",
+		{"disabled": 0, "is_sales_item": 1, ITEM_CATEGORY_FIELD: ["in", ["", None]]},
+	)

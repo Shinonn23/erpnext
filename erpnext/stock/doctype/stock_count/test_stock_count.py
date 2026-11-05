@@ -110,7 +110,9 @@ class TestStockCountSnapshot(unittest.TestCase):
 						append=lambda fieldname, row: rows.append(row),
 					)
 					with (
-						patch.object(frappe, "get_cached_doc", return_value=frappe._dict(has_serial_no=has_serial_no)),
+						patch.object(
+							frappe, "get_cached_doc", return_value=frappe._dict(has_serial_no=has_serial_no)
+						),
 						patch.object(frappe, "get_cached_value", return_value=expiry_date) as get_expiry,
 						patch(
 							"erpnext.stock.doctype.stock_count.stock_count.get_serial_nos_based_on_posting_date",
@@ -133,12 +135,16 @@ class TestStockCountSnapshot(unittest.TestCase):
 					if has_serial_no:
 						self.assertEqual(
 							rows,
-							[{**base_row, "serial_no": serial, "system_qty": 1} for serial in ("SERIAL-1", "SERIAL-2")],
+							[
+								{**base_row, "serial_no": serial, "system_qty": 1}
+								for serial in ("SERIAL-1", "SERIAL-2")
+							],
 						)
 						get_serials.assert_called_once()
 						self.assertEqual(get_serials.call_args.args[0].batch_no, batch_no)
 						self.assertEqual(
-							get_serials.call_args.args[0].inventory_dimensions_dict, {"storage_location": "SHELF"}
+							get_serials.call_args.args[0].inventory_dimensions_dict,
+							{"storage_location": "SHELF"},
 						)
 					else:
 						self.assertEqual(rows, [base_row])
@@ -176,9 +182,7 @@ class TestStockCountLineValidation(unittest.TestCase):
 				"get_cached_doc",
 				return_value=frappe._dict(is_stock_item=1, has_batch_no=0, has_serial_no=0),
 			),
-			patch.object(
-				frappe, "db", SimpleNamespace(get_value=lambda *args, **kwargs: count.warehouse)
-			),
+			patch.object(frappe, "db", SimpleNamespace(get_value=lambda *args, **kwargs: count.warehouse)),
 		):
 			StockCount.validate_count_lines(count)
 
@@ -298,7 +302,10 @@ class TestStockCountLineValidation(unittest.TestCase):
 		):
 			with self.subTest(doctype=doctype):
 				doc = frappe._dict(
-					doctype=doctype, name="VOUCHER-001", stock_count="COUNT-001", ignore_linked_doctypes=("GL Entry",)
+					doctype=doctype,
+					name="VOUCHER-001",
+					stock_count="COUNT-001",
+					ignore_linked_doctypes=("GL Entry",),
 				)
 				get_value = MagicMock(return_value=doc.name)
 				with patch.object(
@@ -312,7 +319,10 @@ class TestStockCountLineValidation(unittest.TestCase):
 		for stock_count, parent_link in ((None, None), ("COUNT-001", None), ("COUNT-001", "OTHER-VOUCHER")):
 			with self.subTest(stock_count=stock_count, parent_link=parent_link):
 				doc = frappe._dict(
-					doctype="Stock Entry", name="VOUCHER-001", stock_count=stock_count, ignore_linked_doctypes=("GL Entry",)
+					doctype="Stock Entry",
+					name="VOUCHER-001",
+					stock_count=stock_count,
+					ignore_linked_doctypes=("GL Entry",),
 				)
 				with patch.object(frappe, "db", SimpleNamespace(get_value=lambda *args: parent_link)):
 					allow_generated_stock_count_cancellation(doc)
@@ -325,7 +335,10 @@ class TestStockCountLineValidation(unittest.TestCase):
 		):
 			with self.subTest(doctype=doctype):
 				doc = frappe._dict(
-					doctype=doctype, name="VOUCHER-001", stock_count="COUNT-001", ignore_linked_doctypes=("GL Entry",)
+					doctype=doctype,
+					name="VOUCHER-001",
+					stock_count="COUNT-001",
+					ignore_linked_doctypes=("GL Entry",),
 				)
 				exists = MagicMock(return_value="FOREIGN-COUNT")
 				with patch.object(
@@ -337,19 +350,30 @@ class TestStockCountLineValidation(unittest.TestCase):
 				)
 				self.assertEqual(doc.ignore_linked_doctypes, ("GL Entry",))
 
-	def test_count_requires_generated_voucher_to_be_cancelled_first(self):
-		for doctype, link_field in (
-			("Stock Entry", "stock_entry"),
-			("Stock Reconciliation", "stock_reconciliation"),
-		):
-			with self.subTest(doctype=doctype):
-				count = SimpleNamespace(name="COUNT-001", stock_entry=None, stock_reconciliation=None)
-				setattr(count, link_field, "VOUCHER-001")
-				with patch.object(
-					frappe, "get_doc", return_value=frappe._dict(docstatus=1, stock_count=count.name)
-				):
-					with self.assertRaisesRegex(frappe.ValidationError, "before cancelling this Stock Count"):
-						StockCount.on_cancel(count)
+	def test_count_requires_a_reconciliation_to_be_cancelled_first(self):
+		count = SimpleNamespace(name="COUNT-001", stock_entry=None, stock_reconciliation="VOUCHER-001")
+		with patch.object(frappe, "get_doc", return_value=frappe._dict(docstatus=1, stock_count=count.name)):
+			with self.assertRaisesRegex(frappe.ValidationError, "before cancelling this Stock Count"):
+				StockCount.on_cancel(count)
+
+	def test_count_cancels_the_stock_entries_it_posted(self):
+		# the count posts its transfers and receipt itself (5 Nov 2026), so cancelling it cancels them, last posted first
+		posted = []
+		count = SimpleNamespace(
+			name="COUNT-001",
+			stock_entry="LOST-SE",
+			found_transfer_entry="BACK-SE",
+			found_stock_entry="FOUND-SE",
+			stock_reconciliation=None,
+			cancel_posted=lambda entry: posted.append(entry.name),
+		)
+		entries = {
+			name: frappe._dict(name=name, docstatus=1, stock_count=count.name)
+			for name in ("LOST-SE", "BACK-SE", "FOUND-SE")
+		}
+		with patch.object(frappe, "get_doc", side_effect=lambda doctype, name: entries[name]):
+			StockCount.on_cancel(count)
+		self.assertEqual(posted, ["FOUND-SE", "BACK-SE", "LOST-SE"])
 
 	def test_unrelated_draft_voucher_is_never_deleted_on_count_cancellation(self):
 		for link_field in ("stock_entry", "stock_reconciliation"):
@@ -357,10 +381,14 @@ class TestStockCountLineValidation(unittest.TestCase):
 				count = SimpleNamespace(name="COUNT-001", stock_entry=None, stock_reconciliation=None)
 				setattr(count, link_field, "UNRELATED-VOUCHER")
 				with (
-					patch.object(frappe, "get_doc", return_value=frappe._dict(docstatus=0, stock_count="OTHER-COUNT")),
+					patch.object(
+						frappe, "get_doc", return_value=frappe._dict(docstatus=0, stock_count="OTHER-COUNT")
+					),
 					patch.object(frappe, "delete_doc") as delete_doc,
 				):
-					with self.assertRaisesRegex(frappe.ValidationError, "was not generated by this Stock Count"):
+					with self.assertRaisesRegex(
+						frappe.ValidationError, "was not generated by this Stock Count"
+					):
 						StockCount.on_cancel(count)
 					delete_doc.assert_not_called()
 
@@ -370,7 +398,9 @@ class TestStockCountLineValidation(unittest.TestCase):
 				with self.subTest(link_field=link_field, previous=previous):
 					values = {link_field: "MANUAL-VOUCHER"}
 					count = SimpleNamespace(get=values.get, get_doc_before_save=lambda: previous)
-					with self.assertRaisesRegex(frappe.ValidationError, "can only be set by Stock Count submission"):
+					with self.assertRaisesRegex(
+						frappe.ValidationError, "can only be set by Stock Count submission"
+					):
 						StockCount.validate_generated_links(count)
 
 	def test_submitted_generated_links_cannot_be_replaced_or_cleared(self):
@@ -381,7 +411,9 @@ class TestStockCountLineValidation(unittest.TestCase):
 					values = {link_field: value}
 					count = SimpleNamespace(get=values.get, get_doc_before_save=lambda: previous)
 					count.validate_generated_links = lambda: StockCount.validate_generated_links(count)
-					with self.assertRaisesRegex(frappe.ValidationError, "can only be set by Stock Count submission"):
+					with self.assertRaisesRegex(
+						frappe.ValidationError, "can only be set by Stock Count submission"
+					):
 						StockCount.before_update_after_submit(count)
 
 	def test_unchanged_generated_links_remain_valid(self):

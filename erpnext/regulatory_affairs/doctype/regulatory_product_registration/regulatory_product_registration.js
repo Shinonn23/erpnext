@@ -18,6 +18,7 @@ frappe.ui.form.on("Regulatory Product Registration", {
 
 		frm.trigger("add_status_buttons");
 		frm.trigger("set_validity_intro");
+		frm.trigger("show_activation_hint");
 
 		frm.add_custom_button(
 			__("Renewal / Variation Action"),
@@ -54,16 +55,37 @@ frappe.ui.form.on("Regulatory Product Registration", {
 	set_validity_intro(frm) {
 		if (!["Active", "Expired"].includes(frm.doc.official_status)) return;
 		if (frm.doc.expiry_basis === "Unconfirmed") {
-			frm.set_intro(__("The expiry date of this registration is unconfirmed, so no expiry alerts are sent."), "orange");
+			frm.set_intro(
+				__("The expiry date of this registration is unconfirmed, so no expiry alerts are sent."),
+				"orange"
+			);
 			return;
 		}
 		if (frm.doc.expiry_basis !== "Expiry Date Specified" || frm.doc.days_to_expiry == null) return;
 		const days = frm.doc.days_to_expiry;
 		if (days < 0) {
-			frm.set_intro(__("Expired {0} days ago. Approve a renewal to reactivate it.", [Math.abs(days)]), "red");
+			frm.set_intro(
+				__("Expired {0} days ago. Approve a renewal to reactivate it.", [Math.abs(days)]),
+				"red"
+			);
 		} else if (days <= 90) {
 			frm.set_intro(__("Expires in {0} days.", [days]), "orange");
 		}
+	},
+
+	// What is missing before the registration can be activated; every Regulatory user sees it, not only the Approver.
+	show_activation_hint(frm) {
+		if (frm.doc.official_status !== "Draft") return;
+		frm.call("get_activation_problems").then((r) => {
+			if (!r.message || !r.message.length) {
+				frm.set_intro(
+					__("Ready: a Regulatory Approver can press Status > Verify and Activate."),
+					"green"
+				);
+				return;
+			}
+			frm.set_intro(__("To activate: {0}", [r.message.join(" ")]), "orange");
+		});
 	},
 
 	add_status_buttons(frm) {
@@ -73,25 +95,30 @@ frappe.ui.form.on("Regulatory Product Registration", {
 
 		const status = frm.doc.official_status;
 		const group = __("Status");
-		const change = (target, label, needs_reason) => {
+		const change = (target, label, needs_reason, verify) => {
 			frm.add_custom_button(
 				label,
 				() => {
-					if (frm.is_dirty()) {
-						frappe.msgprint(__("Save the registration before changing its status."));
-						return;
-					}
+					// the form is saved first, so the user never has to
+					const save_first = () => (frm.is_dirty() ? frm.save() : Promise.resolve());
 					const apply = (reason) =>
-						frm
-							.call({
-								doc: frm.doc,
-								method: "set_official_status",
-								args: { status: target, reason: reason },
-								freeze: true,
-							})
-							.then(() => frm.reload_doc());
+						save_first().then(() =>
+							frm
+								.call({
+									doc: frm.doc,
+									method: verify ? "verify_and_activate" : "set_official_status",
+									args: verify ? {} : { status: target, reason: reason },
+									freeze: true,
+								})
+								.then(() => frm.reload_doc())
+						);
 					if (!needs_reason) {
-						frappe.confirm(__("Set the status to {0}?", [__(target)]), () => apply());
+						frappe.confirm(
+							verify
+								? __("Verify the attached Certificate and activate this registration?")
+								: __("Set the status to {0}?", [__(target)]),
+							() => apply()
+						);
 						return;
 					}
 					frappe.prompt(
@@ -106,12 +133,7 @@ frappe.ui.form.on("Regulatory Product Registration", {
 		};
 
 		if (status === "Draft") {
-			change("Active", __("Activate"), false);
-			frm.call("get_activation_problems").then((r) => {
-				if (r.message && r.message.length) {
-					frm.set_intro(__("To activate: {0}", [r.message.join(" ")]), "orange");
-				}
-			});
+			change("Active", __("Verify and Activate"), false, true);
 		}
 		if (status === "Suspended") change("Active", __("Reinstate"), false);
 		if (["Active", "Suspended"].includes(status)) {

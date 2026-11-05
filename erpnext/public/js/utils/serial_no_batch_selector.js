@@ -486,18 +486,23 @@ erpnext.SerialBatchPackageSelector = class SerialNoBatchBundleUpdate {
 						}
 
 						let include_expired_batches = me.include_expired_batches();
+						const filters = {
+							item_code: this.item.item_code,
+							warehouse: this.item.s_warehouse || this.item.t_warehouse || this.item.warehouse,
+							is_inward: is_inward,
+							posting_date: this.frm.doc.posting_date,
+							posting_time: this.frm.doc.posting_time,
+							include_expired_batches: include_expired_batches,
+						};
+						// stock going out: only the batches at the row's chosen location
+						const outward = !is_inward && (this.item.s_warehouse || !this.item.t_warehouse);
+						if (outward && this.item.storage_location) {
+							filters.storage_location = this.item.storage_location;
+						}
 
 						return {
 							query: "erpnext.controllers.queries.get_batch_no",
-							filters: {
-								item_code: this.item.item_code,
-								warehouse:
-									this.item.s_warehouse || this.item.t_warehouse || this.item.warehouse,
-								is_inward: is_inward,
-								posting_date: this.frm.doc.posting_date,
-								posting_time: this.frm.doc.posting_time,
-								include_expired_batches: include_expired_batches,
-							},
+							filters: filters,
 						};
 					},
 				},

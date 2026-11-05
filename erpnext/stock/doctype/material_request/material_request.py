@@ -1092,6 +1092,13 @@ def make_stock_entry(source_name: str, target_doc: str | dict | None = None):
 			if any(source.get(field) or target.get(field) for field in ("job_card", "work_order")):
 				frappe.throw(_("A Purchase Material Request for Internal Use cannot reference manufacturing."))
 
+		# The requester's Employee and Department are the request's (the company's custom fields on both documents): the
+		# Stock User does not type them again.
+		if source.get("requesting_employee"):
+			target.operation_requester = source.requesting_employee
+		if source.get("requesting_department"):
+			target.workflow_department = source.requesting_department
+
 		target.purpose = source.material_request_type
 		target.from_warehouse = source.set_from_warehouse
 		target.to_warehouse = source.set_warehouse

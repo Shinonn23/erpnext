@@ -83,18 +83,6 @@
    "icon": "",
    "indent": 0,
    "keep_closed": 0,
-   "label": "Override",
-   "link_to": "Regulatory Override",
-   "link_type": "DocType",
-   "show_arrow": 0,
-   "type": "Link"
-  },
-  {
-   "child": 1,
-   "collapsible": 1,
-   "icon": "",
-   "indent": 0,
-   "keep_closed": 0,
    "label": "Alert Log",
    "link_to": "Regulatory Alert Log",
    "link_type": "DocType",

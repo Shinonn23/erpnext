@@ -122,7 +122,7 @@ frappe.ui.form.on("Pick List", {
 	},
 
 	get_item_locations: (frm) => {
-		// Button on the form
+		// The Auto Pick button: one press fills every row (Pick List.keep_manual_picking: nothing picks on save)
 		frm.events.set_item_locations(frm, false);
 	},
 	refresh: (frm) => {
@@ -134,9 +134,8 @@ frappe.ui.form.on("Pick List", {
 			const status_completed = frm.doc.status === "Completed";
 
 			if (!status_completed) {
-				frm.add_custom_button(__("Update Current Stock"), () =>
-					frm.trigger("update_pick_list_stock")
-				);
+				// "Update Current Stock" re-ran the automatic pick on a submitted list: the Auto Pick of the draft
+				// is the one place it runs.
 
 				if (frm.doc.purpose === "Delivery") {
 					if (frm.doc.custody_loan) {

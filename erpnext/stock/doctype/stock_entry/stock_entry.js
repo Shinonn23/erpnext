@@ -131,6 +131,11 @@ frappe.ui.form.on("Stock Entry", {
 					filters["is_inward"] = 1;
 				}
 
+				// only the batches at the chosen source location (storage_location.js filters the other way)
+				if (item.s_warehouse && item.storage_location) {
+					filters["storage_location"] = item.storage_location;
+				}
+
 				if (["Material Receipt", "Material Transfer", "Material Issue"].includes(doc.purpose)) {
 					filters["include_expired_batches"] = 1;
 				}

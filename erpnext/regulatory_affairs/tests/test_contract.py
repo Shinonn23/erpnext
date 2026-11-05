@@ -45,7 +45,6 @@ class TestDocTypeFiles(unittest.TestCase):
 			"ESTABLISHMENT_REGISTRATION",
 			"REGULATORY_DOCUMENT",
 			"REGISTRATION_ACTION",
-			"REGULATORY_OVERRIDE",
 			"ALERT_LOG",
 			"SETTINGS",
 			"ALERT_RULE",
@@ -53,7 +52,7 @@ class TestDocTypeFiles(unittest.TestCase):
 			"RENEWAL_HISTORY",
 		):
 			self.assertIn(getattr(constants, constant), names, constant)
-		self.assertEqual(len(names), 11)
+		self.assertEqual(len(names), 10)
 
 	def test_field_order_matches_fields_and_controllers_exist(self):
 		for path in doctype_files():
@@ -70,12 +69,6 @@ class TestDocTypeFiles(unittest.TestCase):
 		for path in doctype_files():
 			doc = load(path)
 			roles = {perm["role"] for perm in doc.get("permissions", [])}
-			if doc["name"] == constants.REGULATORY_OVERRIDE:
-				# Transaction users get select (pick-a-link) permission only, never read or write.
-				for perm in doc["permissions"]:
-					if perm["role"] not in KNOWN_ROLES:
-						self.assertEqual(set(perm) - {"role"}, {"select"}, perm["role"])
-				roles &= KNOWN_ROLES
 			self.assertTrue(roles <= KNOWN_ROLES, (doc["name"], roles - KNOWN_ROLES))
 			if doc.get("istable"):
 				self.assertEqual(roles, set(), doc["name"])
@@ -137,13 +130,6 @@ NATIVE_JSON = {
 	"Sales Order Item": "selling/doctype/sales_order_item/sales_order_item.json",
 	"Delivery Note Item": "stock/doctype/delivery_note_item/delivery_note_item.json",
 	"Sales Invoice Item": "accounts/doctype/sales_invoice_item/sales_invoice_item.json",
-	"Purchase Order": "buying/doctype/purchase_order/purchase_order.json",
-	"Purchase Receipt": "stock/doctype/purchase_receipt/purchase_receipt.json",
-	"Stock Entry": "stock/doctype/stock_entry/stock_entry.json",
-	"Sales Order": "selling/doctype/sales_order/sales_order.json",
-	"Delivery Note": "stock/doctype/delivery_note/delivery_note.json",
-	"Sales Invoice": "accounts/doctype/sales_invoice/sales_invoice.json",
-	"Quotation": "selling/doctype/quotation/quotation.json",
 }
 
 
@@ -186,10 +172,10 @@ class TestCustomFields(unittest.TestCase):
 			self.assertNotIn(retired, specs)
 		category = specs[constants.ITEM_CATEGORY_FIELD]
 		self.assertEqual(category["fieldtype"], "Select")
-		self.assertEqual(category["options"].split("\n"), ["", *constants.PRODUCT_CATEGORIES])
+		self.assertEqual(category["options"].split("\n"), ["", *constants.ITEM_CATEGORIES])
 		self.assertEqual(category["insert_after"], "regulatory_tab")
 		self.assertNotIn("default", category)
-		self.assertIn("only Items with a Product Category are validated", category["description"])
+		self.assertIn("unclassified and is not sold", category["description"])
 		self.assertIn("Other", specs["regulatory_other_category"]["depends_on"])
 		self.assertEqual(specs["regulatory_other_category"]["fieldtype"], "Data")
 		self.assertIn("Medical Device", specs["medical_device_category"]["depends_on"])

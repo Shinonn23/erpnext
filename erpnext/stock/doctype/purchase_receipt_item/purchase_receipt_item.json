@@ -1070,7 +1070,7 @@
    "label": "Add Serial / Batch No (Rejected Qty)"
   },
   {
-   "depends_on": "eval:doc.use_serial_batch_fields === 1",
+   "depends_on": "eval:(doc.use_serial_batch_fields === 1 || !doc.serial_and_batch_bundle)",
    "fieldname": "section_break_3vxt",
    "fieldtype": "Section Break"
   },

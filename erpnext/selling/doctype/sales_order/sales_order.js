@@ -1049,7 +1049,10 @@ erpnext.selling.SalesOrderController = class SalesOrderController extends erpnex
 						(order_is_a_sale || order_is_a_custom_sale) &&
 						allow_delivery
 					) {
-						if (frappe.model.can_create("Delivery Note")) {
+						// An order with stock items is delivered from the My Tasks "Deliver" task, which
+						// makes the Pick List and its Delivery Note: no second way in (UX round, 5 Nov 2026).
+						const has_stock_items = (doc.items || []).some((item) => item.is_stock_item);
+						if (frappe.model.can_create("Delivery Note") && !has_stock_items) {
 							this.frm.add_custom_button(
 								__("Delivery Note"),
 								() => this.make_delivery_note_based_on_delivery_date(true),

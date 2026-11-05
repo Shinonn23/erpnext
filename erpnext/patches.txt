@@ -550,3 +550,5 @@ erpnext.patches.v16_0.restore_cost_center
 erpnext.patches.v16_0.snapshot_company_branch_on_tax_invoices
 erpnext.patches.v16_0.create_tax_invoice_link_fields
 erpnext.patches.v16_0.link_tax_invoices_to_vouchers
+erpnext.patches.v16_0.remove_regulatory_override
+erpnext.patches.v16_0.release_loans_waiting_for_shipment

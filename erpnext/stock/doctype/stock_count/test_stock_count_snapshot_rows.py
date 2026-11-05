@@ -10,7 +10,9 @@ from erpnext.stock.doctype.stock_count.stock_count import StockCount
 def count(rows, before_rows):
 	doc = frappe._dict(items=[frappe._dict(idx=i + 1, **row) for i, row in enumerate(rows)])
 	doc.get_countable_dimensions = lambda: [frappe._dict(source_fieldname="storage_location")]
-	before = frappe._dict(snapshot_datetime="2026-10-19 09:00:00", items=[frappe._dict(**row) for row in before_rows])
+	before = frappe._dict(
+		snapshot_datetime="2026-10-19 09:00:00", items=[frappe._dict(**row) for row in before_rows]
+	)
 	doc.get_doc_before_save = Mock(return_value=before)
 	return doc
 
@@ -28,12 +30,16 @@ class TestSnapshotRows(unittest.TestCase):
 		StockCount.keep_snapshot_rows(doc)
 		self.assertEqual([row.system_qty for row in doc["items"]], [10, 3])
 
-	def test_rows_cannot_be_added_or_dropped(self):
+	def test_an_added_row_is_found_stock(self):
+		# A row the snapshot lacks is stock the counter found: System Qty 0 (Connect Diagnostics, 5 Nov 2026)
+		added = {"item_code": "ITEM-C", "batch_no": None, "serial_no": None, "storage_location": "L1"}
+		doc = count([*SNAPSHOT, dict(added, system_qty=5, counted_qty=2)], SNAPSHOT)
+		StockCount.keep_snapshot_rows(doc)
+		self.assertEqual([row.system_qty for row in doc["items"]], [10, 3, 0])
+
+	def test_rows_cannot_be_dropped(self):
 		self.enterContext(patch.object(stock_count, "_", side_effect=lambda text: text))
 		self.enterContext(patch.object(stock_count.frappe, "throw", side_effect=frappe.ValidationError))
-		extra = [*SNAPSHOT, {"item_code": "ITEM-C", "batch_no": None, "serial_no": None, "storage_location": "L1", "system_qty": 0}]
-		with self.assertRaises(frappe.ValidationError):
-			StockCount.keep_snapshot_rows(count(extra, SNAPSHOT))
 		with self.assertRaises(frappe.ValidationError):
 			StockCount.keep_snapshot_rows(count(SNAPSHOT[:1], SNAPSHOT))
 
@@ -41,3 +47,46 @@ class TestSnapshotRows(unittest.TestCase):
 		doc = count(SNAPSHOT, [])
 		doc.get_doc_before_save.return_value = frappe._dict(snapshot_datetime=None, items=[])
 		StockCount.keep_snapshot_rows(doc)
+
+
+class TestCancelDeletesGeneratedDrafts(unittest.TestCase):
+	def test_the_link_is_cleared_before_the_generated_draft_is_deleted(self):
+		# Frappe refuses to delete a document any other names, cancelled or not (a recount's FOUND receipt, 5 Nov 2026)
+		calls = []
+		count = Mock(name="count", recount_stock_count=None, stock_entry=None, found_transfer_entry=None)
+		count.name = "SC-2"
+		count.found_stock_entry = "SE-1"
+		count.stock_reconciliation = None
+		count.db_set.side_effect = lambda field, value: calls.append(("db_set", field, value))
+		with (
+			patch.object(
+				stock_count.frappe, "get_doc", return_value=frappe._dict(docstatus=0, stock_count="SC-2")
+			),
+			patch.object(
+				stock_count.frappe,
+				"delete_doc",
+				side_effect=lambda doctype, name, **kw: calls.append(("delete", name)),
+			),
+		):
+			StockCount.on_cancel(count)
+		self.assertEqual(calls, [("db_set", "found_stock_entry", None), ("delete", "SE-1")])
+
+	def test_a_draft_recount_is_unlinked_then_deleted(self):
+		calls = []
+		count = Mock(
+			stock_entry=None, found_stock_entry=None, found_transfer_entry=None, stock_reconciliation=None
+		)
+		count.name = "SC-1"
+		count.recount_stock_count = "SC-2"
+		count.db_set.side_effect = lambda field, value: calls.append(("db_set", field, value))
+		recount = frappe._dict(name="SC-2", docstatus=0, recount_of="SC-1")
+		with (
+			patch.object(stock_count.frappe, "db", Mock(get_value=Mock(return_value=recount))),
+			patch.object(
+				stock_count.frappe,
+				"delete_doc",
+				side_effect=lambda doctype, name, **kw: calls.append(("delete", name)),
+			),
+		):
+			StockCount.on_cancel(count)
+		self.assertEqual(calls, [("db_set", "recount_stock_count", None), ("delete", "SC-2")])

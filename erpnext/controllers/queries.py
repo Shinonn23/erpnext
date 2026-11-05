@@ -10,7 +10,7 @@ from frappe import _, qb
 from frappe.desk.reportview import get_filters_cond, get_match_cond
 from frappe.permissions import has_permission
 from frappe.query_builder import Case, Criterion
-from frappe.query_builder.functions import Concat, Locate, Sum
+from frappe.query_builder.functions import Coalesce, Concat, Locate, NullIf, Sum
 from frappe.utils import cint, nowdate, today, unique
 from pypika import Order
 
@@ -222,6 +222,15 @@ def item_query(
 	searchfields = " or ".join([field + " like %(txt)s" for field in searchfields])
 
 	restricted_items_cond = ""
+	regulatory_cond = ""
+	if filters and isinstance(filters, dict) and filters.pop("regulatory_sale", None):
+		# Quotation, Sales Order, Delivery Note and Sales Invoice offer only Items RA classified and, when regulated,
+		# registered on the document's date (Siwat, 5 Nov 2026)
+		from erpnext.regulatory_affairs.transactions import sellable_items_condition
+
+		regulatory_cond = sellable_items_condition(filters.pop("regulatory_date", None))
+	elif filters and isinstance(filters, dict):
+		filters.pop("regulatory_date", None)
 	if filters and isinstance(filters, dict):
 		if filters.get("customer") or filters.get("supplier"):
 			party_type = "Customer" if filters.get("customer") else "Supplier"
@@ -261,7 +270,7 @@ def item_query(
 			and (tabItem.end_of_life > %(today)s or ifnull(tabItem.end_of_life, '0000-00-00')='0000-00-00')
 			and ({scond} or tabItem.item_code IN (select parent from `tabItem Barcode` where barcode LIKE %(txt)s)
 				{description_cond})
-			{fcond} {mcond} {candidate_cond} {restricted_items_cond}
+			{fcond} {mcond} {candidate_cond} {restricted_items_cond} {regulatory_cond}
 		order by
 			if(locate(%(_txt)s, name), locate(%(_txt)s, name), 99999),
 			if(locate(%(_txt)s, item_name), locate(%(_txt)s, item_name), 99999),
@@ -275,6 +284,7 @@ def item_query(
 			description_cond=description_cond,
 			candidate_cond=candidate_cond,
 			restricted_items_cond=restricted_items_cond.replace("%", "%%"),
+			regulatory_cond=regulatory_cond.replace("%", "%%"),
 		),
 		{
 			"today": nowdate(),
@@ -616,8 +626,10 @@ def get_batches_from_serial_and_batch_bundle(searchfields, txt, filters, start=0
 		bundle_query = bundle_query.where(stock_ledger_entry.warehouse == filters.get("warehouse"))
 
 	if filters.get("storage_location"):
+		# a bundle row keeps its own location when one entry spans several
 		bundle_query = bundle_query.where(
-			stock_ledger_entry.storage_location == filters.get("storage_location")
+			Coalesce(NullIf(bundle.storage_location, ""), stock_ledger_entry.storage_location)
+			== filters.get("storage_location")
 		)
 
 	for field in searchfields:

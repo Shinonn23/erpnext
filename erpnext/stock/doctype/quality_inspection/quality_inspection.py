@@ -140,16 +140,28 @@ class QualityInspection(Document):
 		):
 			frappe.throw(
 				_(
-					"'Inspection Required before Purchase' has disabled for the item {0}, no need to create the QI"
+					"Item {0} is not inspected when it is received, so it needs no Quality Inspection."
 				).format(get_link_to_form("Item", self.item_code))
 			)
 
-		if self.reference_type in ["Delivery Note", "Sales Invoice"] and not frappe.get_cached_value(
+		if (
+			self.reference_type in ["Delivery Note", "Sales Invoice"]
+			and self.reference_name
+			and cint(frappe.db.get_value(self.reference_type, self.reference_name, "is_return"))
+		):
+			# goods coming back are a receipt (stock_controller.item_inspection_switch)
+			if not frappe.get_cached_value("Item", self.item_code, "inspection_required_before_purchase"):
+				frappe.throw(
+					_(
+						"Item {0} is not inspected when it is received, so it needs no Quality Inspection."
+					).format(get_link_to_form("Item", self.item_code))
+				)
+		elif self.reference_type in ["Delivery Note", "Sales Invoice"] and not frappe.get_cached_value(
 			"Item", self.item_code, "inspection_required_before_delivery"
 		):
 			frappe.throw(
 				_(
-					"'Inspection Required before Delivery' has disabled for the item {0}, no need to create the QI"
+					"Item {0} is not inspected when it is delivered, so it needs no Quality Inspection."
 				).format(get_link_to_form("Item", self.item_code))
 			)
 

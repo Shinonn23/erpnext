@@ -84,12 +84,17 @@ def make_packing_list(doc):
 	set_price_from_children = frappe.get_single_value("Selling Settings", "editable_bundle_item_rates")
 
 	stale_packed_items_table = get_indexed_packed_items_table(doc)
+	split_keys = get_split_packed_item_keys(doc)
 
 	reset = reset_packing_list(doc)
 
 	for item_row in doc.get("items"):
 		if is_product_bundle(item_row.item_code):
 			for bundle_item in get_product_bundle_items(item_row.item_code):
+				if not reset and (item_row.name, bundle_item.item_code) in split_keys:
+					# a part picked from several places keeps one row for each place (set when it was made)
+					continue
+
 				pi_row = add_packed_item_row(
 					doc=doc,
 					packing_item=bundle_item,
@@ -97,18 +102,20 @@ def make_packing_list(doc):
 					packed_items_table=stale_packed_items_table,
 					reset=reset,
 				)
+				extra_rows = []
 				item_data = get_packed_item_details(bundle_item.item_code, doc.company)
 				update_packed_item_basic_data(item_row, pi_row, bundle_item, item_data)
 				update_packed_item_stock_data(item_row, pi_row, bundle_item, item_data, doc)
 				update_packed_item_price_data(pi_row, item_data, doc)
 
-				if item_row.get("against_pick_list"):
-					update_packed_item_with_pick_list_info(item_row, pi_row)
+				if item_row.get("against_pick_list") and (reset or not pi_row.get("name") or doc.is_new()):
+					extra_rows = split_packed_item_by_pick_list(doc, item_row, pi_row)
 
 				update_packed_item_from_cancelled_doc(item_row, bundle_item, pi_row, doc)
 
 				if set_price_from_children:  # create/update bundle item wise price dict
-					update_product_bundle_rate(parent_items_price, pi_row, item_row)
+					for priced_row in [pi_row, *extra_rows]:
+						update_product_bundle_rate(parent_items_price, priced_row, item_row)
 
 	if parent_items_price:
 		set_product_bundle_rate_amount(doc, parent_items_price)  # set price in bundle item
@@ -136,6 +143,15 @@ def get_indexed_packed_items_table(doc):
 		indexed_table[key] = packed_item
 
 	return indexed_table
+
+
+def get_split_packed_item_keys(doc):
+	"""{(bundle row name, part item code)} of the parts that already have more than one Packed Item row."""
+	counts = {}
+	for packed_item in doc.get("packed_items") or []:
+		key = (packed_item.parent_detail_docname, packed_item.item_code)
+		counts[key] = counts.get(key, 0) + 1
+	return {key for key, count in counts.items() if count > 1}
 
 
 def reset_packing_list(doc):
@@ -286,26 +302,71 @@ def update_packed_item_inventory_dimensions(main_item_row, pi_row):
 			pi_row.set(target_fieldname, main_item_row.get(target_fieldname))
 
 
-def update_packed_item_with_pick_list_info(main_item_row, pi_row):
-	pl_row = frappe.db.get_value(
+def get_pick_list_rows_of_packed_item(main_item_row, pi_row):
+	"""The undelivered rows of the Pick List that picked this part of a Product Bundle, biggest first."""
+	rows = frappe.get_all(
 		"Pick List Item",
-		{
+		filters={
 			"item_code": pi_row.item_code,
 			"sales_order": main_item_row.get("against_sales_order"),
 			"sales_order_item": main_item_row.get("so_detail"),
 			"parent": main_item_row.against_pick_list,
 		},
-		["warehouse", "batch_no", "serial_no"],
-		as_dict=True,
-		order_by="qty desc",
+		fields=[
+			"warehouse",
+			"storage_location",
+			"batch_no",
+			"serial_no",
+			"use_serial_batch_fields",
+			"picked_qty",
+			"delivered_qty",
+		],
+		order_by="qty desc, idx asc",
 	)
+	return rows
 
-	if not pl_row:
-		return
 
+def apply_pick_list_row(pi_row, pl_row):
 	pi_row.warehouse = pl_row.warehouse
 	pi_row.batch_no = pl_row.batch_no
 	pi_row.serial_no = pl_row.serial_no
+	if pl_row.storage_location:
+		pi_row.storage_location = pl_row.storage_location
+
+
+def update_packed_item_with_pick_list_info(main_item_row, pi_row):
+	rows = get_pick_list_rows_of_packed_item(main_item_row, pi_row)
+	if rows:
+		apply_pick_list_row(pi_row, rows[0])
+
+
+def split_packed_item_by_pick_list(doc, main_item_row, pi_row):
+	"""A part picked from one place takes its warehouse, storage location, batch and serial nos. A part the
+	Pick List picked from several places (a location or a batch is short) gets one Packed Item row for each, with
+	the quantity picked there, so the Delivery Note takes the stock from where the picker found it."""
+	rows = get_pick_list_rows_of_packed_item(main_item_row, pi_row)
+	if not rows:
+		return []
+
+	apply_pick_list_row(pi_row, rows[0])
+	if len(rows) < 2:
+		return []
+
+	pi_row.qty = flt(rows[0].picked_qty) - flt(rows[0].delivered_qty)
+	extra_rows = []
+	for pl_row in rows[1:]:
+		qty = flt(pl_row.picked_qty) - flt(pl_row.delivered_qty)
+		if qty <= 0:
+			continue
+		values = pi_row.as_dict()
+		for fieldname in ("name", "idx", "creation", "modified", "owner", "modified_by", "docstatus"):
+			values.pop(fieldname, None)
+		extra = doc.append("packed_items", values)
+		apply_pick_list_row(extra, pl_row)
+		extra.qty = qty
+		extra_rows.append(extra)
+
+	return extra_rows
 
 
 def update_packed_item_price_data(pi_row, item_data, doc):

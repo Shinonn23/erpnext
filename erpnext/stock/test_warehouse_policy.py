@@ -88,6 +88,18 @@ class TestWarehousePolicy(unittest.TestCase):
 		with patch.object(frappe, "get_roles", return_value=["Stock Manager"]):
 			warehouse_policy.validate_warehouse_operation("WH", "transfer", outgoing=True)
 
+	def test_quarantine_outgoing_role_message_names_the_way_out(self):
+		self.policy.outgoing_role = "Stock Manager"
+		self.warehouse.warehouse_type = "Quarantine"
+		with self.assertRaises(frappe.PermissionError) as raised:
+			warehouse_policy.validate_warehouse_operation("WH", "transfer", outgoing=True)
+		self.assertIn("requires the Stock Manager role", str(raised.exception))
+		self.assertIn("Move out of quarantine", str(raised.exception))
+		self.warehouse.warehouse_type = "Frozen"
+		with self.assertRaises(frappe.PermissionError) as raised:
+			warehouse_policy.validate_warehouse_operation("WH", "transfer", outgoing=True)
+		self.assertNotIn("Move out of quarantine", str(raised.exception))
+
 	def test_an_app_waiver_lifts_the_outgoing_role_only_for_the_document_it_owns(self):
 		self.policy.outgoing_role = "Stock Manager"
 		owned, other = Mock(name="owned"), Mock(name="other")
@@ -802,3 +814,36 @@ class TestWarehouseTypeSummary(unittest.TestCase):
 			warehouse_policy.movement_operation(internal, True, row=frappe._dict(target_warehouse="T")),
 			"transfer",
 		)
+
+	def test_a_rejected_sales_return_row_is_a_receipt_into_quarantine(self):
+		doc = frappe._dict(doctype="Delivery Note", is_return=1, company="CD")
+		row = frappe._dict(quality_inspection="QI-1", warehouse="QUARANTINE - CD")
+		quarantine = {"QUARANTINE - CD"}
+		with (
+			patch.object(
+				frappe, "db", Mock(get_value=Mock(return_value=frappe._dict(docstatus=1, status="Rejected")))
+			),
+			patch(
+				"erpnext.loan.doctype.custody_loan.custody_loan_core.is_quarantine_warehouse",
+				side_effect=lambda warehouse, company: warehouse in quarantine,
+			),
+		):
+			self.assertEqual(warehouse_policy.movement_operation(doc, False, row=row), "receipt")
+			# the leg that leaves, an Accepted result or another warehouse stays a sale
+			self.assertEqual(warehouse_policy.movement_operation(doc, True, row=row), "sales")
+			self.assertEqual(
+				warehouse_policy.movement_operation(
+					doc, False, row=frappe._dict(quality_inspection="QI-1", warehouse="CD STOCK - CD")
+				),
+				"sales",
+			)
+		with (
+			patch.object(
+				frappe, "db", Mock(get_value=Mock(return_value=frappe._dict(docstatus=1, status="Accepted")))
+			),
+			patch(
+				"erpnext.loan.doctype.custody_loan.custody_loan_core.is_quarantine_warehouse",
+				return_value=True,
+			),
+		):
+			self.assertEqual(warehouse_policy.movement_operation(doc, False, row=row), "sales")

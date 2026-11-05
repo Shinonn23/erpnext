@@ -7,7 +7,6 @@ REGISTERED_PRODUCT = "Regulatory Registered Product"
 ESTABLISHMENT_REGISTRATION = "Regulatory Establishment Registration"
 REGULATORY_DOCUMENT = "Regulatory Document"
 REGISTRATION_ACTION = "Regulatory Registration Action"
-REGULATORY_OVERRIDE = "Regulatory Override"
 ALERT_LOG = "Regulatory Alert Log"
 SETTINGS = "Regulatory Settings"
 ALERT_RULE = "Regulatory Expiry Alert Rule"
@@ -28,8 +27,8 @@ TRANSACTION_ITEM_DOCTYPES = {
 	"Delivery Note": "Delivery Note Item",
 	"Sales Invoice": "Sales Invoice Item",
 }
-# Documents a Regulatory Override can be bound to: the snapshot transactions and the Quotation, which is checked
-# (warning on save, blocked on submit) but carries no snapshot.
+# Documents that are checked: the snapshot transactions and the Quotation, which is checked (warning on save,
+# blocked on submit) but carries no snapshot.
 TRANSACTION_DOCTYPES = (*TRANSACTION_ITEM_DOCTYPES, "Quotation")
 OUTBOUND_DOCTYPES = frozenset({"Delivery Note", "Sales Invoice"})
 
@@ -70,6 +69,12 @@ PRODUCT_CATEGORIES = (
 	"Other",
 )
 OTHER_CATEGORY = "Other"
+# An Item RA has looked at and found to need no FDA registration (Siwat, 5 Nov 2026). An Item with no category at all
+# is unclassified and is not sold; a registration can never be of this category.
+NOT_REGULATED = "Not Regulated"
+ITEM_CATEGORIES = (*PRODUCT_CATEGORIES, NOT_REGULATED)
+# Documents on which every Item row must be classified (and registered when regulated) already when saved.
+SALE_DOCTYPES = ("Quotation", "Sales Order", "Delivery Note", "Sales Invoice")
 
 # Item classification: an Item with a Product Category is regulated, so transactions validate it against
 # its FDA registrations; an Item without one is not checked.

@@ -794,7 +794,14 @@ class TestGapLoader(unittest.TestCase):
 		get_all.assert_called_once()
 		self.assertEqual(get_all.call_args.args[0], "Item")
 		kwargs = get_all.call_args.kwargs
-		self.assertEqual(kwargs["filters"], {"disabled": 0, "regulatory_product_category": ["is", "set"]})
+		self.assertEqual(
+			kwargs["filters"],
+			[
+				["Item", "disabled", "=", 0],
+				["Item", "regulatory_product_category", "is", "set"],
+				["Item", "regulatory_product_category", "!=", "Not Regulated"],
+			],
+		)
 		self.assertEqual(
 			kwargs["fields"], ["name", "item_name", "regulatory_product_category", "regulatory_owner"]
 		)

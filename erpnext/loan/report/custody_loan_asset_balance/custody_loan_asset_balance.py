@@ -1,5 +1,15 @@
 import frappe
 
+from erpnext.loan.report.requester import (
+	REQUEST_JOIN,
+	REQUESTER_SELECT,
+	UNIT_VALUE,
+	add_requester_filter,
+	insert_columns_after,
+	requester_columns,
+	value_columns,
+)
+
 
 def execute(filters=None):
 	filters = frappe._dict(filters or {})
@@ -20,6 +30,7 @@ def execute(filters=None):
 			values[bound] = filters[bound]
 	if filters.get("overdue_only"):
 		conditions.append("loan.expected_return_date < CURDATE()")
+	add_requester_filter(filters, conditions, values)
 
 	columns = [
 		{"label": "Custody Loan", "fieldname": "loan", "fieldtype": "Link", "options": "Custody Loan", "width": 165},
@@ -38,14 +49,18 @@ def execute(filters=None):
 		{"label": "Asset Movement", "fieldname": "asset_movement", "fieldtype": "Link", "options": "Asset Movement", "width": 155},
 		{"label": "Company", "fieldname": "company", "fieldtype": "Link", "options": "Company", "width": 130},
 	]
+	columns = insert_columns_after(columns, "borrower", requester_columns())
+	columns = insert_columns_after(columns, "outstanding_qty", value_columns())
 	data = frappe.db.sql(
 		f"""SELECT loan.name AS loan, loan.material_request, loan.borrower_type,
-			loan.borrower, loan.expected_return_date, item.asset, asset.asset_name,
+			loan.borrower, {REQUESTER_SELECT}, loan.expected_return_date, item.asset, asset.asset_name,
 			item.item_code, asset.asset_serial_number, asset.location AS current_location,
-			asset.custodian, item.outstanding_qty, loan.status, loan.asset_movement, loan.company
+			asset.custodian, item.outstanding_qty, {UNIT_VALUE} AS unit_value,
+			item.qty * {UNIT_VALUE} AS loan_value, item.outstanding_qty * {UNIT_VALUE} AS outstanding_value, loan.status, loan.asset_movement, loan.company
 		FROM `tabCustody Loan` loan
 		JOIN `tabCustody Loan Item` item ON item.parent = loan.name
 		JOIN `tabAsset` asset ON asset.name = item.asset
+		{REQUEST_JOIN}
 		WHERE {' AND '.join(conditions)}
 		ORDER BY loan.expected_return_date, loan.borrower, item.item_code, item.asset""",
 		values,

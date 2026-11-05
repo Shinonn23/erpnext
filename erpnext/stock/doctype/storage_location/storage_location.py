@@ -5,7 +5,7 @@ import frappe
 from frappe import _
 from frappe.desk.reportview import get_match_cond
 from frappe.model.document import Document
-from frappe.utils import flt, get_time, getdate
+from frappe.utils import cint, cstr, flt, get_time, getdate
 
 # Every active leaf Warehouse gets this location as its default, so stock rows are filled in.
 DEFAULT_LOCATION_CODE = "STAGING"
@@ -253,9 +253,9 @@ def get_default_storage_location(warehouse, item_code=None):
 	)
 	if not location:
 		frappe.throw(
-			_("Warehouse {0} has no Storage Location that supports Storage Condition {1} required by Item {2}.").format(
-				warehouse, condition, item_code
-			),
+			_(
+				"Warehouse {0} has no Storage Location that supports Storage Condition {1} required by Item {2}."
+			).format(warehouse, condition, item_code),
 			title=_("Incompatible Storage Location"),
 		)
 	return location[0][0]
@@ -276,6 +276,84 @@ def get_storage_location_warehouses(doc, row):
 	return warehouses
 
 
+def is_outgoing_row(doc, row):
+	"""The row takes goods out of its source warehouse: a Stock Entry row with a source warehouse, a Delivery Note or
+	a Sales Invoice (with stock) that is not a return."""
+	if doc.doctype == "Stock Entry":
+		return bool(row.get("s_warehouse"))
+	return doc.doctype in ("Delivery Note", "Sales Invoice") and not cint(doc.get("is_return"))
+
+
+def row_stock_qty(doc, row):
+	"""The quantity the row takes out, in the Item's stock UOM."""
+	if doc.doctype == "Stock Entry":
+		return flt(row.get("transfer_qty")) or flt(row.get("qty")) * (flt(row.get("conversion_factor")) or 1)
+	return flt(row.get("stock_qty")) or flt(row.get("qty")) * (flt(row.get("conversion_factor")) or 1)
+
+
+def choose_source_location(places, needed):
+	"""(location, enough): the one Storage Location of ``places`` ({location: qty}) that holds ``needed``; None when no
+	or more than one does. ``enough`` lists every location that holds it."""
+	enough = sorted(location for location, qty in places.items() if flt(qty) + 1e-9 >= flt(needed))
+	return (enough[0] if len(enough) == 1 else None), enough
+
+
+def source_storage_location(doc, row, warehouse, item_code):
+	"""The Storage Location an outgoing row takes its goods from, when its source location is empty (Connect
+	Diagnostics, Siwat, 5 Nov 2026: never a silent STAGING). The location that holds the stock when exactly one
+	location holds enough of it (the row's Serial Nos, its Batch No, or the Item); when located stock exists but no
+	single location holds enough, or several do, the row is refused, naming the row and the locations that hold the
+	stock. None, so the warehouse default applies, when no location holds any of it (no stock, or lab stock and
+	legacy balances without a Storage Location), when the warehouse holds enough of it without a Storage Location,
+	and when the stock cannot be read per location (not a stock Item, a row with a Serial and Batch Bundle,
+	negative stock allowed)."""
+	item = frappe.get_cached_value(
+		"Item", item_code, ["is_stock_item", "has_serial_no", "has_batch_no"], as_dict=True
+	)
+	if (
+		not item
+		or not cint(item.is_stock_item)
+		or row.get("serial_and_batch_bundle")
+		or cint(frappe.db.get_single_value("Stock Settings", "allow_negative_stock"))
+	):
+		return None
+	needed = row_stock_qty(doc, row)
+	if needed <= 0:
+		return None
+	serials = _row_serial_nos(row) if cint(item.has_serial_no) else []
+	if serials:
+		places = serial_locations(serials, warehouse)
+		needed = len(serials)
+	else:
+		places = location_stock(item_code, warehouse, row.get("batch_no") or None)
+	location, enough = choose_source_location(places, needed)
+	if location:
+		return location
+	if not places:
+		# no stock sits at any Storage Location (none at all, or lab stock and legacy balances without one): the
+		# warehouse default applies and the stock check of the submit decides
+		return None
+	if not enough and not serials:
+		# a balance that carries no Storage Location is enough: the warehouse default applies
+		unlocated = location_stock(item_code, warehouse, row.get("batch_no") or None, unlocated=True)
+		if flt(unlocated.get("")) + 1e-9 >= flt(needed):
+			return None
+	where = ", ".join(f"{name} ({flt(qty):g})" for name, qty in sorted(places.items())) or _("none")
+	if enough:
+		frappe.throw(
+			_(
+				"Row {0}: {1} is held at more than one Storage Location of {2} ({3}). Choose the Storage Location to take it from."
+			).format(row.get("idx"), item_code, warehouse, where),
+			title=_("Choose the Storage Location"),
+		)
+	frappe.throw(
+		_("Row {0}: no single Storage Location of {1} holds {2} of {3}. In stock by location: {4}.").format(
+			row.get("idx"), warehouse, f"{flt(needed):g}", item_code, where
+		),
+		title=_("Not Enough Stock"),
+	)
+
+
 def set_default_storage_locations(doc, method=None):
 	"""Persist warehouse defaults before stock valuation and serial/batch processing."""
 	# Historical submissions and cancellations must retain their original dimensions.
@@ -294,7 +372,19 @@ def set_default_storage_locations(doc, method=None):
 				if not warehouse or not row.meta.has_field(fieldname) or row.get(fieldname):
 					continue
 				item_code = row.get("item_code") or row.get("rm_item_code")
-				location = get_default_storage_location(warehouse, item_code)
+				location = None
+				if fieldname == "storage_location" and is_outgoing_row(doc, row):
+					try:
+						location = source_storage_location(doc, row, warehouse, item_code)
+					except frappe.ValidationError:
+						# the Packing List of a Delivery Note appears only after its first save: the user cannot choose
+						# before it, so a draft leaves the location empty and the submit refuses it
+						if table.fieldname == "packed_items" and not doc.docstatus:
+							if frappe.local.message_log:
+								frappe.local.message_log.pop()
+							continue
+						raise
+				location = location or get_default_storage_location(warehouse, item_code)
 				if location:
 					validate_storage_location_warehouse(location, warehouse, item_code=item_code)
 					row.set(fieldname, location)
@@ -432,10 +522,91 @@ def validate_item_storage_condition(storage_location, item_code=None, storage_co
 		)
 
 
+def location_stock(item_code, warehouse, batch_no=None, unlocated=False):
+	"""{Storage Location: qty} of ``item_code`` in ``warehouse`` now (submitted, not cancelled ledger), only locations
+	with a balance. With ``batch_no``, the batch's own balance (bundle rows and legacy ledger batch). With
+	``unlocated``, the balance that carries no Storage Location (lab stock, legacy balances) instead."""
+	if not item_code or not warehouse:
+		return {}
+	if batch_no:
+		rows = frappe.db.sql(
+			"""select coalesce(nullif(entry.storage_location, ''), sle.storage_location) location,
+				sum(entry.qty) qty
+			from `tabStock Ledger Entry` sle
+			join `tabSerial and Batch Entry` entry on entry.parent = sle.serial_and_batch_bundle
+			where sle.item_code = %(item)s and sle.warehouse = %(warehouse)s and sle.is_cancelled = 0
+				and entry.batch_no = %(batch)s
+			group by location
+			union all
+			select sle.storage_location location, sum(sle.actual_qty) qty
+			from `tabStock Ledger Entry` sle
+			where sle.item_code = %(item)s and sle.warehouse = %(warehouse)s and sle.is_cancelled = 0
+				and ifnull(sle.serial_and_batch_bundle, '') = '' and sle.batch_no = %(batch)s
+			group by location""",
+			{"item": item_code, "warehouse": warehouse, "batch": batch_no},
+			as_dict=True,
+		)
+	else:
+		rows = frappe.db.sql(
+			"""select storage_location location, sum(actual_qty) qty
+			from `tabStock Ledger Entry`
+			where item_code = %(item)s and warehouse = %(warehouse)s and is_cancelled = 0
+			group by storage_location""",
+			{"item": item_code, "warehouse": warehouse},
+			as_dict=True,
+		)
+	totals = {}
+	for row in rows:
+		if bool(row.location) != bool(unlocated):
+			totals[row.location or ""] = totals.get(row.location or "", 0) + flt(row.qty)
+	return {location: qty for location, qty in totals.items() if qty > 0}
+
+
+def serial_locations(serial_nos, warehouse):
+	"""{Storage Location: count} where the given serial nos are now in ``warehouse`` (the serial's own location on
+	its bundle row, else the ledger row's)."""
+	serial_nos = [serial for serial in (serial_nos or []) if serial]
+	if not serial_nos or not warehouse:
+		return {}
+	rows = frappe.db.sql(
+		"""select entry.serial_no, coalesce(nullif(entry.storage_location, ''), sle.storage_location) location,
+			sum(entry.qty) qty
+		from `tabStock Ledger Entry` sle
+		join `tabSerial and Batch Entry` entry on entry.parent = sle.serial_and_batch_bundle
+		where sle.warehouse = %(warehouse)s and sle.is_cancelled = 0 and entry.serial_no in %(serials)s
+		group by entry.serial_no, location""",
+		{"warehouse": warehouse, "serials": tuple(serial_nos)},
+		as_dict=True,
+	)
+	found = {}
+	for row in rows:
+		if row.location and flt(row.qty) > 0:
+			found[row.location] = found.get(row.location, 0) + 1
+	return found
+
+
+def _row_serial_nos(filters):
+	"""The serial nos a row names: its Serial No text and/or its Serial and Batch Bundle."""
+	serials = [line.strip() for line in cstr(filters.get("serial_no")).splitlines() if line.strip()]
+	bundle = filters.get("serial_and_batch_bundle")
+	if bundle and frappe.db.exists("Serial and Batch Bundle", bundle):
+		serials += [
+			serial
+			for serial in frappe.get_all(
+				"Serial and Batch Entry", filters={"parent": bundle}, pluck="serial_no", order_by="idx"
+			)
+			if serial
+		]
+	return list(dict.fromkeys(serials))
+
+
 @frappe.whitelist()
 @frappe.validate_and_sanitize_search_inputs
 def storage_location_query(doctype, txt, searchfield, start, page_len, filters):
-	"""Rank Item preferences before other active locations satisfying the same condition."""
+	"""Rank Item preferences before other active locations satisfying the same condition, each with the Item's
+	quantity there. A row that names serial nos is offered only the locations holding them; a source field
+	(``only_stock``) only the locations holding the Item (and batch) when any does (Connect Diagnostics, 5 Nov
+	2026)."""
 	filters = frappe.parse_json(filters) or {}
 	warehouse = filters.get("warehouse")
 	if doctype != "Storage Location" or not warehouse:
@@ -458,9 +629,12 @@ def storage_location_query(doctype, txt, searchfield, start, page_len, filters):
 		# An Item's persisted requirement cannot be overridden by request filters.
 		condition = item.get("storage_condition")
 
-	return frappe.db.sql(
+	stock = location_stock(item_code, warehouse, filters.get("batch_no")) if item_code else {}
+	serials = _row_serial_nos(filters)
+	holding = serial_locations(serials, warehouse) if serials else {}
+	candidates = frappe.db.sql(
 		"""select `tabStorage Location`.name, `tabStorage Location`.location_code,
-			case when preference.idx is null then '' else %(preferred_label)s end
+			case when preference.idx is null then 0 else 1 end preferred, preference.idx
 		from `tabStorage Location`
 		left join `tabItem Storage Location` preference
 			on preference.storage_location = `tabStorage Location`.name
@@ -477,20 +651,32 @@ def storage_location_query(doctype, txt, searchfield, start, page_len, filters):
 			and (`tabStorage Location`.name like %(txt)s or `tabStorage Location`.location_code like %(txt)s
 				or `tabStorage Location`.zone like %(txt)s or `tabStorage Location`.rack like %(txt)s
 				or `tabStorage Location`.shelf like %(txt)s)
-			{match_cond}
-		order by case when preference.idx is null then 1 else 0 end,
-			preference.idx, `tabStorage Location`.name
-		limit %(page_len)s offset %(start)s""".format(match_cond=get_match_cond("Storage Location")),
+			{match_cond}""".format(match_cond=get_match_cond("Storage Location")),
 		{
 			"warehouse": warehouse,
 			"item_code": item_code or "",
 			"condition": condition or "",
 			"txt": f"%{txt}%",
-			"preferred_label": _("Preferred for Item"),
-			"page_len": page_len,
-			"start": start,
 		},
+		as_dict=True,
 	)
+	if serials:
+		candidates = [row for row in candidates if row.name in holding]
+	elif cint(filters.get("only_stock")) and stock:
+		candidates = [row for row in candidates if row.name in stock]
+	candidates.sort(key=lambda row: (-row.preferred, row.idx or 0, -stock.get(row.name, 0), row.name))
+	start, page_len = cint(start), cint(page_len) or 20
+	return [
+		(
+			row.name,
+			row.location_code or "",
+			_("Qty {0}").format(frappe.format(stock.get(row.name, 0), {"fieldtype": "Float"}))
+			if item_code
+			else "",
+			_("Preferred for Item") if row.preferred else "",
+		)
+		for row in candidates[start : start + page_len]
+	]
 
 
 @frappe.whitelist()

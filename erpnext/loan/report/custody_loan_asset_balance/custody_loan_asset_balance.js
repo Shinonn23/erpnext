@@ -16,5 +16,6 @@ frappe.query_reports["Custody Loan Asset Balance"] = {
 		{ fieldname: "from_date", label: __("Expected Return From"), fieldtype: "Date" },
 		{ fieldname: "to_date", label: __("Expected Return To"), fieldtype: "Date" },
 		{ fieldname: "overdue_only", label: __("Overdue Only"), fieldtype: "Check" },
+		{ fieldname: "requested_by", label: __("Requested By"), fieldtype: "Link", options: "Employee" },
 	],
 };

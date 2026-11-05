@@ -8,6 +8,7 @@
   "returned_qty",
   "batch_no",
   "serial_no",
+  "asset_column",
   "asset",
   "target_location"
  ],
@@ -15,45 +16,58 @@
   {
    "fieldname": "custody_loan_item",
    "fieldtype": "Link",
-   "label": "Loan Item",
+   "label": "Loan Item Row",
    "options": "Custody Loan Item",
-   "reqd": 1,
-   "in_list_view": 1
+   "hidden": 1,
+   "read_only": 1,
+   "description": "The loan row this line returns, set from the Item (as ERPNext links a Delivery Note row to its Sales Order row)."
   },
   {
    "fieldname": "item_code",
    "fieldtype": "Link",
    "label": "Item",
    "options": "Item",
-   "read_only": 1,
-   "in_list_view": 1
+   "in_list_view": 1,
+   "columns": 2,
+   "reqd": 1
   },
   {
    "fieldname": "returned_qty",
    "fieldtype": "Float",
    "label": "Received Qty",
    "reqd": 1,
-   "in_list_view": 1
+   "in_list_view": 1,
+   "columns": 1
   },
   {
    "fieldname": "batch_no",
    "fieldtype": "Link",
-   "label": "Actual Batch No",
+   "label": "Batch No",
    "options": "Batch",
-   "depends_on": "eval:parent.loan_type == 'Stock'"
+   "depends_on": "eval:parent.loan_type == 'Stock'",
+   "in_list_view": 1,
+   "columns": 2
   },
   {
    "fieldname": "serial_no",
    "fieldtype": "Small Text",
-   "label": "Actual Serial Nos",
-   "depends_on": "eval:parent.loan_type == 'Stock'"
+   "label": "Serial Nos",
+   "depends_on": "eval:parent.loan_type == 'Stock'",
+   "in_list_view": 1,
+   "columns": 3
+  },
+  {
+   "fieldname": "asset_column",
+   "fieldtype": "Column Break"
   },
   {
    "fieldname": "asset",
    "fieldtype": "Link",
    "label": "Asset",
    "options": "Asset",
-   "depends_on": "eval:parent.loan_type == 'Asset'"
+   "depends_on": "eval:parent.loan_type == 'Asset'",
+   "in_list_view": 1,
+   "columns": 2
   },
   {
    "fieldname": "target_location",

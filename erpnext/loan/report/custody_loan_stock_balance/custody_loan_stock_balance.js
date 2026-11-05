@@ -15,5 +15,6 @@ frappe.query_reports["Custody Loan Stock Balance"] = {
 		},
 		{ fieldname: "from_date", label: __("Expected Return From"), fieldtype: "Date" },
 		{ fieldname: "to_date", label: __("Expected Return To"), fieldtype: "Date" },
+		{ fieldname: "requested_by", label: __("Requested By"), fieldtype: "Link", options: "Employee" },
 	],
 };

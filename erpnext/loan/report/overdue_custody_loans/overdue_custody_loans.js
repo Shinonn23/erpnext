@@ -14,5 +14,6 @@ frappe.query_reports["Overdue Custody Loans"] = {
 			fieldtype: "Dynamic Link",
 			options: "borrower_type",
 		},
+		{ fieldname: "requested_by", label: __("Requested By"), fieldtype: "Link", options: "Employee" },
 	],
 };

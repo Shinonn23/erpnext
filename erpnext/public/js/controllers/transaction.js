@@ -2834,6 +2834,7 @@ erpnext.TransactionController = class TransactionController extends erpnext.taxe
 				doctype: this.frm.doc.doctype,
 				docstatus: this.frm.doc.docstatus,
 				items: this.frm.doc.items,
+				is_return: this.frm.doc.is_return ? 1 : 0,
 			},
 			freeze: true,
 			callback: function (r) {
@@ -2946,6 +2947,10 @@ erpnext.TransactionController = class TransactionController extends erpnext.taxe
 			}
 
 			if (item.warehouse) filters["warehouse"] = item.warehouse;
+			// only the batches at the chosen location when stock goes out
+			if (item.storage_location && !filters["is_inward"]) {
+				filters["storage_location"] = item.storage_location;
+			}
 
 			return {
 				query: "erpnext.controllers.queries.get_batch_no",
