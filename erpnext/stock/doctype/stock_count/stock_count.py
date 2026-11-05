@@ -1249,7 +1249,10 @@ def is_count_posting(doc):
 	"""Whether ``doc`` is the Stock Entry that the Stock Count is posting right now (the guards of the warehouse scope,
 	the Warehouse Type's outgoing role, the approval route and the rate rules do not apply to it). The Stock Count link
 	on the document alone never qualifies."""
-	posting = frappe.flags.get("stock_count_posting")
+	try:
+		posting = frappe.flags.get("stock_count_posting")
+	except RuntimeError:  # no site bound (offline tests, scripts): nothing is being posted
+		posting = None
 	if not posting or getattr(doc, "doctype", None) != "Stock Entry" or not doc.get("stock_count"):
 		return False
 	return posting is doc or (bool(doc.get("name")) and doc.get("name") == posting.get("name"))
