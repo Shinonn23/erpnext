@@ -54,13 +54,6 @@ frappe.ui.form.on("Custody Loan", {
 				__("The Pick List is submitted. Create the Loan Delivery Note to send the items out."),
 				"blue"
 			);
-		} else if (frm.doc.status === "Pending Shipment") {
-			frm.set_intro(
-				__(
-					"The items go with a Shipment: open the Loan Delivery Note, create the Shipment and mark it Delivered when the borrower has them."
-				),
-				"blue"
-			);
 		} else if (["Active", "Partially Returned"].includes(frm.doc.status)) {
 			frm.set_intro(
 				__(

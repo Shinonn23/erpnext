@@ -76,7 +76,6 @@ class TestAssetReissue(TestCase):
 			items=[self.row],
 			loan_type="Asset",
 			borrower_type="Customer",
-			requires_shipment=0,
 			recipient_location="New Customer",
 		)
 		for context in (

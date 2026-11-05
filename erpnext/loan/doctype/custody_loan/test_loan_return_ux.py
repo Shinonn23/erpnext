@@ -95,54 +95,27 @@ class TestQuarantineWarehouse(Patched):
 				core.receive_inspected_return("DN-1")
 
 
-class TestShippedReturn(Patched):
-	def test_a_delivered_shipment_makes_the_return_follow_the_unshipped_path(self):
-		note = Row(
-			docstatus=0,
-			is_return=1,
-			is_custody_loan_transaction=1,
-			custody_loan_source_doctype="Custody Loan Return",
-			custody_loan_source_name="RET-1",
-			name="DN-1",
-		)
-		return_doc = MagicMock(docstatus=1, loan_type="Stock", requires_shipment=1, custody_loan="L1")
-		docs = {"Delivery Note": note, "Custody Loan Return": return_doc, "Custody Loan": MagicMock()}
-		with (
-			patch.object(frappe, "get_doc", side_effect=lambda doctype, name=None: docs[doctype]),
-			patch.object(frappe, "db", MagicMock(exists=MagicMock(return_value=True), savepoint=MagicMock())),
-		):
-			core.receive_shipped_return("DN-1")
-		return_doc.inspect_or_receive.assert_called_once_with(note, arrived=True)
+class TestNoShipmentCoupling(Patched):
+	"""A Shipment is optional (Siwat, 5 Nov 2026): nothing in a loan waits for one."""
 
-	def test_a_failure_is_noted_and_the_shipment_stays_delivered(self):
-		note = Row(
-			docstatus=0,
-			is_return=1,
-			is_custody_loan_transaction=1,
-			custody_loan_source_doctype="Custody Loan Return",
-			custody_loan_source_name="RET-1",
-			name="DN-1",
-		)
-		return_doc = MagicMock(docstatus=1, loan_type="Stock", requires_shipment=1, custody_loan="L1")
-		return_doc.inspect_or_receive.side_effect = frappe.ValidationError("no stock")
-		docs = {"Delivery Note": note, "Custody Loan Return": return_doc, "Custody Loan": MagicMock()}
-		with (
-			patch.object(frappe, "get_doc", side_effect=lambda doctype, name=None: docs[doctype]),
-			patch.object(frappe, "db", MagicMock(exists=MagicMock(return_value=True))),
-			patch.object(frappe, "clear_last_message"),
-		):
-			core.receive_shipped_return("DN-1")
-		self.assertIn("no stock", return_doc.add_comment.call_args.args[1])
-
-	def test_the_unshipped_return_waits_only_while_the_shipment_is_not_delivered(self):
+	def test_the_return_is_inspected_or_received_on_submit_whatever_a_shipment_does(self):
 		doc = core.CustodyLoanReturn.__new__(core.CustodyLoanReturn)
-		doc.requires_shipment = 1
-		note = Row(name="DN-1", items=[])
-		with patch.object(core, "receive_return_delivery_note") as receive:
+		note = Row(name="DN-1", items=[Row(item_code="PLAIN")])
+		with (
+			patch.object(core, "receive_return_delivery_note") as receive,
+			patch.object(core, "custody_loan_return_row_requires_inspection", return_value=False),
+		):
 			doc.inspect_or_receive(note)
-			receive.assert_not_called()
-			doc.inspect_or_receive(note, arrived=True)
-			receive.assert_called_once_with("DN-1")
+		receive.assert_called_once_with("DN-1")
+
+	def test_the_shipment_gates_are_gone(self):
+		for name in (
+			"receive_shipped_return",
+			"validate_custody_loan_return_shipment_arrival",
+			"validate_delivery_note_shipment_link",
+		):
+			self.assertFalse(hasattr(core, name), name)
+		self.assertFalse(hasattr(core.CustodyLoan, "validate_shipment_scope"))
 
 
 class TestPickListRows(Patched):

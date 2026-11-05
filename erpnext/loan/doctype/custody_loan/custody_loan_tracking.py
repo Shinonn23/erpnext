@@ -28,6 +28,7 @@ TRACKING_FIELDS = (
 	"adjusted_qty",
 	"outstanding_qty",
 	"status",
+	"returned_as",
 )
 
 
@@ -125,11 +126,16 @@ def _movement_rows(loan_name, *, exclude=None):
 	return rows
 
 
-def get_balances(loan, *, exclude=None):
+def get_balances(loan, *, exclude=None, attribute=True):
 	"""{(loan item, batch, serial): balance} for the tracked items of a Stock loan.
 
 	exclude=(doctype, name) leaves a return or adjustment out, so the document being validated is not counted
 	against itself.
+
+	A return may bring back another batch or serial number of the same Item than the one lent (Siwat, 5 Nov 2026):
+	``attribute`` counts what came back in another lot against the lent entries, earliest first, and notes the lot
+	on them (``returned_as``), so the outstanding of each lent entry stays honest. A validation of a return itself
+	passes ``attribute=False`` and sees the entries as they are.
 	"""
 	items = {row.name: row for row in loan.items if row.item_code and is_tracked(row.item_code)}
 	factors = conversion_factors(loan)
@@ -176,15 +182,47 @@ def get_balances(loan, *, exclude=None):
 	for entry in balances.values():
 		if entry.serial_no:
 			entry.batch_no = serial_batch.get((entry.custody_loan_item, entry.serial_no))
+		entry.returned_as = ""
+		entry.other_lot = entry.issued_qty <= 0 and (entry.returned_qty > 0 or entry.pending_return_qty > 0)
+	if attribute:
+		attribute_other_lots(balances)
+	for entry in balances.values():
 		entry.outstanding_qty = max(entry.issued_qty - entry.returned_qty - entry.adjusted_qty, 0)
 		entry.open_qty = max(entry.outstanding_qty - entry.pending_return_qty, 0)
 		entry.status = tracking_status(entry)
 	return balances
 
 
+def attribute_other_lots(balances):
+	"""What came back in a lot that was not lent counts against the lent entries of the same loan item, earliest lot
+	first; each lent entry keeps a note of the lots that came back for it."""
+	lent_by_item = defaultdict(list)
+	for entry in balances.values():
+		if entry.issued_qty > 0:
+			lent_by_item[entry.custody_loan_item].append(entry)
+	for entry in list(balances.values()):
+		if not entry.other_lot:
+			continue
+		label = entry.serial_no or entry.batch_no or _("no batch")
+		lent = sorted(lent_by_item.get(entry.custody_loan_item, []), key=lambda e: (e.batch_no or "", e.serial_no or ""))
+		for field in ("returned_qty", "pending_return_qty"):
+			left = entry.get(field)
+			for target in lent:
+				if left <= 0:
+					break
+				room = target.issued_qty - target.returned_qty - target.adjusted_qty - target.pending_return_qty
+				take = min(max(room, 0), left)
+				if take <= 0:
+					continue
+				target[field] += take
+				left -= take
+				note = f"{label} x {flt(take):g}" + (f" ({_('pending')})" if field == "pending_return_qty" else "")
+				target.returned_as = f"{target.returned_as}, {note}" if target.returned_as else note
+
+
 def tracking_status(entry):
 	if entry.issued_qty <= 0:
-		return "Not Issued"
+		return "Returned in Other Lot" if (entry.returned_qty > 0 or entry.pending_return_qty > 0) else "Not Issued"
 	if entry.pending_return_qty > 0:
 		return "Pending Return"
 	if entry.outstanding_qty <= 0:
@@ -196,7 +234,7 @@ def tracking_rows(loan):
 	"""Rows for the loan's Serial / Batch Tracking table, in loan-item order."""
 	order = {row.name: row.idx for row in loan.items}
 	rows = sorted(
-		get_balances(loan).values(),
+		(entry for entry in get_balances(loan).values() if not entry.other_lot),
 		key=lambda entry: (
 			order.get(entry.custody_loan_item, 0),
 			entry.batch_no or "",
@@ -258,11 +296,41 @@ def grouped_open_rows(loan, loan_item_row):
 	return sorted(groups.values(), key=lambda group: group["batch_no"] or "")
 
 
-def validate_tracked_rows(doc, loan, qty_field):
+def check_foreign_serial(serial, item_code, loan_name, idx=None):
+	"""A serial number that was not lent on this loan may come back only if it is a known unit of the Item that nobody
+	holds: not in our stock and not on another open loan."""
+	prefix = _("Row {0}: ").format(idx) if idx else ""
+	values = frappe.db.get_value("Serial No", serial, ["item_code", "warehouse"], as_dict=True)
+	if not values:
+		frappe.throw(
+			prefix + _("Serial No {0} is not known yet: use 'New Batch / Serial' to add it first.").format(serial)
+		)
+	if values.item_code != item_code:
+		frappe.throw(prefix + _("Serial No {0} belongs to another Item.").format(serial))
+	if values.warehouse:
+		frappe.throw(
+			prefix
+			+ _("Serial No {0} is in stock in {1}: it cannot come back from a customer.").format(
+				serial, values.warehouse
+			)
+		)
+	if frappe.db.exists(
+		"Custody Loan Serial Batch",
+		{
+			"serial_no": serial,
+			"status": ["in", ["With Borrower", "Pending Return"]],
+			"parent": ["!=", loan_name],
+			"parenttype": "Custody Loan",
+		},
+	):
+		frappe.throw(prefix + _("Serial No {0} is on another open loan.").format(serial))
+
+
+def validate_tracked_rows(doc, loan, qty_field, allow_other_lots=False):
 	"""Each return/adjustment row of a tracked item must take open units: its serials and batch must have been issued
 	on this loan and not be returned, pending return or written off already."""
 	exclude = (doc.doctype, doc.name) if doc.name else None
-	balances = get_balances(loan, exclude=exclude)
+	balances = get_balances(loan, exclude=exclude, attribute=not allow_other_lots)
 	factors = conversion_factors(loan)
 	loan_items = {row.name: row for row in loan.items}
 	taken = defaultdict(float)
@@ -280,6 +348,12 @@ def validate_tracked_rows(doc, loan, qty_field):
 			batches = set()
 			for serial in serials:
 				entry = balances.get((loan_item.name, None, serial))
+				if allow_other_lots and (not entry or entry.issued_qty <= 0):
+					# a serial number that was not lent: a unit of the same Item that nobody holds
+					check_foreign_serial(serial, loan_item.item_code, loan.name, row.idx)
+					taken[(loan_item.name, None, serial)] += 1
+					batches.add(None)
+					continue
 				if not entry or entry.issued_qty <= 0:
 					frappe.throw(
 						_("Row {0}: Serial No {1} was not issued on this Loan Item").format(row.idx, serial)
@@ -292,7 +366,10 @@ def validate_tracked_rows(doc, loan, qty_field):
 					)
 				taken[(loan_item.name, None, serial)] += 1
 				batches.add(entry.batch_no)
-			if flags.has_batch_no:
+			if flags.has_batch_no and allow_other_lots:
+				if not row.batch_no:
+					frappe.throw(_("Row {0}: Select the Batch No").format(row.idx))
+			elif flags.has_batch_no:
 				if len(batches) > 1:
 					frappe.throw(
 						_(
@@ -313,13 +390,24 @@ def validate_tracked_rows(doc, loan, qty_field):
 				frappe.throw(_("Row {0}: Select the Batch No").format(row.idx))
 			key = (loan_item.name, row.batch_no, None)
 			entry = balances.get(key)
-			if not entry or entry.issued_qty <= 0:
+			if allow_other_lots and (not entry or entry.issued_qty <= 0):
+				# a batch that was not lent comes back too, if it is a batch of this Item
+				if frappe.db.get_value("Batch", row.batch_no, "item") != loan_item.item_code:
+					frappe.throw(
+						_("Row {0}: Batch {1} is not a batch of {2}").format(row.idx, row.batch_no, loan_item.item_code)
+					)
+			elif allow_other_lots:
+				pass
+			elif not entry or entry.issued_qty <= 0:
 				frappe.throw(
 					_("Row {0}: Batch {1} was not issued on this Loan Item").format(row.idx, row.batch_no)
 				)
 			stock_qty = qty * (factors.get(loan_item.name, 1) or 1)
 			taken[key] += stock_qty
-			if taken[key] > entry.open_qty + 1e-9:
+			if allow_other_lots:
+				# the count is per Item, checked on the whole return
+				pass
+			elif taken[key] > entry.open_qty + 1e-9:
 				frappe.throw(
 					_("Row {0}: Only {1} of Batch {2} is still with the borrower").format(
 						row.idx, flt(entry.open_qty), row.batch_no

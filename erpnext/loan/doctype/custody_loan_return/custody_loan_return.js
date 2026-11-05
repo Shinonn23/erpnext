@@ -41,14 +41,7 @@ frappe.ui.form.on("Custody Loan Return", {
 		}
 		if (frm.doc.docstatus !== 1) return;
 		if (frm.doc.loan_type === "Stock") {
-			if (frm.doc.status === "Pending Shipment") {
-				frm.set_intro(
-					__(
-						"The items are on their way back: create the Shipment and mark it Delivered when they arrive. The system then receives them, or asks the QI team to inspect them first."
-					),
-					"blue"
-				);
-			} else if (frm.doc.status === "Pending Quality Inspection") {
+			if (frm.doc.status === "Pending Quality Inspection") {
 				frm.set_intro(
 					__(
 						"The QI team inspects the returned items. They are received when the last Quality Inspection is submitted: accepted ones go back to stock, rejected ones to Quarantine."
@@ -77,28 +70,6 @@ frappe.ui.form.on("Custody Loan Return", {
 			frm.add_custom_button(__("Open Asset Movement"), () =>
 				frappe.set_route("Form", "Asset Movement", frm.doc.asset_movement)
 			);
-		}
-		if (frm.doc.requires_shipment && frm.doc.delivery_note) {
-			const return_name = frm.doc.name;
-			const delivery_note = frm.doc.delivery_note;
-			frappe.db.get_value("Delivery Note", delivery_note, "custody_loan_shipment").then(({ message }) => {
-				if (frm.doc.docstatus !== 1 || frm.doc.name !== return_name || frm.doc.delivery_note !== delivery_note || !frm.doc.requires_shipment) return;
-				if (message?.custody_loan_shipment) {
-					if (frappe.model.can_read("Shipment")) {
-						frm.add_custom_button(__("Open Loan Return Shipment"), () =>
-							frappe.set_route("Form", "Shipment", message.custody_loan_shipment)
-						);
-					}
-					return;
-				}
-				if (!frappe.model.can_create("Shipment")) return;
-				frm.add_custom_button(__("Create Loan Return Shipment"), () => {
-					frappe.call({
-						method: "erpnext.stock.doctype.shipment.shipment.make_shipment_from_document",
-						args: { source_doctype: "Delivery Note", source_name: frm.doc.delivery_note },
-					}).then((r) => open_generated_doc(r.message));
-				});
-			});
 		}
 	},
 });
@@ -318,13 +289,12 @@ function ask_who_returns(frm) {
 	load();
 }
 
+// A customer may return another batch of the Item than the one lent (Siwat, 5 Nov 2026): any batch of the Item is
+// offered; a batch that does not exist yet is added from the Return Loan Set dialog ("New Batch / Serial").
 function set_open_batch_query(frm) {
 	frm.set_query("batch_no", "items", (doc, cdt, cdn) => {
 		const row = locals[cdt][cdn];
-		return {
-			query: "erpnext.loan.doctype.custody_loan.custody_loan_tracking.custody_loan_batch_query",
-			filters: { custody_loan: doc.custody_loan, custody_loan_item: row.custody_loan_item },
-		};
+		return { filters: { item: row.item_code } };
 	});
 }
 

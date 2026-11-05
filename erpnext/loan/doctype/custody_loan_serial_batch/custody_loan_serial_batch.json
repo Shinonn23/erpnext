@@ -14,7 +14,8 @@
   "pending_return_qty",
   "adjusted_qty",
   "outstanding_qty",
-  "status"
+  "status",
+  "returned_as"
  ],
  "fields": [
   {
@@ -94,6 +95,13 @@
    "read_only": 1,
    "in_list_view": 1,
    "columns": 1
+  },
+  {
+   "fieldname": "returned_as",
+   "fieldtype": "Small Text",
+   "label": "Came Back As",
+   "read_only": 1,
+   "description": "The batch or serial number that came back for this lent one, when another was returned."
   }
  ],
  "istable": 1,

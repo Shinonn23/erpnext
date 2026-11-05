@@ -27,7 +27,6 @@ class TestCustodyLoanReturnFlow(TestCase):
 			"is_custody_loan_transaction": 1,
 			"custody_loan_source_doctype": "Custody Loan Return",
 			"custody_loan_source_name": "RETURN-1",
-			"requires_shipment": 0,
 			"items": [
 				FakeDocument(
 					idx=1,
@@ -58,7 +57,6 @@ class TestCustodyLoanReturnFlow(TestCase):
 		)
 
 		with (
-			patch("erpnext.loan.doctype.custody_loan.custody_loan_core.validate_custody_loan_return_shipment_arrival"),
 			patch(
 				"erpnext.loan.doctype.custody_loan.custody_loan_core.validate_custody_loan_return_quality_inspection"
 			) as validate_qi,
@@ -73,7 +71,6 @@ class TestCustodyLoanReturnFlow(TestCase):
 		delivery_note.items[0].quality_inspection = None
 
 		with (
-			patch("erpnext.loan.doctype.custody_loan.custody_loan_core.validate_custody_loan_return_shipment_arrival"),
 			patch.object(frappe, "get_doc", return_value=self.make_return()),
 			self.assertRaises(frappe.ValidationError),
 		):
@@ -85,7 +82,6 @@ class TestCustodyLoanReturnFlow(TestCase):
 			docstatus=1,
 			loan_type="Stock",
 			delivery_note=delivery_note.name,
-			requires_shipment=0,
 		)
 		with (
 			patch.object(frappe.db, "exists", return_value=True),
@@ -113,23 +109,11 @@ class TestCustodyLoanReturnFlow(TestCase):
 		):
 			self.assertEqual(update_return_status_on_transaction(return_doc), "Received")
 
-	def test_shipped_return_uses_pending_receipt_until_delivery_before_inspection(self):
-		delivery_note = self.make_delivery_note(requires_shipment=1, custody_loan_shipment="SHIP-1")
-		return_doc = FakeDocument(
-			docstatus=1,
-			loan_type="Stock",
-			delivery_note=delivery_note.name,
-			requires_shipment=1,
-		)
+	def test_a_return_never_waits_for_a_shipment(self):
+		# Siwat, 5 Nov 2026: a Shipment is optional; a draft return note waits only for its inspections
+		delivery_note = self.make_delivery_note(custody_loan_shipment="SHIP-1")
+		return_doc = FakeDocument(docstatus=1, loan_type="Stock", delivery_note=delivery_note.name)
 		with (
-			patch.object(frappe.db, "get_value", return_value=frappe._dict(docstatus=1, tracking_status="In Progress")),
-			patch.object(frappe.db, "exists", return_value=True),
-			patch.object(frappe, "get_doc", return_value=delivery_note),
-		):
-			self.assertEqual(update_return_status_on_transaction(return_doc), "Pending Receipt")
-
-		with (
-			patch.object(frappe.db, "get_value", return_value=frappe._dict(docstatus=1, tracking_status="Delivered")),
 			patch.object(frappe.db, "exists", return_value=True),
 			patch.object(frappe, "get_doc", return_value=delivery_note),
 			patch(
@@ -151,7 +135,6 @@ class TestCustodyLoanReturnFlow(TestCase):
 		loan = FakeDocument(
 			name="LOAN-1",
 			loan_type="Asset",
-			requires_shipment=0,
 			items=[
 				FakeDocument(issued_qty=1, returned_qty=0, adjusted_qty=0, sold_qty=0, outstanding_qty=1)
 			],
@@ -160,11 +143,10 @@ class TestCustodyLoanReturnFlow(TestCase):
 		with patch.object(frappe, "get_all", return_value=[]):
 			self.assertEqual(CustodyLoan.get_submitted_status(loan), "Active")
 
-	def test_stock_loan_waiting_for_delivery_uses_pending_shipment(self):
+	def test_a_stock_loan_whose_delivery_note_is_not_submitted_waits_for_it_only(self):
 		loan = FakeDocument(
 			name="LOAN-2",
 			loan_type="Stock",
-			requires_shipment=1,
 			pick_list="PICK-1",
 			delivery_note="DN-1",
 			asset_movement=None,
@@ -174,11 +156,10 @@ class TestCustodyLoanReturnFlow(TestCase):
 			refresh_balances=lambda: None,
 		)
 		with (
-			patch.object(frappe.db, "get_value", return_value=1),
+			patch.object(frappe.db, "get_value", side_effect=[1, 0]),
 			patch.object(frappe, "get_all", return_value=[]),
-			patch("erpnext.loan.doctype.custody_loan.custody_loan_core.transaction_is_received", return_value=False),
 		):
-			self.assertEqual(CustodyLoan.get_submitted_status(loan), "Pending Shipment")
+			self.assertEqual(CustodyLoan.get_submitted_status(loan), "Pending Delivery Note")
 
 	def test_only_submitted_accepted_inspections_complete_the_check(self):
 		delivery_note = self.make_delivery_note()
