@@ -395,3 +395,39 @@ def get_loan_item_rows(custody_loan):
 		}
 		for row in loan.items
 	]
+
+
+@frappe.whitelist()
+def get_open_loans(borrower_type=None, borrower=None):
+	"""The loans a return can be started for (submitted, still with their borrower) that the user may open, the
+	soonest due first: what the Loan Return form lists once the user says who returns (customer, employee ...)."""
+	filters = {"docstatus": 1, "status": ["in", ["Active", "Partially Returned"]]}
+	if borrower_type:
+		filters["borrower_type"] = borrower_type
+	if borrower:
+		filters["borrower"] = borrower
+	loans = frappe.get_list(
+		"Custody Loan",
+		filters=filters,
+		fields=["name", "loan_type", "borrower_type", "borrower", "expected_return_date", "status"],
+		order_by="expected_return_date is null, expected_return_date, creation",
+		limit_page_length=50,
+	)
+	for loan in loans:
+		rows = frappe.get_all(
+			"Custody Loan Item",
+			filters={"parent": loan.name, "parenttype": "Custody Loan", "outstanding_qty": [">", 0]},
+			fields=["item_code", "outstanding_qty"],
+			order_by="idx",
+		)
+		loan["items"] = ", ".join(f"{row.item_code} x {flt(row.outstanding_qty):g}" for row in rows)
+	return loans
+
+
+@frappe.whitelist()
+def get_return_items(custody_loan):
+	"""The rows of a new Loan Return for a loan: what is still with the borrower, one row per batch (the same rows
+	Create > Return fills)."""
+	loan = frappe.get_doc("Custody Loan", custody_loan)
+	loan.check_permission("read")
+	return [row.as_dict() for row in loan.make_return().items]

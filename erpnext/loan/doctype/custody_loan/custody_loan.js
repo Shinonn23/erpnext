@@ -43,9 +43,31 @@ frappe.ui.form.on("Custody Loan", {
 		show_loan_summary(frm);
 		if (frm.doc.docstatus !== 1) return;
 		if (frm.doc.status === "Pending Pick") {
-			frm.set_intro(__("Complete and submit the Pick List, then create the Loan Delivery Note."), "blue");
+			frm.set_intro(
+				__(
+					"The warehouse picks the items and submits the Pick List; the Loan Delivery Note is made for you."
+				),
+				"blue"
+			);
+		} else if (frm.doc.status === "Pending Delivery Note") {
+			frm.set_intro(
+				__("The Pick List is submitted. Create the Loan Delivery Note to send the items out."),
+				"blue"
+			);
 		} else if (frm.doc.status === "Pending Shipment") {
-			frm.set_intro(__("Open the Loan Delivery Note to complete shipment and confirm delivery."), "blue");
+			frm.set_intro(
+				__(
+					"The items go with a Shipment: open the Loan Delivery Note, create the Shipment and mark it Delivered when the borrower has them."
+				),
+				"blue"
+			);
+		} else if (["Active", "Partially Returned"].includes(frm.doc.status)) {
+			frm.set_intro(
+				__(
+					"When the items come back, press Return: the items still out are filled in, then Save and Submit. The system receives them or asks the QI team to inspect them first."
+				),
+				"blue"
+			);
 		}
 		if (frm.doc.pick_list && frappe.model.can_read("Pick List")) {
 			frm.add_custom_button(__("Open Pick List"), () =>
@@ -91,11 +113,14 @@ frappe.ui.form.on("Custody Loan", {
 		}
 		if (!["Active", "Partially Returned"].includes(frm.doc.status)) return;
 		if (frappe.model.can_create("Custody Loan Return")) {
-			frm.add_custom_button(__("Return"), () => open_generated_doc(frm, "make_return"), __("Create"), "Custody Loan Return");
+			// the first thing to do with a loan that is out: one button, the rows of what is still out filled in
+			frm.add_custom_button(__("Return"), () => open_generated_doc(frm, "make_return")).addClass(
+				"btn-primary"
+			);
 		}
 		if (frm.doc.loan_type === "Stock" && frappe.model.can_create("Custody Loan Adjustment")) {
 			frm.add_custom_button(
-				__("Adjustment"),
+				__("Write Off"),
 				() => open_generated_doc(frm, "make_adjustment"),
 				__("Create"),
 				"Custody Loan Adjustment"

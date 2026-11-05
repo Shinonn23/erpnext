@@ -38,7 +38,7 @@
   {"fieldname": "responsible_column", "fieldtype": "Column Break"},
   {"fieldname": "borrower_type", "fieldtype": "Select", "label": "Borrower Type", "options": "Employee\nCustomer\nSupplier\nContact", "fetch_from": "custody_loan.borrower_type", "read_only": 1},
   {"fieldname": "borrower", "fieldtype": "Dynamic Link", "label": "Borrower", "options": "borrower_type", "fetch_from": "custody_loan.borrower", "read_only": 1, "in_list_view": 1},
-  {"fieldname": "requested_by_name", "fieldtype": "Data", "label": "Requested By", "fetch_from": "custody_loan.requested_by_name", "read_only": 1, "in_list_view": 1},
+  {"fieldname": "requested_by_name", "fieldtype": "Data", "label": "Responsible Employee", "fetch_from": "custody_loan.requested_by_name", "read_only": 1, "in_list_view": 1},
   {"fieldname": "items_section", "fieldtype": "Section Break", "label": "Items Coming Back"},
   {"fieldname": "items", "fieldtype": "Table", "label": "Items", "options": "Custody Loan Return Item", "reqd": 1},
   {"fieldname": "generated_documents_section", "fieldtype": "Section Break", "label": "Receiving Documents", "collapsible": 0},

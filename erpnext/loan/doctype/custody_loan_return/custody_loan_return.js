@@ -16,28 +16,60 @@ frappe.ui.form.on("Custody Loan Return", {
 	onload(frm) {
 		load_loan_rows(frm);
 	},
+	onload_post_render(frm) {
+		ask_who_returns(frm);
+	},
 	custody_loan(frm) {
 		load_loan_rows(frm);
+		fit_form(frm);
 	},
 	refresh(frm) {
 		frm.set_intro("");
+		fit_form(frm);
 		show_draft_guidance(
 			frm,
-			__("Use Select Serial / Batch to tick the serial numbers and batches that came back, then submit.")
+			frm.doc.loan_type === "Asset"
+				? __(
+						"Check the asset and the Location it goes back to, then Save. If its Item is inspected the QI team is asked first and the return is submitted when they submit the inspection; otherwise Submit."
+				  )
+				: __(
+						"Check what is coming back (the batches and serial numbers are filled in), then Save and Submit. The system receives the items, after the QI team inspects those that need it."
+				  )
 		);
 		if (frm.doc.docstatus === 0 && frm.doc.loan_type === "Stock" && frm.doc.custody_loan) {
 			frm.add_custom_button(__("Select Serial / Batch"), () => select_open_serial_batches(frm, "returned_qty"));
 		}
 		if (frm.doc.docstatus !== 1) return;
 		if (frm.doc.loan_type === "Stock") {
-			if (frm.doc.status === "Pending Quality Inspection") {
-				frm.set_intro(__("Open Loan Receive, inspect each returned item, and submit an Accepted Quality Inspection for every row."), "blue");
+			if (frm.doc.status === "Pending Shipment") {
+				frm.set_intro(
+					__(
+						"The items are on their way back: create the Shipment and mark it Delivered when they arrive. The system then receives them, or asks the QI team to inspect them first."
+					),
+					"blue"
+				);
+			} else if (frm.doc.status === "Pending Quality Inspection") {
+				frm.set_intro(
+					__(
+						"The QI team inspects the returned items. They are received when the last Quality Inspection is submitted: accepted ones go back to stock, rejected ones to Quarantine."
+					),
+					"blue"
+				);
 			} else if (frm.doc.status === "Pending Receipt") {
-				frm.set_intro(__("Open Loan Receive to complete any required shipment and submit the receiving Delivery Note."), "blue");
+				frm.set_intro(
+					__(
+						"The system could not receive the items by itself (see the comments). Open the receiving Delivery Note, fix what it says and submit it."
+					),
+					"blue"
+				);
 			}
 		}
-		if (frm.doc.delivery_note && frappe.model.can_read("Delivery Note")) {
-			frm.add_custom_button(__("Loan Receive"), () =>
+		if (
+			frm.doc.delivery_note &&
+			frm.doc.status === "Pending Receipt" &&
+			frappe.model.can_read("Delivery Note")
+		) {
+			frm.add_custom_button(__("Open Receiving Delivery Note"), () =>
 				frappe.set_route("Form", "Delivery Note", frm.doc.delivery_note)
 			);
 		}
@@ -174,6 +206,7 @@ function select_open_serial_batches(frm, qty_field) {
 						row[qty_field] = group.qty;
 					});
 					frm.refresh_field("items");
+					fit_form(frm);
 					frm.dirty();
 					dialog.hide();
 				},
@@ -189,7 +222,100 @@ function show_draft_guidance(frm, message) {
 	grid.toggle_display("batch_no", stock);
 	grid.toggle_display("serial_no", stock);
 	if (frm.fields_dict.items.grid.get_docfield("asset")) grid.toggle_display("asset", !stock);
-	if (frm.doc.docstatus === 0 && stock && frm.doc.custody_loan) frm.set_intro(message, "blue");
+	if (frm.doc.docstatus === 0 && frm.doc.custody_loan) frm.set_intro(message, "blue");
+}
+
+// A return started from the list has no loan yet: ask who is returning and list their open loans (the user
+// never types a Custody Loan ID). Started from a loan (its Return button) the form opens filled in.
+function ask_who_returns(frm) {
+	if (!frm.is_new() || frm.doc.custody_loan || frm._asked_who) return;
+	frm._asked_who = true;
+	let loans = [];
+	const load = () => {
+		const values = dialog.get_values(true) || {};
+		frappe
+			.xcall("erpnext.loan.doctype.custody_loan.custody_loan_tracking.get_open_loans", {
+				borrower_type: values.borrower_type,
+				borrower: values.borrower,
+			})
+			.then((rows) => {
+				loans = rows || [];
+				dialog.set_df_property(
+					"loan",
+					"options",
+					loans.map((loan) => ({
+						value: loan.name,
+						label: `${loan.name} - ${loan.borrower} - ${loan.items || ""}${
+							loan.expected_return_date
+								? ` (${__("due")} ${frappe.datetime.str_to_user(loan.expected_return_date)})`
+								: ""
+						}`,
+					}))
+				);
+				dialog.set_value("loan", loans.length ? loans[0].name : "");
+				dialog.set_df_property("loans_hint", "hidden", loans.length ? 1 : 0);
+			});
+	};
+	const dialog = new frappe.ui.Dialog({
+		title: __("Who is returning items?"),
+		fields: [
+			{
+				fieldname: "borrower_type",
+				fieldtype: "Select",
+				label: __("Borrower Type"),
+				options: ["Customer", "Employee", "Supplier", "Contact"],
+				default: "Customer",
+				onchange() {
+					dialog.set_value("borrower", "");
+					load();
+				},
+			},
+			{
+				fieldname: "borrower",
+				fieldtype: "Dynamic Link",
+				label: __("Borrower"),
+				options: "borrower_type",
+				onchange: load,
+			},
+			{ fieldname: "loan", fieldtype: "Select", label: __("Open Loan"), reqd: 1 },
+			{
+				fieldname: "loans_hint",
+				fieldtype: "HTML",
+				options: `<p class="text-muted">${__("No open loan found. Choose another borrower.")}</p>`,
+				hidden: 1,
+			},
+		],
+		primary_action_label: __("Return Items"),
+		primary_action(values) {
+			const loan = loans.find((row) => row.name === values.loan);
+			if (!loan) return;
+			dialog.hide();
+			frappe
+				.xcall("erpnext.loan.doctype.custody_loan.custody_loan_tracking.get_return_items", {
+					custody_loan: loan.name,
+				})
+				.then((rows) => {
+					frm.doc.loan_type = loan.loan_type;
+					frm.set_value("custody_loan", loan.name);
+					frm.clear_table("items");
+					(rows || []).forEach((row) => {
+						frm.add_child("items", {
+							custody_loan_item: row.custody_loan_item,
+							item_code: row.item_code,
+							returned_qty: row.returned_qty,
+							batch_no: row.batch_no,
+							serial_no: row.serial_no,
+							asset: row.asset,
+							target_location: row.target_location,
+						});
+					});
+					frm.refresh_fields();
+					fit_form(frm);
+				});
+		},
+	});
+	dialog.show();
+	load();
 }
 
 function set_open_batch_query(frm) {
@@ -256,4 +382,46 @@ function link_loan_row(frm, cdt, cdn) {
 	}
 	const chosen = candidates.find((loan_row) => flt(loan_row.outstanding_qty) > 0) || candidates[0];
 	frappe.model.set_value(cdt, cdn, "custody_loan_item", chosen.name);
+}
+
+// What a return shows: rows only from the loan's outstanding items (no free Add row), batch / serial columns only
+// where the rows carry them, the Asset column only on an Asset loan, no Status or Series on a new form, and whose
+// items come back (the borrower and the Responsible Employee by name, from the loan).
+function fit_form(frm) {
+	const grid = frm.fields_dict.items.grid;
+	const stock = frm.doc.loan_type !== "Asset";
+	const tracked = (frm.doc.items || []).some((row) => row.batch_no || row.serial_no);
+	grid.cannot_add_rows = true;
+	grid.toggle_display("batch_no", stock && tracked);
+	grid.toggle_display("serial_no", stock && tracked);
+	grid.toggle_display("asset", !stock);
+	grid.toggle_display("target_location", !stock);
+	frm.toggle_display("status", !frm.is_new());
+	frm.toggle_display("naming_series", false);
+	show_whose_items(frm);
+}
+
+function show_whose_items(frm) {
+	if (!frm.doc.custody_loan || !frm.doc.borrower_type || !frm.doc.borrower) return;
+	const key = `${frm.doc.borrower_type}::${frm.doc.borrower}`;
+	const show = (name) => {
+		if (frm.doc.docstatus === undefined || frm._whose_key !== key) return;
+		const parts = [__("Items of {0}", [`<b>${frappe.utils.escape_html(name)}</b>`])];
+		if (frm.doc.requested_by_name) {
+			parts.push(
+				__("Responsible Employee: {0}", [
+					`<b>${frappe.utils.escape_html(frm.doc.requested_by_name)}</b>`,
+				])
+			);
+		}
+		frm.dashboard.set_headline(parts.join(" &middot; "));
+	};
+	frm._whose_key = key;
+	frappe
+		.xcall("frappe.desk.search.get_link_title", {
+			doctype: frm.doc.borrower_type,
+			docname: frm.doc.borrower,
+		})
+		.then((title) => show(title || frm.doc.borrower))
+		.catch(() => show(frm.doc.borrower));
 }

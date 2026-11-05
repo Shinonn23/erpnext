@@ -231,8 +231,7 @@ class Shipment(Document):
 				delivery_note = frappe.get_doc("Delivery Note", entry.reference_name)
 				if delivery_note.get("is_custody_loan_transaction") and delivery_note.requires_shipment:
 					if delivery_note.is_return:
-						# A Loan Return is received only after its Quality Inspections pass and
-						# the operator submits the Loan Receive Delivery Note.
+						# A Loan Return is received when the Shipment is Delivered (on_update_after_submit).
 						has_transit_stock = True
 						continue
 					if delivery_note.docstatus == 0:
@@ -256,6 +255,7 @@ class Shipment(Document):
 		if self.tracking_status != "Delivered" or self.flags.get("receiving_stock_for_shipment"):
 			return
 
+		from erpnext.loan.doctype.custody_loan.custody_loan_core import receive_shipped_return
 		from erpnext.stock.doctype.stock_entry.shipment_stock_entry import make_transit_receipt
 
 		new_receipts = []
@@ -264,7 +264,9 @@ class Shipment(Document):
 				delivery_note = frappe.get_doc("Delivery Note", entry.reference_name)
 				if delivery_note.get("is_custody_loan_transaction") and delivery_note.requires_shipment:
 					if delivery_note.is_return:
-						# Return stock stays out of the ledger until inspection and Loan Receive.
+						# The return follows the path of one that was not shipped: its inspections are drafted for
+						# the Item's QI team, or it is received at once (no approval step).
+						receive_shipped_return(delivery_note.name)
 						continue
 					if delivery_note.docstatus == 0:
 						delivery_note.submit()
