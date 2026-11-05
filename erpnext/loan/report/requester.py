@@ -58,13 +58,13 @@ def value_columns():
 def requester_columns():
 	return [
 		{
-			"label": _("Requested By"),
+			"label": _("Responsible Employee"),
 			"fieldname": "requested_by",
 			"fieldtype": "Link",
 			"options": "Employee",
 			"width": 120,
 		},
-		{"label": _("Requester Name"), "fieldname": "requested_by_name", "fieldtype": "Data", "width": 170},
+		{"label": _("Responsible Employee Name"), "fieldname": "requested_by_name", "fieldtype": "Data", "width": 170},
 		{
 			"label": _("Requester User"),
 			"fieldname": "requested_by_user",

@@ -65,7 +65,7 @@ def execute(filters=None):
 		{REQUEST_JOIN}
 		WHERE {' AND '.join(conditions)}
 		GROUP BY loan.name
-		ORDER BY loan.expected_return_date, loan.name""",
+		ORDER BY loan.expected_return_date, loan.material_request, loan.loan_type, loan.name""",
 		values,
 		as_dict=True,
 	)

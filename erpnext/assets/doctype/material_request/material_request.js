@@ -23,10 +23,8 @@ frappe.ui.form.on("Material Request", {
 		}));
 		frm.set_query("asset", "items", (doc, cdt, cdn) => {
 			const row = locals[cdt][cdn];
-			const fixed_asset_purpose =
-				["Asset Transfer", "Customer Demo"].includes(doc.material_request_type) ||
-				(doc.material_request_type === "Customer Borrow / Loan" && doc.borrow_item_type === "Asset");
-			if (!fixed_asset_purpose) return { filters: { name: ["=", ""] } };
+			// Only an Asset Transfer picks Assets; the Stock team picks those of a Demo / Borrow request.
+			if (doc.material_request_type !== "Asset Transfer") return { filters: { name: ["=", ""] } };
 			return {
 				query: "erpnext.assets.doctype.material_request.material_request.asset_query",
 				filters: {
@@ -92,7 +90,7 @@ frappe.ui.form.on("Material Request", {
 				loan_recipient_contact_email: null,
 			});
 		} else if (previous !== purpose) {
-			values.borrow_item_type = "Stock Item";
+			values.loan_recipient_type = "Customer";
 		}
 		if (purpose !== "Material Transfer") values.set_from_warehouse = null;
 		if (purpose !== "Asset Transfer") values.asset_source_location = null;
@@ -101,20 +99,11 @@ frappe.ui.form.on("Material Request", {
 			values.request_progress_status = null;
 			values.request_remarks = null;
 		}
-		if (!["Asset Transfer", "Customer Demo"].includes(purpose) &&
-			!(purpose === "Customer Borrow / Loan" && frm.doc.borrow_item_type === "Asset")) {
-			values.asset_item_filter = null;
-		}
+		if (purpose !== "Asset Transfer") values.asset_item_filter = null;
 		return frm.set_value(values).then(() => {
 			set_stock_item_query(frm);
 			configure_material_request_item_columns(frm);
 			frm.refresh_fields();
-		});
-	},
-	borrow_item_type(frm) {
-		if (frm.doc.material_request_type !== "Customer Borrow / Loan") return;
-		return frm.set_value({ items: [], asset_item_filter: null }).then(() => {
-			configure_material_request_item_columns(frm);
 		});
 	},
 	schedule_date(frm) {
@@ -271,6 +260,9 @@ frappe.ui.form.on("Material Request", {
 	refresh(frm) {
 		set_stock_item_query(frm);
 		configure_material_request_item_columns(frm);
+		// a Series with a single choice is not asked
+		const series = frm.fields_dict.naming_series?.df?.options || "";
+		frm.toggle_display("naming_series", series.split("\n").filter(Boolean).length > 1);
 		if (frm.doc.docstatus === 0 && frm.doc.workflow_state === "Draft") {
 			frm.page.set_indicator(__("Draft"), "orange");
 		}
@@ -298,7 +290,8 @@ frappe.ui.form.on("Material Request", {
 			) return;
 			remove_standard_status_actions();
 			const actions = r.message || {};
-			// A Demo request may lend some rows as Stock and others as Assets: one Loan Order of each.
+			// The system makes the loans by itself once approved (and decided); the button is for a loan it has not made.
+			// A request may lend some rows as Stock and others as Assets: one Loan Order of each.
 			const loan_types = [
 				actions.stock_custody_loan && "Stock",
 				actions.asset_custody_loan && "Asset",
@@ -408,11 +401,10 @@ function set_stock_item_query(frm) {
 	frm.set_query("item_code", "items", (doc) => ({
 		query: "erpnext.controllers.queries.item_query",
 		filters:
-			// A Demo request names any Item (Stock or Fixed Asset); the back office decides how it is supplied.
-			doc.material_request_type === "Customer Demo"
+			// A Demo or Borrow request names any Item (Stock or Fixed Asset); the Stock team decides how it is supplied.
+			["Customer Demo", "Customer Borrow / Loan"].includes(doc.material_request_type)
 				? { disabled: 0, has_variants: 0 }
-				: doc.material_request_type === "Asset Transfer" ||
-					  (doc.material_request_type === "Customer Borrow / Loan" && doc.borrow_item_type === "Asset")
+				: doc.material_request_type === "Asset Transfer"
 					? { is_fixed_asset: 1, disabled: 0 }
 				: doc.material_request_type === "Purchase"
 					? { is_purchase_item: 1, disabled: 0 }
@@ -425,30 +417,24 @@ function configure_material_request_item_columns(frm) {
 	if (!grid) return;
 
 	const purpose = frm.doc.material_request_type;
-	const is_asset_request =
-		["Asset Transfer", "Customer Demo"].includes(purpose) ||
-		(purpose === "Customer Borrow / Loan" && frm.doc.borrow_item_type === "Asset");
+	const is_loan = ["Customer Demo", "Customer Borrow / Loan"].includes(purpose);
 	const visible_columns = new Set();
 
-	if (purpose === "Customer Demo") visible_columns.add("qty");
-	if (is_asset_request) {
+	if (purpose === "Asset Transfer") {
 		visible_columns.add("asset");
+		visible_columns.add("source_location");
 		visible_columns.add("target_location");
-		if (["Asset Transfer", "Customer Demo"].includes(purpose)) visible_columns.add("source_location");
 	} else {
+		// a Demo / Borrow request asks for the Item and the Qty only; the Assets are chosen by the Stock team
 		visible_columns.add("qty");
-		if (
-			["Purchase", "Material Transfer"].includes(purpose) ||
-			(purpose === "Customer Borrow / Loan" && frm.doc.borrow_item_type === "Stock Item")
-		) {
-			visible_columns.add("warehouse");
-		}
+		if (!is_loan && ["Purchase", "Material Transfer"].includes(purpose)) visible_columns.add("warehouse");
 		if (purpose === "Material Transfer") visible_columns.add("from_warehouse");
+		if (is_loan && frm.doc.docstatus === 1) visible_columns.add("asset");
 	}
 
 	// The header date is copied to every row by ERPNext's standard handler.
 	// Keep the row date visible only when each row may need its own value.
-	if (!frm.doc.schedule_date) visible_columns.add("schedule_date");
+	if (!frm.doc.schedule_date && !is_loan) visible_columns.add("schedule_date");
 
 	const managed_columns = [
 		"asset",
