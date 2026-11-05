@@ -7,7 +7,6 @@ REGISTERED_PRODUCT = "Regulatory Registered Product"
 ESTABLISHMENT_REGISTRATION = "Regulatory Establishment Registration"
 REGULATORY_DOCUMENT = "Regulatory Document"
 REGISTRATION_ACTION = "Regulatory Registration Action"
-REGULATORY_OVERRIDE = "Regulatory Override"
 ALERT_LOG = "Regulatory Alert Log"
 SETTINGS = "Regulatory Settings"
 ALERT_RULE = "Regulatory Expiry Alert Rule"
@@ -28,8 +27,8 @@ TRANSACTION_ITEM_DOCTYPES = {
 	"Delivery Note": "Delivery Note Item",
 	"Sales Invoice": "Sales Invoice Item",
 }
-# Documents a Regulatory Override can be bound to: the snapshot transactions and the Quotation, which is checked
-# (warning on save, blocked on submit) but carries no snapshot.
+# Documents that are checked: the snapshot transactions and the Quotation, which is checked (warning on save,
+# blocked on submit) but carries no snapshot.
 TRANSACTION_DOCTYPES = (*TRANSACTION_ITEM_DOCTYPES, "Quotation")
 OUTBOUND_DOCTYPES = frozenset({"Delivery Note", "Sales Invoice"})
 

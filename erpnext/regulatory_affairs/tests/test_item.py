@@ -150,6 +150,49 @@ class TestSetProductCategory(unittest.TestCase):
 
 	def test_method_is_whitelisted(self):
 		self.assertIn(ra_item.set_product_category, frappe.whitelisted)
+		self.assertIn(ra_item.classify_item, frappe.whitelisted)
+
+	@staticmethod
+	def raise_error(message, exc=frappe.ValidationError, **kwargs):
+		raise exc(message)
+
+	def classify(self, *args, operator=True, **kwargs):
+		doc = MagicMock()
+		doc.get.side_effect = lambda field: {ITEM_CATEGORY_FIELD: kwargs.get("category")}.get(field)
+		with (
+			patch.object(frappe, "has_permission"),
+			patch.object(frappe, "get_doc", return_value=doc),
+			patch.object(ra_item.permissions, "is_operator", return_value=operator),
+			patch.object(frappe, "throw", side_effect=self.raise_error),
+		):
+			ra_item.classify_item("ITEM-1", *args, **kwargs)
+		return doc
+
+	def test_one_dialog_classifies_a_medical_device(self):
+		doc = self.classify(
+			category="Medical Device", medical_device_category="IVD", regulatory_owner="ra@example.com"
+		)
+		doc.set.assert_called_once_with(ITEM_CATEGORY_FIELD, "Medical Device")
+		self.assertEqual(doc.medical_device_category, "IVD")
+		self.assertEqual(doc.regulatory_owner, "ra@example.com")
+		self.assertIsNone(doc.regulatory_other_category)
+		self.assertTrue(doc.flags.ignore_permissions)
+		doc.save.assert_called_once_with()
+
+	def test_a_medical_device_needs_its_device_category(self):
+		with self.assertRaises(frappe.ValidationError):
+			self.classify(category="Medical Device")
+
+	def test_other_needs_its_name_and_clears_the_device_category(self):
+		with self.assertRaises(frappe.ValidationError):
+			self.classify(category="Other")
+		doc = self.classify(category="Other", other_category="Reagent kit")
+		self.assertIsNone(doc.medical_device_category)
+		self.assertEqual(doc.regulatory_other_category, "Reagent kit")
+
+	def test_only_the_regulatory_roles_classify(self):
+		with self.assertRaises(frappe.PermissionError):
+			self.classify(category="Drug", operator=False)
 
 	def test_category_field_is_on_permission_level_one_for_the_regulatory_roles(self):
 		import json

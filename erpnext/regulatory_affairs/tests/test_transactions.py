@@ -44,55 +44,6 @@ def make_doc(doctype="Purchase Receipt", rows=None, **values):
 	return doc
 
 
-def make_override(**values):
-	override = frappe._dict(
-		status="Approved",
-		transaction_doctype="Purchase Receipt",
-		transaction_name="DOC-1",
-		item_code=None,
-	)
-	override.update(values)
-	return override
-
-
-class FakeUpstream:
-	"""The upstream item rows and Regulatory Override rows that `UpstreamOverrides` reads."""
-
-	ITEM_DOCTYPES = frozenset({"Sales Order Item", "Delivery Note Item"})
-
-	def __init__(self, rows=None, overrides=None):
-		self.rows = rows or {}  # (item doctype, row name) -> values
-		self.overrides = overrides or []  # stored Regulatory Override rows, any status
-		self.row_reads = []
-		self.override_reads = []
-
-	def get_value(self, doctype, name, fields=None, as_dict=False):
-		assert doctype in self.ITEM_DOCTYPES, doctype
-		self.row_reads.append((doctype, name))
-		stored = self.rows.get((doctype, name))
-		return frappe._dict({field: stored.get(field) for field in fields}) if stored else None
-
-	def get_all(self, doctype, filters=None, fields=None, order_by=None, **kwargs):
-		assert doctype == "Regulatory Override", doctype
-		self.override_reads.append((filters["transaction_doctype"], filters["transaction_name"]))
-		matches = [
-			row for row in self.overrides if all(row.get(field) == value for field, value in filters.items())
-		]
-		return [
-			{field: row.get(field) for field in fields} for row in sorted(matches, key=lambda r: r["name"])
-		]
-
-
-def stored_override(name, transaction_doctype, transaction_name, item_code=None, status="Approved"):
-	return dict(
-		name=name,
-		status=status,
-		transaction_doctype=transaction_doctype,
-		transaction_name=transaction_name,
-		item_code=item_code,
-	)
-
-
 def evaluate(doctype, mapping, settings=None, **row_values):
 	return transactions.evaluate_row(
 		doctype, make_row(**row_values), mapping, COVERAGE_DATE, settings or make_settings()
@@ -357,80 +308,13 @@ class TestCoverageDate(unittest.TestCase):
 			self.assertEqual(transactions.get_coverage_date(doc, make_row()), date(2026, 9, 9))
 
 
-class TestOverride(unittest.TestCase):
-	def get_override(self, stored, doc=None, **kwargs):
-		db = MagicMock()
-		db.get_value.return_value = stored
-		doc = doc or make_doc(regulatory_override_ref="OVR-1")
-		with patch.object(frappe, "db", new=db):
-			return transactions.get_override(doc, **kwargs)
-
-	def test_no_override_is_none_and_not_looked_up(self):
-		db = MagicMock()
-		with patch.object(frappe, "db", new=db):
-			self.assertIsNone(transactions.get_override(make_doc()))
-		db.get_value.assert_not_called()
-
-	def test_override_is_read_fresh_from_the_database(self):
-		db = MagicMock()
-		db.get_value.return_value = make_override()
-		with patch.object(frappe, "db", new=db), patch.object(frappe, "get_cached_doc") as cached:
-			override = transactions.get_override(make_doc(regulatory_override_ref="OVR-1"))
-		cached.assert_not_called()
-		db.get_value.assert_called_once_with(
-			"Regulatory Override",
-			"OVR-1",
-			["status", "transaction_doctype", "transaction_name", "item_code"],
-			as_dict=True,
-		)
-		self.assertEqual(override.name, "OVR-1")
-
-	def test_approved_bound_override_is_accepted(self):
-		self.assertEqual(self.get_override(make_override()).name, "OVR-1")
-
-	def test_unusable_overrides_raise(self):
-		cases = {
-			"missing": None,
-			"unapproved": make_override(status="Requested"),
-			"rejected": make_override(status="Rejected"),
-			"other document": make_override(transaction_name="DOC-2"),
-			"other doctype": make_override(transaction_doctype="Delivery Note"),
-		}
-		for label, stored in cases.items():
-			with (
-				self.subTest(label),
-				patch.object(frappe, "throw", side_effect=frappe.ValidationError) as throw,
-				self.assertRaises(frappe.ValidationError),
-			):
-				self.get_override(stored)
-			throw.assert_called_once()
-
-	def test_non_strict_lookup_ignores_unusable_overrides(self):
-		with patch.object(frappe, "throw") as throw:
-			self.assertIsNone(self.get_override(make_override(status="Requested"), strict=False))
-			self.assertIsNone(self.get_override(None, strict=False))
-		throw.assert_not_called()
-
-	def test_item_scope(self):
-		row = make_row("DEVICE-1")
-		self.assertFalse(transactions.override_covers_row(None, row))
-		self.assertTrue(transactions.override_covers_row(make_override(), row))
-		self.assertTrue(transactions.override_covers_row(make_override(item_code="DEVICE-1"), row))
-		self.assertFalse(transactions.override_covers_row(make_override(item_code="DEVICE-2"), row))
-
-
 class ValidationHarness:
 	"""Runs the entry points with the database, the policy settings and the messages replaced."""
 
-	def __init__(
-		self, mappings, settings=None, in_scope=None, override=None, override_problem=None, upstream=None
-	):
+	def __init__(self, mappings, settings=None, in_scope=None):
 		self.mappings = mappings
 		self.settings = settings or make_settings()
 		self.in_scope = in_scope
-		self.override = override
-		self.override_problem = override_problem
-		self.upstream = upstream or FakeUpstream()
 		self.mapping_error = None
 
 	def _mapping_for(self, item_code, on_date):
@@ -458,15 +342,6 @@ class ValidationHarness:
 					side_effect=self._mapping_for,
 				)
 			)
-			self.get_override = stack.enter_context(
-				patch.object(
-					transactions, "load_override", return_value=(self.override, self.override_problem)
-				)
-			)
-			db = MagicMock()
-			db.get_value.side_effect = self.upstream.get_value
-			stack.enter_context(patch.object(frappe, "db", new=db))
-			stack.enter_context(patch.object(frappe, "get_all", side_effect=self.upstream.get_all))
 			self.msgprint = stack.enter_context(patch.object(frappe, "msgprint"))
 			self.throw = stack.enter_context(
 				patch.object(frappe, "throw", side_effect=frappe.ValidationError)
@@ -507,15 +382,15 @@ class TestValidateTransaction(unittest.TestCase):
 		harness = ValidationHarness({}).run_with(make_doc())
 		self.assertTrue(harness.raised)
 		args, kwargs = harness.throw_calls[0]
-		self.assertTrue(args[0].startswith("Block:"), args[0])
-		self.assertEqual(kwargs["title"], "Regulatory requirement not met")
+		self.assertTrue("has no FDA registration" in args[0], args[0])
+		self.assertEqual(kwargs["title"], "This cannot go on yet: an Item is not registered")
 
 	def test_warning_policy_shows_an_orange_message_and_does_not_raise(self):
 		settings = make_settings(missing_registration_action="Warning")
 		harness = ValidationHarness({}, settings).run_with(make_doc())
 		self.assertFalse(harness.raised)
 		args, kwargs = harness.msgprint_calls[0]
-		self.assertTrue(args[0].startswith("Warning:"), args[0])
+		self.assertTrue("has no FDA registration" in args[0], args[0])
 		self.assertEqual(kwargs["indicator"], "orange")
 
 	def test_ignore_policy_is_silent(self):
@@ -530,8 +405,8 @@ class TestValidateTransaction(unittest.TestCase):
 		harness = ValidationHarness(mappings).run_with(make_doc(rows=rows))
 		self.assertTrue(harness.raised)
 		message = harness.throw_calls[0][0][0]
-		self.assertIn("Block:", message)
-		self.assertIn("Warning:", message)
+		self.assertIn("has no FDA registration", message)
+		self.assertIn("comes from manufacturer", message)
 
 	def test_warn_only_entry_point_never_raises(self):
 		doc = make_doc("Purchase Order", transaction_date="2026-08-09")
@@ -539,7 +414,7 @@ class TestValidateTransaction(unittest.TestCase):
 		self.assertFalse(harness.raised)
 		self.assertEqual(harness.throw_calls, [])
 		self.assertEqual(len(harness.msgprint_calls), 1)
-		self.assertIn("Block:", harness.msgprint_calls[0][0][0])
+		self.assertIn("has no FDA registration", harness.msgprint_calls[0][0][0])
 
 	def test_warn_only_entry_point_is_silent_when_compliant(self):
 		harness = ValidationHarness({"DEVICE-1": make_mapping()}).run_with(
@@ -631,99 +506,22 @@ class TestValidateTransaction(unittest.TestCase):
 			harness.throw.assert_not_called()
 
 
-class TestValidateWithOverride(unittest.TestCase):
-	def override_message(self, harness):
-		title = "Regulatory override applied"
-		return [call for call in harness.msgprint_calls if call[1].get("title") == title]
-
-	def test_approved_override_exempts_blocking_messages(self):
-		override = make_override(name="OVR-1")
-		harness = ValidationHarness({}, override=override).run_with(make_doc())
-		self.assertFalse(harness.raised)
-		self.assertEqual(len(harness.msgprint_calls), 1)
-		args, kwargs = self.override_message(harness)[0]
-		self.assertIn("OVR-1", args[0])
-		self.assertIn("Block:", args[0])
-		self.assertEqual(kwargs["indicator"], "orange")
-
-	def test_override_message_is_not_shown_when_nothing_needed_exempting(self):
-		override = make_override(name="OVR-1")
-		harness = ValidationHarness({"DEVICE-1": make_mapping()}, override=override).run_with(make_doc())
-		self.assertFalse(harness.raised)
-		self.assertEqual(harness.msgprint_calls, [])
-
-	def test_item_scoped_override_exempts_only_that_item(self):
-		rows = [make_row("DEVICE-1", idx=1), make_row("DEVICE-2", idx=2)]
-		override = make_override(name="OVR-1", item_code="DEVICE-1")
-		harness = ValidationHarness({}, override=override).run_with(make_doc(rows=rows))
-		self.assertTrue(harness.raised)
-		message = harness.throw_calls[0][0][0]
-		self.assertIn("DEVICE-2", message)
-		self.assertNotIn("DEVICE-1", message)
-		exempted = self.override_message(harness)[0][0][0]
-		self.assertIn("DEVICE-1", exempted)
-		self.assertNotIn("DEVICE-2", exempted)
-
-	def test_item_scoped_override_for_another_item_exempts_nothing(self):
-		override = make_override(name="OVR-1", item_code="DEVICE-9")
-		harness = ValidationHarness({}, override=override).run_with(make_doc())
-		self.assertTrue(harness.raised)
-		self.assertEqual(self.override_message(harness), [])
-
-	def test_item_scoped_override_still_warns_about_other_rows(self):
-		rows = [make_row("DEVICE-1", idx=1), make_row("DEVICE-2", idx=2, manufacturer="Maker B")]
-		mappings = {"DEVICE-1": None, "DEVICE-2": make_mapping()}
-		override = make_override(name="OVR-1", item_code="DEVICE-1")
-		harness = ValidationHarness(mappings, override=override).run_with(make_doc(rows=rows))
-		self.assertFalse(harness.raised)
-		titles = [call[1]["title"] for call in harness.msgprint_calls]
-		self.assertEqual(titles, ["Regulatory override applied", "Regulatory warning"])
-
-	def test_unusable_override_stops_validation_even_for_a_compliant_document(self):
-		doc = make_doc(regulatory_override_ref="OVR-1")
-		for stored in (None, make_override(status="Requested"), make_override(transaction_name="OTHER")):
-			db = MagicMock()
-			db.get_value.return_value = stored
-			with (
-				patch.object(frappe, "db", new=db),
-				patch.object(transactions, "get_settings", return_value=make_settings()),
-				patch.object(transactions, "get_items_in_scope", return_value={"DEVICE-1"}),
-				patch.object(transactions, "get_mapping_at_date", return_value=make_mapping()),
-				patch.object(frappe, "throw", side_effect=frappe.ValidationError),
-				self.assertRaises(frappe.ValidationError),
-			):
-				transactions.validate_transaction(doc)
-
-	def test_override_is_not_looked_up_when_validation_does_not_apply(self):
-		doc = make_doc("Stock Entry", purpose="Material Transfer", regulatory_override_ref="OVR-1")
-		db = MagicMock()
-		with patch.object(frappe, "db", new=db), patch.object(transactions, "get_settings"):
-			transactions.validate_transaction(doc)
-		db.get_value.assert_not_called()
-
-
 def snapshot_values(row):
 	return {fieldname: row.get(fieldname) for fieldname in SNAPSHOT_FIELDNAMES}
 
 
 class SnapshotHarness:
-	def __init__(
-		self, mappings, in_scope=None, override=None, countries=None, delivery_rows=None, upstream=None
-	):
+	def __init__(self, mappings, in_scope=None, countries=None, delivery_rows=None):
 		self.mappings = mappings
 		self.in_scope = in_scope
-		self.override = override
 		self.countries = countries or {}
 		self.delivery_rows = delivery_rows or {}
-		self.upstream = upstream or FakeUpstream()
 
 	def lookup(self, doctype, name, fields=None, **kwargs):
 		if doctype == "Manufacturer":
 			return self.countries.get(name)
 		if doctype == "Delivery Note Item" and fields == list(SNAPSHOT_FIELDNAMES):
 			return self.delivery_rows.get(name)
-		if doctype in FakeUpstream.ITEM_DOCTYPES:
-			return self.upstream.get_value(doctype, name, fields, **kwargs)
 		raise AssertionError(f"Unexpected lookup of {doctype}")
 
 	def run(self, doc):
@@ -745,8 +543,6 @@ class SnapshotHarness:
 					side_effect=lambda item_code, on_date: self.mappings.get(item_code),
 				)
 			)
-			stack.enter_context(patch.object(transactions, "get_override", return_value=self.override))
-			stack.enter_context(patch.object(frappe, "get_all", side_effect=self.upstream.get_all))
 			self.log_error = stack.enter_context(patch.object(frappe, "log_error"))
 			self.throw = stack.enter_context(
 				patch.object(frappe, "throw", side_effect=frappe.ValidationError)
@@ -757,7 +553,7 @@ class SnapshotHarness:
 
 
 class TestSnapshot(unittest.TestCase):
-	def test_snapshot_records_the_nine_fields(self):
+	def test_snapshot_records_the_eight_fields(self):
 		mapping = make_mapping(physical_manufacturer="Maker A", identifier="ID-9")
 		doc = make_doc(rows=[make_row()])
 		harness = SnapshotHarness({"DEVICE-1": mapping}, countries={"Maker A": "Japan"})
@@ -774,7 +570,6 @@ class TestSnapshot(unittest.TestCase):
 				"regulatory_registration_status": "Active",
 				"regulatory_registration_expiry": date(2027, 1, 1),
 				"regulatory_coverage_date": date(2026, 8, 9),
-				"regulatory_override": None,
 			},
 		)
 		harness.get_mapping.assert_called_once_with("DEVICE-1", date(2026, 8, 9))
@@ -889,35 +684,6 @@ class TestSnapshot(unittest.TestCase):
 		harness.run(make_doc())
 		harness.get_mapping.assert_not_called()
 
-	def test_override_is_recorded_on_the_rows_it_covers(self):
-		rows = [make_row("DEVICE-1", idx=1), make_row("DEVICE-2", idx=2)]
-		mappings = {"DEVICE-1": make_mapping(), "DEVICE-2": make_mapping()}
-		override = make_override(name="OVR-1", item_code="DEVICE-1")
-		doc = SnapshotHarness(mappings, override=override).run(make_doc(rows=rows))
-		self.assertEqual(doc["items"][0].regulatory_override, "OVR-1")
-		self.assertIsNone(doc["items"][1].regulatory_override)
-
-	def test_document_wide_override_is_recorded_on_every_regulated_row(self):
-		rows = [make_row("DEVICE-1", idx=1), make_row("DEVICE-2", idx=2), make_row("PLAIN-1", idx=3)]
-		override = make_override(name="OVR-1")
-		harness = SnapshotHarness({}, in_scope={"DEVICE-1", "DEVICE-2"}, override=override)
-		doc = harness.run(make_doc(rows=rows))
-		self.assertEqual([row.get("regulatory_override") for row in doc["items"]], ["OVR-1", "OVR-1", None])
-
-	def test_unusable_override_does_not_block_or_get_recorded(self):
-		doc = make_doc(regulatory_override_ref="OVR-1", rows=[make_row()])
-		db = MagicMock()
-		db.get_value.return_value = make_override(status="Requested")
-		with (
-			patch.object(frappe, "db", new=db),
-			patch.object(transactions, "get_items_in_scope", return_value={"DEVICE-1"}),
-			patch.object(transactions, "get_mapping_at_date", return_value=make_mapping()),
-			patch.object(frappe, "throw", side_effect=frappe.ValidationError),
-		):
-			transactions.capture_transaction_snapshot(doc, "before_submit")
-		self.assertEqual(doc["items"][0].regulatory_registration, "REG-1")
-		self.assertIsNone(doc["items"][0].regulatory_override)
-
 
 class TestInvoiceSnapshotInheritance(unittest.TestCase):
 	DELIVERY_SNAPSHOT = frappe._dict(
@@ -929,7 +695,6 @@ class TestInvoiceSnapshotInheritance(unittest.TestCase):
 		regulatory_registration_status="Active",
 		regulatory_registration_expiry=date(2026, 12, 31),
 		regulatory_coverage_date=date(2026, 6, 1),
-		regulatory_override="OVR-DN",
 	)
 
 	def test_invoice_row_inherits_the_delivery_note_snapshot(self):
@@ -979,12 +744,12 @@ class TestBuildSnapshot(unittest.TestCase):
 		self.assertEqual(
 			tuple(transactions.build_snapshot(make_mapping(), COVERAGE_DATE)), tuple(SNAPSHOT_FIELDNAMES)
 		)
-		self.assertEqual(len(SNAPSHOT_FIELDNAMES), 9)
+		self.assertEqual(len(SNAPSHOT_FIELDNAMES), 8)
 
-	def test_no_mapping_keeps_the_coverage_date_and_override(self):
-		snapshot = transactions.build_snapshot(None, COVERAGE_DATE, "OVR-1", "Japan")
+	def test_no_mapping_keeps_the_coverage_date(self):
+		snapshot = transactions.build_snapshot(None, COVERAGE_DATE, "Japan")
 		blank = {k: v for k, v in snapshot.items() if v}
-		self.assertEqual(blank, {"regulatory_coverage_date": COVERAGE_DATE, "regulatory_override": "OVR-1"})
+		self.assertEqual(blank, {"regulatory_coverage_date": COVERAGE_DATE})
 
 
 class TestHardening(unittest.TestCase):
@@ -996,25 +761,6 @@ class TestHardening(unittest.TestCase):
 		self.assertFalse(harness.raised)
 		self.assertEqual(harness.msgprint_calls, [])
 		self.assertEqual(harness.settings_calls, [])
-
-	def test_order_entry_reports_an_unusable_override_without_raising(self):
-		problem = "Regulatory Override OVR-9 is not approved."
-		harness = ValidationHarness({"DEVICE-1": make_mapping()}, override_problem=problem).run_with(
-			make_doc(doctype="Sales Order", transaction_date="2026-08-09"),
-			entry_point=transactions.validate_warning_transaction,
-		)
-		self.assertFalse(harness.raised)
-		self.assertEqual(harness.throw_calls, [])
-		self.assertIn("OVR-9", harness.msgprint_calls[0][0][0])
-		self.assertIn("Warning:", harness.msgprint_calls[0][0][0])
-
-	def test_submit_still_raises_for_an_unusable_override_even_with_compliant_rows(self):
-		problem = "Regulatory Override OVR-9 is not approved."
-		harness = ValidationHarness({"DEVICE-1": make_mapping()}, override_problem=problem).run_with(
-			make_doc()
-		)
-		self.assertTrue(harness.raised)
-		self.assertIn("OVR-9", harness.throw_calls[0][0][0])
 
 	def test_order_entry_downgrades_an_ambiguous_mapping_to_a_warning(self):
 		harness = ValidationHarness({})
@@ -1067,28 +813,15 @@ class TestSalesOrderAndQuotation(unittest.TestCase):
 	def test_sales_order_submit_blocks_without_a_registration(self):
 		harness = ValidationHarness({}).run_with(self.sales_order(docstatus=1))
 		self.assertTrue(harness.raised)
-		self.assertTrue(harness.throw_calls[0][0][0].startswith("Block:"))
+		self.assertTrue("has no FDA registration" in harness.throw_calls[0][0][0])
 
 	def test_sales_order_submit_checks_the_row_delivery_date(self):
 		rows = [make_row(delivery_date="2027-01-02")]
 		mapping = make_mapping(in_force=None)
 		harness = ValidationHarness({"DEVICE-1": mapping}).run_with(self.sales_order(rows=rows, docstatus=1))
 		self.assertTrue(harness.raised)
-		self.assertIn("which expired on 2027-01-01", harness.throw_calls[0][0][0])
+		self.assertIn("expired on 2027-01-01", harness.throw_calls[0][0][0])
 		self.assertEqual([call[0][1] for call in harness.mapping_calls], [date(2027, 1, 2)])
-
-	def test_sales_order_submit_passes_with_an_approved_override(self):
-		override = make_override(name="OVR-1", transaction_doctype="Sales Order")
-		harness = ValidationHarness({}, override=override).run_with(self.sales_order(docstatus=1))
-		self.assertFalse(harness.raised)
-		self.assertIn("OVR-1", harness.msgprint_calls[0][0][0])
-
-	def test_sales_order_submit_raises_for_an_unusable_override(self):
-		problem = "Regulatory Override OVR-9 does not belong to this transaction."
-		harness = ValidationHarness({"DEVICE-1": make_mapping()}, override_problem=problem).run_with(
-			self.sales_order(docstatus=1)
-		)
-		self.assertTrue(harness.raised)
 
 	def test_sales_order_switch_off_skips_the_submit_check(self):
 		settings = make_settings(validate_on_sales_order=0)
@@ -1101,7 +834,7 @@ class TestSalesOrderAndQuotation(unittest.TestCase):
 			self.sales_order(), transactions.validate_warning_transaction
 		)
 		self.assertFalse(harness.raised)
-		self.assertIn("Block:", harness.msgprint_calls[0][0][0])
+		self.assertIn("has no FDA registration", harness.msgprint_calls[0][0][0])
 		harness = ValidationHarness({}).run_with(
 			self.sales_order(docstatus=1), transactions.validate_warning_transaction
 		)
@@ -1122,7 +855,7 @@ class TestSalesOrderAndQuotation(unittest.TestCase):
 		harness = ValidationHarness({}).run_with(self.quotation(), transactions.validate_warning_transaction)
 		self.assertFalse(harness.raised)
 		self.assertEqual(harness.throw_calls, [])
-		self.assertIn("Block:", harness.msgprint_calls[0][0][0])
+		self.assertIn("has no FDA registration", harness.msgprint_calls[0][0][0])
 		self.assertEqual([call[0][1] for call in harness.mapping_calls], [COVERAGE_DATE])
 
 	def test_quotation_submit_blocks_on_its_transaction_date_and_does_not_warn_twice(self):
@@ -1131,14 +864,8 @@ class TestSalesOrderAndQuotation(unittest.TestCase):
 		self.assertEqual((harness.raised, harness.msgprint_calls, harness.mapping_calls), (False, [], []))
 		harness = ValidationHarness({}).run_with(doc)
 		self.assertTrue(harness.raised)
-		self.assertTrue(harness.throw_calls[0][0][0].startswith("Block:"))
+		self.assertTrue("has no FDA registration" in harness.throw_calls[0][0][0])
 		self.assertEqual([call[0][1] for call in harness.mapping_calls], [COVERAGE_DATE])
-
-	def test_quotation_submit_passes_with_its_own_approved_override(self):
-		override = make_override(name="OVR-Q", transaction_doctype="Quotation")
-		harness = ValidationHarness({}, override=override).run_with(self.quotation(docstatus=1))
-		self.assertFalse(harness.raised)
-		self.assertIn("OVR-Q", harness.msgprint_calls[0][0][0])
 
 	def test_a_save_already_checked_by_the_caller_is_not_warned_again(self):
 		doc = self.quotation(flags=frappe._dict({transactions.POLICY_CHECKED_FLAG: True}))
@@ -1157,218 +884,81 @@ class TestSalesOrderAndQuotation(unittest.TestCase):
 			self.assertEqual((harness.raised, harness.msgprint_calls, harness.mapping_calls), (False, [], []))
 
 
-# Upstream item rows of the sales chain QTN-1 -> SO-1 -> DN-1, and two unrelated orders
-UPSTREAM_ROWS = {
-	("Sales Order Item", "SOI-1"): {"parent": "SO-1", "prevdoc_docname": "QTN-1"},
-	("Sales Order Item", "SOI-2"): {"parent": "SO-2", "prevdoc_docname": "QTN-2"},
-	("Sales Order Item", "SOI-3"): {"parent": "SO-3", "prevdoc_docname": None},
-	("Delivery Note Item", "DNI-1"): {
-		"parent": "DN-1",
-		"against_sales_order": "SO-1",
-		"so_detail": "SOI-1",
-	},
-}
+class TestPlainMessages(unittest.TestCase):
+	"""Siwat, 5 Nov 2026: no way around a block; the message says which Item, why and what to do."""
+
+	def test_block_message_is_plain_and_offers_to_notify_regulatory_affairs(self):
+		doc = make_doc("Delivery Note")
+		harness = ValidationHarness({}).run_with(doc)
+		self.assertTrue(harness.raised)
+		args, kwargs = harness.throw_calls[0]
+		self.assertIn("has no FDA registration in force on 2026-08-09", args[0])
+		self.assertIn("Regulatory Affairs must register the Item", args[0])
+		self.assertNotIn("Block:", args[0])
+		self.assertNotIn("mapping", args[0])
+		self.assertEqual(kwargs["primary_action"]["label"], "Notify Regulatory Affairs")
+		self.assertEqual(kwargs["primary_action"]["args"], {"doctype": "Delivery Note", "name": "DOC-1"})
+
+	def test_no_button_for_an_unsaved_document(self):
+		doc = make_doc("Delivery Note", __islocal=1)
+		self.assertIsNone(transactions.notify_action(doc))
+
+	def test_a_registration_cannot_be_bypassed(self):
+		self.assertFalse(hasattr(transactions, "get_override"))
+		self.assertFalse(hasattr(transactions, "UpstreamOverrides"))
+
+	def test_expired_and_suspended_messages_name_the_registration_and_date(self):
+		expired = make_mapping(official_status="Expired", expiry_date=date(2026, 1, 1), in_force=False)
+		message = evaluate("Delivery Note", expired)[0]
+		self.assertIn("registration <strong>REG-1</strong> expired on 2026-01-01", message)
+		suspended = make_mapping(official_status="Suspended", in_force=False)
+		self.assertIn("is suspended", evaluate("Delivery Note", suspended)[0])
 
 
-class TestUpstreamOverrides(unittest.TestCase):
-	"""An Approved override bound to a Quotation, Sales Order or Delivery Note covers the rows made from it."""
+class TestWarnOnce(unittest.TestCase):
+	def order(self, previous_rows=None, **values):
+		doc = make_doc("Sales Order", transaction_date="2026-08-09", docstatus=0, **values)
+		previous = make_doc("Sales Order", transaction_date="2026-08-09", rows=previous_rows)
+		doc.get_doc_before_save = lambda: previous
+		return doc
 
-	def upstream(self, *overrides):
-		return FakeUpstream(dict(UPSTREAM_ROWS), list(overrides))
+	def test_unchanged_rows_are_not_warned_again(self):
+		doc = self.order()
+		harness = ValidationHarness({}).run_with(doc, transactions.validate_warning_transaction)
+		self.assertEqual((harness.msgprint_calls, harness.mapping_calls), ([], []))
 
-	def run_doc(self, doc, *overrides, entry_point=transactions.validate_transaction):
-		return ValidationHarness({}, upstream=self.upstream(*overrides)).run_with(doc, entry_point)
+	def test_a_changed_row_warns_again(self):
+		doc = self.order(previous_rows=[make_row("OTHER-1")])
+		harness = ValidationHarness({}).run_with(doc, transactions.validate_warning_transaction)
+		self.assertEqual(len(harness.msgprint_calls), 1)
+		self.assertIn("You can keep this draft", harness.msgprint_calls[0][0][0])
 
-	def overridden(self, harness):
-		return [
-			call[0][0]
-			for call in harness.msgprint_calls
-			if call[1].get("title") == "Regulatory override applied"
-		]
+	def test_the_first_save_warns(self):
+		doc = make_doc("Sales Order", transaction_date="2026-08-09", docstatus=0)
+		doc.get_doc_before_save = lambda: None
+		harness = ValidationHarness({}).run_with(doc, transactions.validate_warning_transaction)
+		self.assertEqual(len(harness.msgprint_calls), 1)
 
-	def test_sources_are_resolved_per_row_nearest_first(self):
-		with patch.object(
-			frappe, "db", new=MagicMock(get_value=MagicMock(side_effect=self.upstream().get_value))
+
+class TestBlockedRows(unittest.TestCase):
+	def test_blocked_rows_list_the_items_in_plain_words(self):
+		harness = ValidationHarness({"DEVICE-2": make_mapping()})
+		rows = [make_row("DEVICE-1", idx=1), make_row("DEVICE-2", idx=2)]
+		with harness.patched():
+			found = transactions.blocked_rows(make_doc("Delivery Note", rows=rows))
+		self.assertEqual([row["item_code"] for row in found], ["DEVICE-1"])
+		self.assertIn("no FDA registration", found[0]["reason"])
+
+	def test_notify_hands_the_blocked_items_to_the_handlers(self):
+		calls = []
+		doc = MagicMock(doctype="Delivery Note", name="DOC-1")
+		with (
+			patch.object(frappe, "get_doc", return_value=doc),
+			patch.object(transactions, "blocked_rows", return_value=[{"item_code": "DEVICE-1"}]),
+			patch.object(frappe, "get_hooks", return_value=["x.handler"]),
+			patch.object(frappe, "get_attr", return_value=lambda d, items: calls.append((d, items))),
+			patch.object(frappe, "msgprint"),
 		):
-			upstream = transactions.UpstreamOverrides()
-			self.assertEqual(
-				upstream.sources("Sales Order", make_row(prevdoc_docname="QTN-1")), [("Quotation", "QTN-1")]
-			)
-			self.assertEqual(
-				upstream.sources("Delivery Note", make_row(against_sales_order="SO-1", so_detail="SOI-1")),
-				[("Sales Order", "SO-1"), ("Quotation", "QTN-1")],
-			)
-			invoice_row = make_row(
-				delivery_note="DN-1", dn_detail="DNI-1", sales_order="SO-1", so_detail="SOI-1"
-			)
-			self.assertEqual(
-				upstream.sources("Sales Invoice", invoice_row),
-				[("Delivery Note", "DN-1"), ("Sales Order", "SO-1"), ("Quotation", "QTN-1")],
-			)
-			# A row-detail link alone still finds the upstream document.
-			self.assertEqual(
-				upstream.sources("Sales Invoice", make_row(so_detail="SOI-2")),
-				[("Sales Order", "SO-2"), ("Quotation", "QTN-2")],
-			)
-			self.assertEqual(upstream.sources("Purchase Receipt", make_row(purchase_order="PO-1")), [])
-			self.assertEqual(upstream.sources("Quotation", make_row()), [])
-
-	def test_a_quotation_override_covers_its_sales_order_delivery_note_and_invoice(self):
-		override = stored_override("RO-Q", "Quotation", "QTN-1")
-		documents = (
-			make_doc(
-				"Sales Order",
-				transaction_date="2026-08-09",
-				rows=[make_row(prevdoc_docname="QTN-1")],
-				docstatus=1,
-			),
-			make_doc("Delivery Note", rows=[make_row(against_sales_order="SO-1", so_detail="SOI-1")]),
-			make_doc("Sales Invoice", rows=[make_row(sales_order="SO-1", so_detail="SOI-1")], update_stock=1),
-		)
-		for doc in documents:
-			with self.subTest(doc.doctype):
-				harness = self.run_doc(doc, override)
-				self.assertFalse(harness.raised)
-				message = self.overridden(harness)[0]
-				self.assertIn("RO-Q", message)
-				self.assertIn("QTN-1", message)
-				self.assertIn("Quotation", message)
-
-	def test_a_sales_order_override_covers_its_delivery_note_and_invoice_not_the_quotation(self):
-		override = stored_override("RO-SO", "Sales Order", "SO-1")
-		delivery = make_doc("Delivery Note", rows=[make_row(against_sales_order="SO-1", so_detail="SOI-1")])
-		self.assertFalse(self.run_doc(delivery, override).raised)
-		invoice = make_doc("Sales Invoice", rows=[make_row(sales_order="SO-1", so_detail="SOI-1")])
-		self.assertFalse(self.run_doc(invoice, override).raised)
-		quotation = make_doc("Quotation", name="QTN-1", docstatus=1)
-		self.assertTrue(self.run_doc(quotation, override).raised)
-
-	def test_a_delivery_note_override_covers_the_invoice_rows_made_from_it(self):
-		override = stored_override("RO-DN", "Delivery Note", "DN-1")
-		rows = [make_row(delivery_note="DN-1", dn_detail="DNI-1")]
-		harness = SnapshotHarness({}, upstream=self.upstream(override)).run(
-			make_doc("Sales Invoice", rows=rows)
-		)
-		self.assertEqual(harness["items"][0].regulatory_override, "RO-DN")
-		# The invoice row was delivered, so the policy is not applied to it again; a row of the DN's Sales Order
-		# that the DN did not deliver is not covered by the DN's override.
-		rows = [make_row(sales_order="SO-1", so_detail="SOI-1")]
-		self.assertTrue(self.run_doc(make_doc("Sales Invoice", rows=rows), override).raised)
-
-	def test_mixed_sources_are_judged_row_by_row(self):
-		override = stored_override("RO-Q1", "Quotation", "QTN-1")
-		rows = [
-			make_row("DEVICE-1", idx=1, against_sales_order="SO-1", so_detail="SOI-1"),
-			make_row("DEVICE-2", idx=2, against_sales_order="SO-2", so_detail="SOI-2"),
-		]
-		harness = self.run_doc(make_doc("Delivery Note", rows=rows), override)
-		self.assertTrue(harness.raised)
-		blocked = harness.throw_calls[0][0][0]
-		self.assertIn("Row 2", blocked)
-		self.assertNotIn("Row 1", blocked)
-		self.assertIn("Row 1", self.overridden(harness)[0])
-
-	def test_an_item_scoped_upstream_override_covers_only_its_item(self):
-		override = stored_override("RO-Q", "Quotation", "QTN-1", item_code="DEVICE-1")
-		rows = [
-			make_row("DEVICE-1", idx=1, prevdoc_docname="QTN-1"),
-			make_row("DEVICE-2", idx=2, prevdoc_docname="QTN-1"),
-		]
-		harness = self.run_doc(
-			make_doc("Sales Order", transaction_date="2026-08-09", rows=rows, docstatus=1), override
-		)
-		self.assertTrue(harness.raised)
-		self.assertIn("DEVICE-2", harness.throw_calls[0][0][0])
-		self.assertNotIn("DEVICE-1", harness.throw_calls[0][0][0])
-		self.assertIn("DEVICE-1", self.overridden(harness)[0])
-
-	def test_a_requested_rejected_or_cancelled_upstream_override_does_not_cover(self):
-		doc = make_doc(
-			"Sales Order",
-			transaction_date="2026-08-09",
-			rows=[make_row(prevdoc_docname="QTN-1")],
-			docstatus=1,
-		)
-		for status in ("Requested", "Rejected", "Cancelled"):
-			with self.subTest(status=status):
-				override = stored_override("RO-Q", "Quotation", "QTN-1", status=status)
-				harness = self.run_doc(doc, override)
-				self.assertTrue(harness.raised)
-				self.assertEqual(self.overridden(harness), [])
-
-	def test_an_override_of_an_unrelated_document_does_not_cover(self):
-		doc = make_doc(
-			"Sales Order",
-			transaction_date="2026-08-09",
-			rows=[make_row(prevdoc_docname="QTN-1")],
-			docstatus=1,
-		)
-		for override in (
-			stored_override("RO-X", "Quotation", "QTN-2"),
-			stored_override("RO-X", "Sales Order", "QTN-1"),
-		):
-			with self.subTest(override=override):
-				self.assertTrue(self.run_doc(doc, override).raised)
-
-	def test_the_document_own_override_still_applies_and_comes_first(self):
-		own = make_override(name="OVR-OWN", transaction_doctype="Sales Order")
-		upstream = stored_override("RO-Q", "Quotation", "QTN-1")
-		doc = make_doc(
-			"Sales Order",
-			transaction_date="2026-08-09",
-			rows=[make_row(prevdoc_docname="QTN-1")],
-			docstatus=1,
-		)
-		harness = ValidationHarness({}, override=own, upstream=self.upstream(upstream)).run_with(doc)
-		self.assertFalse(harness.raised)
-		message = self.overridden(harness)[0]
-		self.assertIn("OVR-OWN", message)
-		self.assertNotIn("RO-Q", message)
-		self.assertEqual(harness.upstream.override_reads, [])
-
-	def test_overrides_are_read_fresh_once_per_source(self):
-		override = stored_override("RO-Q", "Quotation", "QTN-1")
-		rows = [
-			make_row("DEVICE-1", idx=1, prevdoc_docname="QTN-1"),
-			make_row("DEVICE-2", idx=2, prevdoc_docname="QTN-1"),
-		]
-		harness = self.run_doc(
-			make_doc("Sales Order", transaction_date="2026-08-09", rows=rows, docstatus=1), override
-		)
-		self.assertFalse(harness.raised)
-		self.assertEqual(harness.upstream.override_reads, [("Quotation", "QTN-1")])
-
-	def test_a_compliant_row_reads_no_upstream(self):
-		doc = make_doc(
-			"Sales Order",
-			transaction_date="2026-08-09",
-			rows=[make_row(prevdoc_docname="QTN-1")],
-			docstatus=1,
-		)
-		harness = ValidationHarness({"DEVICE-1": make_mapping()}, upstream=self.upstream()).run_with(doc)
-		self.assertEqual((harness.raised, harness.upstream.override_reads), (False, []))
-
-	def test_order_entry_save_reports_the_upstream_override_without_blocking(self):
-		override = stored_override("RO-Q", "Quotation", "QTN-1")
-		doc = make_doc("Sales Order", transaction_date="2026-08-09", rows=[make_row(prevdoc_docname="QTN-1")])
-		harness = self.run_doc(doc, override, entry_point=transactions.validate_warning_transaction)
-		self.assertFalse(harness.raised)
-		self.assertIn("RO-Q", self.overridden(harness)[0])
-
-	def test_snapshot_records_the_upstream_override_on_the_rows_it_covers(self):
-		override = stored_override("RO-Q", "Quotation", "QTN-1", item_code="DEVICE-1")
-		rows = [
-			make_row("DEVICE-1", idx=1, prevdoc_docname="QTN-1"),
-			make_row("DEVICE-2", idx=2, prevdoc_docname="QTN-1"),
-		]
-		doc = SnapshotHarness({}, upstream=self.upstream(override)).run(
-			make_doc("Sales Order", transaction_date="2026-08-09", rows=rows)
-		)
-		self.assertEqual([row.regulatory_override for row in doc["items"]], ["RO-Q", None])
-
-	def test_purchase_documents_have_no_upstream_overrides(self):
-		override = stored_override("RO-PO", "Purchase Order", "PO-1")
-		rows = [make_row(purchase_order="PO-1", purchase_order_item="POI-1")]
-		harness = self.run_doc(make_doc("Purchase Receipt", rows=rows), override)
-		self.assertTrue(harness.raised)
-		self.assertEqual(harness.upstream.override_reads, [])
+			result = transactions.notify_regulatory_affairs("Delivery Note", "DOC-1")
+		self.assertEqual(result, {"items": ["DEVICE-1"]})
+		self.assertEqual(calls, [(doc, [{"item_code": "DEVICE-1"}])])

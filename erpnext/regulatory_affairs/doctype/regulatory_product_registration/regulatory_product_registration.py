@@ -275,6 +275,27 @@ class RegulatoryProductRegistration(Document):
 		change_status(self, status, reason=reason, enforce_activation=True)
 		return self.official_status
 
+	@frappe.whitelist(methods=["POST"])
+	def verify_and_activate(self):
+		"""Verify the attached Certificate(s) and activate, in one action (Regulatory Approver only).
+
+		Every Pending Certificate that is not expired and has its file is verified; then the registration is
+		activated when nothing else is missing (an Active registered product, a Certificate in date).
+		"""
+		self.check_permission("write")
+		if not is_approver():
+			frappe.throw(
+				approver_only_message(_("verify the certificate and activate a registration")),
+				frappe.PermissionError,
+			)
+		if self.is_new():
+			frappe.throw(_("Save the registration first."))
+		if self.official_status != DRAFT:
+			frappe.throw(_("Only a Draft registration is activated this way."))
+		verified = verify_pending_certificates(self.name)
+		change_status(self, ACTIVE, enforce_activation=True)
+		return {"status": self.official_status, "verified": verified}
+
 	@frappe.whitelist()
 	def get_activation_problems(self) -> list[str]:
 		"""What still blocks activation; shown on a Draft registration."""
@@ -343,6 +364,77 @@ def close_predecessor_lines(registration: Document) -> None:
 		change_status(predecessor, None, close_lines_after=cutoff)
 
 
+def verify_pending_certificates(registration: str) -> list[str]:
+	"""Verify the Pending Certificates of a registration that carry a file and are in date; return their names."""
+	verified = []
+	for name in frappe.get_all(
+		REGULATORY_DOCUMENT,
+		filters={
+			"registration": registration,
+			"document_type": "Certificate",
+			"verification_status": "Pending",
+		},
+		pluck="name",
+	):
+		document = frappe.get_doc(REGULATORY_DOCUMENT, name)
+		if not document.file:
+			continue
+		if document.expiry_date and getdate(document.expiry_date) < getdate(today()):
+			continue
+		document.verification_status = "Verified"
+		document.save()
+		verified.append(name)
+	return verified
+
+
+def link_previous_registration(registration: Document) -> None:
+	"""A new registration for the Item(s) of ONE live registration replaces it: link Previous Registration itself.
+
+	Done when the new registration is activated and the user left Previous Registration empty. With two or more
+	live registrations in the way nothing is guessed: the overlap error asks the user to choose.
+	"""
+	if registration.previous_registration:
+		return
+	own = [
+		row
+		for row in registration.get("registered_products", [])
+		if row.item_code and row.line_status == "Active"
+	]
+	if not own:
+		return
+	found = set()
+	other_lines = get_other_lines({row.item_code for row in own}, registration.name)
+	for line in own:
+		own_span = coverage.effective_span(line, registration)
+		for other in other_lines:
+			if other.item_code == line.item_code and coverage.ranges_overlap(
+				*own_span, *coverage.effective_span(other, other)
+			):
+				found.add(other.parent)
+	if len(found) == 1:
+		registration.previous_registration = found.pop()
+		registration.add_comment(
+			"Info",
+			_("Previous Registration {0} was linked automatically: it covers the same Item.").format(
+				registration.previous_registration
+			),
+		)
+
+
+def supersede_predecessor(registration: Document) -> None:
+	"""The activated registration takes over from its Previous Registration, which is Superseded at once."""
+	if not registration.previous_registration:
+		return
+	predecessor = frappe.get_doc(PRODUCT_REGISTRATION, registration.previous_registration)
+	if predecessor.official_status in (ACTIVE, SUSPENDED, EXPIRED):
+		change_status(
+			predecessor,
+			SUPERSEDED,
+			reason=_("Superseded by {0}").format(registration.name),
+			changes={"superseded_by": registration.name},
+		)
+
+
 def get_activation_problems(registration: Any) -> list[str]:
 	"""Reasons a registration cannot be (re)activated yet; empty when it can."""
 	problems = []
@@ -361,7 +453,20 @@ def get_activation_problems(registration: Any) -> list[str]:
 		fields=["expiry_date"],
 	)
 	if not any(not row.expiry_date or getdate(row.expiry_date) >= getdate(today()) for row in certificates):
-		problems.append(_("Upload a Certificate document and have a Regulatory Approver verify it."))
+		pending = frappe.db.exists(
+			REGULATORY_DOCUMENT,
+			{
+				"registration": registration.name,
+				"document_type": "Certificate",
+				"verification_status": "Pending",
+			},
+		)
+		if pending:
+			problems.append(_("The Certificate waits for a Regulatory Approver to verify it."))
+		else:
+			problems.append(
+				_("Attach the Certificate: create a Regulatory Document of type Certificate with its file.")
+			)
 	return problems
 
 
@@ -392,6 +497,8 @@ def change_status(
 			problems = get_activation_problems(registration)
 			if problems:
 				frappe.throw("<br>".join(problems), title=_("Cannot activate"))
+		if status == ACTIVE and registration.official_status == DRAFT:
+			link_previous_registration(registration)
 		if status == ACTIVE:
 			close_predecessor_lines(registration)
 		old_status = registration.official_status
@@ -412,3 +519,5 @@ def change_status(
 				row.effective_to = max(cutoff, getdate(row.effective_from)) if row.effective_from else cutoff
 	registration.flags.allow_status_change = True
 	registration.save(ignore_permissions=True)
+	if status == ACTIVE and registration.previous_registration and not close_lines_after:
+		supersede_predecessor(registration)

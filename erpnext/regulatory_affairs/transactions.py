@@ -4,9 +4,8 @@ Guarded purchase, stock and sales documents are checked row by row against the r
 each Item on the document's coverage date. Rule evaluation is kept in small functions that only take
 plain values so it can be tested without a database; the hook entry points at the top do the I/O.
 
-An Approved Regulatory Override exempts the rows it covers on the document it is bound to and, on the selling
-side, on the documents made from it (Quotation -> Sales Order -> Delivery Note -> Sales Invoice), resolved per row
-through the row links (`UpstreamOverrides`).
+There is no way around a block (Siwat, 5 Nov 2026): Regulatory Affairs registers or renews the product first. The
+block message says so in plain words and offers "Notify Regulatory Affairs" (`notify_regulatory_affairs`).
 """
 
 import frappe
@@ -20,11 +19,11 @@ from erpnext.regulatory_affairs.constants import (
 	IN_FORCE_STATUSES,
 	ITEM_CATEGORY_FIELD,
 	OUTBOUND_DOCTYPES,
-	REGULATORY_OVERRIDE,
 	REVOKED,
 	SETTINGS,
 	SUPERSEDED,
 	SUSPENDED,
+	TRANSACTION_DOCTYPES,
 	TRANSACTION_ITEM_DOCTYPES,
 )
 from erpnext.regulatory_affairs.coverage import get_mapping_at_date
@@ -40,23 +39,11 @@ WARNING_PREFIX = "Warning:"
 
 STOCK_ENTRY_RECEIPT = "Material Receipt"
 AMBIGUOUS = object()  # a mapping lookup that raised: master data is invalid for that Item and date
-OVERRIDE_FIELDS = ("status", "transaction_doctype", "transaction_name", "item_code")
 # Orders that warn on save and are checked with the full policy on submit (validate_transaction, before_submit).
 SUBMIT_CHECKED_ORDERS = frozenset({"Quotation", "Sales Order"})
 # Set on `doc.flags` by a caller that already ran `validate_transaction` on this save (an app blocking a Quotation
 # when it is sent for approval), so the save-time warning does not report the same rows again.
 POLICY_CHECKED_FLAG = "regulatory_policy_checked"
-
-# Selling rows name the documents they were made from: (document field, row-detail field, upstream doctype),
-# nearest first. The row-detail field leads to the upstream row, which names its own upstream documents.
-UPSTREAM_LINKS = {
-	"Sales Order": (("prevdoc_docname", None, "Quotation"),),
-	"Delivery Note": (("against_sales_order", "so_detail", "Sales Order"),),
-	"Sales Invoice": (
-		("delivery_note", "dn_detail", "Delivery Note"),
-		("sales_order", "so_detail", "Sales Order"),
-	),
-}
 
 # Used when a setting is blank, e.g. before the Single has ever been saved.
 POLICY_DEFAULTS = {
@@ -88,7 +75,27 @@ def validate_warning_transaction(doc, method=None):
 		return
 	if (getattr(doc, "flags", None) or {}).get(POLICY_CHECKED_FLAG):
 		return
+	if _rows_unchanged_since_last_save(doc):
+		return
 	_validate(doc, warn_only=True)
+
+
+def rows_signature(doc):
+	"""What decides the regulatory result of a draft: each row's Item and coverage date."""
+	return sorted(
+		(row.get("item_code"), str(get_coverage_date(doc, row)))
+		for row in doc.get("items") or []
+		if row.get("item_code")
+	)
+
+
+def _rows_unchanged_since_last_save(doc):
+	"""The user saw the warning for these rows on an earlier save: it is said once per change (Siwat, 5 Nov 2026)."""
+	getter = getattr(doc, "get_doc_before_save", None)
+	previous = getter() if getter else None
+	if not previous or doc.get("__islocal"):
+		return False
+	return rows_signature(previous) == rows_signature(doc)
 
 
 def validate_transaction(doc, method=None):
@@ -106,8 +113,6 @@ def capture_transaction_snapshot(doc, method=None):
 	if not in_scope:
 		return
 
-	override = get_override(doc, strict=False)
-	upstream = UpstreamOverrides()
 	mappings = {}
 	countries = {}
 	for row in rows:
@@ -121,10 +126,8 @@ def capture_transaction_snapshot(doc, method=None):
 			mappings[key] = _resolve_mapping_for_snapshot(doc, item_code, coverage_date)
 		mapping = mappings[key]
 
-		covering = get_covering_override(doc.doctype, row, override, upstream)
-		override_name = covering.name if covering else None
 		country = _get_manufacturer_country(mapping, countries)
-		row.update(build_snapshot(mapping, coverage_date, override_name, country))
+		row.update(build_snapshot(mapping, coverage_date, country))
 
 
 def _validate(doc, *, warn_only):
@@ -137,12 +140,6 @@ def _validate(doc, *, warn_only):
 		return
 
 	reported = []
-	# A bad override is an error even when every row happens to be compliant. Order entry only warns.
-	override, problem = load_override(doc)
-	if problem:
-		if not warn_only:
-			frappe.throw(problem)
-		reported.append(build_message(problem, WARNING))
 
 	rows = [
 		row
@@ -151,13 +148,9 @@ def _validate(doc, *, warn_only):
 	]
 	in_scope = get_items_in_scope({row.get("item_code") for row in rows})
 	if not in_scope:
-		if reported:
-			report_messages(reported, {}, warn_only=True)
 		return
 
-	upstream = UpstreamOverrides()
 	mappings = {}
-	exempted = {}
 	for row in rows:
 		item_code = row.get("item_code")
 		if item_code not in in_scope:
@@ -173,13 +166,9 @@ def _validate(doc, *, warn_only):
 		messages = evaluate_row(doc.doctype, row, mappings[key], coverage_date, settings)
 		if not messages:
 			continue
-		covering = get_covering_override(doc.doctype, row, override, upstream)
-		if covering:
-			exempted.setdefault(describe_override(covering, doc), []).extend(messages)
-		else:
-			reported.extend(messages)
+		reported.extend(messages)
 
-	report_messages(reported, exempted, warn_only=warn_only)
+	report_messages(reported, warn_only=warn_only, doc=doc)
 
 
 def _lookup_mapping(item_code, coverage_date, warn_only, reported):
@@ -194,28 +183,129 @@ def _lookup_mapping(item_code, coverage_date, warn_only, reported):
 		return AMBIGUOUS
 
 
-def report_messages(reported, exempted, *, warn_only):
-	"""Show exempted and warning messages; raise when a blocking message is not exempted.
-
-	`exempted` maps the description of each override that applied to the messages it exempted.
-	"""
-	if exempted:
-		frappe.msgprint(
-			"<br><br>".join(
-				_("Regulatory policy was overridden by {0}:").format(label) + "<br>" + "<br>".join(messages)
-				for label, messages in exempted.items()
-			),
-			title=_("Regulatory override applied"),
-			indicator="orange",
-		)
-
+def report_messages(reported, *, warn_only, doc=None):
+	"""Show warning messages; raise when a message blocks. The text is plain English: which Item, why, what to do."""
 	if not reported:
 		return
 
-	body = "<br>".join(reported)
-	if not warn_only and has_blocking_message(reported):
-		frappe.throw(body, title=_("Regulatory requirement not met"))
+	body = "<br>".join(display_message(message) for message in reported)
+	blocking = not warn_only and has_blocking_message(reported)
+	advice = what_to_do(doc, blocking=blocking, warn_only=warn_only)
+	if advice:
+		body += "<br><br>" + advice
+	if blocking:
+		frappe.throw(
+			body,
+			title=_("This cannot go on yet: an Item is not registered"),
+			primary_action=notify_action(doc),
+		)
 	frappe.msgprint(body, title=_("Regulatory warning"), indicator="orange")
+
+
+def display_message(message):
+	"""A policy message without its internal Block:/Warning: prefix, as a bullet."""
+	for prefix in (BLOCK_PREFIX, WARNING_PREFIX):
+		if message.startswith(prefix):
+			message = message[len(prefix) :].strip()
+			break
+	return "&bull; " + message
+
+
+def what_to_do(doc, *, blocking, warn_only):
+	"""One short next step for the reader: Regulatory Affairs has to register or renew the product."""
+	doctype = doc.doctype if doc is not None else None
+	if blocking:
+		return _(
+			"What to do: Regulatory Affairs must register the Item or renew its registration first. "
+			"Press Notify Regulatory Affairs to tell them. This document goes on once the registration covers it."
+		)
+	if warn_only and doctype in SUBMIT_CHECKED_ORDERS:
+		return _(
+			"You can keep this draft, but it cannot be approved or submitted until Regulatory Affairs has "
+			"registered the Item. Use Regulatory > Notify Regulatory Affairs on this document."
+		)
+	if warn_only and doctype == "Purchase Order":
+		return _("The purchase is not blocked. Regulatory Affairs must register the Item before it is sold.")
+	return None
+
+
+def notify_action(doc):
+	"""The button of the block message: it tells Regulatory Affairs about this saved document."""
+	if doc is None or not doc.get("name") or doc.get("__islocal") or doc.doctype not in TRANSACTION_DOCTYPES:
+		return None
+	return {
+		"label": _("Notify Regulatory Affairs"),
+		"client_action": "erpnext.regulatory.notify_regulatory_affairs",
+		"args": {"doctype": doc.doctype, "name": doc.name},
+	}
+
+
+def blocked_rows(doc):
+	"""[{idx, item_code, reason}] of the rows that block this document (plain English).
+
+	The same evaluation as `validate_transaction`, returned instead of raised, for the Notify button.
+	"""
+	if not is_guarded_document(doc) or doc.get("is_return") or doc.get("is_consolidated"):
+		return []
+	settings = get_settings()
+	if not validation_enabled(doc.doctype, settings):
+		return []
+	rows = [
+		row
+		for row in doc.get("items") or []
+		if row.get("item_code") and not is_delivery_linked(doc.doctype, row)
+	]
+	in_scope = get_items_in_scope({row.get("item_code") for row in rows})
+	found = []
+	for row in rows:
+		item_code = row.get("item_code")
+		if item_code not in in_scope:
+			continue
+		coverage_date = get_coverage_date(doc, row)
+		try:
+			mapping = get_mapping_at_date(item_code, coverage_date)
+		except frappe.ValidationError:
+			frappe.clear_last_message()
+			continue
+		messages = evaluate_row(doc.doctype, row, mapping, coverage_date, settings)
+		blocking = [m for m in messages if m.startswith(BLOCK_PREFIX)]
+		if blocking:
+			reason = "; ".join(display_message(m)[len("&bull; ") :] for m in blocking)
+			found.append({"idx": row.get("idx"), "item_code": item_code, "reason": reason})
+	return found
+
+
+@frappe.whitelist()
+def get_blocked_items(doctype: str, name: str) -> list[dict]:
+	"""The Items that keep a saved draft from going on, for the form button (empty: show no button)."""
+	if doctype not in TRANSACTION_DOCTYPES:
+		return []
+	doc = frappe.get_doc(doctype, name)
+	doc.check_permission("read")
+	if doc.docstatus != 0:
+		return []
+	return blocked_rows(doc)
+
+
+@frappe.whitelist()
+def notify_regulatory_affairs(doctype: str, name: str) -> dict:
+	"""Tell the Regulatory Operators that a document waits for the registration of its Items.
+
+	One task for each Item (the app's handlers in the hook `regulatory_notify_handlers` make it, for the role, never
+	for named users, and do not repeat it while it is open). Returns {"items": [...]} of the Items notified.
+	"""
+	if doctype not in TRANSACTION_DOCTYPES:
+		frappe.throw(_("{0} is not checked for registration.").format(_(doctype)))
+	doc = frappe.get_doc(doctype, name)
+	doc.check_permission("read")
+	items = blocked_rows(doc)
+	if not items:
+		frappe.msgprint(_("Nothing blocks this document: every regulated Item is registered."), alert=True)
+		return {"items": []}
+	for handler in frappe.get_hooks("regulatory_notify_handlers"):
+		frappe.get_attr(handler)(doc, items)
+	frappe.msgprint(_("Regulatory Affairs has been told."), indicator="green", alert=True)
+	return {"items": sorted({row["item_code"] for row in items})}
 
 
 # Settings and scope
@@ -281,135 +371,6 @@ def get_coverage_date(doc, row):
 	return getdate(next((value for value in candidates if value), None) or today())
 
 
-# Override
-
-
-def load_override(doc):
-	"""(override, problem) for the override linked on a document; both None when none is linked.
-
-	The override is read fresh from the database. A missing override, one that is not Approved or one
-	bound to another document gives a problem text and no override.
-	"""
-	name = doc.get("regulatory_override_ref")
-	if not name:
-		return None, None
-
-	override = frappe.db.get_value(REGULATORY_OVERRIDE, name, list(OVERRIDE_FIELDS), as_dict=True)
-	problem = get_override_problem(name, override, doc.doctype, doc.name)
-	if problem:
-		return None, problem
-
-	override.name = name
-	return override, None
-
-
-def get_override(doc, *, strict=True):
-	"""The Approved override bound to this document, or None when none is set.
-
-	With `strict` an unusable override raises; otherwise it is ignored.
-	"""
-	override, problem = load_override(doc)
-	if problem and strict:
-		frappe.throw(problem)
-	return override
-
-
-def get_override_problem(name, override, doctype, docname):
-	"""Why an override cannot be used for a document, or None when it can."""
-	if not override:
-		return _("Regulatory Override {0} does not exist.").format(frappe.bold(name))
-	if override.get("status") != "Approved":
-		return _("Regulatory Override {0} is not approved.").format(frappe.bold(name))
-	if override.get("transaction_doctype") != doctype or override.get("transaction_name") != docname:
-		return _("Regulatory Override {0} does not belong to this transaction.").format(frappe.bold(name))
-	return None
-
-
-def override_covers_row(override, row):
-	"""An override without an Item exempts every row; with an Item only that Item's rows."""
-	if not override:
-		return False
-	return not override.get("item_code") or override.get("item_code") == row.get("item_code")
-
-
-def get_covering_override(doctype, row, override, upstream):
-	"""The override that exempts a row: the document's own first, then one bound to a document the row was made
-	from, nearest first; None when none covers the row."""
-	if override_covers_row(override, row):
-		return override
-	return next(
-		(candidate for candidate in upstream.for_row(doctype, row) if override_covers_row(candidate, row)),
-		None,
-	)
-
-
-def describe_override(override, doc):
-	"""The override's name in bold, with the document it is bound to when that is not `doc`."""
-	label = frappe.bold(escape_html(override.name))
-	doctype, name = override.get("transaction_doctype"), override.get("transaction_name")
-	if doctype and name and (doctype, name) != (doc.doctype, doc.get("name")):
-		label = _("{0} (on {1} {2})").format(label, _(doctype), frappe.bold(escape_html(name)))
-	return label
-
-
-class UpstreamOverrides:
-	"""Approved overrides bound to the documents a selling row was made from, read fresh from the database.
-
-	The sources are resolved per row through the row links (`UPSTREAM_LINKS`), so a document that mixes rows of
-	several Quotations, Sales Orders or Delivery Notes is handled row by row. Each upstream row and each source's
-	overrides are read once per document. A Requested, Rejected or Cancelled override never covers.
-	"""
-
-	def __init__(self):
-		self._rows = {}
-		self._overrides = {}
-
-	def for_row(self, doctype, row):
-		"""Approved overrides of every upstream document of the row, nearest document first."""
-		overrides = []
-		for source in self.sources(doctype, row):
-			overrides.extend(self._approved(*source))
-		return overrides
-
-	def sources(self, doctype, row):
-		"""(doctype, name) of each document the row was made from, nearest first, without repeats."""
-		sources = []
-		for document_field, detail_field, upstream in UPSTREAM_LINKS.get(doctype, ()):
-			detail = row.get(detail_field) if detail_field else None
-			upstream_row = self._row(upstream, detail) if detail else None
-			name = row.get(document_field) or (upstream_row or {}).get("parent")
-			found = [(upstream, name)] if name else []
-			if upstream_row:
-				found.extend(self.sources(upstream, upstream_row))
-			sources.extend(source for source in found if source not in sources)
-		return sources
-
-	def _row(self, doctype, name):
-		key = (doctype, name)
-		if key not in self._rows:
-			fields = {"parent"}
-			for document_field, detail_field, _upstream in UPSTREAM_LINKS.get(doctype, ()):
-				fields.update(field for field in (document_field, detail_field) if field)
-			self._rows[key] = frappe.db.get_value(
-				TRANSACTION_ITEM_DOCTYPES[doctype], name, sorted(fields), as_dict=True
-			)
-		return self._rows[key]
-
-	def _approved(self, doctype, name):
-		key = (doctype, name)
-		if key not in self._overrides:
-			self._overrides[key] = [
-				frappe._dict(row)
-				for row in frappe.get_all(
-					REGULATORY_OVERRIDE,
-					filters={"transaction_doctype": doctype, "transaction_name": name, "status": "Approved"},
-					fields=["name", *OVERRIDE_FIELDS],
-					order_by="name asc",
-				)
-			]
-		return self._overrides[key]
-
-
 # Row evaluation
 
 
@@ -417,10 +378,10 @@ def evaluate_row(doctype, row, mapping, coverage_date, settings):
 	"""Policy messages for one row, each prefixed `Block:` or `Warning:`; ignored checks add nothing."""
 	item_code = row.get("item_code") or ""
 	coverage_date = getdate(coverage_date)
-	prefix = _("Row {0} ({1})").format(row.get("idx") or "?", frappe.bold(escape_html(item_code)))
+	prefix = _("Item {1} (row {0})").format(row.get("idx") or "?", frappe.bold(escape_html(item_code)))
 
 	if not mapping:
-		detail = _("{0} has no registration mapping effective on {1}.").format(prefix, coverage_date)
+		detail = _("{0} has no FDA registration in force on {1}.").format(prefix, coverage_date)
 		return _compact([build_message(detail, settings["missing_registration_action"])])
 
 	registration = frappe.bold(escape_html(mapping.get("registration") or "-"))
@@ -438,7 +399,7 @@ def evaluate_row(doctype, row, mapping, coverage_date, settings):
 	row_manufacturer = row.get("manufacturer")
 	mapped_manufacturer = mapping.get("physical_manufacturer")
 	if row_manufacturer and mapped_manufacturer and row_manufacturer != mapped_manufacturer:
-		detail = _("{0} has manufacturer {1}, but registration {2} lists {3}.").format(
+		detail = _("{0} comes from manufacturer {1}, but registration {2} lists {3}.").format(
 			prefix,
 			frappe.bold(escape_html(row_manufacturer)),
 			registration,
@@ -460,21 +421,19 @@ def get_status_issue(doctype, mapping, coverage_date, settings, prefix, registra
 	if is_covering(mapping, coverage_date):
 		return None, IGNORE
 	if status == SUSPENDED:
-		detail = _("{0} is mapped to suspended registration {1}.").format(prefix, registration)
+		detail = _("{0}: registration {1} is suspended.").format(prefix, registration)
 		return detail, settings["suspended_registration_action"]
 	if status == REVOKED:
-		detail = _("{0} is mapped to revoked registration {1}.").format(prefix, registration)
+		detail = _("{0}: registration {1} was revoked.").format(prefix, registration)
 		return detail, settings["revoked_registration_action"]
 	if status == EXPIRED or (status in (ACTIVE, SUPERSEDED) and expiry_date and expiry_date < coverage_date):
 		if expiry_date:
-			detail = _("{0} is mapped to registration {1}, which expired on {2}.").format(
-				prefix, registration, expiry_date
-			)
+			detail = _("{0}: registration {1} expired on {2}.").format(prefix, registration, expiry_date)
 		else:
-			detail = _("{0} is mapped to expired registration {1}.").format(prefix, registration)
+			detail = _("{0}: registration {1} has expired.").format(prefix, registration)
 		return detail, get_expired_action(doctype, settings)
 
-	detail = _("{0} is mapped to registration {1} with status {2}, which does not cover {3}.").format(
+	detail = _("{0}: registration {1} is {2} and does not cover {3}.").format(
 		prefix, registration, frappe.bold(escape_html(status or "-")), coverage_date
 	)
 	return detail, settings["missing_registration_action"]
@@ -528,11 +487,10 @@ def _compact(messages):
 # Snapshot
 
 
-def build_snapshot(mapping, coverage_date, override_name=None, manufacturer_country=None):
-	"""Values for the nine snapshot fields; only the coverage date and override survive a missing mapping."""
+def build_snapshot(mapping, coverage_date, manufacturer_country=None):
+	"""Values for the eight snapshot fields; only the coverage date survives a missing mapping."""
 	snapshot = dict.fromkeys(SNAPSHOT_FIELDNAMES)
 	snapshot["regulatory_coverage_date"] = coverage_date
-	snapshot["regulatory_override"] = override_name or None
 	if mapping:
 		snapshot.update(
 			regulatory_registration=mapping.get("registration"),

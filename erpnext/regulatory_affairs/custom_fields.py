@@ -11,8 +11,6 @@ from erpnext.regulatory_affairs.constants import (
 	OTHER_CATEGORY,
 	PRODUCT_CATEGORIES,
 	PRODUCT_REGISTRATION,
-	REGULATORY_OVERRIDE,
-	TRANSACTION_DOCTYPES,
 	TRANSACTION_ITEM_DOCTYPES,
 )
 
@@ -39,7 +37,6 @@ SNAPSHOT_FIELDNAMES = (
 	"regulatory_registration_status",
 	"regulatory_registration_expiry",
 	"regulatory_coverage_date",
-	"regulatory_override",
 )
 
 
@@ -191,28 +188,6 @@ def snapshot_fields(anchor):
 		_field(
 			"regulatory_coverage_date", "Date", "Coverage Date", "regulatory_registration_expiry", **read_only
 		),
-		_field(
-			"regulatory_override",
-			"Link",
-			"Regulatory Override",
-			"regulatory_coverage_date",
-			options=REGULATORY_OVERRIDE,
-			**read_only,
-		),
-	]
-
-
-def transaction_fields():
-	return [
-		_field(
-			"regulatory_override_ref",
-			"Link",
-			"Regulatory Override",
-			"items",
-			options=REGULATORY_OVERRIDE,
-			no_copy=1,
-			description="Approved override for this document; it must be bound to this document's name.",
-		)
 	]
 
 
@@ -220,8 +195,6 @@ def get_custom_fields():
 	fields = {"Item": item_fields()}
 	for item_doctype in TRANSACTION_ITEM_DOCTYPES.values():
 		fields[item_doctype] = snapshot_fields(ITEM_ROW_ANCHORS[item_doctype])
-	for doctype in TRANSACTION_DOCTYPES:
-		fields[doctype] = transaction_fields()
 	return fields
 
 

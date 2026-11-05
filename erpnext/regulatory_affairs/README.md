@@ -20,7 +20,6 @@ did not change.
 | Regulatory Establishment Registration | Company establishment licence (Import/Manufacture/Sale) referenced by product registrations. |
 | Regulatory Document | Versioned evidence (Certificate, Annex, Label, IFU, LOA, ISO, GMP, ...). Own expiry; verification by a Regulatory Approver. |
 | Regulatory Registration Action | Renewal / variation / new registration history with FDA application number, stage, FDA Query due date and outcome. Approving it updates the registration. |
-| Regulatory Override | Maker-checker exception bound to one transaction name (and optionally one Item). |
 | Regulatory Alert Log | One row per alert sent (idempotency key), with delivery status and retries. |
 | Regulatory Settings (single) + Regulatory Expiry Alert Rule and Regulatory Alert Recipient (children) | Validation policy, renewal planning, alert thresholds/channels and extra alert recipients. |
 | Regulatory Renewal History (child of a registration) | Read-only legacy renewal log rows carried over from Thai FDA Registration. |
@@ -45,7 +44,7 @@ unregulated ones). There is no separate assessment status, exemption reason or N
 registration simply has no Product Category.
 
 The **Regulatory** tab also has `regulatory_other_category` (for Other), `medical_device_category` (only for Medical Device) and
-`regulatory_owner`. The six guarded transactions and the Quotation get `regulatory_override_ref` (Link); each item row of the six
+`regulatory_owner`. Each item row of the six guarded transactions
 (not the Quotation) gets a collapsed, read-only **Regulatory Snapshot** section (`regulatory_*` fields listed in `custom_fields.SNAPSHOT_FIELDNAMES`). Custom Field definitions live
 in `custom_fields.py` (RA is their only owner). The legacy Item fields *Thai FDA Assessment Status* (`custom_thai_fda_applicability`)
 and *Thai FDA Assessment Reason / Notes* (`custom_thai_fda_assessment_note`) are retired by the patch described under
@@ -59,22 +58,20 @@ stay) and clears the old `depends_on` of `regulatory_owner`.
 
 `Regulatory Viewer` (read/report/export), `Regulatory Operator` (+ create/write), `Regulatory Approver` (+ delete/share and the
 approval powers below), plus `System Manager`. Roles are created by `install.ensure_roles` on install and migrate.
-Users of the guarded documents (Stock, Sales, Purchase and Accounts roles) get *select* permission on Override only, so they can link an approved override on their document without being able to read or edit it.
 
 Approver-only operations: changing a registration's official status, verifying/rejecting a document (any change to a verified document
-voids the verification), approving an override (never by its requester; audit stamps cannot be edited), editing settings, changing the
+voids the verification; *Verify and Activate* verifies the attached Certificate and activates in one action), editing settings, changing the
 issue date, expiry date or expiry basis of a registration that is no longer Draft. System, import, patch and install writes are not
 restricted. Operators otherwise create and edit registrations, product lines, documents and actions. The Item's Product Category
 is guarded: only an Operator sets or changes it and only an Approver clears it (see *Product Category permission* below).
 
-The Override controller alone exposes private `_is_decision_approver()` and `_decision_approver_role()`
-methods for a company subclass/mixin to narrow transaction-exception decisions and their role label. Native
-behavior remains Regulatory Approver/System Manager (and Administrator). The shared `permissions.is_approver`
-check for FDA registrations, evidence verification, registration actions and renewals is unchanged. A company
-override must retain the controller's requester self-approval ban, requester cancellation, system-owned stamps
-and approved transaction/Item/reason immutability; it changes neither the transaction binding nor coverage policy.
-
 ## Registration lifecycle
+
+Simplified 5 Nov 2026: the form shows every Regulatory user what a Draft still needs ("To activate: ..."); the Approver presses
+*Status > Verify and Activate* (`verify_and_activate`: verifies the attached in-date Certificates, then activates). Status buttons
+save the form first. Activating a registration that covers the same Item as exactly one live registration links *Previous
+Registration* itself and supersedes the old one (its lines end the day before the issue date). A Renewal Action offers one button per
+next stage (*Move to*) and asks for the dates of that stage in a dialog (`advance_stage`). An Operator may correct dates of a Draft.
 
 `official_status` is read-only on the form and may change only through `set_official_status` (buttons on the form):
 
@@ -117,8 +114,7 @@ conflict because the predecessor and successor have different windows. More than
 Hooks: Quotation, PO and SO `validate` -> `validate_warning_transaction`; `before_submit` of PO, Purchase Receipt, Stock Entry, SO,
 Delivery Note and Sales Invoice -> `capture_transaction_snapshot`; `before_submit` of Quotation, Purchase Receipt, Stock Entry, SO,
 Delivery Note and Sales Invoice additionally -> `validate_transaction` (run first). A Quotation and a Sales Order are therefore
-warned on save and blocked on submit like a delivery (`validate_on_quotation` / `validate_on_sales_order`; an Approved override
-covering the rows lets them through); `validate_warning_transaction` skips a Quotation or Sales Order being submitted so its
+warned on save and blocked on submit like a delivery (`validate_on_quotation` / `validate_on_sales_order`; there is no way around the block); `validate_warning_transaction` skips a Quotation or Sales Order being submitted so its
 messages are not shown twice. A Quotation has no snapshot. A caller that already ran `validate_transaction` on a save sets
 `doc.flags.regulatory_policy_checked` (`POLICY_CHECKED_FLAG`) and the save-time warning steps aside (Connect Diagnostics blocks a
 Quotation when it is sent for approval this way, before any approver is asked).
@@ -131,32 +127,25 @@ Quotation when it is sent for approval this way, before any approver is asked).
   are not validated again; when `dn_detail` is set they inherit the Delivery Note row's snapshot.
 * Coverage date: PO row `schedule_date` (then the document's, then `transaction_date`), SO row `delivery_date` (then the document's, then `transaction_date`), otherwise `posting_date`, falling back to `transaction_date`, then today. A Quotation has no `posting_date`, so it is covered on its `transaction_date` (not `valid_till`).
 * Consolidated Sales Invoices built by POS closing are not validated (POS Invoices themselves are not guarded). Saving a Quotation,
-  Purchase Order or Sales Order never raises: an unusable override or an ambiguous mapping is reported as a warning there; submitting
+  Purchase Order or Sales Order never raises: an ambiguous mapping is reported as a warning there; submitting
   a Quotation or Sales Order raises like the other submit checks.
-* Per row checks (message prefix `Block:` or `Warning:` from the policy; `Ignore` drops it): no mapping effective on the date
+* Per row checks (each message is plain English: which Item, why; internally `Block:` or `Warning:` from the policy, `Ignore` drops it): no mapping effective on the date
   (`missing_registration_action`); mapping with neither a NEWCODE nor an Identifier (`missing_newcode_action`, labelled *Missing NEWCODE / Identifier Action*; migrated legacy lines carry only an Identifier, which is accepted); status Suspended / Revoked
   (`suspended_/revoked_registration_action`); any other non-covering status (Cancelled, Draft ...) counts as missing; expired
   (status Expired, or stated expiry before the coverage date) -> `expired_registration_action`, but for outbound documents the
   `expired_registration_existing_stock_policy` (Block / Warning / Allow Existing Compliant Stock = ignore); row `manufacturer`
   different from the mapped physical manufacturer (`manufacturer_mismatch_action`). An expiry is reported once.
-* Outcome: any `Block:` message raises unless an approved override applies; only warnings -> orange message; warn-only entry points
-  always message.
-* **Override** (`regulatory_override_ref` on the document): must be Approved, bound to this `doctype` + `name`, and if the
-  override has an `item_code`, only rows of that Item are exempted. The snapshot records `regulatory_override` on every in-scope row the override covers, including rows that have no mapping (the audit trail for exactly that case).
-* **Carried-forward override** (`UpstreamOverrides`): on the selling side an Approved override also covers the rows made from the
-  document it is bound to, resolved per row through the row links, nearest document first: Sales Order row `prevdoc_docname`
-  (Quotation); Delivery Note row `against_sales_order` and, through `so_detail`, that Sales Order row's Quotation; Sales Invoice row
-  `delivery_note` (and through `dn_detail` the Delivery Note row's Sales Order and Quotation) and `sales_order` (and through
-  `so_detail` its Quotation). So an override of a Quotation covers its Sales Orders and their Delivery Notes and Sales Invoices, one
-  of a Sales Order its Delivery Notes and Sales Invoices, and one of a Delivery Note the invoice rows made from it. The `item_code`
-  scope applies the same way; a document mixing rows of several sources is judged row by row. Upstream overrides are read from the
-  database on every check (status Approved only, so a Requested, Rejected or Cancelled one never covers); the document's own
-  override is tried first. The message names the override and the document it is bound to ("overridden by RO-1 (on Quotation
-  QTN-1)") and the snapshot records it on the rows it covers. Purchase and stock documents have no upstream overrides.
+* Outcome: any `Block:` message raises with a plain explanation and the button *Notify Regulatory Affairs*; only warnings -> orange
+  message; warn-only entry points always message. A save of a draft whose Items and coverage dates did not change since the last
+  save does not warn again (once per change).
+* **No override (Siwat, 5 Nov 2026).** The Regulatory Override was removed: nothing can be sold, delivered or invoiced until
+  Regulatory Affairs registers or renews the product. `notify_regulatory_affairs(doctype, name)` (form button and block message)
+  hands the blocked Items to the hook `regulatory_notify_handlers` (the app makes one task per Item for the Regulatory Operators);
+  `get_blocked_items` tells the form whether to show the button. `patches/v16_0/remove_regulatory_override` deletes the DocType,
+  its records, the link fields and closes the open tasks.
 * **Snapshot** (never blocks; an ambiguous mapping is logged and left blank): `regulatory_registration`, `regulatory_newcode`,
   `regulatory_identifier`, `regulatory_manufacturer`, `regulatory_manufacturer_country`, `regulatory_registration_status`,
-  `regulatory_registration_expiry`, `regulatory_coverage_date`, `regulatory_override`. With no mapping only the coverage date (and a
-  covering override) are stored; the section stays visible because it is shown whenever a coverage date exists. Batch/serial/qty/UOM
+  `regulatory_registration_expiry`, `regulatory_coverage_date`. With no mapping only the coverage date is stored; the section stays visible because it is shown whenever a coverage date exists. Batch/serial/qty/UOM
   are not duplicated: they live on the row and its Serial and Batch Bundle.
 
 ## Alerts (`alerts.py`)
@@ -347,47 +336,16 @@ so with the default **Block** policies an expired or suspended legacy registrati
    overdue reminder repeats on day 1 and every *Overdue Reminder Interval* days.
 6. Sales Invoice made from a Delivery Note keeps the delivery's snapshot even after the registration expires; a return is never blocked;
    a Stock Entry of type Material Transfer is not checked.
-7. Override: the requester cannot approve; an approved override bound to one Delivery Note lets exactly that document (and the
-   invoice rows made from it) through and is recorded on its rows; one bound to a Quotation also lets the Sales Order, Delivery Note
-   and Sales Invoice made from it through.
-8. Legacy data: on a copy of a site with Thai FDA Registration records, the dry run lists one registration per distinct number and the
-   conflicts; the real run creates them (Active ones with a past expiry as Expired, legacy numbers kept, renewal log in *Renewal
-   History*, certificate documents attached), shows the Items as covered, copies legacy reminder days and recipients into Settings, and a
-   second run creates nothing new. Mapped Items get the registration's Product Category except those assessed *Not Required /
-   Exempt*; Items assessed *Registration Required* without a registration get Other / *Not specified (legacy)*; the Item form no longer
-   shows *Thai FDA Assessment Status* and the `tabItem` columns still hold the old values.
-
-## Product Category permission
-
-The Product Category decides whether an Item is checked at all, so it is guarded in two layers:
-
-* The Custom Field sits on **permission level 1** (`ITEM_CATEGORY_PERMLEVEL`). `item.json` gives every Item reading role read access to
-  level 1 (so the field shows read-only) and only Regulatory Operator / Approver write access. Both are applied by `bench migrate`
-  (the Custom Field update in `install.ensure_custom_fields` is idempotent). An Item Manager's form save never changes the field.
-* `item.validate` (`check_category_change`) refuses any other path: a **Regulatory Operator** (or Approver) may set or change the
-  category, only a **Regulatory Approver** may clear it. Administrator, System Manager-as-approver and install/patch/migrate runs pass.
-
-On a site whose Item permissions are Custom DocPerms (the privacy layer creates them, so the UAT/live sites have them) the rows of
-`item.json` are ignored; `install.ensure_item_category_permissions` (run by `ensure_configuration` and again as the last erpnext `after_migrate` hook; idempotent, never lowers a right; new rows grant only the one right, no export/print) adds the
-same level-1 read/write rows and the level-0 read the Regulatory roles need there.
-
-Regulatory roles have no write right on the rest of the Item, so they use *Regulatory > Set Product Category* on the Item form
-(`item.set_product_category`, whitelisted, needs read on the Item); that method saves with `ignore_permissions` and `validate` still
-enforces the role rule. Because an Item Manager can no longer set the category, an Item that must become regulated is passed to RA.
-
-## Known limits
-
+7. Blocked: a Delivery Note with an unregistered Item cannot be submitted whoever asks; *Notify Regulatory Affairs* tells RA; once the registration is
+   active the same document submits.
 * The Item dashboard shows no Regulatory connection group; use the Item's *Current Registration* field and the *Coverage Matrix* button.
 
 * Establishment licences get expiry alerts but no Renewal Actions; Registration Actions work on product registrations only.
 * Purchase Invoice, Subcontracting and Stock Reconciliation are not guarded; Purchase Order only warns.
-* `regulatory_override_ref` is no-copy: an upstream override is found through the row links, not copied onto the document. A row
-  added by hand (no link to a source row) is covered only by the document's own override.
-* Overrides are requested from the Override form (or API); the transactions have no shortcut button yet.
 * Product lines of a live registration can still be edited by an Operator (history is kept by version tracking); the issue/expiry
   dates cannot.
 * Product Category permission: see the section of that name; the Regulatory roles cannot edit other Item fields, so they change the
-  category with the *Regulatory > Set Product Category* button.
+  category with the *Regulatory > Classify Item* dialog (Product Category, Medical Device Category and Regulatory Owner in one step).
 * The new code assumes `bench migrate` has run: submitting a guarded document on a site where the Settings DocType and the Item
   columns do not exist yet fails, like any other schema-dependent ERPNext change.
 * **Not verified end to end.** The DocTypes, patches and reports are checked by unit tests with mocks; run the dry run and
