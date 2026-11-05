@@ -361,7 +361,7 @@ def get_activation_problems(registration: Any) -> list[str]:
 		fields=["expiry_date"],
 	)
 	if not any(not row.expiry_date or getdate(row.expiry_date) >= getdate(today()) for row in certificates):
-		problems.append(_("Upload a Certificate document and have a Regulatory Approver verify it."))
+		problems.append(_("Add a Certificate document and have a Regulatory Approver verify it."))
 	return problems
 
 
