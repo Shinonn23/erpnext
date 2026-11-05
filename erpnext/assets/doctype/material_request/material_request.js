@@ -7,8 +7,8 @@ frappe.ui.form.on("Material Request", {
 				frm.doc.material_request_type === "Customer Demo"
 					? frm.doc.customer
 					: frm.doc.loan_recipient_type === "Customer"
-						? frm.doc.loan_recipient || frm.doc.customer
-						: null;
+					? frm.doc.loan_recipient || frm.doc.customer
+					: null;
 			const link_doctype = customer ? "Customer" : frm.doc.loan_recipient_type;
 			const link_name = customer || frm.doc.loan_recipient;
 			if (!link_doctype || !link_name) return { filters: { name: ["=", ""] } };
@@ -30,7 +30,8 @@ frappe.ui.form.on("Material Request", {
 				filters: {
 					company: doc.company,
 					material_request_type: doc.material_request_type,
-					location: doc.material_request_type === "Asset Transfer" ? doc.asset_source_location : null,
+					location:
+						doc.material_request_type === "Asset Transfer" ? doc.asset_source_location : null,
 					item_code: row.item_code || doc.asset_item_filter,
 				},
 			};
@@ -100,7 +101,9 @@ frappe.ui.form.on("Material Request", {
 			values.request_remarks = null;
 		}
 		if (purpose !== "Asset Transfer") values.asset_item_filter = null;
+		const is_loan = purpose === "Customer Demo" || purpose === "Customer Borrow / Loan";
 		return frm.set_value(values).then(() => {
+			if (is_loan && !frm.doc.responsible_employee) set_responsible_employee(frm);
 			set_stock_item_query(frm);
 			configure_material_request_item_columns(frm);
 			frm.refresh_fields();
@@ -140,7 +143,9 @@ frappe.ui.form.on("Material Request", {
 				}
 
 				asset_dialog.dialog.hide();
-				const existing_assets = new Set((frm.doc.items || []).map((row) => row.asset).filter(Boolean));
+				const existing_assets = new Set(
+					(frm.doc.items || []).map((row) => row.asset).filter(Boolean)
+				);
 				for (const asset of assets) {
 					if (existing_assets.has(asset.name)) continue;
 					frm.add_child("items", {
@@ -150,7 +155,9 @@ frappe.ui.form.on("Material Request", {
 						asset_serial_number: asset.asset_serial_number,
 						source_location: asset.location,
 						target_location:
-							frm.doc.material_request_type === "Customer Demo" ? frm.doc.customer_location : null,
+							frm.doc.material_request_type === "Customer Demo"
+								? frm.doc.customer_location
+								: null,
 						uom: asset.stock_uom,
 						stock_uom: asset.stock_uom,
 						conversion_factor: 1,
@@ -211,8 +218,13 @@ frappe.ui.form.on("Material Request", {
 				if (!r.message || frm.doc.loan_recipient_contact !== contact) return;
 				const details = r.message;
 				frm.set_value({
-					loan_recipient_contact_display: [details.contact_display, details.contact_email, details.contact_phone || details.contact_mobile]
-						.filter(Boolean).join("<br>"),
+					loan_recipient_contact_display: [
+						details.contact_display,
+						details.contact_email,
+						details.contact_phone || details.contact_mobile,
+					]
+						.filter(Boolean)
+						.join("<br>"),
 					loan_recipient_contact_email: details.contact_email,
 				});
 			},
@@ -249,7 +261,9 @@ frappe.ui.form.on("Material Request", {
 					details.contact_display,
 					details.contact_email,
 					details.contact_phone || details.contact_mobile,
-				].filter(Boolean).join("<br>");
+				]
+					.filter(Boolean)
+					.join("<br>");
 				frm.set_value({
 					customer_contact_display: display,
 					customer_contact_email: details.contact_email,
@@ -267,9 +281,11 @@ frappe.ui.form.on("Material Request", {
 			frm.page.set_indicator(__("Draft"), "orange");
 		}
 		const request_name = frm.doc.name;
-		const is_special_request_type = ["Customer Demo", "Customer Borrow / Loan", "Asset Transfer"].includes(
-			frm.doc.material_request_type
-		);
+		const is_special_request_type = [
+			"Customer Demo",
+			"Customer Borrow / Loan",
+			"Asset Transfer",
+		].includes(frm.doc.material_request_type);
 		const remove_standard_status_actions = () => {
 			if (frm.doc.name !== request_name || !is_special_request_type) return;
 			frm.remove_custom_button(__("Stop"));
@@ -279,41 +295,51 @@ frappe.ui.form.on("Material Request", {
 		if (frm.doc.docstatus !== 1) return;
 		const action_refresh_id = (frm.__material_request_action_refresh_id || 0) + 1;
 		frm.__material_request_action_refresh_id = action_refresh_id;
-		return Promise.resolve(frappe.call({
-			method: "run_doc_method",
-			args: { dt: frm.doc.doctype, dn: request_name, method: "get_post_submit_actions" },
-		})).then((r) => {
-			if (
-				frm.doc.name !== request_name ||
-				frm.doc.docstatus !== 1 ||
-				frm.__material_request_action_refresh_id !== action_refresh_id
-			) return;
-			remove_standard_status_actions();
-			const actions = r.message || {};
-			// The system makes the loans by itself once approved (and decided); the button is for a loan it has not made.
-			// A request may lend some rows as Stock and others as Assets: one Loan Order of each.
-			const loan_types = [
-				actions.stock_custody_loan && "Stock",
-				actions.asset_custody_loan && "Asset",
-			].filter(Boolean);
-			for (const loan_type of loan_types) {
-				// By name, not with the whole document: a document call on a submitted request needs its submit right.
-				frm.add_custom_button(
-					loan_types.length > 1 ? __("{0} Loan Order", [__(loan_type)]) : __("Loan Order"),
-					() =>
-						run_request_method(frm, "make_custody_loan", { loan_type }).then((r) =>
-							open_generated_doc(r.message)
-						),
-					__("Create"),
-					"Custody Loan"
-				);
-			}
-			if (actions.asset_movement) {
-				frm.add_custom_button(__("Asset Movement"), () =>
-					run_request_method(frm, "make_asset_movement").then((response) => open_generated_doc(response.message)), __("Create")
-				);
-			}
-		}).finally(remove_standard_status_actions);
+		return Promise.resolve(
+			frappe.call({
+				method: "run_doc_method",
+				args: { dt: frm.doc.doctype, dn: request_name, method: "get_post_submit_actions" },
+			})
+		)
+			.then((r) => {
+				if (
+					frm.doc.name !== request_name ||
+					frm.doc.docstatus !== 1 ||
+					frm.__material_request_action_refresh_id !== action_refresh_id
+				)
+					return;
+				remove_standard_status_actions();
+				const actions = r.message || {};
+				// The system makes the loans by itself once approved (and decided); the button is for a loan it has not made.
+				// A request may lend some rows as Stock and others as Assets: one Loan Order of each.
+				const loan_types = [
+					actions.stock_custody_loan && "Stock",
+					actions.asset_custody_loan && "Asset",
+				].filter(Boolean);
+				for (const loan_type of loan_types) {
+					// By name, not with the whole document: a document call on a submitted request needs its submit right.
+					frm.add_custom_button(
+						loan_types.length > 1 ? __("{0} Loan Order", [__(loan_type)]) : __("Loan Order"),
+						() =>
+							run_request_method(frm, "make_custody_loan", { loan_type }).then((r) =>
+								open_generated_doc(r.message)
+							),
+						__("Create"),
+						"Custody Loan"
+					);
+				}
+				if (actions.asset_movement) {
+					frm.add_custom_button(
+						__("Asset Movement"),
+						() =>
+							run_request_method(frm, "make_asset_movement").then((response) =>
+								open_generated_doc(response.message)
+							),
+						__("Create")
+					);
+				}
+			})
+			.finally(remove_standard_status_actions);
 	},
 });
 
@@ -322,22 +348,28 @@ frappe.ui.form.on("Material Request Item", {
 		const row = locals[cdt][cdn];
 		if (!row.item_code) return;
 		const item_code = row.item_code;
-		frappe.db.get_value("Item", item_code, ["item_code", "is_stock_item", "is_fixed_asset", "stock_uom"]).then(({ message }) => {
-			if (!message || row.item_code !== item_code) return;
-			if (row.asset && row.item_code !== message.item_code) {
-				frappe.model.set_value(cdt, cdn, "asset", null);
-			}
-			const values = {
-				item_type: message.is_stock_item ? "Stock Item" : message.is_fixed_asset ? "Fixed Asset" : "",
-				uom: message.stock_uom,
-			};
-			if (row.asset) {
-				values.stock_uom = message.stock_uom;
-				values.conversion_factor = 1;
-				values.stock_qty = row.qty || 1;
-			}
-			frappe.model.set_value(cdt, cdn, values);
-		});
+		frappe.db
+			.get_value("Item", item_code, ["item_code", "is_stock_item", "is_fixed_asset", "stock_uom"])
+			.then(({ message }) => {
+				if (!message || row.item_code !== item_code) return;
+				if (row.asset && row.item_code !== message.item_code) {
+					frappe.model.set_value(cdt, cdn, "asset", null);
+				}
+				const values = {
+					item_type: message.is_stock_item
+						? "Stock Item"
+						: message.is_fixed_asset
+						? "Fixed Asset"
+						: "",
+					uom: message.stock_uom,
+				};
+				if (row.asset) {
+					values.stock_uom = message.stock_uom;
+					values.conversion_factor = 1;
+					values.stock_qty = row.qty || 1;
+				}
+				frappe.model.set_value(cdt, cdn, values);
+			});
 	},
 	asset(frm, cdt, cdn) {
 		const row = locals[cdt][cdn];
@@ -345,39 +377,44 @@ frappe.ui.form.on("Material Request Item", {
 		const asset_name = row.asset;
 		const company = frm.doc.company;
 		const purpose = frm.doc.material_request_type;
-		return frappe.call({
-			method: "erpnext.assets.doctype.material_request.material_request.get_asset_request_details",
-			args: {
-				asset_name,
-				company,
-				material_request_type: purpose,
-				item_code: row.item_code || frm.doc.asset_item_filter,
-				acquisition_method: row.demo_acquisition_method,
-			},
-		}).then(({ message }) => {
-			if (
-				!message || row.asset !== asset_name || frm.doc.company !== company ||
-				frm.doc.material_request_type !== purpose
-			) return;
-			return frappe.model.set_value(cdt, cdn, {
-				asset_name: message.asset_name,
-				asset_serial_number: message.asset_serial_number,
-				item_code: message.item_code,
-				source_location: message.location,
-				target_location:
-					frm.doc.material_request_type === "Customer Demo"
-						? frm.doc.customer_location
-						: frm.doc.material_request_type === "Customer Borrow / Loan"
+		return frappe
+			.call({
+				method: "erpnext.assets.doctype.material_request.material_request.get_asset_request_details",
+				args: {
+					asset_name,
+					company,
+					material_request_type: purpose,
+					item_code: row.item_code || frm.doc.asset_item_filter,
+					acquisition_method: row.demo_acquisition_method,
+				},
+			})
+			.then(({ message }) => {
+				if (
+					!message ||
+					row.asset !== asset_name ||
+					frm.doc.company !== company ||
+					frm.doc.material_request_type !== purpose
+				)
+					return;
+				return frappe.model.set_value(cdt, cdn, {
+					asset_name: message.asset_name,
+					asset_serial_number: message.asset_serial_number,
+					item_code: message.item_code,
+					source_location: message.location,
+					target_location:
+						frm.doc.material_request_type === "Customer Demo"
+							? frm.doc.customer_location
+							: frm.doc.material_request_type === "Customer Borrow / Loan"
 							? frm.doc.loan_recipient_location
 							: row.target_location,
-				qty: 1,
-				stock_qty: 1,
-				item_type: "Fixed Asset",
-				uom: message.stock_uom,
-				stock_uom: message.stock_uom,
-				conversion_factor: 1,
+					qty: 1,
+					stock_qty: 1,
+					item_type: "Fixed Asset",
+					uom: message.stock_uom,
+					stock_uom: message.stock_uom,
+					conversion_factor: 1,
+				});
 			});
-		});
 	},
 });
 
@@ -405,10 +442,10 @@ function set_stock_item_query(frm) {
 			["Customer Demo", "Customer Borrow / Loan"].includes(doc.material_request_type)
 				? { disabled: 0, has_variants: 0 }
 				: doc.material_request_type === "Asset Transfer"
-					? { is_fixed_asset: 1, disabled: 0 }
+				? { is_fixed_asset: 1, disabled: 0 }
 				: doc.material_request_type === "Purchase"
-					? { is_purchase_item: 1, disabled: 0 }
-					: { is_stock_item: 1, disabled: 0 },
+				? { is_purchase_item: 1, disabled: 0 }
+				: { is_stock_item: 1, disabled: 0 },
 	}));
 }
 
@@ -453,4 +490,20 @@ function configure_material_request_item_columns(frm) {
 		managed_columns.filter((fieldname) => !visible_columns.has(fieldname)),
 		false
 	);
+}
+
+// The Responsible Employee of a Demo / Borrow request is the requester's own Employee unless he names another: the
+// system fills it, nobody types it (the server does the same when it is left empty).
+function set_responsible_employee(frm) {
+	frappe.db
+		.get_value(
+			"Employee",
+			{ user_id: frappe.session.user, status: "Active", company: frm.doc.company },
+			"name"
+		)
+		.then(({ message }) => {
+			if (message && message.name && !frm.doc.responsible_employee) {
+				frm.set_value("responsible_employee", message.name);
+			}
+		});
 }

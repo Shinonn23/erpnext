@@ -87,6 +87,23 @@ def get_default_customer_address(customer):
 	)
 
 
+def get_default_supplier_address(supplier):
+	"""The default address of a Supplier recipient (the requester cannot see the Address & Contact tab, so the system
+	fills it): the supplier's primary address, else its default linked address."""
+	if not supplier:
+		return None
+	for address in (
+		frappe.db.get_value("Supplier", supplier, "supplier_primary_address"),
+		get_default_address("Supplier", supplier, sort_key="is_primary_address"),
+	):
+		if address and frappe.db.exists(
+			"Dynamic Link",
+			{"parenttype": "Address", "parent": address, "link_doctype": "Supplier", "link_name": supplier},
+		):
+			return address
+	return None
+
+
 @frappe.whitelist()
 def get_default_request_address(customer):
 	frappe.has_permission("Customer", "read", doc=customer, throw=True)
@@ -339,6 +356,8 @@ class CustomerMaterialRequest(MaterialRequest):
 			self.set_delivery_snapshots()
 		else:
 			self.customer = None
+			if not self.recipient_address and self.loan_recipient_type == "Supplier":
+				self.recipient_address = get_default_supplier_address(self.loan_recipient)
 			if self.recipient_address:
 				if not frappe.db.exists("Address", self.recipient_address):
 					frappe.throw(_("Recipient Address does not exist"))
