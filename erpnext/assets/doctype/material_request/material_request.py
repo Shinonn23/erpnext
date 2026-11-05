@@ -30,7 +30,6 @@ def active_asset_request_condition(asset):
 		and ((mr.material_request_type = 'Asset Transfer'
 			and coalesce(mr.asset_transfer_status, '') not in ('Fulfilled', 'Cancelled'))
 		or (mr.material_request_type in ('Customer Demo', 'Customer Borrow / Loan')
-			and (mr.material_request_type = 'Customer Demo' or mr.borrow_item_type = 'Asset')
 			and coalesce(mr.request_progress_status, '') not in ('Returned', 'Closed', 'Cancelled')
 			and not exists (select 1 from `tabCustody Loan Item` allocation
 				join `tabCustody Loan` custody on custody.name = allocation.parent
@@ -175,8 +174,7 @@ class CustomerMaterialRequest(MaterialRequest):
 				frappe.throw(_("Customer is required for Customer Demo requests"))
 			return
 		if self.material_request_type == "Customer Borrow / Loan":
-			if self.get("borrow_item_type") not in ("Stock Item", "Asset"):
-				frappe.throw(_("Select whether this request borrows Stock Items or Assets"))
+			# the requester names Items only; each row is lent as Stock or as an Asset (decided by the Stock team)
 			return
 		if is_asset_transfer_request(self):
 			return
@@ -203,11 +201,9 @@ class CustomerMaterialRequest(MaterialRequest):
 			elif is_asset_transfer_request(self) and self.get("asset_transfer_status") == "Cancelled":
 				self.asset_transfer_status = "Draft"
 
-		asset_rows = purpose == "Asset Transfer" or (
-			purpose == "Customer Borrow / Loan" and self.get("borrow_item_type") == "Asset"
-		)
+		asset_rows = purpose == "Asset Transfer"
 		for row in self.items:
-			if asset_rows or (purpose == "Customer Demo" and is_demo_asset_row(row)):
+			if asset_rows or (purpose in CUSTOMER_REQUEST_TYPES and is_demo_asset_row(row)):
 				if row.asset:
 					row.item_code = row.item_code or frappe.db.get_value("Asset", row.asset, "item_code")
 				row.from_warehouse = None
@@ -223,6 +219,12 @@ class CustomerMaterialRequest(MaterialRequest):
 				if purpose != "Material Transfer":
 					row.from_warehouse = None
 
+		if purpose in CUSTOMER_REQUEST_TYPES:
+			self.set_responsible_employee()
+			# the requester gives the Required By date once, or none: the rows then fall due on the request date
+			for row in self.items:
+				row.schedule_date = row.schedule_date or self.schedule_date or self.transaction_date
+
 		if purpose == "Customer Borrow / Loan":
 			if not self.loan_recipient_type and self.customer:
 				self.loan_recipient_type = "Customer"
@@ -231,7 +233,10 @@ class CustomerMaterialRequest(MaterialRequest):
 				self.customer = self.loan_recipient
 			else:
 				self.clear_customer_details()
-			if self.get("borrow_item_type") == "Asset":
+			stock_rows = [row for row in self.items if row.item_type == "Stock Item"]
+			# derived, never asked: the Stock Item rows are lent from the Customer Loan Warehouse
+			self.borrow_item_type = "Stock Item" if stock_rows else "Asset"
+			if not stock_rows:
 				self.customer_loan_warehouse = None
 			else:
 				self.customer_loan_warehouse = frappe.db.get_value(
@@ -239,7 +244,7 @@ class CustomerMaterialRequest(MaterialRequest):
 				)
 				if not self.customer_loan_warehouse:
 					frappe.throw(_("Set Customer Loan Warehouse on Company {0}").format(self.company))
-				for row in self.items:
+				for row in stock_rows:
 					row.warehouse = self.customer_loan_warehouse
 		else:
 			self.clear_loan_recipient_details()
@@ -254,9 +259,7 @@ class CustomerMaterialRequest(MaterialRequest):
 		if purpose != "Asset Transfer":
 			self.asset_transfer_status = None
 			self.asset_source_location = None
-		if purpose not in ("Asset Transfer", "Customer Demo") and not (
-					purpose == "Customer Borrow / Loan" and self.get("borrow_item_type") == "Asset"
-		):
+		if purpose not in ("Asset Transfer", "Customer Demo", "Customer Borrow / Loan"):
 			self.asset_item_filter = None
 		if purpose not in CUSTOMER_REQUEST_TYPES:
 			self.request_progress_status = None
@@ -302,23 +305,16 @@ class CustomerMaterialRequest(MaterialRequest):
 		super().validate()
 		if self.material_request_type == "Customer Demo":
 			self.validate_dates()
-			self.validate_customer_contact(required=True)
+			# the requester names the Customer; the Address and the Contact are the Customer's defaults when he gives none
+			self.set_default_contact()
+			self.validate_customer_contact()
 			self.set_delivery_snapshots()
-			if not self.recipient_address:
-				frappe.throw(_("Customer Address is required for Customer Demo requests"))
-			if not self.contact_person:
-				frappe.throw(_("Customer Contact is required for Customer Demo requests"))
-			if not self.customer_location:
-				frappe.throw(_("Customer Location is required for Customer Demo requests"))
 			self.validate_demo_items()
 			self.update_progress()
 		elif self.material_request_type == "Customer Borrow / Loan":
 			self.validate_dates()
 			self.validate_loan_recipient()
-			if self.get("borrow_item_type") == "Stock Item":
-				self.validate_stock_loan_items()
-			else:
-				self.validate_asset_items("Customer Borrow / Loan")
+			self.validate_demo_items()
 			self.update_progress()
 		elif is_asset_transfer_request(self):
 			self.validate_asset_items("Asset Transfer")
@@ -338,6 +334,7 @@ class CustomerMaterialRequest(MaterialRequest):
 
 		if self.loan_recipient_type == "Customer":
 			self.customer = self.loan_recipient
+			self.set_default_contact()
 			self.validate_customer_contact()
 			self.set_delivery_snapshots()
 		else:
@@ -442,7 +439,6 @@ class CustomerMaterialRequest(MaterialRequest):
 			and ((mr.material_request_type = 'Asset Transfer'
 				and coalesce(mr.asset_transfer_status, '') not in ('Fulfilled', 'Cancelled'))
 			or (mr.material_request_type in ('Customer Demo', 'Customer Borrow / Loan')
-				and (mr.material_request_type = 'Customer Demo' or mr.borrow_item_type = 'Asset')
 				and coalesce(mr.request_progress_status, '') not in ('Returned', 'Closed', 'Cancelled')))
 			for update""", (asset_name, self.name or ""), as_dict=True,
 		)
@@ -476,6 +472,33 @@ class CustomerMaterialRequest(MaterialRequest):
 			self.customer_contact_email = None
 			self.customer_contact_display = None
 
+	def set_responsible_employee(self):
+		"""A Demo / Borrow request names an Employee who answers for the items (default: the requester's own Active
+		Employee in the request's company); other purposes have none (Siwat, 5 Nov 2026)."""
+		if not is_customer_request(self):
+			self.responsible_employee = None
+			return
+		if not self.get("responsible_employee"):
+			self.responsible_employee = frappe.db.get_value(
+				"Employee",
+				{"user_id": self.owner or frappe.session.user, "company": self.company, "status": "Active"},
+				"name",
+			)
+		if not self.get("responsible_employee"):
+			frappe.throw(_("Select the Responsible Employee."))
+		employee = frappe.db.get_value(
+			"Employee", self.responsible_employee, ["status", "company"], as_dict=True
+		)
+		if not employee or employee.status != "Active" or employee.company != self.company:
+			frappe.throw(_("The Responsible Employee must be an Active Employee of {0}.").format(self.company))
+
+	def set_default_contact(self):
+		"""The Customer's primary Contact when the requester names none (it is optional for him)."""
+		if self.customer and not self.contact_person:
+			contact = frappe.db.get_value("Customer", self.customer, "customer_primary_contact")
+			if contact and frappe.db.exists("Contact", contact):
+				self.contact_person = contact
+
 	def validate_customer_contact(self, required=False):
 		if required and not self.contact_person:
 			frappe.throw(_("Customer Contact is required"))
@@ -496,11 +519,11 @@ class CustomerMaterialRequest(MaterialRequest):
 			frappe.throw(_("Expected Return Date cannot be before Request Date"))
 
 	def validate_demo_items(self):
-		"""A Demo request names the Items wanted; each row is lent as Stock or as an Asset (Connect Diagnostics,
-		Siwat, 5 Nov 2026, relayed by the user: the requester picks the Item Code, the back office decides how
-		it is supplied). Stock Item rows are validated as a Stock Loan's, the rest as Assets."""
+		"""A Demo or Borrow request names the Items wanted; each row is lent as Stock or as an Asset (Connect Diagnostics,
+		Siwat, 5 Nov 2026, relayed by the user: the requester picks the Item Code and the Qty, the Stock team decides
+		which Assets supply a Fixed Asset Item). Stock Item rows are validated as a Stock Loan's, the rest as Assets."""
 		if not self.items:
-			frappe.throw(_("Add at least one Item to the Demo request"))
+			frappe.throw(_("Add at least one Item to the request"))
 		stock_rows = [row for row in self.items if row.item_type == "Stock Item"]
 		asset_rows = [row for row in self.items if row.item_type != "Stock Item"]
 		for row in stock_rows:
@@ -520,7 +543,7 @@ class CustomerMaterialRequest(MaterialRequest):
 			rows = self.items
 			try:
 				self.items = asset_rows
-				self.validate_asset_items("Customer Demo")
+				self.validate_asset_items(self.material_request_type)
 			finally:
 				self.items = rows
 
@@ -564,10 +587,8 @@ class CustomerMaterialRequest(MaterialRequest):
 	def set_title(self):
 		if self.title:
 			return
-		if self.material_request_type in ("Asset Transfer", "Customer Demo") or (
-			self.material_request_type == "Customer Borrow / Loan" and self.get("borrow_item_type") == "Asset"
-		):
-			items = [row.asset_name or row.item_name or row.asset for row in self.items]
+		if self.material_request_type == "Asset Transfer" or is_customer_request(self):
+			items = [row.asset_name or row.item_name or row.asset or row.item_code for row in self.items]
 		else:
 			return super().set_title()
 		self.title = _("{0} Request for {1}").format(
@@ -576,14 +597,10 @@ class CustomerMaterialRequest(MaterialRequest):
 
 	def before_submit(self):
 		super().before_submit()
-		if self.material_request_type == "Customer Demo":
+		if is_customer_request(self):
 			self.validate_demo_items()
-		elif is_asset_transfer_request(self) or (
-			self.material_request_type == "Customer Borrow / Loan" and self.get("borrow_item_type") == "Asset"
-		):
+		elif is_asset_transfer_request(self):
 			self.validate_asset_items(self.material_request_type)
-		elif self.material_request_type == "Customer Borrow / Loan":
-			self.validate_stock_loan_items()
 		if is_customer_request(self):
 			self.request_progress_status = "Pending"
 		elif is_asset_transfer_request(self):

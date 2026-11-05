@@ -168,11 +168,11 @@ class CustodyLoan(Document):
 			frappe.throw(_("Select a Recipient Address on the Material Request before using Shipment"))
 
 	def set_requester(self, request=None):
-		"""The employee who asked for the loan answers for the items until they come back (Connect Diagnostics,
-		Siwat, 5 Nov 2026, relayed by the user): the requester on the Material Request, else the Employee of the
-		user who raised it."""
+		"""The Responsible Employee of the request answers for the items until they come back (Connect Diagnostics,
+		Siwat, 5 Nov 2026, relayed by the user): the one named on the Material Request (the requester by default),
+		else the Employee of the user who raised it."""
 		request = request or frappe.get_cached_doc("Material Request", self.material_request)
-		employee = request.get("requesting_employee") or frappe.db.get_value(
+		employee = request.get("responsible_employee") or request.get("requesting_employee") or frappe.db.get_value(
 			"Employee", {"user_id": request.owner, "company": self.company}, "name"
 		)
 		self.requested_by = employee or None
@@ -1978,16 +1978,12 @@ def make_custody_loan_from_request(request, loan_type, ignore_permissions=False)
 
 
 def request_loan_types(request):
-	"""The Loan types a request can make. A Borrow request names one; a Demo request lends each row as Stock or as
-	an Asset, so it can make one of each."""
-	if request.material_request_type == "Customer Demo":
-		return [loan_type for loan_type in ("Stock", "Asset") if request_rows_for_loan(request, loan_type)]
-	return ["Asset" if request.get("borrow_item_type") == "Asset" else "Stock"]
+	"""The Loan types a request can make. A Demo or Borrow request lends each row as Stock or as an Asset, so it can
+	make one of each."""
+	return [loan_type for loan_type in ("Stock", "Asset") if request_rows_for_loan(request, loan_type)]
 
 
 def request_rows_for_loan(request, loan_type):
-	if request.material_request_type != "Customer Demo":
-		return list(request.items)
 	if loan_type == "Stock":
 		return [row for row in request.items if row.item_type == "Stock Item"]
 	return [row for row in request.items if row.item_type != "Stock Item"]
@@ -1996,10 +1992,18 @@ def request_rows_for_loan(request, loan_type):
 def get_custody_loan_actions(request):
 	can_create = frappe.has_permission("Custody Loan", "create")
 	loan_types = request_loan_types(request)
-	return frappe._dict(
-		stock_loan=can_create and "Stock" in loan_types and bool(request_rows_for_loan(request, "Stock")),
-		asset_loan=can_create and "Asset" in loan_types and bool(request_rows_for_loan(request, "Asset")),
-	)
+
+	def open_for(loan_type):
+		# the button is for a loan that does not exist yet (the system makes it by itself once approved)
+		return (
+			can_create
+			and loan_type in loan_types
+			and not frappe.db.exists(
+				"Custody Loan", {"material_request": request.name, "loan_type": loan_type, "docstatus": ["<", 2]}
+			)
+		)
+
+	return frappe._dict(stock_loan=open_for("Stock"), asset_loan=open_for("Asset"))
 
 
 def lock_material_request(request_name):

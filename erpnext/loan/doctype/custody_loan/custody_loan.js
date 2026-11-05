@@ -43,7 +43,7 @@ frappe.ui.form.on("Custody Loan", {
 		show_loan_summary(frm);
 		if (frm.doc.docstatus !== 1) return;
 		if (frm.doc.status === "Pending Pick") {
-			frm.set_intro(__("Complete and submit the Pick List, then create the Loan Delivery Note."), "blue");
+			frm.set_intro(__("Pick the goods and submit the Pick List. The Loan Delivery Note is made by the system."), "blue");
 		} else if (frm.doc.status === "Pending Shipment") {
 			frm.set_intro(__("Open the Loan Delivery Note to complete shipment and confirm delivery."), "blue");
 		}
@@ -114,15 +114,18 @@ frappe.ui.form.on("Custody Loan", {
 // Who answers for the items, how many are still out, and the grid columns that fit the loan type.
 function show_loan_summary(frm) {
 	const stock = frm.doc.loan_type !== "Asset";
+	// refresh runs more than once: start the headline and the figures over, never add them twice
+	frm.dashboard.clear_headline();
+	frm.dashboard.stats_area_row?.empty();
 	const grid = frm.fields_dict.items.grid;
 	grid.toggle_display("source_warehouse", stock);
 	grid.toggle_display("asset", !stock);
 	if (frm.doc.docstatus === 0 && !frm.is_new()) {
-		frm.set_intro(__("Check the Loan Qty and Source Warehouse of each item, then submit to make the Pick List."), "blue");
+		frm.set_intro(__("The system could not submit this loan by itself. Check the Loan Qty and Source Warehouse of each item, then submit."), "blue");
 	}
 	if (frm.doc.requested_by_name) {
 		frm.dashboard.set_headline(
-			__("Requested by {0}: responsible for these items until they come back.", [
+			__("Responsible Employee {0}: answers for these items until they come back.", [
 				`<b>${frappe.utils.escape_html(frm.doc.requested_by_name)}</b>`,
 			])
 		);

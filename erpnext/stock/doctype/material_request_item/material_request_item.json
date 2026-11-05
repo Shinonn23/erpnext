@@ -108,30 +108,30 @@
    "width": "100px"
   },
   {
-   "depends_on": "eval:in_list(['Asset Transfer', 'Customer Demo'], parent.material_request_type) || (parent.material_request_type == 'Customer Borrow / Loan' && parent.borrow_item_type == 'Asset')",
+   "depends_on": "eval:parent.material_request_type == 'Asset Transfer' || (in_list(['Customer Demo', 'Customer Borrow / Loan'], parent.material_request_type) && doc.asset)",
    "fieldname": "asset",
    "fieldtype": "Link",
    "in_list_view": 1,
    "label": "Asset",
-   "mandatory_depends_on": "eval:in_list(['Asset Transfer', 'Customer Demo'], parent.material_request_type) || (parent.material_request_type == 'Customer Borrow / Loan' && parent.borrow_item_type == 'Asset')",
+   "mandatory_depends_on": "eval:parent.material_request_type == 'Asset Transfer'",
    "options": "Asset"
   },
   {
-   "depends_on": "eval:in_list(['Asset Transfer', 'Customer Demo'], parent.material_request_type) || (parent.material_request_type == 'Customer Borrow / Loan' && parent.borrow_item_type == 'Asset')",
+   "depends_on": "eval:parent.material_request_type == 'Asset Transfer' || (in_list(['Customer Demo', 'Customer Borrow / Loan'], parent.material_request_type) && doc.asset)",
    "fieldname": "asset_name",
    "fieldtype": "Data",
    "label": "Asset Name",
    "read_only": 1
   },
   {
-   "depends_on": "eval:in_list(['Asset Transfer', 'Customer Demo'], parent.material_request_type) || (parent.material_request_type == 'Customer Borrow / Loan' && parent.borrow_item_type == 'Asset')",
+   "depends_on": "eval:parent.material_request_type == 'Asset Transfer' || (in_list(['Customer Demo', 'Customer Borrow / Loan'], parent.material_request_type) && doc.asset)",
    "fieldname": "asset_serial_number",
    "fieldtype": "Data",
    "label": "Asset Serial Number",
    "read_only": 1
   },
   {
-   "depends_on": "eval:in_list(['Asset Transfer', 'Customer Demo'], parent.material_request_type)",
+   "depends_on": "eval:parent.material_request_type == 'Asset Transfer' || (in_list(['Customer Demo', 'Customer Borrow / Loan'], parent.material_request_type) && doc.asset)",
    "fieldname": "source_location",
    "fieldtype": "Link",
    "in_list_view": 1,
@@ -140,7 +140,7 @@
    "read_only": 1
   },
   {
-   "depends_on": "eval:parent.material_request_type == 'Asset Transfer' || parent.material_request_type == 'Customer Demo' || (parent.material_request_type == 'Customer Borrow / Loan' && parent.borrow_item_type == 'Asset')",
+   "depends_on": "eval:parent.material_request_type == 'Asset Transfer' || (in_list(['Customer Demo', 'Customer Borrow / Loan'], parent.material_request_type) && doc.asset)",
    "fieldname": "target_location",
    "fieldtype": "Link",
    "in_list_view": 1,
@@ -210,7 +210,7 @@
    "fieldtype": "Link",
    "in_list_view": 1,
    "label": "UOM",
-   "mandatory_depends_on": "eval:!in_list(['Asset Transfer', 'Customer Demo'], parent.material_request_type) && !(parent.material_request_type == 'Customer Borrow / Loan' && parent.borrow_item_type == 'Asset')",
+   "mandatory_depends_on": "eval:!in_list(['Asset Transfer', 'Customer Demo', 'Customer Borrow / Loan'], parent.material_request_type)",
    "oldfieldname": "uom",
    "oldfieldtype": "Link",
    "options": "UOM",
@@ -221,7 +221,7 @@
    "fieldname": "conversion_factor",
    "fieldtype": "Float",
    "label": "UOM Conversion Factor",
-   "mandatory_depends_on": "eval:!in_list(['Asset Transfer', 'Customer Demo'], parent.material_request_type) && !(parent.material_request_type == 'Customer Borrow / Loan' && parent.borrow_item_type == 'Asset')",
+   "mandatory_depends_on": "eval:!in_list(['Asset Transfer', 'Customer Demo', 'Customer Borrow / Loan'], parent.material_request_type)",
    "precision": "9",
    "print_hide": 1
   },
@@ -229,7 +229,7 @@
    "fieldname": "stock_uom",
    "fieldtype": "Link",
    "label": "Stock UOM",
-   "mandatory_depends_on": "eval:!in_list(['Asset Transfer', 'Customer Demo'], parent.material_request_type) && !(parent.material_request_type == 'Customer Borrow / Loan' && parent.borrow_item_type == 'Asset')",
+   "mandatory_depends_on": "eval:!in_list(['Asset Transfer', 'Customer Demo', 'Customer Borrow / Loan'], parent.material_request_type)",
    "options": "UOM",
    "print_hide": 1,
    "read_only": 1
@@ -263,8 +263,8 @@
    "oldfieldname": "schedule_date",
    "oldfieldtype": "Date",
    "print_width": "100px",
-   "reqd": 1,
-   "width": "100px"
+   "width": "100px",
+   "mandatory_depends_on": "eval:!in_list(['Customer Demo', 'Customer Borrow / Loan'], parent.material_request_type)"
   },
   {
    "fieldname": "rate",
