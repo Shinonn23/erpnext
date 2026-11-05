@@ -2241,7 +2241,8 @@ def make_custody_loan_from_request(request, loan_type, ignore_permissions=False)
 					"item_name": request_item.item_name,
 					"qty": request_item.qty,
 					"source_warehouse": request_item.from_warehouse
-					or request.get_default_warehouse(request_item.item_code),
+					or request.get_default_warehouse(request_item.item_code)
+					or stocked_warehouse(request, request_item.item_code),
 				},
 			)
 		else:
@@ -2261,6 +2262,25 @@ def make_custody_loan_from_request(request, loan_type, ignore_permissions=False)
 			)
 	loan.insert(ignore_permissions=ignore_permissions)
 	return loan.as_dict()
+
+
+def stocked_warehouse(request, item_code):
+	"""The warehouse of the company that holds the most of the Item, when the request and the Item name none (the
+	Stock team is not asked to type what the system can read). Not the loan or a quarantine warehouse."""
+	rows = frappe.db.sql(
+		"""select bin.warehouse from `tabBin` bin join `tabWarehouse` wh on wh.name = bin.warehouse
+		where bin.item_code = %(item)s and bin.actual_qty > 0 and wh.company = %(company)s and wh.is_group = 0
+		and wh.disabled = 0 and bin.warehouse != %(loan)s
+		and coalesce(wh.warehouse_type, '') not like %(quarantine)s
+		order by bin.actual_qty desc limit 1""",
+		{
+			"item": item_code,
+			"company": request.company,
+			"loan": request.get("customer_loan_warehouse") or "",
+			"quarantine": "%uarantine%",
+		},
+	)
+	return rows[0][0] if rows else None
 
 
 def request_loan_types(request):

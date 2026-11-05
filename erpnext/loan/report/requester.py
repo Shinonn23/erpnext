@@ -60,16 +60,16 @@ def requester_columns():
 		{
 			"label": _("Responsible Employee"),
 			"fieldname": "requested_by",
-			"fieldtype": "Link",
-			"options": "Employee",
+			# Data, not Link: a Link column hides the rows whose Employee the viewer may not read, so the stock team
+			# would lose every loan another employee requested (the id and name are all the report shows)
+			"fieldtype": "Data",
 			"width": 120,
 		},
 		{"label": _("Responsible Employee Name"), "fieldname": "requested_by_name", "fieldtype": "Data", "width": 170},
 		{
 			"label": _("Requester User"),
 			"fieldname": "requested_by_user",
-			"fieldtype": "Link",
-			"options": "User",
+			"fieldtype": "Data",
 			"width": 190,
 		},
 	]
