@@ -20,9 +20,7 @@ import {
 	childConditions,
 	queryConditions,
 	noEffects,
-	confirmShipment,
 	movementConditions,
-	shipmentQueries,
 	pickQueries,
 } from "../../../../cypress/support/custody";
 
@@ -311,59 +309,21 @@ describe("Custody Loan browser lifecycle", () => {
 			});
 	});
 
-	it("SHIP-01: Shipment delivery gates issue and return inspection", () => {
-		const shipment = (returning) => {
-			action("Create Loan Shipment");
-			current().its("doctype").should("eq", "Shipment");
-			shipmentQueries();
-			field(returning ? "delivery_address_name" : "pickup_address_name", run.company_address);
-			field("value_of_goods", 200);
-			field("description_of_content", run.run_id, "Text");
-			field("pickup_from", "09:00:00");
-			field("pickup_to", "17:00:00");
-			cy.get('[data-fieldname="shipment_parcel"] .grid-add-row').click();
-			row("shipment_parcel", { length: 10, width: 10, height: 10, weight: 1, count: 1 });
-			submit();
-			return current().then((doc) => doc.name);
-		};
+	it("SHIP-01: a Shipment changes nothing in the loan", () => {
+		// Siwat, 5 Nov 2026: a Shipment is optional, made from the Delivery Note as for any sale. The loan issues
+		// at once and its return is received on submit; no "Loan Shipment" step exists.
 		prepare()
-			.then(() => requestLoan(run, false, true))
+			.then(() => requestLoan(run))
 			.then((loan) => {
 				issueStock(loan);
 				saveIfDirty();
-				noEffects(run, loan, () => rejectSubmit("Shipment"));
-				current().then((dn) => {
-					shipment(false).then((shipmentName) => {
-						open("Delivery Note", dn.name);
-						current().its("docstatus").should("eq", 1);
-						open("Custody Loan", loan);
-						absent("Return");
-						checkpoint(run, loan, "shipment-pending", balance("Pending Shipment", 0, 0, 2, 2));
-						open("Shipment", shipmentName);
-						confirmShipment(run);
-						open("Custody Loan", loan);
-						present("Return");
-						action("Return", "Create");
-						field("requires_shipment", true, "Check");
-						submit();
-						action("Loan Receive");
-						current().then((receive) => {
-							action("Inspect Loan Return Items");
-							cy.get(".modal:visible").last().should("contain.text", "Delivered");
-							cy.get(".modal:visible").last().find(".btn-modal-close").click();
-							shipment(true).then((returnShipment) => {
-								open("Delivery Note", receive.name);
-								noEffects(run, loan, () => rejectSubmit("Delivered"));
-								open("Shipment", returnShipment);
-								confirmShipment(run);
-								open("Delivery Note", receive.name);
-								inspectReceive(run, receive.name);
-								submit(false);
-								checkpoint(run, loan, "shipment-returned", balance("Returned", 2, 2, 0, 0));
-							});
-						});
-					});
-				});
+				open("Custody Loan", loan);
+				absent("Create Loan Shipment");
+				present("Return");
+				action("Return", "Create");
+				submit();
+				open("Custody Loan", loan);
+				checkpoint(run, loan, "returned-without-shipment", balance("Returned", 2, 2, 0, 0));
 			});
 	});
 

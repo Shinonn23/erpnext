@@ -117,7 +117,6 @@ class CustodyLoan(Document):
 	def validate(self):
 		self.validate_material_request()
 		self.validate_items()
-		self.validate_shipment_scope()
 		self.refresh_balances()
 
 	def validate_material_request(self):
@@ -133,8 +132,6 @@ class CustodyLoan(Document):
 			frappe.throw(_("Select Stock or Asset as the Loan Type"))
 		if self.loan_type not in request_loan_types(request):
 			frappe.throw(_("Custody Loan Type must match the Material Request Borrow Item Type"))
-		if self.requires_shipment and self.loan_type != "Stock":
-			frappe.throw(_("Shipment is available only for Stock Custody Loans"))
 
 		# The borrower and delivery snapshot are owned by the submitted request.
 		self.borrower_type = request.loan_recipient_type or ("Customer" if request.customer else None)
@@ -164,9 +161,6 @@ class CustodyLoan(Document):
 		else:
 			self.customer_loan_warehouse = None
 
-		if self.requires_shipment and not self.recipient_address:
-			frappe.throw(_("Select a Recipient Address on the Material Request before using Shipment"))
-
 	def set_requester(self, request=None):
 		"""The employee who asked for the loan answers for the items until they come back (Connect Diagnostics,
 		Siwat, 5 Nov 2026, relayed by the user): the requester on the Material Request, else the Employee of the
@@ -194,12 +188,6 @@ class CustodyLoan(Document):
 			},
 			update_modified=False,
 		)
-
-	def validate_shipment_scope(self):
-		if not self.requires_shipment:
-			return
-		if len({row.source_warehouse for row in self.items}) > 1:
-			frappe.throw(_("A Stock Loan Shipment must start from one Source Warehouse"))
 
 	def validate_items(self, require_allocation=False, require_source_warehouse=False):
 		if not self.items:
@@ -268,7 +256,7 @@ class CustodyLoan(Document):
 					frappe.throw(_("Row {0}: Asset has moved since the Material Request was submitted").format(row.idx))
 				row.source_location = asset.location
 				row.target_location = row.target_location or self.recipient_location
-				if self.borrower_type != "Employee" or self.requires_shipment:
+				if self.borrower_type != "Employee":
 					if not row.target_location:
 						frappe.throw(_("Row {0}: Select the recipient Location for this Asset").format(row.idx))
 				if row.target_location and row.target_location == row.source_location:
@@ -365,9 +353,10 @@ class CustodyLoan(Document):
 
 	def deliver_after_pick(self):
 		"""The picked goods go out by themselves (Connect Diagnostics, Siwat, 5 Nov 2026, relayed by the user: the
-		warehouse only picks): the Loan Delivery Note is made and submitted when the Pick List is submitted. A loan
-		shipped through a Shipment waits for it; a failure leaves the draft for the Stock team."""
-		if self.requires_shipment or self.loan_type != "Stock":
+		warehouse only picks): the Loan Delivery Note is made and submitted when the Pick List is submitted. A Shipment
+		is optional (Siwat, 5 Nov 2026): a user may make one from the Delivery Note, as for any sale, and nothing here
+		waits for it. A failure leaves the draft for the Stock team."""
+		if self.loan_type != "Stock":
 			return None
 		savepoint = "custody_loan_auto_delivery"
 		frappe.db.savepoint(savepoint)
@@ -433,7 +422,6 @@ class CustodyLoan(Document):
 		delivery_note.represents_company = self.company
 		delivery_note.set_target_warehouse = self.customer_loan_warehouse
 		delivery_note.custody_loan = self.name
-		delivery_note.requires_shipment = cint(self.requires_shipment)
 		map_pl_locations(
 			pick_list,
 			{"doctype": "Delivery Note Item", "field_map": {"rate": "rate", "name": "name", "parent": ""}},
@@ -470,23 +458,37 @@ class CustodyLoan(Document):
 
 	def capture_delivery_note_details(self, delivery_note=None):
 		delivery_note = delivery_note or frappe.get_doc("Delivery Note", self.delivery_note)
+		# a loan row may be delivered from several locations and batches: its rows are read together
+		rows_by_item = {}
 		for row in delivery_note.items:
-			loan_item = next((item for item in self.items if item.name == row.custody_loan_item), None)
-			if not loan_item:
+			if row.custody_loan_item:
+				rows_by_item.setdefault(row.custody_loan_item, []).append(row)
+		for loan_item in self.items:
+			rows = rows_by_item.get(loan_item.name)
+			if not rows:
 				continue
 			# every batch and serial is kept in the Serial / Batch Tracking table; the row keeps its batch only
 			# when it was picked from one batch
-			entries = transaction_row_entries(row)
+			entries = [entry for row in rows for entry in transaction_row_entries(row)]
 			batches = {batch for batch, _serial, _qty in entries if batch}
 			loan_item.batch_no = next(iter(batches)) if len(batches) == 1 else None
 			serials = [serial for _batch, serial, _qty in entries if serial]
+			if not serials:
+				serials = [
+					serial
+					for row in rows
+					for serial in (
+						normalize_serials(row.serial_no)
+						or (
+							get_serial_nos_from_bundle(row.serial_and_batch_bundle)
+							if row.serial_and_batch_bundle
+							else []
+						)
+					)
+				]
 			if serials:
 				loan_item.serial_no = "\n".join(serials)
-			elif row.serial_no:
-				loan_item.serial_no = row.serial_no
-			elif row.serial_and_batch_bundle:
-				loan_item.serial_no = "\n".join(get_serial_nos_from_bundle(row.serial_and_batch_bundle))
-			loan_item.valuation_rate = row.incoming_rate or row.rate
+			loan_item.valuation_rate = rows[0].incoming_rate or rows[0].rate
 			loan_item.db_update()
 
 	def update_issued_quantities(self):
@@ -610,14 +612,11 @@ class CustodyLoan(Document):
 			pluck="status",
 		)
 		for pending_status in (
-			"Pending Shipment",
 			"Pending Quality Inspection",
 			"Pending Receipt",
 		):
 			if pending_status in return_statuses:
 				return pending_status
-		if self.requires_shipment and not transaction_is_received(self.delivery_note, self.asset_movement):
-			return "Pending Shipment"
 		self.refresh_balances()
 		issued = sum(flt(row.issued_qty) for row in self.items)
 		returned = sum(flt(row.returned_qty) for row in self.items)
@@ -659,6 +658,8 @@ class CustodyLoan(Document):
 		return_doc.company = self.company
 		return_doc.custody_loan = self.name
 		return_doc.loan_type = self.loan_type
+		# the form says whose items come back before it is saved
+		set_loan_parties(return_doc, self)
 		for row in self.items:
 			available_to_receive = loan_item_available_to_receive(self.name, row)
 			if available_to_receive <= 0:
@@ -711,6 +712,7 @@ class CustodyLoan(Document):
 		adjustment.company = self.company
 		adjustment.custody_loan = self.name
 		adjustment.adjustment_account = account
+		set_loan_parties(adjustment, self)
 		for row in self.items:
 			if row.outstanding_qty <= 0:
 				continue
@@ -852,15 +854,6 @@ class CustodyLoanReturn(Document):
 		self.company = loan.company
 		self.loan_type = loan.loan_type
 		set_loan_parties(self, loan)
-		if self.requires_shipment and not loan.recipient_address:
-			frappe.throw(_("The linked Custody Loan has no Recipient Address for Shipment"))
-		if self.requires_shipment and self.loan_type != "Stock":
-			frappe.throw(_("Shipment is available only for Stock Custody Loan Returns"))
-		if self.requires_shipment and self.loan_type == "Stock":
-			selected = {row.custody_loan_item for row in self.items if row.custody_loan_item}
-			warehouses = {row.source_warehouse for row in loan.items if row.name in selected}
-			if len(warehouses) > 1:
-				frappe.throw(_("A Stock Loan Return Shipment must go to one Source Warehouse"))
 
 	def validate_items(self):
 		if not self.items:
@@ -900,7 +893,8 @@ class CustodyLoanReturn(Document):
 			# an item without batch or serial carries neither
 			row.batch_no = row.serial_no = None
 		if self.loan_type == "Stock":
-			validate_tracked_rows(self, loan, "returned_qty")
+			validate_tracked_rows(self, loan, "returned_qty", allow_other_lots=True)
+			require_quarantine_warehouse(self)
 		for loan_item_name, qty in qty_by_loan_item.items():
 			available = loan_item_available_to_receive(self.custody_loan, loan_items[loan_item_name])
 			if qty > available:
@@ -927,9 +921,7 @@ class CustodyLoanReturn(Document):
 
 	def inspect_or_receive(self, delivery_note):
 		"""Goods coming back are inspected only when their Item asks for it; otherwise they are received at once
-		(Connect Diagnostics, Siwat, 5 Nov 2026, relayed by the user). A shipped return waits for its arrival."""
-		if self.requires_shipment:
-			return
+		(Connect Diagnostics, Siwat, 5 Nov 2026, relayed by the user). Nothing waits for a Shipment: it is optional."""
 		if any(custody_loan_return_row_requires_inspection(row) for row in delivery_note.items):
 			# an app may draft them on the system's behalf (its QI teams pick them up)
 			drafters = frappe.get_hooks("custody_loan_return_inspection_drafter")
@@ -947,29 +939,35 @@ class CustodyLoanReturn(Document):
 		from erpnext.stock.doctype.delivery_note.delivery_note import make_sales_return
 
 		delivery_note = make_sales_return(loan.delivery_note)
-		# one receiving row per return row: a loan item may come back from several batches
-		templates = {row.custody_loan_item: row.as_dict() for row in delivery_note.items}
+		# one receiving row per return row: a loan item may come back from several batches, each to the warehouse
+		# and location it was picked from
+		original_doc = frappe.get_doc("Delivery Note", loan.delivery_note)
+		templates = {}
+		for row in delivery_note.items:
+			templates.setdefault(row.custody_loan_item, []).append(row.as_dict())
+		original_rows = {row.name: row for row in original_doc.items}
 		delivery_note.set("items", [])
+		return_rows = []
 		for return_item in self.items:
-			values = frappe._dict(templates[return_item.custody_loan_item])
+			candidates = templates[return_item.custody_loan_item]
+			template = _original_return_template(candidates, original_rows, return_item)
+			values = frappe._dict(template)
 			for field in ("name", "idx", "parent", "parentfield", "parenttype", "doctype"):
 				values.pop(field, None)
 			delivery_note.append("items", values)
-		return_rows = list(self.items)
+			return_rows.append((return_item, original_rows.get(template.get("dn_detail"))))
 		loan_item_by_name = {row.name: row for row in loan.items}
-		original_rows = {
-			row.custody_loan_item: row
-			for row in frappe.get_doc("Delivery Note", loan.delivery_note).items
-		}
 		delivery_note.is_internal_customer = 1
 		delivery_note.represents_company = loan.company
 		delivery_note.set_target_warehouse = loan.customer_loan_warehouse
-		for row, return_item in zip(delivery_note.items, return_rows, strict=True):
+		for row, (return_item, original_row) in zip(delivery_note.items, return_rows, strict=True):
 			loan_item = loan_item_by_name[row.custody_loan_item]
-			original_row = original_rows[row.custody_loan_item]
+			original_row = original_row or next(
+				r for r in original_doc.items if r.custody_loan_item == row.custody_loan_item
+			)
 			row.qty = -flt(return_item.returned_qty)
 			row.stock_qty = -flt(return_item.returned_qty) * flt(original_row.conversion_factor or 1)
-			row.warehouse = loan_item.source_warehouse
+			row.warehouse = original_row.warehouse or loan_item.source_warehouse
 			row.target_warehouse = loan.customer_loan_warehouse
 			row.batch_no = return_item.batch_no or None
 			row.serial_no = return_item.serial_no or None
@@ -981,11 +979,9 @@ class CustodyLoanReturn(Document):
 			row.material_request = loan.material_request
 			row.material_request_item = loan_item.material_request_item
 		delivery_note.custody_loan = loan.name
-		delivery_note.custody_loan_shipment = None
 		delivery_note.is_custody_loan_transaction = 1
 		delivery_note.custody_loan_source_doctype = self.doctype
 		delivery_note.custody_loan_source_name = self.name
-		delivery_note.requires_shipment = cint(self.requires_shipment)
 		delivery_note.flags.custody_loan_generated = True
 		delivery_note.flags.ignore_permissions = True
 		set_loan_transaction_source(delivery_note, loan, self)
@@ -1108,7 +1104,6 @@ def _make_return_inspections(delivery_note):
 	return_doc = frappe.get_doc("Custody Loan Return", delivery_note.custody_loan_source_name)
 	if return_doc.docstatus != 1 or return_doc.loan_type != "Stock" or return_doc.delivery_note != delivery_note.name:
 		frappe.throw(_("Delivery Note must link to a submitted Stock Custody Loan Return"))
-	validate_custody_loan_return_shipment_arrival(delivery_note, return_doc)
 	return_items = {row.custody_loan_item: row for row in return_doc.items}
 	quality_inspection_names = []
 	for row in delivery_note.items:
@@ -1156,6 +1151,40 @@ def custody_loan_return_row_requires_inspection(row):
 	"""A returned stock row is inspected when its Item is inspected on receipt ('before Purchase'): goods coming back
 	are a receipt (Connect Diagnostics, 5 Nov 2026: only goods received are inspected)."""
 	return bool(cint(frappe.get_cached_value("Item", row.item_code, "inspection_required_before_purchase")))
+
+
+def _original_return_template(candidates, original_rows, return_item):
+	"""The row of the loan's Delivery Note a returned row reverses: the one that held its serial number or batch."""
+	serials = set(normalize_serials(return_item.serial_no))
+	if serials:
+		for candidate in candidates:
+			original = original_rows.get(candidate.get("dn_detail"))
+			if original and serials & set(normalize_serials(original.serial_no)):
+				return candidate
+	if return_item.batch_no:
+		for candidate in candidates:
+			original = original_rows.get(candidate.get("dn_detail"))
+			if original and original.batch_no == return_item.batch_no:
+				return candidate
+	return candidates[0]
+
+
+def require_quarantine_warehouse(return_doc):
+	"""Goods that fail their return inspection are received into the company's Quarantine warehouse, so a return
+	with an inspected Item needs one: say so plainly when the return is saved, never leave the goods unreceived."""
+	if return_doc.docstatus != 0 or quarantine_warehouse_for(return_doc.company):
+		return
+	inspected = [
+		row.item_code for row in return_doc.items if custody_loan_return_row_requires_inspection(row)
+	]
+	if inspected:
+		frappe.throw(
+			_(
+				"{0} is inspected when it comes back, and goods that fail go to the Quarantine warehouse, but {1} has none. "
+				"Ask the Stock team to add a warehouse of type Quarantine, then return again."
+			).format(", ".join(sorted(set(inspected))), return_doc.company),
+			title=_("No Quarantine Warehouse"),
+		)
 
 
 def is_quarantine_warehouse(warehouse, company):
@@ -1227,7 +1256,6 @@ def validate_custody_loan_return_receipt(delivery_note, method=None):
 	return_doc = frappe.get_doc("Custody Loan Return", delivery_note.custody_loan_source_name)
 	if return_doc.loan_type != "Stock" or return_doc.docstatus != 1:
 		frappe.throw(_("Only a submitted Stock Custody Loan Return can be received through a Delivery Note"))
-	validate_custody_loan_return_shipment_arrival(delivery_note, return_doc)
 	return_items = {(row.custody_loan_item, row.batch_no or None) for row in return_doc.items}
 	seen_items = set()
 	for row in delivery_note.items:
@@ -1247,19 +1275,6 @@ def validate_custody_loan_return_receipt(delivery_note, method=None):
 			frappe.throw(_("Delivery Note row {0} requires a submitted Quality Inspection: Accepted, or Rejected and received into the Quarantine warehouse").format(row.idx))
 	if seen_items != return_items:
 		frappe.throw(_("Loan Return Delivery Note must include every returned item exactly once"))
-
-
-def validate_custody_loan_return_shipment_arrival(delivery_note, return_doc):
-	if not return_doc.requires_shipment:
-		return
-	shipment_name = delivery_note.get("custody_loan_shipment")
-	shipment = (
-		frappe.db.get_value("Shipment", shipment_name, ["docstatus", "tracking_status"], as_dict=True)
-		if shipment_name
-		else None
-	)
-	if not shipment or shipment.docstatus != 1 or shipment.tracking_status != "Delivered":
-		frappe.throw(_("Mark the Loan Return Shipment as Delivered before inspection or receipt"))
 
 
 def update_custody_loan_return_status_from_quality_inspection(quality_inspection):
@@ -1301,7 +1316,13 @@ def receive_inspected_return(delivery_note_name):
 		if results.get(row.name) == "Rejected" and not is_quarantine_warehouse(row.warehouse, delivery_note.company):
 			quarantine = quarantine_warehouse_for(delivery_note.company, row.warehouse)
 			if not quarantine:
-				return
+				frappe.throw(
+					_(
+						"Row {0} ({1}) failed its inspection, but {2} has no Quarantine warehouse to receive it: "
+						"ask the Stock team to add a warehouse of type Quarantine."
+					).format(row.idx, row.item_code, delivery_note.company),
+					title=_("No Quarantine Warehouse"),
+				)
 			row.warehouse = quarantine
 			changed = True
 	if changed:
@@ -1311,18 +1332,25 @@ def receive_inspected_return(delivery_note_name):
 
 
 def quarantine_warehouse_for(company, near=None):
-	"""The company's Quarantine warehouse, the one beside ``near`` first."""
-	names = frappe.get_all(
-		"Warehouse",
-		filters={"company": company, "is_group": 0, "disabled": 0, "warehouse_type": ["in", ["Quarantine", "QA"]]},
-		fields=["name", "parent_warehouse"],
-		order_by="name",
-	)
+	"""The company's Quarantine warehouse (type Quarantine or QA, or named so), the one beside ``near`` first."""
+	if not company:
+		return None
+	rows = [
+		row
+		for row in frappe.get_all(
+			"Warehouse",
+			filters={"company": company, "is_group": 0, "disabled": 0},
+			fields=["name", "parent_warehouse", "warehouse_type", "warehouse_name"],
+			order_by="name",
+		)
+		if row.warehouse_type in ("Quarantine", "QA")
+		or (row.warehouse_name or "").casefold() in ("qa", "quarantine")
+	]
 	parent = frappe.db.get_value("Warehouse", near, "parent_warehouse") if near else None
-	for row in names:
+	for row in rows:
 		if parent and row.parent_warehouse == parent:
 			return row.name
-	return names[0].name if names else None
+	return rows[0].name if rows else None
 
 
 def receive_return_delivery_note(delivery_note_name):
@@ -1384,6 +1412,10 @@ class CustodyLoanAdjustment(Document):
 			if flt(row.qty) <= 0:
 				frappe.throw(_("Row {0}: Adjusted Qty must be positive").format(row.idx))
 			qty_by_loan_item[row.custody_loan_item] = qty_by_loan_item.get(row.custody_loan_item, 0) + flt(row.qty)
+			# one reason for the whole adjustment; a row may give its own
+			row.reason = (row.reason or "").strip() or (self.get("reason") or "").strip()
+			if not row.reason:
+				frappe.throw(_("Row {0}: give the reason the items will not come back").format(row.idx))
 			if not is_tracked(loan_item.item_code):
 				row.batch_no = row.serial_no = None
 		validate_tracked_rows(self, loan, "qty")
@@ -1624,38 +1656,39 @@ def validate_custody_loan_delivery_note(doc, loan, source_doctype, source_name):
 	if source_doctype == "Custody Loan":
 		if source_name != loan.name or doc.is_return:
 			frappe.throw(_("Loan issue Delivery Note must be a non-return Delivery Note linked to the Custody Loan"))
-		if doc.requires_shipment and doc._action == "submit":
-			validate_delivery_note_shipment_link(doc)
 		if not loan.pick_list or frappe.db.get_value("Pick List", loan.pick_list, "docstatus") != 1:
 			frappe.throw(_("Submit the linked Loan Pick List before creating its Delivery Note"))
 		pick_list_items = {row.name: row for row in frappe.get_doc("Pick List", loan.pick_list).locations}
 		loan_items = {row.name: row for row in loan.items}
-		seen_loan_items = set()
+		seen_pick_rows = set()
+		delivered_by_item = {}
 		for row in doc.items:
 			loan_item = loan_items.get(row.custody_loan_item)
 			pick_row = pick_list_items.get(row.pick_list_item)
 			if (
 				not loan_item
 				or not pick_row
-				or loan_item.name in seen_loan_items
+				or pick_row.name in seen_pick_rows
 				or pick_row.custody_loan_item != loan_item.name
 				or row.against_pick_list != loan.pick_list
-				or flt(row.qty, 9) != flt(loan_item.qty, 9)
-				or row.warehouse != loan_item.source_warehouse
+				or row.warehouse != pick_row.warehouse
 				or row.target_warehouse != loan.customer_loan_warehouse
 				or flt(pick_row.picked_qty, 9) != flt(pick_row.stock_qty, 9)
 				or flt(row.stock_qty, 9) != flt(pick_row.picked_qty, 9)
 			):
-				frappe.throw(_("Loan issue Delivery Note row does not match the Custody Loan item and warehouses"))
-			seen_loan_items.add(loan_item.name)
-		if seen_loan_items != set(loan_items):
+				frappe.throw(
+					_("Loan issue Delivery Note row does not match the Custody Loan item and warehouses")
+				)
+			seen_pick_rows.add(pick_row.name)
+			delivered_by_item[loan_item.name] = delivered_by_item.get(loan_item.name, 0) + flt(row.qty)
+		if set(delivered_by_item) != set(loan_items) or any(
+			flt(qty, 9) != flt(loan_items[name].qty, 9) for name, qty in delivered_by_item.items()
+		):
 			frappe.throw(_("Loan Delivery Note must include every Custody Loan Item exactly once"))
 		return
 
 	if source_doctype != "Custody Loan Return" or not doc.is_return or doc.return_against != loan.delivery_note:
 		frappe.throw(_("Loan return Delivery Note must return against the original Loan Delivery Note"))
-	if doc.requires_shipment and doc._action == "submit":
-		validate_delivery_note_shipment_link(doc)
 	# one receiving row per return row, matched on loan item and batch
 	return_items = {
 		(row.custody_loan_item, row.batch_no or None): row
@@ -1669,10 +1702,18 @@ def validate_custody_loan_delivery_note(doc, loan, source_doctype, source_name):
 		return_item = return_items.get(pair)
 		if not loan_item or not return_item or pair in seen_return_items:
 			frappe.throw(_("Loan return Delivery Note row must match a Custody Loan Return item"))
+		original_warehouses = {
+			warehouse
+			for warehouse in frappe.get_all(
+				"Delivery Note Item",
+				filters={"parent": loan.delivery_note, "custody_loan_item": loan_item.name},
+				pluck="warehouse",
+			)
+		} | {loan_item.source_warehouse}
 		if (
 			flt(row.qty) != -flt(return_item.returned_qty)
 			or (
-				row.warehouse != loan_item.source_warehouse
+				row.warehouse not in original_warehouses
 				and not (
 					# goods that failed their return inspection are received into quarantine
 					is_quarantine_warehouse(row.warehouse, doc.company)
@@ -1681,25 +1722,15 @@ def validate_custody_loan_delivery_note(doc, loan, source_doctype, source_name):
 				)
 			)
 			or row.target_warehouse != loan.customer_loan_warehouse
-			or row.dn_detail != frappe.db.get_value(
-				"Delivery Note Item", {"parent": loan.delivery_note, "custody_loan_item": loan_item.name}, "name"
+			or not frappe.db.exists(
+				"Delivery Note Item",
+				{"name": row.dn_detail, "parent": loan.delivery_note, "custody_loan_item": loan_item.name},
 			)
 		):
 			frappe.throw(_("Loan return Delivery Note row does not reverse the original stock transfer"))
 		seen_return_items.add(pair)
 	if seen_return_items != set(return_items):
 		frappe.throw(_("Loan Return Delivery Note must include every returned item exactly once"))
-
-
-def validate_delivery_note_shipment_link(doc):
-	shipment_name = doc.get("custody_loan_shipment")
-	if not shipment_name or frappe.db.get_value("Shipment", shipment_name, "docstatus") != 1:
-		frappe.throw(_("Submit the linked Loan Shipment before submitting this Delivery Note"))
-	if not frappe.db.exists(
-		"Shipment Document",
-		{"parent": shipment_name, "reference_doctype": "Delivery Note", "reference_name": doc.name},
-	):
-		frappe.throw(_("Link the Loan Delivery Note to its Shipment before submission"))
 
 
 def validate_custody_loan_sales_invoice(doc, loan, source_doctype, source_name):
@@ -1874,12 +1905,11 @@ def validate_custody_loan_pick_list(pick_list, require_picked_qty=False, cancell
 		frappe.throw(_("Loan Pick List must contain the Stock Items on the Custody Loan"))
 
 	loan_items = {row.name: row for row in loan.items}
-	seen_loan_items = set()
+	picked_by_item = {}
 	for row in pick_list.locations:
 		loan_item = loan_items.get(row.custody_loan_item)
-		if not loan_item or loan_item.name in seen_loan_items:
-			frappe.throw(_("Pick List row {0} must link to one unique Custody Loan Item").format(row.idx))
-		seen_loan_items.add(loan_item.name)
+		if not loan_item:
+			frappe.throw(_("Pick List row {0} must link to a Custody Loan Item").format(row.idx))
 		request_item = frappe.db.get_value(
 			"Material Request Item",
 			loan_item.material_request_item,
@@ -1893,19 +1923,51 @@ def validate_custody_loan_pick_list(pick_list, require_picked_qty=False, cancell
 			or request_item.item_code != row.item_code
 			or row.material_request != loan.material_request
 			or row.material_request_item != loan_item.material_request_item
-			or row.warehouse != loan_item.source_warehouse
-			or flt(row.qty, 9) != flt(loan_item.qty, 9)
 			or row.uom != request_item.uom
 			or row.stock_uom != request_item.stock_uom
 			or flt(row.conversion_factor, 9) != flt(conversion_factor, 9)
-			or flt(row.stock_qty, 9) != flt(loan_item.qty * conversion_factor, 9)
+			or flt(row.stock_qty, 9) != flt(row.qty * conversion_factor, 9)
 		):
-			frappe.throw(_("Pick List row {0} must match the linked Custody Loan Item and Source Warehouse").format(row.idx))
+			frappe.throw(_("Pick List row {0} must match the linked Custody Loan Item").format(row.idx))
+		# a loan row may be picked from several locations and batches, and from any usable warehouse of the company
+		# when its default has no stock (the loan row follows when the Pick List is submitted)
+		warehouse = frappe.db.get_value(
+			"Warehouse", row.warehouse, ["company", "is_group", "disabled"], as_dict=True
+		)
+		if not warehouse or warehouse.company != loan.company or warehouse.is_group or warehouse.disabled:
+			frappe.throw(
+				_("Pick List row {0}: choose an enabled warehouse of {1}").format(row.idx, loan.company)
+			)
 		if require_picked_qty and flt(row.picked_qty, 9) != flt(row.stock_qty, 9):
 			frappe.throw(_("Pick List row {0}: Pick the full Loan Qty before submitting").format(row.idx))
+		picked_by_item[loan_item.name] = picked_by_item.get(loan_item.name, 0) + flt(row.qty)
 
-	if seen_loan_items != set(loan_items):
-		frappe.throw(_("Pick List must include every Custody Loan Item exactly once"))
+	if set(picked_by_item) != set(loan_items):
+		frappe.throw(_("Pick List must include every Custody Loan Item"))
+	for name, qty in picked_by_item.items():
+		if flt(qty, 9) != flt(loan_items[name].qty, 9):
+			frappe.throw(
+				_("Pick List rows of {0} add up to {1}, but the Loan Qty is {2}").format(
+					loan_items[name].item_code, flt(qty), flt(loan_items[name].qty)
+				)
+			)
+
+
+def follow_picked_warehouses(pick_list):
+	"""A submitted loan Pick List: each loan row's Source Warehouse is where most of it was picked (a return goes back
+	to the warehouse each part came from, ``make_stock_return_delivery_note``)."""
+	loan_items = {row.name: row for row in frappe.get_doc("Custody Loan", pick_list.custody_loan).items}
+	by_item = {}
+	for row in pick_list.locations:
+		if row.custody_loan_item in loan_items:
+			by_item.setdefault(row.custody_loan_item, {})
+			by_item[row.custody_loan_item][row.warehouse] = by_item[row.custody_loan_item].get(
+				row.warehouse, 0
+			) + flt(row.picked_qty)
+	for name, warehouses in by_item.items():
+		warehouse = max(warehouses, key=lambda key: warehouses[key])
+		if loan_items[name].source_warehouse != warehouse:
+			frappe.db.set_value("Custody Loan Item", name, "source_warehouse", warehouse)
 
 
 def update_custody_loan_pick_list_status(pick_list):
@@ -1913,6 +1975,8 @@ def update_custody_loan_pick_list_status(pick_list):
 		return
 	loan = frappe.get_doc("Custody Loan", pick_list.custody_loan)
 	if pick_list.docstatus == 1 and not loan.delivery_note:
+		follow_picked_warehouses(pick_list)
+		loan.reload()
 		loan.deliver_after_pick()
 		loan.reload()
 	loan.update_status()
@@ -2217,29 +2281,9 @@ def lock_asset(asset_name):
 
 
 def transaction_is_received(stock_entry_name, asset_movement_name):
+	"""A loan's issue is complete when its Delivery Note (or Asset Movement) is submitted."""
 	if stock_entry_name:
-		if frappe.db.exists("Delivery Note", stock_entry_name):
-			entry = frappe.db.get_value(
-				"Delivery Note", stock_entry_name,
-				["docstatus", "requires_shipment", "custody_loan_shipment"], as_dict=True,
-			)
-			if entry and entry.docstatus == 1 and entry.requires_shipment:
-				return bool(
-					entry.custody_loan_shipment
-					and frappe.db.get_value("Shipment", entry.custody_loan_shipment, "tracking_status") == "Delivered"
-				)
-			return bool(entry and entry.docstatus == 1)
-		entry = frappe.db.get_value(
-			"Stock Entry", stock_entry_name,
-			["docstatus", "requires_shipment", "purpose", "shipment", "outgoing_stock_entry"], as_dict=True,
-		)
-		if not entry or entry.docstatus != 1:
-			return False
-		if not entry.requires_shipment:
-			return True
-			if entry.purpose == "Material Receipt":
-				return bool(entry.shipment and frappe.db.get_value("Shipment", entry.shipment, "tracking_status") == "Delivered")
-			return bool(frappe.db.exists("Stock Entry", {"outgoing_stock_entry": stock_entry_name, "docstatus": 1}))
+		return bool(frappe.db.get_value("Delivery Note", stock_entry_name, "docstatus") == 1)
 	if asset_movement_name:
 		return frappe.db.get_value("Asset Movement", asset_movement_name, "docstatus") == 1
 	return False
@@ -2328,8 +2372,6 @@ def cancel_source_transaction(source, fieldname):
 			doc.flags.custody_loan_shipment_cancellation = shipment_name
 	elif shipment_status in (0, 1):
 		frappe.throw(_("Cancel Shipment {0} before cancelling {1} {2}.").format(shipment_name, doctype, name))
-	if doc.docstatus == 1 and doc.get("requires_shipment") and not shipment_name:
-		frappe.throw(_("Cannot cancel {0} {1} because it requires a Shipment that is not linked.").format(doctype, name))
 	if doc.docstatus == 1:
 		doc.flags.custody_loan_cancellation = True
 		doc.flags.custody_operation_token = _CUSTODY_OPERATION_TOKEN
@@ -2365,17 +2407,6 @@ def update_return_status_on_transaction(return_doc):
 		)
 		if not delivery_note:
 			return "Pending Quality Inspection"
-		if return_doc.requires_shipment:
-			shipment_name = delivery_note.get("custody_loan_shipment")
-			shipment = (
-				frappe.db.get_value("Shipment", shipment_name, ["docstatus", "tracking_status"], as_dict=True)
-				if shipment_name
-				else None
-			)
-			if not shipment or shipment.docstatus != 1:
-				return "Pending Shipment"
-			if shipment.tracking_status != "Delivered":
-				return "Pending Receipt"
 		if delivery_note.docstatus == 1:
 			return "Received"
 		return (

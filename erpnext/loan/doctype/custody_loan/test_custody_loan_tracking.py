@@ -2,7 +2,7 @@
 # License: GNU General Public License v3. See license.txt
 
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import frappe
 
@@ -254,3 +254,96 @@ class ResolveLoanItemRowsTest(unittest.TestCase):
 	def test_an_item_not_on_the_loan_is_refused(self):
 		with self.assertRaises(frappe.ValidationError):
 			self.resolve([frappe._dict(idx=1, item_code="Z")])
+
+
+class OtherLotTest(TrackingTest):
+	"""Another batch or serial number than the lent one may come back (Siwat, 5 Nov 2026)."""
+
+	def rows(self, doc, balances):
+		with patch.object(tracking, "get_balances", return_value=balances):
+			return tracking.tracking_rows(doc)
+
+	def test_a_batch_that_was_not_lent_counts_against_the_lent_one_and_is_noted(self):
+		doc = loan(("L1", "BATCHED"))
+		balances = self.balances(
+			doc,
+			{"L1": [("B-1", None, 3), ("B-2", None, 2)]},
+			[movement("returned", "L1", 2, "NEW-LOT")],
+		)
+		first = balances[("L1", "B-1", None)]
+		self.assertEqual((first.returned_qty, first.outstanding_qty), (2, 1))
+		self.assertEqual(first.returned_as, "NEW-LOT x 2")
+		self.assertEqual(balances[("L1", "B-2", None)].outstanding_qty, 2)
+		rows = {row["batch_no"]: row for row in self.rows(doc, balances)}
+		self.assertNotIn("NEW-LOT", rows)
+		self.assertEqual(rows["B-1"]["returned_as"], "NEW-LOT x 2")
+
+	def test_the_lot_spreads_over_the_lent_ones_earliest_first_and_a_pending_one_says_so(self):
+		doc = loan(("L1", "BATCHED"))
+		balances = self.balances(
+			doc,
+			{"L1": [("B-1", None, 1), ("B-2", None, 3)]},
+			[movement("pending", "L1", 2, "NEW-LOT")],
+		)
+		self.assertEqual(balances[("L1", "B-1", None)].open_qty, 0)
+		self.assertEqual(balances[("L1", "B-2", None)].open_qty, 2)
+		self.assertIn("(pending)", balances[("L1", "B-2", None)].returned_as)
+
+
+def raise_validation(message, *args, **kwargs):
+	raise frappe.ValidationError(message)
+
+
+class OtherLotReturnTest(TrackingTest):
+	def doc_and_return(self, batch):
+		doc = loan(("L1", "BATCHED"))
+		ret = Doc(
+			doctype="Custody Loan Return",
+			name=None,
+			items=[frappe._dict(idx=1, custody_loan_item="L1", batch_no=batch, serial_no=None, returned_qty=2)],
+		)
+		return doc, ret
+
+	def validate_return(self, batch, item_of_batch="BATCHED", **kwargs):
+		doc, ret = self.doc_and_return(batch)
+		with (
+			patch.object(tracking, "issued_entries", return_value={"L1": [("B-1", None, 3)]}),
+			patch.object(tracking, "_movement_rows", return_value=[]),
+			patch.object(frappe, "throw", side_effect=raise_validation),
+			patch.object(frappe, "db", MagicMock(get_value=MagicMock(return_value=item_of_batch))),
+		):
+			tracking.validate_tracked_rows(ret, doc, "returned_qty", **kwargs)
+
+	def test_a_lot_that_was_not_lent_is_taken_for_a_return_only(self):
+		self.validate_return("NEW-LOT", allow_other_lots=True)
+		with self.assertRaises(frappe.ValidationError):
+			self.validate_return("NEW-LOT")
+
+	def test_a_batch_of_another_item_is_refused(self):
+		with self.assertRaisesRegex(frappe.ValidationError, "not a batch of"):
+			self.validate_return("OTHER", item_of_batch="ANOTHER-ITEM", allow_other_lots=True)
+
+
+class ForeignSerialTest(unittest.TestCase):
+	def run_check(self, values, on_loan=False):
+		with (
+			patch.object(tracking, "_", side_effect=lambda text: text),
+			patch.object(frappe, "throw", side_effect=raise_validation),
+			patch.object(
+				frappe, "db", MagicMock(get_value=MagicMock(return_value=values), exists=MagicMock(return_value=on_loan))
+			),
+		):
+			tracking.check_foreign_serial("SN-9", "SERIAL", "CL-1", 1)
+
+	def test_a_serial_nobody_holds_may_come_back(self):
+		self.run_check(frappe._dict(item_code="SERIAL", warehouse=None))
+
+	def test_a_serial_in_our_stock_an_unknown_one_or_another_loans_is_refused(self):
+		with self.assertRaisesRegex(frappe.ValidationError, "in stock in STORES"):
+			self.run_check(frappe._dict(item_code="SERIAL", warehouse="STORES"))
+		with self.assertRaisesRegex(frappe.ValidationError, "not known yet"):
+			self.run_check(None)
+		with self.assertRaisesRegex(frappe.ValidationError, "another open loan"):
+			self.run_check(frappe._dict(item_code="SERIAL", warehouse=None), on_loan=True)
+		with self.assertRaisesRegex(frappe.ValidationError, "another Item"):
+			self.run_check(frappe._dict(item_code="OTHER", warehouse=None))

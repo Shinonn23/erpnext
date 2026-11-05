@@ -27,7 +27,9 @@ frappe.ui.form.on("Custody Loan Adjustment", {
 		frm.set_intro("");
 		show_draft_guidance(
 			frm,
-			__("Use Select Serial / Batch to tick what will not come back, give the reason on each row, then submit.")
+			__(
+				"The items still out are listed. Remove what is coming back, write one Reason for the whole write-off (a row may give its own), then Save and Submit."
+			)
 		);
 		if (frm.doc.docstatus === 0 && frm.doc.custody_loan) {
 			frm.add_custom_button(__("Select Serial / Batch"), () => select_open_serial_batches(frm, "qty"));
