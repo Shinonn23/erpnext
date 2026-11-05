@@ -19,6 +19,7 @@ from erpnext.regulatory_affairs.constants import (
 	IN_FORCE_STATUSES,
 	ITEM_CATEGORY_FIELD,
 	MEDICAL_DEVICE,
+	NOT_REGULATED,
 	OTHER_CATEGORY,
 	PRODUCT_CATEGORIES,
 	PRODUCT_REGISTRATION,
@@ -212,7 +213,7 @@ class RegulatoryProductRegistration(Document):
 			if row.item_code:
 				item = item_names.get(row.item_code)
 				row.item_name_at_registration = item.item_name if item else ""
-				if item and not item.get(ITEM_CATEGORY_FIELD):
+				if item and item.get(ITEM_CATEGORY_FIELD) in (None, "", NOT_REGULATED):
 					uncategorized.add(row.item_code)
 
 		active_rows = [row for row in rows if row.item_code and row.line_status == "Active"]
@@ -227,7 +228,7 @@ class RegulatoryProductRegistration(Document):
 		if uncategorized:
 			frappe.msgprint(
 				_(
-					"Items {0} have no Product Category. Set it on the Item's Regulatory tab so transactions are validated against this registration."
+					"Items {0} are not marked as regulated (no Product Category, or Not Regulated). Set the Product Category on the Item's Regulatory tab so transactions are validated against this registration."
 				).format(", ".join(frappe.bold(item) for item in sorted(uncategorized))),
 				indicator="orange",
 				alert=True,
@@ -365,7 +366,7 @@ def close_predecessor_lines(registration: Document) -> None:
 
 
 def verify_pending_certificates(registration: str) -> list[str]:
-	"""Verify the Pending Certificates of a registration that carry a file and are in date; return their names."""
+	"""Verify the Pending Certificates of a registration that are in date (the file is optional); return their names."""
 	verified = []
 	for name in frappe.get_all(
 		REGULATORY_DOCUMENT,
@@ -377,8 +378,6 @@ def verify_pending_certificates(registration: str) -> list[str]:
 		pluck="name",
 	):
 		document = frappe.get_doc(REGULATORY_DOCUMENT, name)
-		if not document.file:
-			continue
 		if document.expiry_date and getdate(document.expiry_date) < getdate(today()):
 			continue
 		document.verification_status = "Verified"
@@ -464,9 +463,7 @@ def get_activation_problems(registration: Any) -> list[str]:
 		if pending:
 			problems.append(_("The Certificate waits for a Regulatory Approver to verify it."))
 		else:
-			problems.append(
-				_("Attach the Certificate: create a Regulatory Document of type Certificate with its file.")
-			)
+			problems.append(_("Add the Certificate: create a Regulatory Document of type Certificate."))
 	return problems
 
 

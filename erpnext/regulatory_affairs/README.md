@@ -35,13 +35,25 @@ Type), `activity_type` (Import, Manufacture, Sale, Product Registration, Other),
 
 ### Item classification
 
-An Item is **regulated** when its **Product Category** (`regulatory_product_category`, Regulatory tab, standard filter) is set.
-Transactions are validated against a regulated Item's coverage, and only a regulated Item shows the *Current Regulatory Coverage*
-section with the read-only coverage fields (`current_regulatory_registration`, `current_newcode`, `current_registration_expiry`,
-`current_registration_status`), the red/orange headline alerts and the *Coverage Matrix* button. An Item without a Product Category
-is not checked; saving it clears its coverage fields (saving a registration still stores coverage on every Item it maps, hidden on
-unregulated ones). There is no separate assessment status, exemption reason or Not Assessed state: an Item that needs no FDA
-registration simply has no Product Category.
+Every Item that is sold must be **classified by Regulatory Affairs** (Siwat, 5 Nov 2026). The **Product Category**
+(`regulatory_product_category`, Regulatory tab) is one of the Thai FDA groups (the Item is **regulated** and needs a registration in
+force to be sold) or **Not Regulated** (RA looked at it and it needs none). An Item whose category is still blank is
+**unclassified** and is not sold. For Quotation, Sales Order, Delivery Note and Sales Invoice:
+
+* the Item link (`sales_common.js` -> `item_query` filter `regulatory_sale`) offers only Items that are classified and, when
+  regulated, covered by a registration in force on the document's date (`transactions.sellable_items_condition`);
+* saving (`validate`, not only submit) a row with an unclassified, unregistered or expired Item is refused in plain words, with
+  the button *Notify Regulatory Affairs* (a task for each Item for the Regulatory Operators, also for a draft not saved yet);
+* returns, consolidated POS invoices and Sales Invoice rows already delivered are not checked; purchasing and stock keep their
+  own rules (a Purchase Order only warns).
+
+RA classifies one Item with *Regulatory > Classify Item* (Product Category, Medical Device Category, Regulatory Owner in one
+dialog; `item.classify_item`) and many with the Item list *Actions > Classify as ...* (`item.classify_items`); the report
+*Regulatory Unclassified Items* counts and lists the sales Items still unclassified (filter by Item Group). Only a regulated
+Item shows the *Current Regulatory Coverage* section with the read-only coverage fields (`current_regulatory_registration`,
+`current_newcode`, `current_registration_expiry`, `current_registration_status`), the red/orange headline alerts and the *Coverage
+Matrix* button; saving a Not Regulated Item clears its coverage fields. There is no separate assessment status, exemption reason
+or Not Assessed state.
 
 The **Regulatory** tab also has `regulatory_other_category` (for Other), `medical_device_category` (only for Medical Device) and
 `regulatory_owner`. Each item row of the six guarded transactions
@@ -119,7 +131,7 @@ messages are not shown twice. A Quotation has no snapshot. A caller that already
 `doc.flags.regulatory_policy_checked` (`POLICY_CHECKED_FLAG`) and the save-time warning steps aside (Connect Diagnostics blocks a
 Quotation when it is sent for approval this way, before any approver is asked).
 
-* Only rows whose Item has a Product Category are checked (any category). Saving a registration that maps an Item without one shows
+* Only rows whose Item has a Thai FDA Product Category are checked against a registration (Not Regulated needs none); on the four sale documents an unclassified Item blocks. Saving a registration that maps an Item without one shows
   an orange alert asking to set it.
 * A document type is skipped when its `validate_on_*` setting is off. **Returns** (`is_return`) are never validated (they still get a
   snapshot). **Stock Entry** is validated and snapshotted only for purpose *Material Receipt* so transfers, issues and

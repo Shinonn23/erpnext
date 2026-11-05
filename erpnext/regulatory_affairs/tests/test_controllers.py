@@ -478,7 +478,7 @@ class TestRegistrationCategory(unittest.TestCase):
 		message = msgprint.call_args.args[0]
 		self.assertIn(frappe.bold("UNCAT"), message)
 		self.assertNotIn(frappe.bold("REG"), message)
-		self.assertIn("have no Product Category", message)
+		self.assertIn("are not marked as regulated", message)
 		self.assertEqual(msgprint.call_args.kwargs, {"indicator": "orange", "alert": True})
 
 
