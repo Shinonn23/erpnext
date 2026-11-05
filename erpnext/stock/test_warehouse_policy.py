@@ -802,3 +802,36 @@ class TestWarehouseTypeSummary(unittest.TestCase):
 			warehouse_policy.movement_operation(internal, True, row=frappe._dict(target_warehouse="T")),
 			"transfer",
 		)
+
+	def test_a_rejected_sales_return_row_is_a_receipt_into_quarantine(self):
+		doc = frappe._dict(doctype="Delivery Note", is_return=1, company="CD")
+		row = frappe._dict(quality_inspection="QI-1", warehouse="QUARANTINE - CD")
+		quarantine = {"QUARANTINE - CD"}
+		with (
+			patch.object(
+				frappe, "db", Mock(get_value=Mock(return_value=frappe._dict(docstatus=1, status="Rejected")))
+			),
+			patch(
+				"erpnext.loan.doctype.custody_loan.custody_loan_core.is_quarantine_warehouse",
+				side_effect=lambda warehouse, company: warehouse in quarantine,
+			),
+		):
+			self.assertEqual(warehouse_policy.movement_operation(doc, False, row=row), "receipt")
+			# the leg that leaves, an Accepted result or another warehouse stays a sale
+			self.assertEqual(warehouse_policy.movement_operation(doc, True, row=row), "sales")
+			self.assertEqual(
+				warehouse_policy.movement_operation(
+					doc, False, row=frappe._dict(quality_inspection="QI-1", warehouse="CD STOCK - CD")
+				),
+				"sales",
+			)
+		with (
+			patch.object(
+				frappe, "db", Mock(get_value=Mock(return_value=frappe._dict(docstatus=1, status="Accepted")))
+			),
+			patch(
+				"erpnext.loan.doctype.custody_loan.custody_loan_core.is_quarantine_warehouse",
+				return_value=True,
+			),
+		):
+			self.assertEqual(warehouse_policy.movement_operation(doc, False, row=row), "sales")

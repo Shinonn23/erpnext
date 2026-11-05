@@ -276,6 +276,72 @@ def get_storage_location_warehouses(doc, row):
 	return warehouses
 
 
+def is_outgoing_row(doc, row):
+	"""The row takes goods out of its source warehouse: a Stock Entry row with a source warehouse, a Delivery Note or
+	a Sales Invoice (with stock) that is not a return."""
+	if doc.doctype == "Stock Entry":
+		return bool(row.get("s_warehouse"))
+	return doc.doctype in ("Delivery Note", "Sales Invoice") and not cint(doc.get("is_return"))
+
+
+def row_stock_qty(doc, row):
+	"""The quantity the row takes out, in the Item's stock UOM."""
+	if doc.doctype == "Stock Entry":
+		return flt(row.get("transfer_qty")) or flt(row.get("qty")) * (flt(row.get("conversion_factor")) or 1)
+	return flt(row.get("stock_qty")) or flt(row.get("qty")) * (flt(row.get("conversion_factor")) or 1)
+
+
+def choose_source_location(places, needed):
+	"""(location, enough): the one Storage Location of ``places`` ({location: qty}) that holds ``needed``; None when no
+	or more than one does. ``enough`` lists every location that holds it."""
+	enough = sorted(location for location, qty in places.items() if flt(qty) + 1e-9 >= flt(needed))
+	return (enough[0] if len(enough) == 1 else None), enough
+
+
+def source_storage_location(doc, row, warehouse, item_code):
+	"""The Storage Location an outgoing row takes its goods from, when its source location is empty (Connect
+	Diagnostics, Siwat, 5 Nov 2026: never a silent STAGING). The location that holds the stock when exactly one
+	location holds enough of it (the row's Serial Nos, its Batch No, or the Item); otherwise the row is refused,
+	naming the row and the locations that hold the stock. None when the stock cannot be read per location (not a
+	stock Item, a row with a Serial and Batch Bundle, negative stock allowed): the warehouse default applies."""
+	item = frappe.get_cached_value(
+		"Item", item_code, ["is_stock_item", "has_serial_no", "has_batch_no"], as_dict=True
+	)
+	if (
+		not item
+		or not cint(item.is_stock_item)
+		or row.get("serial_and_batch_bundle")
+		or cint(frappe.db.get_single_value("Stock Settings", "allow_negative_stock"))
+	):
+		return None
+	needed = row_stock_qty(doc, row)
+	if needed <= 0:
+		return None
+	serials = _row_serial_nos(row) if cint(item.has_serial_no) else []
+	if serials:
+		places = serial_locations(serials, warehouse)
+		needed = len(serials)
+	else:
+		places = location_stock(item_code, warehouse, row.get("batch_no") or None)
+	location, enough = choose_source_location(places, needed)
+	if location:
+		return location
+	where = ", ".join(f"{name} ({flt(qty):g})" for name, qty in sorted(places.items())) or _("none")
+	if enough:
+		frappe.throw(
+			_(
+				"Row {0}: {1} is held at more than one Storage Location of {2} ({3}). Choose the Storage Location to take it from."
+			).format(row.get("idx"), item_code, warehouse, where),
+			title=_("Choose the Storage Location"),
+		)
+	frappe.throw(
+		_(
+			"Row {0}: no single Storage Location of {1} holds {2} of {3}. In stock by location: {4}."
+		).format(row.get("idx"), warehouse, f"{flt(needed):g}", item_code, where),
+		title=_("Not Enough Stock"),
+	)
+
+
 def set_default_storage_locations(doc, method=None):
 	"""Persist warehouse defaults before stock valuation and serial/batch processing."""
 	# Historical submissions and cancellations must retain their original dimensions.
@@ -294,7 +360,19 @@ def set_default_storage_locations(doc, method=None):
 				if not warehouse or not row.meta.has_field(fieldname) or row.get(fieldname):
 					continue
 				item_code = row.get("item_code") or row.get("rm_item_code")
-				location = get_default_storage_location(warehouse, item_code)
+				location = None
+				if fieldname == "storage_location" and is_outgoing_row(doc, row):
+					try:
+						location = source_storage_location(doc, row, warehouse, item_code)
+					except frappe.ValidationError:
+						# the Packing List of a Delivery Note appears only after its first save: the user cannot choose
+						# before it, so a draft leaves the location empty and the submit refuses it
+						if table.fieldname == "packed_items" and not doc.docstatus:
+							if frappe.local.message_log:
+								frappe.local.message_log.pop()
+							continue
+						raise
+				location = location or get_default_storage_location(warehouse, item_code)
 				if location:
 					validate_storage_location_warehouse(location, warehouse, item_code=item_code)
 					row.set(fieldname, location)
