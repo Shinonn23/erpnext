@@ -613,7 +613,7 @@ class StockCount(Document):
 			)
 
 	def on_cancel(self):
-		if self.recount_stock_count:
+		if getattr(self, "recount_stock_count", None):
 			recount = frappe.db.get_value(
 				"Stock Count", self.recount_stock_count, ["docstatus", "recount_of"], as_dict=True
 			)
@@ -625,13 +625,17 @@ class StockCount(Document):
 						)
 					)
 				if recount.docstatus == 0:
-					frappe.delete_doc("Stock Count", self.recount_stock_count, ignore_permissions=True)
-		for doctype, name in (
-			("Stock Entry", self.stock_entry),
-			("Stock Entry", self.found_stock_entry),
-			("Stock Entry", self.found_transfer_entry),
-			("Stock Reconciliation", self.stock_reconciliation),
+					# a link from this count, cancelled or not, keeps Frappe from deleting the draft it names
+					name = self.recount_stock_count
+					self.db_set("recount_stock_count", None)
+					frappe.delete_doc("Stock Count", name, ignore_permissions=True)
+		for fieldname, doctype in (
+			("stock_entry", "Stock Entry"),
+			("found_stock_entry", "Stock Entry"),
+			("found_transfer_entry", "Stock Entry"),
+			("stock_reconciliation", "Stock Reconciliation"),
 		):
+			name = getattr(self, fieldname, None)
 			if not name:
 				continue
 			doc = frappe.get_doc(doctype, name)
@@ -642,6 +646,7 @@ class StockCount(Document):
 					_("Cancel linked {0} {1} before cancelling this Stock Count.").format(doctype, name)
 				)
 			if doc.docstatus == 0:
+				self.db_set(fieldname, None)
 				frappe.delete_doc(doctype, name, ignore_permissions=True)
 
 	def before_update_after_submit(self):
@@ -888,7 +893,15 @@ class StockCount(Document):
 			if adjustment_account:
 				entry_row["expense_account"] = adjustment_account
 			stock_entry.append("items", entry_row)
-		stock_entry.insert(ignore_permissions=True)
+		# The rates are the system's (found_valuation_rate), not typed by the approver: a site that keeps stock costs
+		# from users without cost rights lets this one document through by its identity, as the ledger policy does
+		# for a landed cost voucher's entries (warehouse_policy_lcv_entry).
+		previous = frappe.flags.get("stock_count_found_receipt")
+		frappe.flags.stock_count_found_receipt = stock_entry
+		try:
+			stock_entry.insert(ignore_permissions=True)
+		finally:
+			frappe.flags.stock_count_found_receipt = previous
 		return stock_entry
 
 	def make_found_transfer(self, rows):
