@@ -1800,12 +1800,21 @@ class StockController(AccountsController):
 			else:
 				frappe.msgprint(msg, alert=True, indicator="orange")
 
+	def is_return_into_quarantine(self, row):
+		"""Goods that failed their inspection on coming back are received into the Quarantine warehouse (Connect
+		Diagnostics, Siwat, 5 Nov 2026): a sales return row received there is not refused for its rejection."""
+		if self.doctype not in ("Delivery Note", "Sales Invoice") or not cint(self.get("is_return")):
+			return False
+		from erpnext.loan.doctype.custody_loan.custody_loan_core import is_quarantine_warehouse
+
+		return bool(row.get("warehouse")) and is_quarantine_warehouse(row.warehouse, self.company)
+
 	def validate_qi_rejection(self, row):
 		"""Check if QI is rejected on row level, during submission"""
 		action = frappe.get_single_value("Stock Settings", "action_if_quality_inspection_is_rejected")
 		qa_status = frappe.db.get_value("Quality Inspection", row.quality_inspection, "status")
 
-		if qa_status == "Rejected":
+		if qa_status == "Rejected" and not self.is_return_into_quarantine(row):
 			link = frappe.utils.get_link_to_form("Quality Inspection", row.quality_inspection)
 			msg = _("Row #{0}: Quality Inspection {1} was rejected for item {2}").format(
 				row.idx, link, row.item_code
