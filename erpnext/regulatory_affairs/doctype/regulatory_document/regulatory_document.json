@@ -94,8 +94,7 @@
   {
    "fieldname": "file",
    "fieldtype": "Attach",
-   "label": "File",
-   "reqd": 1
+   "label": "File"
   },
   {
    "default": "Pending",
