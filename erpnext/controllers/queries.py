@@ -222,6 +222,15 @@ def item_query(
 	searchfields = " or ".join([field + " like %(txt)s" for field in searchfields])
 
 	restricted_items_cond = ""
+	regulatory_cond = ""
+	if filters and isinstance(filters, dict) and filters.pop("regulatory_sale", None):
+		# Quotation, Sales Order, Delivery Note and Sales Invoice offer only Items RA classified and, when regulated,
+		# registered on the document's date (Siwat, 5 Nov 2026)
+		from erpnext.regulatory_affairs.transactions import sellable_items_condition
+
+		regulatory_cond = sellable_items_condition(filters.pop("regulatory_date", None))
+	elif filters and isinstance(filters, dict):
+		filters.pop("regulatory_date", None)
 	if filters and isinstance(filters, dict):
 		if filters.get("customer") or filters.get("supplier"):
 			party_type = "Customer" if filters.get("customer") else "Supplier"
@@ -261,7 +270,7 @@ def item_query(
 			and (tabItem.end_of_life > %(today)s or ifnull(tabItem.end_of_life, '0000-00-00')='0000-00-00')
 			and ({scond} or tabItem.item_code IN (select parent from `tabItem Barcode` where barcode LIKE %(txt)s)
 				{description_cond})
-			{fcond} {mcond} {candidate_cond} {restricted_items_cond}
+			{fcond} {mcond} {candidate_cond} {restricted_items_cond} {regulatory_cond}
 		order by
 			if(locate(%(_txt)s, name), locate(%(_txt)s, name), 99999),
 			if(locate(%(_txt)s, item_name), locate(%(_txt)s, item_name), 99999),
@@ -275,6 +284,7 @@ def item_query(
 			description_cond=description_cond,
 			candidate_cond=candidate_cond,
 			restricted_items_cond=restricted_items_cond.replace("%", "%%"),
+			regulatory_cond=regulatory_cond.replace("%", "%%"),
 		),
 		{
 			"today": nowdate(),

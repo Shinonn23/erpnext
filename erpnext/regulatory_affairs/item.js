@@ -4,7 +4,17 @@
 frappe.ui.form.on("Item", {
 	refresh(frm) {
 		add_category_button(frm);
-		if (frm.is_new() || !frm.doc.regulatory_product_category) return;
+		if (frm.is_new()) return;
+		if (!frm.doc.regulatory_product_category) {
+			if (frm.doc.is_sales_item) {
+				frm.dashboard.set_headline_alert(
+					__("Regulatory Affairs has not classified this Item yet, so it cannot be sold."),
+					"red"
+				);
+			}
+			return;
+		}
+		if (frm.doc.regulatory_product_category === "Not Regulated") return;
 
 		frm.add_custom_button(
 			__("Coverage Matrix"),

@@ -190,6 +190,32 @@ class TestSetProductCategory(unittest.TestCase):
 		self.assertIsNone(doc.medical_device_category)
 		self.assertEqual(doc.regulatory_other_category, "Reagent kit")
 
+	def test_not_regulated_is_a_classification_without_a_registration(self):
+		doc = self.classify(category="Not Regulated")
+		doc.set.assert_called_once_with(ITEM_CATEGORY_FIELD, "Not Regulated")
+		self.assertFalse(ra_item.is_regulated({ITEM_CATEGORY_FIELD: "Not Regulated"}))
+		self.assertTrue(ra_item.is_regulated({ITEM_CATEGORY_FIELD: "Drug"}))
+		self.assertFalse(ra_item.is_regulated({ITEM_CATEGORY_FIELD: ""}))
+
+	def test_an_unknown_category_is_refused(self):
+		with self.assertRaises(frappe.ValidationError):
+			self.classify(category="Magic")
+
+	def test_bulk_classification_reports_what_failed(self):
+		def fake(code, category, device, owner):
+			if code == "BAD":
+				raise frappe.ValidationError("no device category")
+
+		with (
+			patch.object(ra_item, "classify_item", side_effect=fake),
+			patch.object(frappe, "clear_last_message"),
+			patch.object(frappe, "session", frappe._dict(user="ra@example.test"), create=True),
+		):
+			result = ra_item.classify_items('["A", "BAD"]', "Medical Device")
+		self.assertEqual(result["done"], ["A"])
+		self.assertEqual(list(result["failed"]), ["BAD"])
+		self.assertIn(ra_item.classify_items, frappe.whitelisted)
+
 	def test_only_the_regulatory_roles_classify(self):
 		with self.assertRaises(frappe.PermissionError):
 			self.classify(category="Drug", operator=False)

@@ -172,10 +172,10 @@ class TestCustomFields(unittest.TestCase):
 			self.assertNotIn(retired, specs)
 		category = specs[constants.ITEM_CATEGORY_FIELD]
 		self.assertEqual(category["fieldtype"], "Select")
-		self.assertEqual(category["options"].split("\n"), ["", *constants.PRODUCT_CATEGORIES])
+		self.assertEqual(category["options"].split("\n"), ["", *constants.ITEM_CATEGORIES])
 		self.assertEqual(category["insert_after"], "regulatory_tab")
 		self.assertNotIn("default", category)
-		self.assertIn("only Items with a Product Category are validated", category["description"])
+		self.assertIn("unclassified and is not sold", category["description"])
 		self.assertIn("Other", specs["regulatory_other_category"]["depends_on"])
 		self.assertEqual(specs["regulatory_other_category"]["fieldtype"], "Data")
 		self.assertIn("Medical Device", specs["medical_device_category"]["depends_on"])

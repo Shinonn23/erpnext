@@ -5,11 +5,11 @@ LAST field of its tab or row form, so no native section is swallowed by a new Se
 """
 
 from erpnext.regulatory_affairs.constants import (
+	ITEM_CATEGORIES,
 	ITEM_CATEGORY_FIELD,
 	MEDICAL_DEVICE,
 	MODULE,
 	OTHER_CATEGORY,
-	PRODUCT_CATEGORIES,
 	PRODUCT_REGISTRATION,
 	TRANSACTION_ITEM_DOCTYPES,
 )
@@ -60,11 +60,11 @@ def item_fields():
 			"Select",
 			"Product Category",
 			"regulatory_tab",
-			options="\n" + "\n".join(PRODUCT_CATEGORIES),
+			options="\n" + "\n".join(ITEM_CATEGORIES),
 			in_standard_filter=1,
 			permlevel=ITEM_CATEGORY_PERMLEVEL,
-			description="The Thai FDA product group of this Item. Leave it blank for an Item that needs no "
-			"FDA registration: only Items with a Product Category are validated on transactions.",
+			description="Set by Regulatory Affairs. A Thai FDA product group needs a registration in force to be sold; "
+			"Not Regulated needs none. An Item that is still blank is unclassified and is not sold.",
 		),
 		_field(
 			"regulatory_other_category",

@@ -33,6 +33,10 @@ frappe.listview_settings["Item"] = {
 	},
 
 	onload: function (listview) {
+		// Regulatory Affairs: classify many Items at once (public/js/regulatory_notify.js)
+		if (erpnext.regulatory && erpnext.regulatory.add_bulk_classify) {
+			erpnext.regulatory.add_bulk_classify(listview);
+		}
 		if (listview.view === "List") {
 			listview.columns = listview.columns.map((col) => {
 				if (!col.df) return col;

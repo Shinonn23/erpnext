@@ -18,8 +18,10 @@ from erpnext.regulatory_affairs.constants import (
 	EXPIRY_SPECIFIED,
 	IN_FORCE_STATUSES,
 	ITEM_CATEGORY_FIELD,
+	NOT_REGULATED,
 	OUTBOUND_DOCTYPES,
 	REVOKED,
+	SALE_DOCTYPES,
 	SETTINGS,
 	SUPERSEDED,
 	SUSPENDED,
@@ -140,19 +142,26 @@ def _validate(doc, *, warn_only):
 		return
 
 	reported = []
+	problem_items = set()
 
 	rows = [
 		row
 		for row in doc.get("items") or []
 		if row.get("item_code") and not is_delivery_linked(doc.doctype, row)
 	]
-	in_scope = get_items_in_scope({row.get("item_code") for row in rows})
-	if not in_scope:
+	codes = {row.get("item_code") for row in rows}
+	unclassified = get_unclassified_items(codes) if doc.doctype in SALE_DOCTYPES else set()
+	in_scope = get_items_in_scope(codes)
+	if not in_scope and not unclassified:
 		return
 
 	mappings = {}
 	for row in rows:
 		item_code = row.get("item_code")
+		if item_code in unclassified:
+			reported.append(build_message(unclassified_text(row), BLOCK))
+			problem_items.add(item_code)
+			continue
 		if item_code not in in_scope:
 			continue
 
@@ -167,8 +176,16 @@ def _validate(doc, *, warn_only):
 		if not messages:
 			continue
 		reported.extend(messages)
+		problem_items.add(item_code)
 
-	report_messages(reported, warn_only=warn_only, doc=doc)
+	report_messages(reported, warn_only=warn_only, doc=doc, item_codes=sorted(problem_items))
+
+
+def unclassified_text(row):
+	item_code = frappe.bold(escape_html(row.get("item_code") or ""))
+	return _(
+		"Item {0} (row {1}) has not been classified by Regulatory Affairs yet, so it cannot be sold."
+	).format(item_code, row.get("idx") or "?")
 
 
 def _lookup_mapping(item_code, coverage_date, warn_only, reported):
@@ -183,7 +200,7 @@ def _lookup_mapping(item_code, coverage_date, warn_only, reported):
 		return AMBIGUOUS
 
 
-def report_messages(reported, *, warn_only, doc=None):
+def report_messages(reported, *, warn_only, doc=None, item_codes=()):
 	"""Show warning messages; raise when a message blocks. The text is plain English: which Item, why, what to do."""
 	if not reported:
 		return
@@ -197,7 +214,7 @@ def report_messages(reported, *, warn_only, doc=None):
 		frappe.throw(
 			body,
 			title=_("This cannot go on yet: an Item is not registered"),
-			primary_action=notify_action(doc),
+			primary_action=notify_action(doc, item_codes),
 		)
 	frappe.msgprint(body, title=_("Regulatory warning"), indicator="orange")
 
@@ -216,8 +233,8 @@ def what_to_do(doc, *, blocking, warn_only):
 	doctype = doc.doctype if doc is not None else None
 	if blocking:
 		return _(
-			"What to do: Regulatory Affairs must register the Item or renew its registration first. "
-			"Press Notify Regulatory Affairs to tell them. This document goes on once the registration covers it."
+			"What to do: Regulatory Affairs must classify or register the Item first (or renew its registration). "
+			"Press Notify Regulatory Affairs to tell them. This document goes on once the Item is classified and covered."
 		)
 	if warn_only and doctype in SUBMIT_CHECKED_ORDERS:
 		return _(
@@ -229,14 +246,19 @@ def what_to_do(doc, *, blocking, warn_only):
 	return None
 
 
-def notify_action(doc):
-	"""The button of the block message: it tells Regulatory Affairs about this saved document."""
-	if doc is None or not doc.get("name") or doc.get("__islocal") or doc.doctype not in TRANSACTION_DOCTYPES:
+def notify_action(doc, item_codes=()):
+	"""The button of the block message: it tells Regulatory Affairs about the Items (and this document when saved)."""
+	if doc is None or doc.doctype not in TRANSACTION_DOCTYPES:
 		return None
+	saved = bool(doc.get("name")) and not doc.get("__islocal")
 	return {
 		"label": _("Notify Regulatory Affairs"),
 		"client_action": "erpnext.regulatory.notify_regulatory_affairs",
-		"args": {"doctype": doc.doctype, "name": doc.name},
+		"args": {
+			"doctype": doc.doctype,
+			"name": doc.name if saved else None,
+			"item_codes": list(item_codes),
+		},
 	}
 
 
@@ -255,10 +277,16 @@ def blocked_rows(doc):
 		for row in doc.get("items") or []
 		if row.get("item_code") and not is_delivery_linked(doc.doctype, row)
 	]
-	in_scope = get_items_in_scope({row.get("item_code") for row in rows})
+	codes = {row.get("item_code") for row in rows}
+	unclassified = get_unclassified_items(codes) if doc.doctype in SALE_DOCTYPES else set()
+	in_scope = get_items_in_scope(codes)
 	found = []
 	for row in rows:
 		item_code = row.get("item_code")
+		if item_code in unclassified:
+			reason = display_message(unclassified_text(row))[len("&bull; ") :]
+			found.append({"idx": row.get("idx"), "item_code": item_code, "reason": reason})
+			continue
 		if item_code not in in_scope:
 			continue
 		coverage_date = get_coverage_date(doc, row)
@@ -288,24 +316,64 @@ def get_blocked_items(doctype: str, name: str) -> list[dict]:
 
 
 @frappe.whitelist()
-def notify_regulatory_affairs(doctype: str, name: str) -> dict:
-	"""Tell the Regulatory Operators that a document waits for the registration of its Items.
+def notify_regulatory_affairs(
+	doctype: str, name: str | None = None, item_codes: str | list | None = None
+) -> dict:
+	"""Tell the Regulatory Operators that a document waits for the classification or registration of its Items.
 
 	One task for each Item (the app's handlers in the hook `regulatory_notify_handlers` make it, for the role, never
-	for named users, and do not repeat it while it is open). Returns {"items": [...]} of the Items notified.
+	for named users, and do not repeat it while it is open). A document that is not saved yet is named by its
+	`item_codes`. Returns {"items": [...]} of the Items notified.
 	"""
 	if doctype not in TRANSACTION_DOCTYPES:
 		frappe.throw(_("{0} is not checked for registration.").format(_(doctype)))
-	doc = frappe.get_doc(doctype, name)
-	doc.check_permission("read")
-	items = blocked_rows(doc)
+	if name:
+		doc = frappe.get_doc(doctype, name)
+		doc.check_permission("read")
+		items = blocked_rows(doc)
+	else:
+		codes = frappe.parse_json(item_codes) if isinstance(item_codes, str) else item_codes
+		doc = frappe._dict(doctype=doctype, name=_("an unsaved draft"))
+		items = [
+			{"idx": None, "item_code": code, "reason": _("Not classified or registered yet.")}
+			for code in sorted(set(codes or []))
+			if frappe.db.exists("Item", code)
+		]
 	if not items:
-		frappe.msgprint(_("Nothing blocks this document: every regulated Item is registered."), alert=True)
+		frappe.msgprint(
+			_("Nothing blocks this document: every Item is classified and registered."), alert=True
+		)
 		return {"items": []}
 	for handler in frappe.get_hooks("regulatory_notify_handlers"):
 		frappe.get_attr(handler)(doc, items)
 	frappe.msgprint(_("Regulatory Affairs has been told."), indicator="green", alert=True)
 	return {"items": sorted({row["item_code"] for row in items})}
+
+
+# Item list of the sales forms
+
+
+def sellable_items_condition(on_date=None):
+	"""SQL condition on `tabItem`: classified by RA and (Not Regulated or covered by a registration in force on the date).
+
+	The registration test is the one of `coverage.get_mapping_at_date`/`is_in_force`, written as SQL for the Item link
+	list. A date is a plain `YYYY-MM-DD` value (escaped here); without one it is today."""
+	day = frappe.db.escape(str(getdate(on_date or today())))
+	statuses = ", ".join(frappe.db.escape(status) for status in IN_FORCE_STATUSES)
+	return f"""and (tabItem.{ITEM_CATEGORY_FIELD} = {frappe.db.escape(NOT_REGULATED)}
+		or (ifnull(tabItem.{ITEM_CATEGORY_FIELD}, '') != '' and exists (
+			select 1 from `tabRegulatory Registered Product` rp
+			inner join `tabRegulatory Product Registration` reg on reg.name = rp.parent
+			where rp.parenttype = 'Regulatory Product Registration'
+				and rp.item_code = tabItem.name
+				and rp.line_status = 'Active'
+				and reg.official_status in ({statuses})
+				and (rp.effective_from is null or rp.effective_from <= {day})
+				and (rp.effective_to is null or rp.effective_to >= {day})
+				and (reg.issue_date is null or reg.issue_date <= {day})
+				and (ifnull(reg.expiry_basis, '') != 'Expiry Date Specified' or reg.expiry_date is null
+					or reg.expiry_date >= {day})
+		)))"""
 
 
 # Settings and scope
@@ -351,13 +419,29 @@ def get_items_in_scope(item_codes):
 	return set(
 		frappe.get_all(
 			"Item",
-			filters={
-				"name": ("in", item_codes),
-				ITEM_CATEGORY_FIELD: ("is", "set"),
-			},
+			filters=[
+				["Item", "name", "in", item_codes],
+				["Item", ITEM_CATEGORY_FIELD, "is", "set"],
+				["Item", ITEM_CATEGORY_FIELD, "!=", NOT_REGULATED],
+			],
 			pluck="name",
 		)
 	)
+
+
+def get_unclassified_items(item_codes):
+	"""Item codes RA has not classified yet (no Product Category and not Not Regulated): they are not sold."""
+	item_codes = sorted({item_code for item_code in item_codes if item_code})
+	if not item_codes:
+		return set()
+	classified = set(
+		frappe.get_all(
+			"Item",
+			filters=[["Item", "name", "in", item_codes], ["Item", ITEM_CATEGORY_FIELD, "is", "set"]],
+			pluck="name",
+		)
+	)
+	return {code for code in item_codes if code not in classified}
 
 
 def get_coverage_date(doc, row):

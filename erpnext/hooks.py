@@ -288,19 +288,29 @@ _regulatory_affairs_doc_events = {
 		"validate": "erpnext.regulatory_affairs.transactions.validate_warning_transaction",
 		"before_submit": "erpnext.regulatory_affairs.transactions.capture_transaction_snapshot",
 	},
-	# A Quotation warns on save, so sales see a marked Item without a registration early, and is checked with
-	# the full policy on submit. It carries no snapshot.
+	# Quotation, Sales Order, Delivery Note and Sales Invoice are refused already on save when a row's Item is not
+	# classified by Regulatory Affairs or has no registration in force (Siwat, 5 Nov 2026), and checked again on
+	# submit. A Quotation carries no snapshot.
 	"Quotation": {
-		"validate": "erpnext.regulatory_affairs.transactions.validate_warning_transaction",
+		"validate": "erpnext.regulatory_affairs.transactions.validate_transaction",
 		"before_submit": "erpnext.regulatory_affairs.transactions.validate_transaction",
 	},
-	# A Sales Order warns on save and is checked with the full policy on submit.
 	"Sales Order": {
-		"validate": "erpnext.regulatory_affairs.transactions.validate_warning_transaction",
+		"validate": "erpnext.regulatory_affairs.transactions.validate_transaction",
 		"before_submit": [
 			"erpnext.regulatory_affairs.transactions.validate_transaction",
 			"erpnext.regulatory_affairs.transactions.capture_transaction_snapshot",
 		],
+	},
+	**{
+		_doctype: {
+			"validate": "erpnext.regulatory_affairs.transactions.validate_transaction",
+			"before_submit": [
+				"erpnext.regulatory_affairs.transactions.validate_transaction",
+				"erpnext.regulatory_affairs.transactions.capture_transaction_snapshot",
+			],
+		}
+		for _doctype in ("Delivery Note", "Sales Invoice")
 	},
 	**{
 		_doctype: {
@@ -309,7 +319,7 @@ _regulatory_affairs_doc_events = {
 				"erpnext.regulatory_affairs.transactions.capture_transaction_snapshot",
 			]
 		}
-		for _doctype in ("Purchase Receipt", "Stock Entry", "Delivery Note", "Sales Invoice")
+		for _doctype in ("Purchase Receipt", "Stock Entry")
 	},
 }
 

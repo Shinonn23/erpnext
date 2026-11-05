@@ -12,16 +12,19 @@ from frappe import _
 
 from erpnext.regulatory_affairs import coverage, permissions
 from erpnext.regulatory_affairs.constants import (
+	ITEM_CATEGORIES,
 	ITEM_CATEGORY_FIELD,
 	ITEM_COVERAGE_FIELDS,
 	MEDICAL_DEVICE,
+	NOT_REGULATED,
 	OTHER_CATEGORY,
 )
 
 
 def is_regulated(item: Any) -> bool:
-	"""Whether the Item has a Product Category, i.e. needs an FDA registration."""
-	return bool((item.get(ITEM_CATEGORY_FIELD) or "").strip())
+	"""Whether the Item has a Thai FDA Product Category, i.e. needs an FDA registration (Not Regulated needs none)."""
+	category = (item.get(ITEM_CATEGORY_FIELD) or "").strip()
+	return bool(category) and category != NOT_REGULATED
 
 
 def category_of(value: Any) -> str:
@@ -87,6 +90,8 @@ def classify_item(
 	else:
 		doc.medical_device_category = None
 	doc.regulatory_other_category = category_of(other_category) if category == OTHER_CATEGORY else None
+	if category and category not in ITEM_CATEGORIES:
+		frappe.throw(_("Product Category {0} is not valid.").format(frappe.bold(category)))
 	if category == OTHER_CATEGORY and not doc.regulatory_other_category:
 		frappe.throw(_("Enter the Other Category when the Product Category is Other."))
 	if regulatory_owner:
@@ -118,3 +123,29 @@ def validate(doc, method=None):
 		coverage.refresh_item_coverage(doc)
 	else:
 		doc.update(dict.fromkeys(ITEM_COVERAGE_FIELDS))
+
+
+@frappe.whitelist()
+def classify_items(item_codes: str | list, category: str, medical_device_category: str | None = None) -> dict:
+	"""Classify many Items at once (list view bulk action, Regulatory Operator): the same category for each.
+
+	Items that fail (a Medical Device without its Device Category ...) are listed and the rest are saved.
+	"""
+	codes = frappe.parse_json(item_codes) if isinstance(item_codes, str) else item_codes
+	done, failed = [], {}
+	for code in codes or []:
+		try:
+			classify_item(code, category, medical_device_category, frappe.session.user)
+			done.append(code)
+		except Exception as error:
+			frappe.clear_last_message()
+			failed[code] = str(error)
+	return {"done": done, "failed": failed}
+
+
+def unclassified_count() -> int:
+	"""Enabled sales Items that RA has not classified yet."""
+	return frappe.db.count(
+		"Item",
+		{"disabled": 0, "is_sales_item": 1, ITEM_CATEGORY_FIELD: ["in", ["", None]]},
+	)

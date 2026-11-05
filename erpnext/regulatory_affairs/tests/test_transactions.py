@@ -260,10 +260,11 @@ class TestPolicyHelpers(unittest.TestCase):
 		self.assertEqual(scope, {"A", "B"})
 		get_all.assert_called_once_with(
 			"Item",
-			filters={
-				"name": ("in", ["A", "B"]),
-				"regulatory_product_category": ("is", "set"),
-			},
+			filters=[
+				["Item", "name", "in", ["A", "B"]],
+				["Item", "regulatory_product_category", "is", "set"],
+				["Item", "regulatory_product_category", "!=", "Not Regulated"],
+			],
 			pluck="name",
 		)
 
@@ -311,7 +312,8 @@ class TestCoverageDate(unittest.TestCase):
 class ValidationHarness:
 	"""Runs the entry points with the database, the policy settings and the messages replaced."""
 
-	def __init__(self, mappings, settings=None, in_scope=None):
+	def __init__(self, mappings, settings=None, in_scope=None, unclassified=()):
+		self.unclassified = set(unclassified)
 		self.mappings = mappings
 		self.settings = settings or make_settings()
 		self.in_scope = in_scope
@@ -340,6 +342,13 @@ class ValidationHarness:
 					transactions,
 					"get_mapping_at_date",
 					side_effect=self._mapping_for,
+				)
+			)
+			stack.enter_context(
+				patch.object(
+					transactions,
+					"get_unclassified_items",
+					side_effect=lambda codes: set(codes) & self.unclassified,
 				)
 			)
 			self.msgprint = stack.enter_context(patch.object(frappe, "msgprint"))
@@ -802,12 +811,14 @@ class TestSalesOrderAndQuotation(unittest.TestCase):
 		warn = "erpnext.regulatory_affairs.transactions.validate_warning_transaction"
 		handlers = self.handlers("Sales Order", "before_submit")
 		self.assertLess(handlers.index(validate), handlers.index(snapshot))
-		self.assertIn(warn, self.handlers("Sales Order", "validate"))
-		self.assertIn(warn, self.handlers("Quotation", "validate"))
+		# saving is refused too (Siwat, 5 Nov 2026), not only warned about
+		for doctype in ("Quotation", "Sales Order", "Delivery Note", "Sales Invoice"):
+			self.assertIn(validate, self.handlers(doctype, "validate"), doctype)
+			self.assertNotIn(warn, self.handlers(doctype, "validate"), doctype)
+		self.assertIn(warn, self.handlers("Purchase Order", "validate"))
 		self.assertIn(validate, self.handlers("Quotation", "before_submit"))
 		# A Quotation carries no snapshot.
 		self.assertNotIn(snapshot, self.handlers("Quotation", "before_submit"))
-		self.assertNotIn(validate, self.handlers("Quotation", "validate"))
 		self.assertNotIn(validate, self.handlers("Purchase Order", "before_submit"))
 
 	def test_sales_order_submit_blocks_without_a_registration(self):
@@ -893,15 +904,18 @@ class TestPlainMessages(unittest.TestCase):
 		self.assertTrue(harness.raised)
 		args, kwargs = harness.throw_calls[0]
 		self.assertIn("has no FDA registration in force on 2026-08-09", args[0])
-		self.assertIn("Regulatory Affairs must register the Item", args[0])
+		self.assertIn("Regulatory Affairs must classify or register the Item", args[0])
 		self.assertNotIn("Block:", args[0])
 		self.assertNotIn("mapping", args[0])
 		self.assertEqual(kwargs["primary_action"]["label"], "Notify Regulatory Affairs")
-		self.assertEqual(kwargs["primary_action"]["args"], {"doctype": "Delivery Note", "name": "DOC-1"})
+		self.assertEqual(
+			kwargs["primary_action"]["args"],
+			{"doctype": "Delivery Note", "name": "DOC-1", "item_codes": ["DEVICE-1"]},
+		)
 
-	def test_no_button_for_an_unsaved_document(self):
+	def test_the_button_names_no_document_when_it_is_not_saved(self):
 		doc = make_doc("Delivery Note", __islocal=1)
-		self.assertIsNone(transactions.notify_action(doc))
+		self.assertIsNone(transactions.notify_action(doc)["args"]["name"])
 
 	def test_a_registration_cannot_be_bypassed(self):
 		self.assertFalse(hasattr(transactions, "get_override"))
@@ -962,3 +976,61 @@ class TestBlockedRows(unittest.TestCase):
 			result = transactions.notify_regulatory_affairs("Delivery Note", "DOC-1")
 		self.assertEqual(result, {"items": ["DEVICE-1"]})
 		self.assertEqual(calls, [(doc, [{"item_code": "DEVICE-1"}])])
+
+
+class TestClassification(unittest.TestCase):
+	"""Siwat, 5 Nov 2026: an Item RA has not classified is not sold; a regulated one needs a registration."""
+
+	def test_an_unclassified_item_is_refused_on_save_of_every_sale_document(self):
+		for doctype in ("Quotation", "Sales Order", "Delivery Note", "Sales Invoice"):
+			with self.subTest(doctype=doctype):
+				doc = make_doc(doctype, transaction_date="2026-08-09")
+				harness = ValidationHarness({}, in_scope=set(), unclassified={"DEVICE-1"}).run_with(doc)
+				self.assertTrue(harness.raised)
+				text = harness.throw_calls[0][0][0]
+				self.assertIn("has not been classified by Regulatory Affairs yet", text)
+				self.assertIn("classify or register", text)
+				self.assertEqual(
+					harness.throw_calls[0][1]["primary_action"]["args"]["item_codes"], ["DEVICE-1"]
+				)
+
+	def test_purchasing_does_not_need_a_classification(self):
+		for doctype in ("Purchase Order", "Purchase Receipt", "Stock Entry"):
+			doc = make_doc(doctype, purpose="Material Receipt")
+			harness = ValidationHarness({}, in_scope=set(), unclassified={"DEVICE-1"}).run_with(doc)
+			self.assertFalse(harness.raised, doctype)
+
+	def test_returns_are_not_checked(self):
+		doc = make_doc("Delivery Note", is_return=1)
+		harness = ValidationHarness({}, in_scope=set(), unclassified={"DEVICE-1"}).run_with(doc)
+		self.assertFalse(harness.raised)
+
+	def test_a_classified_item_that_needs_no_registration_passes(self):
+		doc = make_doc("Sales Order", transaction_date="2026-08-09")
+		harness = ValidationHarness({}, in_scope=set(), unclassified=set()).run_with(doc)
+		self.assertFalse(harness.raised)
+
+	def test_the_notify_button_is_offered_for_a_document_not_saved_yet(self):
+		doc = make_doc("Quotation", __islocal=1)
+		action = transactions.notify_action(doc, ["DEVICE-1"])
+		self.assertIsNone(action["args"]["name"])
+		self.assertEqual(action["args"]["item_codes"], ["DEVICE-1"])
+
+	def test_blocked_rows_name_the_unclassified_item(self):
+		rows = [make_row("DEVICE-1", idx=1)]
+		harness = ValidationHarness({}, in_scope=set(), unclassified={"DEVICE-1"})
+		with harness.patched():
+			found = transactions.blocked_rows(make_doc("Sales Order", rows=rows))
+		self.assertIn("not been classified", found[0]["reason"])
+
+	def test_the_link_list_condition_offers_not_regulated_or_covered_items_only(self):
+		with patch.object(frappe, "db", new=MagicMock(escape=lambda v: f"'{v}'")):
+			condition = transactions.sellable_items_condition("2026-08-09")
+		self.assertIn("= 'Not Regulated'", condition)
+		self.assertIn("reg.official_status in ('Active', 'Expired', 'Superseded')", condition)
+		self.assertIn("rp.effective_from <= '2026-08-09'", condition)
+		self.assertIn("reg.expiry_date >= '2026-08-09'", condition)
+
+	def test_get_unclassified_items_lists_items_without_a_category(self):
+		with patch.object(frappe, "get_all", return_value=["B"]):
+			self.assertEqual(transactions.get_unclassified_items(["A", "B", ""]), {"A"})

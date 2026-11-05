@@ -106,7 +106,14 @@ erpnext.sales_common = {
 						}
 						return {
 							query: "erpnext.controllers.queries.item_query",
-							filters: { is_sales_item: 1, customer: customer, has_variants: 0 },
+							filters: {
+								is_sales_item: 1,
+								customer: customer,
+								has_variants: 0,
+								// only Items RA classified and, when regulated, registered on the date
+								regulatory_sale: 1,
+								regulatory_date: me.frm.doc.transaction_date || me.frm.doc.posting_date || "",
+							},
 						};
 					});
 				}
