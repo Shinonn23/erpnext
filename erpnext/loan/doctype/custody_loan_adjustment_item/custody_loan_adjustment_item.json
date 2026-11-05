@@ -16,18 +16,20 @@
   {
    "fieldname": "custody_loan_item",
    "fieldtype": "Link",
-   "label": "Loan Item",
+   "label": "Loan Item Row",
    "options": "Custody Loan Item",
-   "reqd": 1,
-   "in_list_view": 1
+   "hidden": 1,
+   "read_only": 1,
+   "description": "The loan row this line returns, set from the Item (as ERPNext links a Delivery Note row to its Sales Order row)."
   },
   {
    "fieldname": "item_code",
    "fieldtype": "Link",
    "label": "Item",
    "options": "Item",
-   "read_only": 1,
-   "in_list_view": 1
+   "in_list_view": 1,
+   "columns": 2,
+   "reqd": 1
   },
   {
    "fetch_from": "item_code.has_batch_no",
@@ -50,27 +52,31 @@
    "fieldtype": "Float",
    "label": "Adjusted Qty",
    "reqd": 1,
-   "in_list_view": 1
+   "in_list_view": 1,
+   "columns": 1
   },
   {
    "fieldname": "batch_no",
    "fieldtype": "Link",
    "label": "Batch No",
    "options": "Batch",
-   "depends_on": "eval:doc.has_batch_no"
+   "in_list_view": 1,
+   "columns": 2
   },
   {
    "fieldname": "serial_no",
    "fieldtype": "Small Text",
    "label": "Serial Nos",
-   "depends_on": "eval:doc.has_serial_no"
+   "in_list_view": 1,
+   "columns": 2
   },
   {
    "fieldname": "reason",
    "fieldtype": "Small Text",
    "label": "Reason",
    "reqd": 1,
-   "in_list_view": 1
+   "in_list_view": 1,
+   "columns": 3
   }
  ],
  "istable": 1,

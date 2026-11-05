@@ -36,6 +36,8 @@
   "use_serial_batch_fields",
   "column_break_20",
   "section_break_ecxc",
+  "has_serial_no",
+  "has_batch_no",
   "serial_no",
   "column_break_belw",
   "batch_no",
@@ -86,16 +88,34 @@
    "read_only": 1
   },
   {
-   "depends_on": "eval:doc.use_serial_batch_fields === 1",
-   "fieldname": "serial_no",
-   "fieldtype": "Small Text",
-   "label": "Serial No"
+   "fetch_from": "item_code.has_serial_no",
+   "fieldname": "has_serial_no",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "Has Serial No",
+   "read_only": 1
   },
   {
-   "depends_on": "eval:doc.use_serial_batch_fields === 1",
+   "fetch_from": "item_code.has_batch_no",
+   "fieldname": "has_batch_no",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "Has Batch No",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:(doc.use_serial_batch_fields === 1 || !doc.serial_and_batch_bundle)",
+   "fieldname": "serial_no",
+   "fieldtype": "Small Text",
+   "label": "Serial No",
+   "mandatory_depends_on": "eval:doc.has_serial_no && !doc.serial_and_batch_bundle && doc.picked_qty > 0"
+  },
+  {
+   "depends_on": "eval:(doc.use_serial_batch_fields === 1 || !doc.serial_and_batch_bundle)",
    "fieldname": "batch_no",
    "fieldtype": "Link",
    "label": "Batch No",
+   "mandatory_depends_on": "eval:doc.has_batch_no && !doc.serial_and_batch_bundle && doc.picked_qty > 0",
    "options": "Batch",
    "search_index": 1
   },
@@ -252,7 +272,7 @@
    "label": "Use Serial No / Batch Fields"
   },
   {
-   "depends_on": "eval:doc.use_serial_batch_fields === 1",
+   "depends_on": "eval:(doc.use_serial_batch_fields === 1 || !doc.serial_and_batch_bundle)",
    "fieldname": "section_break_ecxc",
    "fieldtype": "Section Break"
   },
@@ -324,7 +344,7 @@
  ],
  "istable": 1,
  "links": [],
- "modified": "2026-10-10 00:47:44.133051",
+ "modified": "2026-11-05 17:00:00.000000",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Pick List Item",

@@ -121,7 +121,7 @@
    "label": "Serial No and Batch"
   },
   {
-   "depends_on": "eval:doc.use_serial_batch_fields === 1",
+   "depends_on": "eval:(doc.use_serial_batch_fields === 1 || !doc.serial_and_batch_bundle)",
    "fieldname": "serial_no",
    "fieldtype": "Long Text",
    "label": "Serial No",
@@ -191,7 +191,7 @@
    "read_only": 1
   },
   {
-   "depends_on": "eval:doc.use_serial_batch_fields === 1",
+   "depends_on": "eval:(doc.use_serial_batch_fields === 1 || !doc.serial_and_batch_bundle)",
    "fieldname": "batch_no",
    "fieldtype": "Link",
    "label": "Batch No",
@@ -251,7 +251,7 @@
    "label": "Use Serial No / Batch Fields"
   },
   {
-   "depends_on": "eval:doc.use_serial_batch_fields === 1",
+   "depends_on": "eval:(doc.use_serial_batch_fields === 1 || !doc.serial_and_batch_bundle)",
    "fieldname": "section_break_lypk",
    "fieldtype": "Section Break"
   },

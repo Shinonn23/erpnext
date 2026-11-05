@@ -1,12 +1,24 @@
 import frappe
 
+from erpnext.loan.report.requester import (
+	REQUEST_JOIN,
+	REQUESTER_SELECT,
+	UNIT_VALUE,
+	add_requester_filter,
+	expand_serial_batches,
+	insert_columns_after,
+	requester_columns,
+	value_columns,
+)
+
 
 def execute(filters=None):
 	filters = frappe._dict(filters or {})
 	conditions = [
 		"loan.docstatus = 1",
 		"loan.loan_type = 'Stock'",
-		"loan.status IN ('Active', 'Partially Returned')",
+		# items on a return not yet received are still the requester's responsibility
+		"loan.status IN ('Active', 'Partially Returned', 'Pending Shipment', 'Pending Quality Inspection', 'Pending Receipt')",
 		"item.outstanding_qty > 0",
 	]
 	values = {}
@@ -18,6 +30,7 @@ def execute(filters=None):
 		if filters.get(bound):
 			conditions.append(f"loan.expected_return_date {operator} %({bound})s")
 			values[bound] = filters[bound]
+	add_requester_filter(filters, conditions, values)
 
 	columns = [
 		{"label": "Custody Loan", "fieldname": "loan", "fieldtype": "Link", "options": "Custody Loan", "width": 165},
@@ -38,17 +51,24 @@ def execute(filters=None):
 		{"label": "Status", "fieldname": "status", "fieldtype": "Data", "width": 125},
 		{"label": "Company", "fieldname": "company", "fieldtype": "Link", "options": "Company", "width": 130},
 	]
+	columns = insert_columns_after(columns, "borrower", requester_columns())
+	columns = insert_columns_after(columns, "outstanding_qty", value_columns())
+	for column in columns:
+		if column["fieldname"] == "serial_no":
+			column.update(label="Serial No", fieldtype="Link", options="Serial No")
 	data = frappe.db.sql(
 		f"""SELECT loan.name AS loan, loan.material_request, loan.borrower_type,
-			loan.borrower, loan.expected_return_date, item.item_code, item.item_name,
+			loan.borrower, {REQUESTER_SELECT}, loan.expected_return_date, item.name AS loan_item, item.item_code, item.item_name,
 			item.source_warehouse, loan.customer_loan_warehouse, item.batch_no, item.serial_no,
 			item.qty, item.returned_qty, item.adjusted_qty,
-			item.outstanding_qty, loan.status, loan.company
+			item.outstanding_qty, {UNIT_VALUE} AS unit_value,
+			item.qty * {UNIT_VALUE} AS loan_value, item.outstanding_qty * {UNIT_VALUE} AS outstanding_value, loan.status, loan.company
 		FROM `tabCustody Loan` loan
 		JOIN `tabCustody Loan Item` item ON item.parent = loan.name
+		{REQUEST_JOIN}
 		WHERE {' AND '.join(conditions)}
 		ORDER BY loan.expected_return_date, loan.borrower, item.item_code""",
 		values,
 		as_dict=True,
 	)
-	return columns, data
+	return columns, expand_serial_batches(data)

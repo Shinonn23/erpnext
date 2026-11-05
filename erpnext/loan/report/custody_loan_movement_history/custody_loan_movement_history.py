@@ -1,6 +1,14 @@
 import frappe
 from frappe.utils import add_days
 
+from erpnext.loan.report.requester import (
+	REQUEST_JOIN,
+	REQUESTED_BY,
+	REQUESTER_SELECT,
+	insert_columns_after,
+	requester_columns,
+)
+
 
 def execute(filters=None):
 	filters = frappe._dict(filters or {})
@@ -22,9 +30,14 @@ def execute(filters=None):
 			stock_conditions.append(f"entry.posting_date {operator} %({bound})s")
 			values[bound] = filters[bound]
 
+	if filters.get("requested_by"):
+		asset_conditions.append(f"{REQUESTED_BY} = %(requested_by)s")
+		stock_conditions.append(f"{REQUESTED_BY} = %(requested_by)s")
+		values["requested_by"] = filters.requested_by
+
 	asset_rows = frappe.db.sql(
 		f"""SELECT movement.transaction_date, loan.name AS loan,
-			loan.material_request, loan.loan_type, loan.borrower_type, loan.borrower,
+			loan.material_request, loan.loan_type, loan.borrower_type, loan.borrower, {REQUESTER_SELECT},
 			'Asset Movement' AS source_doctype, movement.name AS source_document,
 			CASE WHEN movement.custody_loan_source_doctype = 'Custody Loan'
 				THEN 'Issue' ELSE 'Return' END AS action,
@@ -35,6 +48,7 @@ def execute(filters=None):
 			item.from_employee, item.to_employee, movement.company
 		FROM `tabAsset Movement` movement
 		JOIN `tabCustody Loan` loan ON loan.name = movement.custody_loan
+		{REQUEST_JOIN}
 		JOIN `tabAsset Movement Item` item ON item.parent = movement.name
 		JOIN `tabAsset` asset ON asset.name = item.asset
 		WHERE {' AND '.join(asset_conditions)}""",
@@ -43,7 +57,7 @@ def execute(filters=None):
 	)
 	stock_rows = frappe.db.sql(
 		f"""SELECT entry.posting_date AS transaction_date, loan.name AS loan,
-			loan.material_request, loan.loan_type, loan.borrower_type, loan.borrower,
+			loan.material_request, loan.loan_type, loan.borrower_type, loan.borrower, {REQUESTER_SELECT},
 			'Stock Entry' AS source_doctype, entry.name AS source_document,
 			CASE entry.custody_loan_source_doctype
 				WHEN 'Custody Loan' THEN 'Issue'
@@ -55,6 +69,7 @@ def execute(filters=None):
 			NULL AS from_employee, NULL AS to_employee, entry.company
 		FROM `tabStock Entry` entry
 		JOIN `tabCustody Loan` loan ON loan.name = entry.custody_loan
+		{REQUEST_JOIN}
 		JOIN `tabStock Entry Detail` item ON item.parent = entry.name
 		JOIN `tabItem` product ON product.name = item.item_code
 		WHERE {' AND '.join(stock_conditions)}""",
@@ -65,7 +80,7 @@ def execute(filters=None):
 	# Entries remain the source for adjustments and older loan transactions.
 	delivery_rows = frappe.db.sql(
 		f"""SELECT entry.posting_date AS transaction_date, loan.name AS loan,
-			loan.material_request, loan.loan_type, loan.borrower_type, loan.borrower,
+			loan.material_request, loan.loan_type, loan.borrower_type, loan.borrower, {REQUESTER_SELECT},
 			'Delivery Note' AS source_doctype, entry.name AS source_document,
 			CASE WHEN entry.is_return = 1 THEN 'Return' ELSE 'Issue' END AS action,
 			item.item_code, product.item_name, NULL AS asset, NULL AS asset_serial_number,
@@ -75,6 +90,7 @@ def execute(filters=None):
 			NULL AS from_employee, NULL AS to_employee, entry.company
 		FROM `tabDelivery Note` entry
 		JOIN `tabCustody Loan` loan ON loan.name = entry.custody_loan
+		{REQUEST_JOIN}
 		JOIN `tabDelivery Note Item` item ON item.parent = entry.name
 		JOIN `tabItem` product ON product.name = item.item_code
 		WHERE {' AND '.join(stock_conditions)}""",
@@ -105,4 +121,5 @@ def execute(filters=None):
 		{"label": "To Employee", "fieldname": "to_employee", "fieldtype": "Link", "options": "Employee", "width": 135},
 		{"label": "Company", "fieldname": "company", "fieldtype": "Link", "options": "Company", "width": 130},
 	]
+	columns = insert_columns_after(columns, "borrower", requester_columns())
 	return columns, data

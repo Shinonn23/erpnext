@@ -41,6 +41,16 @@ def active_asset_request_condition(asset):
 		))"""
 
 
+def is_demo_asset_row(row):
+	"""A Demo row is an Asset row once it names an Asset or asks for a Fixed Asset Item; a Stock Item row is lent
+	as Stock."""
+	if row.get("asset"):
+		return True
+	if not row.get("item_code"):
+		return row.get("item_type") != "Stock Item"
+	return not cint(frappe.get_cached_value("Item", row.item_code, "is_stock_item"))
+
+
 def is_customer_request(request):
 	return request.material_request_type in CUSTOMER_REQUEST_TYPES
 
@@ -193,11 +203,11 @@ class CustomerMaterialRequest(MaterialRequest):
 			elif is_asset_transfer_request(self) and self.get("asset_transfer_status") == "Cancelled":
 				self.asset_transfer_status = "Draft"
 
-		asset_rows = purpose in ("Asset Transfer", "Customer Demo") or (
+		asset_rows = purpose == "Asset Transfer" or (
 			purpose == "Customer Borrow / Loan" and self.get("borrow_item_type") == "Asset"
 		)
 		for row in self.items:
-			if asset_rows:
+			if asset_rows or (purpose == "Customer Demo" and is_demo_asset_row(row)):
 				if row.asset:
 					row.item_code = row.item_code or frappe.db.get_value("Asset", row.asset, "item_code")
 				row.from_warehouse = None
@@ -300,7 +310,7 @@ class CustomerMaterialRequest(MaterialRequest):
 				frappe.throw(_("Customer Contact is required for Customer Demo requests"))
 			if not self.customer_location:
 				frappe.throw(_("Customer Location is required for Customer Demo requests"))
-			self.validate_asset_items("Customer Demo")
+			self.validate_demo_items()
 			self.update_progress()
 		elif self.material_request_type == "Customer Borrow / Loan":
 			self.validate_dates()
@@ -486,8 +496,33 @@ class CustomerMaterialRequest(MaterialRequest):
 			frappe.throw(_("Expected Return Date cannot be before Request Date"))
 
 	def validate_demo_items(self):
-		"""Keep the old method name for callers while validating the shared MR Items table."""
-		self.validate_asset_items("Customer Demo")
+		"""A Demo request names the Items wanted; each row is lent as Stock or as an Asset (Connect Diagnostics,
+		Siwat, 5 Nov 2026, relayed by the user: the requester picks the Item Code, the back office decides how
+		it is supplied). Stock Item rows are validated as a Stock Loan's, the rest as Assets."""
+		if not self.items:
+			frappe.throw(_("Add at least one Item to the Demo request"))
+		stock_rows = [row for row in self.items if row.item_type == "Stock Item"]
+		asset_rows = [row for row in self.items if row.item_type != "Stock Item"]
+		for row in stock_rows:
+			item = frappe.get_cached_value(
+				"Item", row.item_code, ["is_stock_item", "stock_uom", "disabled"], as_dict=True
+			)
+			if not item or not item.is_stock_item or item.disabled:
+				frappe.throw(_("Row {0}: Select an enabled Stock Item or Fixed Asset Item").format(row.idx))
+			if flt(row.qty) <= 0:
+				frappe.throw(_("Row {0}: Qty must be greater than zero").format(row.idx))
+			row.uom = row.uom or item.stock_uom
+			row.stock_uom = item.stock_uom
+			row.conversion_factor = row.conversion_factor or 1
+			row.schedule_date = row.schedule_date or self.schedule_date
+			row.target_location = row.target_location or self.customer_location
+		if asset_rows:
+			rows = self.items
+			try:
+				self.items = asset_rows
+				self.validate_asset_items("Customer Demo")
+			finally:
+				self.items = rows
 
 	def validate_stock_loan_items(self):
 		if not self.items:
@@ -541,7 +576,9 @@ class CustomerMaterialRequest(MaterialRequest):
 
 	def before_submit(self):
 		super().before_submit()
-		if is_asset_transfer_request(self) or self.material_request_type == "Customer Demo" or (
+		if self.material_request_type == "Customer Demo":
+			self.validate_demo_items()
+		elif is_asset_transfer_request(self) or (
 			self.material_request_type == "Customer Borrow / Loan" and self.get("borrow_item_type") == "Asset"
 		):
 			self.validate_asset_items(self.material_request_type)

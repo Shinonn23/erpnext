@@ -1,0 +1,110 @@
+{
+ "actions": [],
+ "creation": "2026-11-05 15:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "custody_loan_item",
+  "item_code",
+  "batch_no",
+  "serial_no",
+  "issued_qty",
+  "returned_qty",
+  "pending_return_qty",
+  "adjusted_qty",
+  "outstanding_qty",
+  "status"
+ ],
+ "fields": [
+  {
+   "fieldname": "custody_loan_item",
+   "fieldtype": "Data",
+   "label": "Loan Item",
+   "read_only": 1,
+   "hidden": 1
+  },
+  {
+   "fieldname": "item_code",
+   "fieldtype": "Link",
+   "label": "Item",
+   "read_only": 1,
+   "options": "Item",
+   "in_list_view": 1,
+   "columns": 2
+  },
+  {
+   "fieldname": "batch_no",
+   "fieldtype": "Link",
+   "label": "Batch No",
+   "read_only": 1,
+   "options": "Batch",
+   "in_list_view": 1,
+   "columns": 2
+  },
+  {
+   "fieldname": "serial_no",
+   "fieldtype": "Link",
+   "label": "Serial No",
+   "read_only": 1,
+   "options": "Serial No",
+   "in_list_view": 1,
+   "columns": 2
+  },
+  {
+   "fieldname": "issued_qty",
+   "fieldtype": "Float",
+   "label": "Issued Qty",
+   "read_only": 1,
+   "in_list_view": 1,
+   "columns": 1
+  },
+  {
+   "fieldname": "returned_qty",
+   "fieldtype": "Float",
+   "label": "Returned Qty",
+   "read_only": 1,
+   "in_list_view": 1,
+   "columns": 1
+  },
+  {
+   "fieldname": "pending_return_qty",
+   "fieldtype": "Float",
+   "label": "Pending Return Qty",
+   "read_only": 1
+  },
+  {
+   "fieldname": "adjusted_qty",
+   "fieldtype": "Float",
+   "label": "Written Off Qty",
+   "read_only": 1
+  },
+  {
+   "fieldname": "outstanding_qty",
+   "fieldtype": "Float",
+   "label": "Outstanding Qty",
+   "read_only": 1,
+   "in_list_view": 1,
+   "columns": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Data",
+   "label": "Status",
+   "read_only": 1,
+   "in_list_view": 1,
+   "columns": 1
+  }
+ ],
+ "istable": 1,
+ "links": [],
+ "modified": "2026-11-05 15:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Loan",
+ "name": "Custody Loan Serial Batch",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "idx",
+ "sort_order": "ASC",
+ "states": []
+}

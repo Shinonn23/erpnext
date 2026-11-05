@@ -298,11 +298,19 @@ frappe.ui.form.on("Material Request", {
 			) return;
 			remove_standard_status_actions();
 			const actions = r.message || {};
-			if (actions.stock_custody_loan || actions.asset_custody_loan) {
-				const loan_type = actions.stock_custody_loan ? "Stock" : "Asset";
+			// A Demo request may lend some rows as Stock and others as Assets: one Loan Order of each.
+			const loan_types = [
+				actions.stock_custody_loan && "Stock",
+				actions.asset_custody_loan && "Asset",
+			].filter(Boolean);
+			for (const loan_type of loan_types) {
 				// By name, not with the whole document: a document call on a submitted request needs its submit right.
-				frm.add_custom_button(__("Loan Order"), () =>
-					run_request_method(frm, "make_custody_loan", { loan_type }).then((r) => open_generated_doc(r.message)),
+				frm.add_custom_button(
+					loan_types.length > 1 ? __("{0} Loan Order", [__(loan_type)]) : __("Loan Order"),
+					() =>
+						run_request_method(frm, "make_custody_loan", { loan_type }).then((r) =>
+							open_generated_doc(r.message)
+						),
 					__("Create"),
 					"Custody Loan"
 				);
@@ -400,9 +408,12 @@ function set_stock_item_query(frm) {
 	frm.set_query("item_code", "items", (doc) => ({
 		query: "erpnext.controllers.queries.item_query",
 		filters:
-			["Asset Transfer", "Customer Demo"].includes(doc.material_request_type) ||
-			(doc.material_request_type === "Customer Borrow / Loan" && doc.borrow_item_type === "Asset")
-				? { is_fixed_asset: 1, disabled: 0 }
+			// A Demo request names any Item (Stock or Fixed Asset); the back office decides how it is supplied.
+			doc.material_request_type === "Customer Demo"
+				? { disabled: 0, has_variants: 0 }
+				: doc.material_request_type === "Asset Transfer" ||
+					  (doc.material_request_type === "Customer Borrow / Loan" && doc.borrow_item_type === "Asset")
+					? { is_fixed_asset: 1, disabled: 0 }
 				: doc.material_request_type === "Purchase"
 					? { is_purchase_item: 1, disabled: 0 }
 					: { is_stock_item: 1, disabled: 0 },
@@ -419,6 +430,7 @@ function configure_material_request_item_columns(frm) {
 		(purpose === "Customer Borrow / Loan" && frm.doc.borrow_item_type === "Asset");
 	const visible_columns = new Set();
 
+	if (purpose === "Customer Demo") visible_columns.add("qty");
 	if (is_asset_request) {
 		visible_columns.add("asset");
 		visible_columns.add("target_location");

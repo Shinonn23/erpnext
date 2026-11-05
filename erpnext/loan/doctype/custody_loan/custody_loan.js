@@ -40,6 +40,7 @@ frappe.ui.form.on("Custody Loan", {
 	},
 	refresh(frm) {
 		frm.set_intro("");
+		show_loan_summary(frm);
 		if (frm.doc.docstatus !== 1) return;
 		if (frm.doc.status === "Pending Pick") {
 			frm.set_intro(__("Complete and submit the Pick List, then create the Loan Delivery Note."), "blue");
@@ -109,6 +110,43 @@ frappe.ui.form.on("Custody Loan", {
 		}
 	},
 });
+
+// Who answers for the items, how many are still out, and the grid columns that fit the loan type.
+function show_loan_summary(frm) {
+	const stock = frm.doc.loan_type !== "Asset";
+	const grid = frm.fields_dict.items.grid;
+	grid.toggle_display("source_warehouse", stock);
+	grid.toggle_display("asset", !stock);
+	if (frm.doc.docstatus === 0 && !frm.is_new()) {
+		frm.set_intro(__("Check the Loan Qty and Source Warehouse of each item, then submit to make the Pick List."), "blue");
+	}
+	if (frm.doc.requested_by_name) {
+		frm.dashboard.set_headline(
+			__("Requested by {0}: responsible for these items until they come back.", [
+				`<b>${frappe.utils.escape_html(frm.doc.requested_by_name)}</b>`,
+			])
+		);
+	}
+	if (frm.doc.docstatus !== 1) return;
+	const total = (field) => (frm.doc.items || []).reduce((sum, row) => sum + flt(row[field]), 0);
+	const outstanding = total("outstanding_qty");
+	frm.dashboard.add_indicator(__("Issued: {0}", [total("issued_qty")]), "blue");
+	frm.dashboard.add_indicator(__("Returned: {0}", [total("returned_qty")]), "green");
+	if (total("adjusted_qty") || total("sold_qty")) {
+		frm.dashboard.add_indicator(__("Written Off / Sold: {0}", [total("adjusted_qty") + total("sold_qty")]), "grey");
+	}
+	frm.dashboard.add_indicator(__("Outstanding: {0}", [outstanding]), outstanding > 0 ? "orange" : "green");
+	if (outstanding > 0 && frm.doc.expected_return_date && frm.doc.expected_return_date < frappe.datetime.get_today()) {
+		frm.dashboard.set_headline_alert(
+			__("Overdue since {0}: {1} still with {2}.", [
+				frappe.datetime.str_to_user(frm.doc.expected_return_date),
+				outstanding,
+				frappe.utils.escape_html(frm.doc.borrower || ""),
+			]),
+			"red"
+		);
+	}
+}
 
 function open_generated_doc(frm, method) {
 	frm.call(method).then((r) => {

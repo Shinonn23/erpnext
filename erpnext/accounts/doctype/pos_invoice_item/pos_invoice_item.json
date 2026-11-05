@@ -634,7 +634,7 @@
    "options": "Quality Inspection"
   },
   {
-   "depends_on": "eval:doc.use_serial_batch_fields === 1",
+   "depends_on": "eval:(doc.use_serial_batch_fields === 1 || !doc.serial_and_batch_bundle)",
    "fieldname": "batch_no",
    "fieldtype": "Link",
    "label": "Batch No",
@@ -654,7 +654,7 @@
    "print_hide": 1
   },
   {
-   "depends_on": "eval:doc.use_serial_batch_fields === 1",
+   "depends_on": "eval:(doc.use_serial_batch_fields === 1 || !doc.serial_and_batch_bundle)",
    "fieldname": "serial_no",
    "fieldtype": "Text",
    "in_list_view": 1,
@@ -844,7 +844,7 @@
    "label": "Use Serial No / Batch Fields"
   },
   {
-   "depends_on": "eval:doc.use_serial_batch_fields === 1",
+   "depends_on": "eval:(doc.use_serial_batch_fields === 1 || !doc.serial_and_batch_bundle)",
    "fieldname": "section_break_tlhi",
    "fieldtype": "Section Break"
   },

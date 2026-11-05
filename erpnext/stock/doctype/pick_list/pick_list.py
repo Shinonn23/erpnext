@@ -117,6 +117,8 @@ class PickList(TransactionBase):
 		from erpnext.stock.warehouse_policy import validate_document_policy
 
 		validate_document_policy(self)
+		self.keep_manual_picking()
+		self.validate_picked_serial_batch()
 		self.validate_customer_demo_workflow()
 		self.validate_custody_loan()
 		self.validate_expired_batches()
@@ -124,6 +126,41 @@ class PickList(TransactionBase):
 		self.validate_stock_qty()
 		self.check_serial_no_status()
 		self.validate_with_previous_doc()
+
+	def keep_manual_picking(self):
+		"""The automatic pick runs only from the Auto Pick button (Connect Diagnostics, Siwat, 5 Nov 2026, relayed by
+		the user: one press picks everything; nothing picks on save). Pick Manually stays on and hidden, so a save
+		never overwrites what the picker chose."""
+		if self.docstatus == 0 and not cint(self.pick_manually):
+			self.pick_manually = 1
+
+	def validate_picked_serial_batch(self):
+		"""Every picked row of a batch or serial item names what was picked, every time (Connect Diagnostics,
+		Siwat, 5 Nov 2026, relayed by the user): the Batch No, and one Serial No per unit picked, or a Serial and
+		Batch Bundle that carries them."""
+		from erpnext.stock.doctype.serial_no.serial_no import get_serial_nos
+
+		if self.docstatus == 2 or getattr(self, "_action", None) == "update_after_submit":
+			return
+		problems = []
+		for row in self.get("locations"):
+			if flt(row.picked_qty) <= 0 or not row.item_code or row.get("serial_and_batch_bundle"):
+				continue
+			item = frappe.get_cached_value("Item", row.item_code, ["has_batch_no", "has_serial_no"], as_dict=True)
+			if not item:
+				continue
+			if item.has_batch_no and not row.batch_no:
+				problems.append(_("Row {0}: enter the Batch No of {1}").format(row.idx, frappe.bold(row.item_code)))
+			if item.has_serial_no:
+				serials = [serial for serial in get_serial_nos(row.serial_no or "") if serial]
+				if len(serials) != flt(row.picked_qty) or len(set(serials)) != len(serials):
+					problems.append(
+						_("Row {0}: enter one Serial No for each of the {1} {2} picked ({3} entered)").format(
+							row.idx, flt(row.picked_qty), frappe.bold(row.item_code), len(set(serials))
+						)
+					)
+		if problems:
+			frappe.throw(problems, title=_("Enter the Batch and Serial Nos picked"), as_list=True)
 
 	def validate_custody_loan(self):
 		if not self.get("custody_loan"):
@@ -139,7 +176,12 @@ class PickList(TransactionBase):
 		request_type = frappe.db.get_value(
 			"Material Request", self.material_request, "material_request_type"
 		) if self.material_request else None
-		if request_type == "Customer Demo" and self.pick_list_type != "Customer Demo - Asset Conversion":
+		# A Demo row lent as Stock is picked for its Custody Loan (Connect Diagnostics, Siwat, 5 Nov 2026).
+		if (
+			request_type == "Customer Demo"
+			and self.pick_list_type != "Customer Demo - Asset Conversion"
+			and not self.get("custody_loan")
+		):
 			frappe.throw(_("Pick Lists linked to a Customer Demo request must use Customer Demo - Asset Conversion"))
 		if self.pick_list_type == "Asset Conversion":
 			self.validate_asset_conversion_workflow()
@@ -785,6 +827,7 @@ class PickList(TransactionBase):
 
 	@frappe.whitelist(methods=["POST"])
 	def set_item_locations(self, save=False):
+		"""The Auto Pick button: fill every row's warehouse, storage location, batch and serial numbers."""
 		# gate up front, but only for a saved list: the mappers reach this on an unsaved one.
 		# Test the record, not is_new() -- `__islocal` arrives in the client's own JSON.
 		if self.name and frappe.db.exists("Pick List", self.name):

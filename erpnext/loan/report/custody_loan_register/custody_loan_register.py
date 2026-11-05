@@ -1,5 +1,15 @@
 import frappe
 
+from erpnext.loan.report.requester import (
+	REQUEST_JOIN,
+	REQUESTER_SELECT,
+	UNIT_VALUE,
+	add_requester_filter,
+	insert_columns_after,
+	requester_columns,
+	value_columns,
+)
+
 
 def execute(filters=None):
 	filters = frappe._dict(filters or {})
@@ -15,6 +25,7 @@ def execute(filters=None):
 	if filters.get("to_date"):
 		conditions.append("loan.expected_return_date <= %(to_date)s")
 		values["to_date"] = filters.to_date
+	add_requester_filter(filters, conditions, values)
 
 	columns = [
 		{"label": "Custody Loan", "fieldname": "loan", "fieldtype": "Link", "options": "Custody Loan", "width": 165},
@@ -32,12 +43,16 @@ def execute(filters=None):
 		{"label": "Shipment", "fieldname": "shipment", "fieldtype": "Link", "options": "Shipment", "width": 145},
 		{"label": "Company", "fieldname": "company", "fieldtype": "Link", "options": "Company", "width": 130},
 	]
+	columns = insert_columns_after(columns, "borrower", requester_columns())
+	columns = insert_columns_after(columns, "outstanding_qty", value_columns())
 	data = frappe.db.sql(
 		f"""SELECT loan.name AS loan, loan.material_request, loan.loan_type,
-			loan.borrower_type, loan.borrower, loan.expected_return_date,
+			loan.borrower_type, loan.borrower, {REQUESTER_SELECT}, loan.expected_return_date,
 			COUNT(item.name) AS item_count, SUM(item.qty) AS issued_qty,
 			SUM(item.returned_qty) AS returned_qty, SUM(item.adjusted_qty) AS adjusted_qty,
-			SUM(item.outstanding_qty) AS outstanding_qty, loan.status,
+			SUM(item.outstanding_qty) AS outstanding_qty,
+			SUM(item.qty * {UNIT_VALUE}) AS loan_value,
+			SUM(item.outstanding_qty * {UNIT_VALUE}) AS outstanding_value, loan.status,
 			COALESCE(
 				(SELECT shipment.name FROM `tabShipment` shipment
 				 WHERE shipment.custody_loan = loan.name AND shipment.docstatus < 2
@@ -47,10 +62,39 @@ def execute(filters=None):
 		FROM `tabCustody Loan` loan
 		LEFT JOIN `tabCustody Loan Item` item ON item.parent = loan.name
 		LEFT JOIN `tabDelivery Note` delivery_note ON delivery_note.name = loan.delivery_note
+		{REQUEST_JOIN}
 		WHERE {' AND '.join(conditions)}
 		GROUP BY loan.name
 		ORDER BY loan.expected_return_date, loan.name""",
 		values,
 		as_dict=True,
 	)
+	if filters.get("summary_by_requester"):
+		return summary_by_requester(columns, data)
 	return columns, data
+
+
+def summary_by_requester(columns, data):
+	"""One row per requester: how many loans, how much is still out and what it is worth."""
+	keep = {"requested_by", "requested_by_name", "requested_by_user"}
+	totals = {}
+	for row in data:
+		key = row.requested_by or row.requested_by_user
+		total = totals.setdefault(
+			key,
+			frappe._dict(
+				{field: row.get(field) for field in keep},
+				loan_count=0, issued_qty=0, returned_qty=0, outstanding_qty=0, loan_value=0, outstanding_value=0,
+			),
+		)
+		total.loan_count += 1
+		for field in ("issued_qty", "returned_qty", "outstanding_qty", "loan_value", "outstanding_value"):
+			total[field] += row.get(field) or 0
+	summary_columns = [column for column in columns if column["fieldname"] in keep]
+	summary_columns.append({"label": "Loans", "fieldname": "loan_count", "fieldtype": "Int", "width": 70})
+	summary_columns += [
+		column
+		for column in columns
+		if column["fieldname"] in ("issued_qty", "returned_qty", "outstanding_qty", "loan_value", "outstanding_value")
+	]
+	return summary_columns, sorted(totals.values(), key=lambda row: -(row.outstanding_value or 0))
