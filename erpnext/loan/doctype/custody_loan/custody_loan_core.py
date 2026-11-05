@@ -1058,8 +1058,9 @@ def make_custody_loan_return_quality_inspections(delivery_note_name):
 
 
 def custody_loan_return_row_requires_inspection(row):
-	"""A returned stock row is inspected when its Item is inspected before delivery (the same goods come back)."""
-	return bool(cint(frappe.get_cached_value("Item", row.item_code, "inspection_required_before_delivery")))
+	"""A returned stock row is inspected when its Item is inspected on receipt ('before Purchase'): goods coming back
+	are a receipt (Connect Diagnostics, 5 Nov 2026: only goods received are inspected)."""
+	return bool(cint(frappe.get_cached_value("Item", row.item_code, "inspection_required_before_purchase")))
 
 
 def is_quarantine_warehouse(warehouse, company):

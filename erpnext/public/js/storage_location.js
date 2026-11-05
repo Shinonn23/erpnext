@@ -57,6 +57,13 @@ for (const doctype of [
 				return warehouse_field ? row[warehouse_field] : null;
 			};
 
+			// The location the goods are taken from (not where they are put).
+			const is_source_field = (fieldname) =>
+				fieldname.startsWith("from_") ||
+				fieldname.startsWith("source_") ||
+				(fieldname === "storage_location" &&
+					["Stock Entry", "Delivery Note", "Sales Invoice"].includes(doctype));
+
 			const set_storage_location_query = (fieldname, get_row) => {
 				const query = (doc, cdt, cdn) => {
 					const row = get_row ? locals[cdt][cdn] : doc;
@@ -78,6 +85,15 @@ for (const doctype of [
 						// Preview the unsaved condition while editing Item preferences.
 						result.filters.item_code = "";
 						result.filters.storage_condition = doc.storage_condition || "";
+						return result;
+					}
+					if (get_row) {
+						// Each location shows the Item's quantity; a row that names serial nos is offered
+						// only their locations, and a source field only the locations holding the Item.
+						result.filters.serial_no = row.serial_no || "";
+						result.filters.serial_and_batch_bundle = row.serial_and_batch_bundle || "";
+						result.filters.batch_no = row.batch_no || "";
+						result.filters.only_stock = is_source_field(fieldname) ? 1 : 0;
 					}
 					return result;
 				};

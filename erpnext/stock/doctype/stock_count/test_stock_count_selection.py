@@ -214,12 +214,34 @@ class StockCountSelectionTest(unittest.TestCase):
 		doc.uses_variance = lambda: True
 		StockCount.validate_quarantine_if_needed(doc)
 		doc.uses_variance = lambda: False
-		with self.assertRaises(frappe.ValidationError):
-			StockCount.validate_quarantine_if_needed(doc)
+		with patch(f"{StockCount.__module__}.get_lost_warehouse", return_value=None):
+			with self.assertRaises(frappe.ValidationError):
+				StockCount.validate_quarantine_if_needed(doc)
 		doc.uses_variance = lambda: True
 		doc.quarantine_warehouse = "Q"
 		with self.assertRaises(frappe.ValidationError):
 			StockCount.validate_quarantine_if_needed(doc)
+
+	def test_a_monthly_count_defaults_to_the_companys_lost_warehouse(self):
+		# the field keeps its name but holds the Lost Warehouse (Connect Diagnostics, 5 Nov 2026)
+		doc = count(quarantine_warehouse=None, found_warehouse=None, company="C", warehouse="CD STOCK")
+		doc.validate_quarantine_warehouse = Mock()
+		doc.validate_found_warehouse = Mock()
+		doc.uses_variance = lambda: False
+		with (
+			patch(f"{StockCount.__module__}.get_lost_warehouse", return_value="LOST - C") as lost,
+			patch(f"{StockCount.__module__}.get_found_warehouse", return_value="FOUND - C") as found,
+		):
+			StockCount.validate_quarantine_if_needed(doc)
+		self.assertEqual((doc.quarantine_warehouse, doc.found_warehouse), ("LOST - C", "FOUND - C"))
+		lost.assert_called_once_with("C", exclude="CD STOCK")
+		found.assert_called_once_with("C", exclude="CD STOCK")
+		# a count that posts its differences needs none
+		doc = count(quarantine_warehouse=None, company="C")
+		doc.uses_variance = lambda: True
+		with patch(f"{StockCount.__module__}.get_lost_warehouse") as lost:
+			StockCount.validate_quarantine_if_needed(doc)
+		lost.assert_not_called()
 
 	def test_variance_account_must_be_an_enabled_leaf_expense_account_of_the_company(self):
 		good = {"company": "C", "root_type": "Expense", "is_group": 0, "account_type": "", "disabled": 0}
@@ -303,9 +325,10 @@ class StockCountSelectionTest(unittest.TestCase):
 			calls = []
 			doc.make_quarantine_stock_entry = lambda calls=calls: calls.append("quarantine")
 			doc.make_stock_reconciliation = lambda calls=calls: calls.append("reconciliation")
+			doc.handle_surplus = lambda calls=calls: calls.append("found")
 			doc.db_set = Mock()
 			StockCount.on_submit(doc)
-			self.assertEqual(calls, [expected])
+			self.assertEqual(calls, [expected, "found"] if expected == "quarantine" else [expected])
 
 	def test_make_count_template_checks_permission_and_state(self):
 		doc = count(docstatus=0, selected_items=rows("A"))
@@ -450,3 +473,154 @@ class StockCountTemplateTest(unittest.TestCase):
 
 if __name__ == "__main__":
 	unittest.main()
+
+
+class LostWarehouseAndLocationsTest(unittest.TestCase):
+	"""Connect Diagnostics, 5 Nov 2026: a zone or range of Storage Locations is counted at once, and a monthly count
+	moves what it did not find to the Lost Warehouse."""
+
+	def dims(self, *rows):
+		doc = count(dimensions=[frappe._dict(inventory_dimension=d, dimension_value=v) for d, v in rows])
+		doc.get_countable_dimensions = lambda: [
+			frappe._dict(dimension_name="Storage Location", fieldname="storage_location"),
+			frappe._dict(dimension_name="Project", fieldname="project"),
+		]
+		return doc
+
+	def test_storage_location_may_be_named_many_times_other_dimensions_once(self):
+		doc = self.dims(("Storage Location", "A-1"), ("Storage Location", "A-2"), ("Storage Location", "A-1"))
+		_dimensions, filters = StockCount.get_dimension_filters(doc)
+		self.assertEqual(filters, {"storage_location": ["A-1", "A-2"]})
+		_dimensions, filters = StockCount.get_dimension_filters(self.dims(("Storage Location", "A-1")))
+		self.assertEqual(filters, {"storage_location": "A-1"})
+		with (
+			patch("frappe.throw", side_effect=frappe.ValidationError),
+			patch(f"{StockCount.__module__}._", side_effect=lambda text: text),
+			self.assertRaises(frappe.ValidationError),
+		):
+			StockCount.get_dimension_filters(self.dims(("Project", "P1"), ("Project", "P2")))
+
+	def test_only_the_quantity_not_found_moves_to_the_lost_warehouse(self):
+		doc = Doc(
+			count(
+				quarantine_warehouse="LOST", quarantine_storage_location=None, stock_entry=None, name="SC-1"
+			)
+		)
+		doc.items = [
+			frappe._dict(item_code="SHORT", system_qty=10, counted_qty=7, batch_no=None, serial_no=None),
+			frappe._dict(item_code="OVER", system_qty=2, counted_qty=5, batch_no=None, serial_no=None),
+			frappe._dict(item_code="SN", system_qty=1, counted_qty=0, batch_no=None, serial_no="SN-LOST"),
+			frappe._dict(item_code="SN", system_qty=1, counted_qty=1, batch_no=None, serial_no="SN-FOUND"),
+		]
+		doc.has_differences = lambda: {"SHORT", "OVER", "SN"}
+		doc.get_row_dimension_values = lambda row: {}
+		doc.get_current_stock_qty = lambda row: 100
+		entry = Mock()
+		entry.items = []
+		entry.append = lambda field, row: entry.items.append(row)
+		with (
+			patch("frappe.new_doc", return_value=entry),
+			patch("frappe.get_meta", return_value=Mock(has_field=lambda fieldname: False)),
+			patch(
+				"frappe.db",
+				fake_db(get_value=lambda *args, **kwargs: "W" if args[0] == "Serial No" else "MT"),
+			),
+			patch(f"{StockCount.__module__}._", side_effect=lambda text: text),
+		):
+			StockCount.make_quarantine_stock_entry(doc)
+		moved = {(row["item_code"], row["qty"], row["serial_no"], row["t_warehouse"]) for row in entry.items}
+		self.assertEqual(moved, {("SHORT", 3, "", "LOST"), ("SN", 1, "SN-LOST", "LOST")})
+
+
+class FoundWarehouseTest(unittest.TestCase):
+	"""A count's surplus is counted again by another person; what both found is received into FOUND (5 Nov 2026)."""
+
+	def surplus_count(self, *count_rows, recount_of=None):
+		doc = Doc(
+			count(
+				found_warehouse="FOUND - C",
+				recount_of=recount_of,
+				items=[frappe._dict(row) for row in count_rows],
+			)
+		)
+		doc.get_row_dimension_values = lambda row: {"storage_location": row.get("storage_location")}
+		doc.surplus = lambda: StockCount.surplus(doc)
+		doc.db_set = lambda field, value: doc.__setitem__(field, value)
+		doc.make_found_receipt = lambda rows: frappe._dict(name="RECEIPT", rows=dict(rows))
+		doc.make_found_transfer = lambda rows: frappe._dict(name="TRANSFER", rows=dict(rows))
+		doc.make_recount = lambda pending: frappe._dict(name="RECOUNT", pending=dict(pending))
+		return doc
+
+	def run_surplus(self, doc, serials, first=None):
+		with (
+			patch.object(
+				stock_count.frappe,
+				"db",
+				fake_db(get_value=lambda doctype, name, fields, as_dict=False: serials.get(name)),
+			),
+			patch.object(stock_count.frappe, "get_doc", return_value=first),
+			patch.object(stock_count, "serial_note", side_effect=lambda serial: f"note {serial}"),
+		):
+			StockCount.handle_surplus(doc)
+
+	def test_a_first_count_receives_nothing_and_asks_for_a_recount(self):
+		doc = self.surplus_count(
+			{"item_code": "A", "system_qty": 3, "counted_qty": 5, "storage_location": "L1"},
+			{"item_code": "A", "system_qty": 4, "counted_qty": 1, "storage_location": "L2"},  # missing: LOST
+			{"item_code": "S", "serial_no": "NEW", "system_qty": 0, "counted_qty": 1},
+			{"item_code": "S", "serial_no": "IN-LOST", "system_qty": 0, "counted_qty": 1},
+			{"item_code": "S", "serial_no": "MISPLACED", "system_qty": 0, "counted_qty": 1},
+			{"item_code": "S", "serial_no": "SOLD", "system_qty": 0, "counted_qty": 1},
+		)
+		serials = {
+			"IN-LOST": frappe._dict(name="IN-LOST", warehouse="LOST - C"),
+			"MISPLACED": frappe._dict(name="MISPLACED", warehouse="W"),
+			"SOLD": frappe._dict(name="SOLD", warehouse=None),
+		}
+		self.run_surplus(doc, serials)
+		self.assertIsNone(doc.get("found_stock_entry"))
+		self.assertEqual(doc.recount_stock_count, "RECOUNT")
+		self.assertEqual(doc.found_transfer_entry, "TRANSFER")
+		self.assertEqual(doc.surplus_notes, "note SOLD")
+
+	def test_the_recount_receives_what_both_counts_found(self):
+		first = self.surplus_count(
+			{"item_code": "A", "system_qty": 3, "counted_qty": 6, "storage_location": "L1"},
+			{"item_code": "B", "system_qty": 1, "counted_qty": 2, "storage_location": "L1"},
+			{"item_code": "S", "serial_no": "NEW", "system_qty": 0, "counted_qty": 1},
+		)
+		doc = self.surplus_count(
+			{"item_code": "A", "system_qty": 3, "counted_qty": 5, "storage_location": "L1"},
+			{
+				"item_code": "B",
+				"system_qty": 1,
+				"counted_qty": 1,
+				"storage_location": "L1",
+			},  # not found again
+			{"item_code": "S", "serial_no": "NEW", "system_qty": 0, "counted_qty": 1},
+			recount_of="SC-1",
+		)
+		received = {}
+		doc.make_found_receipt = lambda rows: received.update(rows) or frappe._dict(name="RECEIPT")
+		self.run_surplus(doc, {}, first=first)
+		self.assertEqual(doc.found_stock_entry, "RECEIPT")
+		self.assertIsNone(doc.get("recount_stock_count"))
+		self.assertEqual(
+			{key[0]: (values["qty"], values["serial_nos"]) for key, values in received.items()},
+			{"A": (2.0, []), "S": (1.0, ["NEW"])},
+		)
+
+	def test_confirmed_surplus_is_the_smaller_of_the_two_counts(self):
+		self.assertEqual(
+			stock_count.confirmed_surplus({"a": 2, "b": 5, "c": 1}, {"a": 3, "b": 1}), {"a": 2, "b": 1}
+		)
+
+	def test_a_row_the_counter_adds_counts_as_found(self):
+		before = count(snapshot_datetime="2026-11-05", items=[frappe._dict(item_code="A", system_qty=3)])
+		doc = count(
+			items=[frappe._dict(item_code="A", system_qty=9), frappe._dict(item_code="B", system_qty=7)]
+		)
+		doc.get_doc_before_save = Mock(return_value=before)
+		doc.get_countable_dimensions = lambda: []
+		StockCount.keep_snapshot_rows(doc)
+		self.assertEqual([row.system_qty for row in doc["items"]], [3, 0])

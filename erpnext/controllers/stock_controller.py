@@ -89,6 +89,24 @@ def is_inspection_exempt_secondary_row(doc, row) -> bool:
 	return True
 
 
+RECEIPT_INSPECTION_FIELD = "inspection_required_before_purchase"
+
+
+def item_inspection_switch(doctype, is_return=False):
+	"""The Item switch that asks for an inspection on this document. Goods coming back (a Delivery Note or Sales
+	Invoice return, a loan return included) are a receipt: they follow 'Inspection Required before Purchase', not
+	'before Delivery' (Connect Diagnostics, 5 Nov 2026: only goods received are inspected)."""
+	if doctype in ("Delivery Note", "Sales Invoice") and cint(is_return):
+		return RECEIPT_INSPECTION_FIELD
+	return {
+		"Purchase Receipt": "inspection_required_before_purchase",
+		"Purchase Invoice": "inspection_required_before_purchase",
+		"Subcontracting Receipt": "inspection_required_before_purchase",
+		"Sales Invoice": "inspection_required_before_delivery",
+		"Delivery Note": "inspection_required_before_delivery",
+	}.get(doctype)
+
+
 def stock_entry_row_requires_inspection(purpose, row):
 	"""Check if this Stock Entry row need a Quality Inspection."""
 	if purpose in SECONDARY_ITEM_PURPOSES and (row.get("secondary_item_type") or row.get("valuation_type")):
@@ -1718,14 +1736,7 @@ class StockController(AccountsController):
 
 	def validate_inspection(self):
 		"""Checks if quality inspection is set/ is valid for Items that require inspection."""
-		inspection_fieldname_map = {
-			"Purchase Receipt": "inspection_required_before_purchase",
-			"Purchase Invoice": "inspection_required_before_purchase",
-			"Subcontracting Receipt": "inspection_required_before_purchase",
-			"Sales Invoice": "inspection_required_before_delivery",
-			"Delivery Note": "inspection_required_before_delivery",
-		}
-		inspection_required_fieldname = inspection_fieldname_map.get(self.doctype)
+		inspection_required_fieldname = item_inspection_switch(self.doctype, self.get("is_return"))
 
 		# return if inspection is not required on document level
 		if (
@@ -2473,19 +2484,16 @@ def repost_required_for_queue(doc: StockController) -> bool:
 
 
 @frappe.whitelist()
-def check_item_quality_inspection(doctype: str, docstatus: str | int, items: str | list[dict]):
+def check_item_quality_inspection(
+	doctype: str, docstatus: str | int, items: str | list[dict], is_return: str | int | None = None
+):
 	if isinstance(items, str):
 		items = json.loads(items)
 
-	inspection_fieldname_map = {
-		"Purchase Receipt": "inspection_required_before_purchase",
-		"Purchase Invoice": "inspection_required_before_purchase",
-		"Subcontracting Receipt": "inspection_required_before_purchase",
-		"Sales Invoice": "inspection_required_before_delivery",
-		"Delivery Note": "inspection_required_before_delivery",
-	}
-
-	inspection_fieldname = inspection_fieldname_map.get(doctype)
+	if is_return is None:
+		# a caller that does not say: a return's rows all carry a negative quantity
+		is_return = bool(items) and all(flt(item.get("qty")) < 0 for item in items)
+	inspection_fieldname = item_inspection_switch(doctype, is_return)
 	if inspection_fieldname is None:
 		return items if doctype == "Stock Entry" else []
 

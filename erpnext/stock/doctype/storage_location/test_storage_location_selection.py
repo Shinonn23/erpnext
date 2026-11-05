@@ -98,9 +98,12 @@ class TestStorageLocationSelection(unittest.TestCase):
 	def test_picker_cannot_override_persisted_item_requirement(self):
 		warehouse = frappe._dict(is_group=0, disabled=0)
 		item = frappe._dict(storage_condition="Cold")
+		self.db.sql.return_value = []
 		with patch("frappe.get_cached_doc", side_effect=[warehouse, item]), patch(
 			"frappe.has_permission", return_value=True
-		), patch(f"{MODULE}.get_match_cond", return_value=""):
+		), patch(f"{MODULE}.get_match_cond", return_value=""), patch(
+			f"{MODULE}.location_stock", return_value={}
+		):
 			self.query({"warehouse": "Warehouse", "item_code": "Item", "storage_condition": ""})
 			self.assertEqual(self.db.sql.call_args.args[1]["condition"], "Cold")
 			self.assertEqual(self.db.sql.call_args.args[1]["item_code"], "Item")
@@ -148,3 +151,50 @@ class TestStorageLocationSelection(unittest.TestCase):
 		), patch("erpnext.stock.doctype.putaway_rule.putaway_rule._", side_effect=lambda text: text):
 			with self.assertRaisesRegex(frappe.ValidationError, "Putaway Rules are disabled"):
 				apply_putaway_rule("Stock Entry", [], "Company", purpose="Material Transfer")
+
+
+class TestStorageLocationStock(unittest.TestCase):
+	"""The picker shows the Item's quantity per location and follows the row's serial nos (5 Nov 2026)."""
+
+	def setUp(self):
+		self.db = patch("frappe.db", Mock()).start()
+		self.addCleanup(patch.stopall)
+		self.candidates = [
+			frappe._dict(name="A-1", location_code="A1", preferred=0, idx=None),
+			frappe._dict(name="A-2", location_code="A2", preferred=0, idx=None),
+			frappe._dict(name="B-1", location_code="B1", preferred=1, idx=1),
+		]
+		self.db.sql.return_value = self.candidates
+		patch(
+			"frappe.get_cached_doc",
+			side_effect=lambda doctype, name: frappe._dict(is_group=0, disabled=0, storage_condition=None),
+		).start()
+		patch("frappe.has_permission", return_value=True).start()
+		patch(f"{MODULE}.get_match_cond", return_value="").start()
+		patch("frappe.format", side_effect=lambda value, df=None: f"{value:g}").start()
+		patch(f"{MODULE}._", side_effect=lambda text, *args, **kwargs: text).start()
+
+	def query(self, **filters):
+		return inspect.unwrap(storage_location_query)(
+			"Storage Location", "", "name", 0, 20, {"warehouse": "W", "item_code": "Item", **filters}
+		)
+
+	def test_each_location_shows_the_items_quantity_preferred_first_then_most_stock(self):
+		with patch(f"{MODULE}.location_stock", return_value={"A-2": 5.0, "B-1": 1.0}):
+			rows = self.query()
+		self.assertEqual([row[0] for row in rows], ["B-1", "A-2", "A-1"])
+		self.assertEqual([row[2] for row in rows], ["Qty 1", "Qty 5", "Qty 0"])
+
+	def test_a_source_field_offers_only_locations_holding_the_item(self):
+		with patch(f"{MODULE}.location_stock", return_value={"A-2": 5.0}):
+			self.assertEqual([row[0] for row in self.query(only_stock=1)], ["A-2"])
+		# nothing recorded per location: every location stays offered
+		with patch(f"{MODULE}.location_stock", return_value={}):
+			self.assertEqual(len(self.query(only_stock=1)), 3)
+
+	def test_a_row_with_serial_nos_offers_only_their_locations(self):
+		with patch(f"{MODULE}.location_stock", return_value={"A-2": 5.0, "A-1": 2.0}), patch(
+			f"{MODULE}.serial_locations", return_value={"A-1": 1}
+		) as where:
+			self.assertEqual([row[0] for row in self.query(serial_no="SN-1\nSN-2\n")], ["A-1"])
+		self.assertEqual(where.call_args.args, (["SN-1", "SN-2"], "W"))

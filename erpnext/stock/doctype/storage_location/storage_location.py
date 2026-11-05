@@ -5,7 +5,7 @@ import frappe
 from frappe import _
 from frappe.desk.reportview import get_match_cond
 from frappe.model.document import Document
-from frappe.utils import flt, get_time, getdate
+from frappe.utils import cint, cstr, flt, get_time, getdate
 
 # Every active leaf Warehouse gets this location as its default, so stock rows are filled in.
 DEFAULT_LOCATION_CODE = "STAGING"
@@ -253,9 +253,9 @@ def get_default_storage_location(warehouse, item_code=None):
 	)
 	if not location:
 		frappe.throw(
-			_("Warehouse {0} has no Storage Location that supports Storage Condition {1} required by Item {2}.").format(
-				warehouse, condition, item_code
-			),
+			_(
+				"Warehouse {0} has no Storage Location that supports Storage Condition {1} required by Item {2}."
+			).format(warehouse, condition, item_code),
 			title=_("Incompatible Storage Location"),
 		)
 	return location[0][0]
@@ -432,10 +432,90 @@ def validate_item_storage_condition(storage_location, item_code=None, storage_co
 		)
 
 
+def location_stock(item_code, warehouse, batch_no=None):
+	"""{Storage Location: qty} of ``item_code`` in ``warehouse`` now (submitted, not cancelled ledger), only locations
+	with a balance. With ``batch_no``, the batch's own balance (bundle rows and legacy ledger batch)."""
+	if not item_code or not warehouse:
+		return {}
+	if batch_no:
+		rows = frappe.db.sql(
+			"""select coalesce(nullif(entry.storage_location, ''), sle.storage_location) location,
+				sum(entry.qty) qty
+			from `tabStock Ledger Entry` sle
+			join `tabSerial and Batch Entry` entry on entry.parent = sle.serial_and_batch_bundle
+			where sle.item_code = %(item)s and sle.warehouse = %(warehouse)s and sle.is_cancelled = 0
+				and entry.batch_no = %(batch)s
+			group by location
+			union all
+			select sle.storage_location location, sum(sle.actual_qty) qty
+			from `tabStock Ledger Entry` sle
+			where sle.item_code = %(item)s and sle.warehouse = %(warehouse)s and sle.is_cancelled = 0
+				and ifnull(sle.serial_and_batch_bundle, '') = '' and sle.batch_no = %(batch)s
+			group by location""",
+			{"item": item_code, "warehouse": warehouse, "batch": batch_no},
+			as_dict=True,
+		)
+	else:
+		rows = frappe.db.sql(
+			"""select storage_location location, sum(actual_qty) qty
+			from `tabStock Ledger Entry`
+			where item_code = %(item)s and warehouse = %(warehouse)s and is_cancelled = 0
+			group by storage_location""",
+			{"item": item_code, "warehouse": warehouse},
+			as_dict=True,
+		)
+	totals = {}
+	for row in rows:
+		if row.location:
+			totals[row.location] = totals.get(row.location, 0) + flt(row.qty)
+	return {location: qty for location, qty in totals.items() if qty > 0}
+
+
+def serial_locations(serial_nos, warehouse):
+	"""{Storage Location: count} where the given serial nos are now in ``warehouse`` (the serial's own location on
+	its bundle row, else the ledger row's)."""
+	serial_nos = [serial for serial in (serial_nos or []) if serial]
+	if not serial_nos or not warehouse:
+		return {}
+	rows = frappe.db.sql(
+		"""select entry.serial_no, coalesce(nullif(entry.storage_location, ''), sle.storage_location) location,
+			sum(entry.qty) qty
+		from `tabStock Ledger Entry` sle
+		join `tabSerial and Batch Entry` entry on entry.parent = sle.serial_and_batch_bundle
+		where sle.warehouse = %(warehouse)s and sle.is_cancelled = 0 and entry.serial_no in %(serials)s
+		group by entry.serial_no, location""",
+		{"warehouse": warehouse, "serials": tuple(serial_nos)},
+		as_dict=True,
+	)
+	found = {}
+	for row in rows:
+		if row.location and flt(row.qty) > 0:
+			found[row.location] = found.get(row.location, 0) + 1
+	return found
+
+
+def _row_serial_nos(filters):
+	"""The serial nos a row names: its Serial No text and/or its Serial and Batch Bundle."""
+	serials = [line.strip() for line in cstr(filters.get("serial_no")).splitlines() if line.strip()]
+	bundle = filters.get("serial_and_batch_bundle")
+	if bundle and frappe.db.exists("Serial and Batch Bundle", bundle):
+		serials += [
+			serial
+			for serial in frappe.get_all(
+				"Serial and Batch Entry", filters={"parent": bundle}, pluck="serial_no", order_by="idx"
+			)
+			if serial
+		]
+	return list(dict.fromkeys(serials))
+
+
 @frappe.whitelist()
 @frappe.validate_and_sanitize_search_inputs
 def storage_location_query(doctype, txt, searchfield, start, page_len, filters):
-	"""Rank Item preferences before other active locations satisfying the same condition."""
+	"""Rank Item preferences before other active locations satisfying the same condition, each with the Item's
+	quantity there. A row that names serial nos is offered only the locations holding them; a source field
+	(``only_stock``) only the locations holding the Item (and batch) when any does (Connect Diagnostics, 5 Nov
+	2026)."""
 	filters = frappe.parse_json(filters) or {}
 	warehouse = filters.get("warehouse")
 	if doctype != "Storage Location" or not warehouse:
@@ -458,9 +538,12 @@ def storage_location_query(doctype, txt, searchfield, start, page_len, filters):
 		# An Item's persisted requirement cannot be overridden by request filters.
 		condition = item.get("storage_condition")
 
-	return frappe.db.sql(
+	stock = location_stock(item_code, warehouse, filters.get("batch_no")) if item_code else {}
+	serials = _row_serial_nos(filters)
+	holding = serial_locations(serials, warehouse) if serials else {}
+	candidates = frappe.db.sql(
 		"""select `tabStorage Location`.name, `tabStorage Location`.location_code,
-			case when preference.idx is null then '' else %(preferred_label)s end
+			case when preference.idx is null then 0 else 1 end preferred, preference.idx
 		from `tabStorage Location`
 		left join `tabItem Storage Location` preference
 			on preference.storage_location = `tabStorage Location`.name
@@ -477,20 +560,32 @@ def storage_location_query(doctype, txt, searchfield, start, page_len, filters):
 			and (`tabStorage Location`.name like %(txt)s or `tabStorage Location`.location_code like %(txt)s
 				or `tabStorage Location`.zone like %(txt)s or `tabStorage Location`.rack like %(txt)s
 				or `tabStorage Location`.shelf like %(txt)s)
-			{match_cond}
-		order by case when preference.idx is null then 1 else 0 end,
-			preference.idx, `tabStorage Location`.name
-		limit %(page_len)s offset %(start)s""".format(match_cond=get_match_cond("Storage Location")),
+			{match_cond}""".format(match_cond=get_match_cond("Storage Location")),
 		{
 			"warehouse": warehouse,
 			"item_code": item_code or "",
 			"condition": condition or "",
 			"txt": f"%{txt}%",
-			"preferred_label": _("Preferred for Item"),
-			"page_len": page_len,
-			"start": start,
 		},
+		as_dict=True,
 	)
+	if serials:
+		candidates = [row for row in candidates if row.name in holding]
+	elif cint(filters.get("only_stock")) and stock:
+		candidates = [row for row in candidates if row.name in stock]
+	candidates.sort(key=lambda row: (-row.preferred, row.idx or 0, -stock.get(row.name, 0), row.name))
+	start, page_len = cint(start), cint(page_len) or 20
+	return [
+		(
+			row.name,
+			row.location_code or "",
+			_("Qty {0}").format(frappe.format(stock.get(row.name, 0), {"fieldtype": "Float"}))
+			if item_code
+			else "",
+			_("Preferred for Item") if row.preferred else "",
+		)
+		for row in candidates[start : start + page_len]
+	]
 
 
 @frappe.whitelist()

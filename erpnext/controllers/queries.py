@@ -10,7 +10,7 @@ from frappe import _, qb
 from frappe.desk.reportview import get_filters_cond, get_match_cond
 from frappe.permissions import has_permission
 from frappe.query_builder import Case, Criterion
-from frappe.query_builder.functions import Concat, Locate, Sum
+from frappe.query_builder.functions import Coalesce, Concat, Locate, NullIf, Sum
 from frappe.utils import cint, nowdate, today, unique
 from pypika import Order
 
@@ -616,8 +616,10 @@ def get_batches_from_serial_and_batch_bundle(searchfields, txt, filters, start=0
 		bundle_query = bundle_query.where(stock_ledger_entry.warehouse == filters.get("warehouse"))
 
 	if filters.get("storage_location"):
+		# a bundle row keeps its own location when one entry spans several
 		bundle_query = bundle_query.where(
-			stock_ledger_entry.storage_location == filters.get("storage_location")
+			Coalesce(NullIf(bundle.storage_location, ""), stock_ledger_entry.storage_location)
+			== filters.get("storage_location")
 		)
 
 	for field in searchfields:
