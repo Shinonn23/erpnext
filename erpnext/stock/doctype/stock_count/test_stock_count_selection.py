@@ -385,6 +385,7 @@ def preparing(**values):
 	doc.save = Mock()
 	doc.get_item_codes_to_count = lambda snapshot: StockCount.get_item_codes_to_count(doc, snapshot)
 	doc.validate_quarantine_if_needed = Mock()
+	doc.add_first_count_surplus_rows = lambda: set()
 	doc.append_snapshot_rows = lambda code, snapshot: doc["items"].append(frappe._dict(item_code=code))
 	doc.stock = []
 	return doc

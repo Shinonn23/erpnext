@@ -8,7 +8,7 @@ const source = fs.readFileSync(
   "utf8"
 );
 
-function setup(rows, scanned, location) {
+function setup(rows, scanned, location, resolved) {
   const handlers = {};
   const messages = [];
   const queries = {};
@@ -28,6 +28,17 @@ function setup(rows, scanned, location) {
       this.doc[fieldname] = value;
     },
     refresh_field() {},
+    trigger(event) {
+      return (
+        handlers["Stock Count"][event] && handlers["Stock Count"][event](this)
+      );
+    },
+    add_custom_button(label) {
+      (this.buttons = this.buttons || []).push(label);
+    },
+    is_new: () => false,
+    is_dirty: () => false,
+    dirty() {},
     set_query(fieldname, ...args) {
       queries[fieldname] = args.at(-1);
     },
@@ -40,6 +51,7 @@ function setup(rows, scanned, location) {
   };
   const context = {
     __: (message) => message,
+    erpnext: { stock_count: {}, queries: {} },
     flt: (value) => Number(value) || 0,
     frappe: {
       ui: {
@@ -49,7 +61,16 @@ function setup(rows, scanned, location) {
           },
         },
       },
-      call: () => Promise.resolve({ message: scanned }),
+      provide: () => {},
+      call: (args) =>
+        Promise.resolve({
+          message:
+            args &&
+            args.method &&
+            args.method.endsWith("resolve_storage_location")
+              ? resolved
+              : scanned,
+        }),
       show_alert: (message) => messages.push(message),
       msgprint: (message) => messages.push(message),
       model: {
@@ -190,14 +211,9 @@ test("duplicate serial rows are ambiguous and do not receive a count", async () 
   );
 });
 
-test("scan location uses the current warehouse and active locations and is visible only during counting", () => {
+test("scan location is visible only during counting", () => {
   const fixture = setup([], {});
   fixture.handlers.setup(fixture.frm);
-  assert.equal(
-    fixture.queries.scan_storage_location().filters.warehouse,
-    "Count Warehouse"
-  );
-  assert.equal(fixture.queries.scan_storage_location().filters.disabled, 0);
   fixture.handlers.refresh(fixture.frm);
   assert.equal(fixture.displays.scan_storage_location, true);
   fixture.frm.doc.status = "Completed";
@@ -232,10 +248,18 @@ test("preparing a count opens the counting tab only after the snapshot reloads",
   Object.assign(fixture.frm, {
     is_new: () => false,
     is_dirty: () => false,
-    add_custom_button: (label, callback) => { prepare = callback; },
-    call: async (method) => { events.push(method); },
-    reload_doc: async () => { events.push("reload"); },
-    scroll_to_field: (field) => { events.push(field); },
+    add_custom_button: (label, callback) => {
+      prepare = callback;
+    },
+    call: async (method) => {
+      events.push(method);
+    },
+    reload_doc: async () => {
+      events.push("reload");
+    },
+    scroll_to_field: (field) => {
+      events.push(field);
+    },
   });
   fixture.handlers.refresh(fixture.frm);
   await prepare();
@@ -245,11 +269,16 @@ test("preparing a count opens the counting tab only after the snapshot reloads",
 test("native layout keeps counting controls outside Monthly Count Setup", () => {
   const layout = JSON.parse(
     fs.readFileSync(
-      new URL("../../stock/doctype/stock_count/stock_count.json", import.meta.url),
+      new URL(
+        "../../stock/doctype/stock_count/stock_count.json",
+        import.meta.url
+      ),
       "utf8"
     )
   );
-  const fields = Object.fromEntries(layout.fields.map((field) => [field.fieldname, field]));
+  const fields = Object.fromEntries(
+    layout.fields.map((field) => [field.fieldname, field])
+  );
   const ancestorSections = {};
   const ancestorTabs = {};
   let section;
@@ -284,9 +313,17 @@ test("native layout keeps counting controls outside Monthly Count Setup", () => 
           );
         }
         for (const fieldname of ["snapshot_datetime", "status"]) {
-          assert.equal(visible(fieldname, doc), true, `${fieldname}: ${JSON.stringify(doc)}`);
+          assert.equal(
+            visible(fieldname, doc),
+            true,
+            `${fieldname}: ${JSON.stringify(doc)}`
+          );
         }
-        for (const fieldname of ["item_count", "quarantine_warehouse", "quarantine_storage_location"]) {
+        for (const fieldname of [
+          "item_count",
+          "quarantine_warehouse",
+          "quarantine_storage_location",
+        ]) {
           assert.equal(
             visible(fieldname, doc),
             count_type === "Monthly",
@@ -301,16 +338,66 @@ test("native layout keeps counting controls outside Monthly Count Setup", () => 
   assert.equal(ancestorSections.snapshot_datetime[0].label, "Count Status");
   assert.equal(ancestorSections.status[0].label, "Count Status");
   assert.deepEqual(
-    layout.fields.filter((field) => field.fieldtype === "Tab Break").map((field) => field.label),
+    layout.fields
+      .filter((field) => field.fieldtype === "Tab Break")
+      .map((field) => field.label),
     ["Count Setup", "Counting", "Review"]
   );
-  for (const fieldname of ["company", "warehouse", "item_count", "dimensions"]) {
+  for (const fieldname of [
+    "company",
+    "warehouse",
+    "item_count",
+    "dimensions",
+  ]) {
     assert.equal(ancestorTabs[fieldname].label, "Count Setup");
   }
   for (const fieldname of ["scan_storage_location", "scan_barcode", "items"]) {
     assert.equal(ancestorTabs[fieldname].label, "Counting");
   }
-  for (const fieldname of ["status", "snapshot_datetime", "stock_entry", "stock_reconciliation"]) {
+  for (const fieldname of [
+    "status",
+    "snapshot_datetime",
+    "stock_entry",
+    "stock_reconciliation",
+  ]) {
     assert.equal(ancestorTabs[fieldname].label, "Review");
   }
+});
+
+test("a scanned location label is resolved to the location name", async () => {
+  const fixture = setup([], {}, "C001-01-01", "Count Warehouse / C001-01-01");
+  fixture.handlers.scan_storage_location(fixture.frm);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(
+    fixture.frm.doc.scan_storage_location,
+    "Count Warehouse / C001-01-01"
+  );
+});
+
+test("Set uncounted rows to 0 is an explicit button that completes only the uncounted rows", () => {
+  const rows = [
+    row("A", { system_qty: 3 }),
+    row("B", { system_qty: 2, counted_qty: 5, is_counted: 1 }),
+  ];
+  const fixture = setup(rows, {});
+  const buttons = {};
+  fixture.frm.add_custom_button = (label, callback) => {
+    buttons[label] = callback;
+  };
+  fixture.handlers.refresh(fixture.frm);
+  assert.ok(buttons["Set uncounted rows to 0"]);
+  assert.deepEqual(
+    rows.map((r) => r.is_counted),
+    [undefined, 1]
+  );
+  buttons["Set uncounted rows to 0"]();
+  assert.deepEqual(
+    rows.map((r) => r.counted_qty),
+    [0, 5]
+  );
+  assert.deepEqual(
+    rows.map((r) => r.is_counted),
+    [1, 1]
+  );
+  assert.equal(rows[0].difference_qty, -3);
 });

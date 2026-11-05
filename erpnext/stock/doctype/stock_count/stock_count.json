@@ -203,11 +203,10 @@
   {
    "depends_on": "eval:doc.status == 'In Progress' && doc.docstatus == 0 && (!doc.workflow_state || doc.workflow_state == 'Stock Count Draft')",
    "fieldname": "scan_storage_location",
-   "fieldtype": "Link",
+   "fieldtype": "Data",
    "label": "Scan Storage Location",
-   "options": "Storage Location",
    "print_hide": 1,
-   "description": "Select the location being counted before scanning items stored in multiple locations.",
+   "description": "Scan or type the label of the location being counted, then scan its items.",
    "no_copy": 1
   },
   {
@@ -350,7 +349,7 @@
  "is_submittable": 1,
  "grid_page_length": 50,
  "links": [],
- "modified": "2026-11-05 00:00:00.000000",
+ "modified": "2026-11-05 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Stock Count",
