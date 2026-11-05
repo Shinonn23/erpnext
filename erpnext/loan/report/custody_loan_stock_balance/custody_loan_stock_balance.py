@@ -18,7 +18,7 @@ def execute(filters=None):
 		"loan.docstatus = 1",
 		"loan.loan_type = 'Stock'",
 		# items on a return not yet received are still the requester's responsibility
-		"loan.status IN ('Active', 'Partially Returned', 'Pending Shipment', 'Pending Quality Inspection', 'Pending Receipt')",
+		"loan.status IN ('Active', 'Partially Returned', 'Pending Quality Inspection', 'Pending Receipt')",
 		"item.outstanding_qty > 0",
 	]
 	values = {}

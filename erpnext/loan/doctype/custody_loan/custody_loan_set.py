@@ -60,6 +60,53 @@ def _set_names(loan, material_request):
 	return loans_of_set(loan)
 
 
+DELIVERING = ("Pending Pick", "Pending Delivery Note")
+RETURN_CHECK = ("Pending Quality Inspection", "Pending Receipt")
+DONE = ("Returned", "Closed", "Cancelled")
+
+
+def set_status(statuses):
+	"""One status for the loans of a request: delivering until the goods have left, then out, partly back, being checked
+	and finally closed. ``statuses`` are the loans' own statuses."""
+	statuses = [status for status in statuses if status != "Cancelled"]
+	if not statuses:
+		return None
+	if any(status in DELIVERING for status in statuses):
+		return "Being delivered"
+	if any(status in RETURN_CHECK for status in statuses):
+		return "Return being checked"
+	if all(status in DONE for status in statuses):
+		return "Closed"
+	if any(status in DONE or status == "Partially Returned" for status in statuses):
+		return "Partly back"
+	return "Out"
+
+
+@frappe.whitelist()
+def request_loan_summary(material_request: str):
+	"""The loans of a Demo / Borrow request as one set, for the block on the request: each loan with what is out, what
+	came back and what was used up, and the combined status. Loans the user may not read are left out."""
+	loans = []
+	for name in loans_of_request(material_request):
+		doc = frappe.get_doc("Custody Loan", name)
+		if not doc.has_permission("read"):
+			continue
+		rows = [
+			{
+				"item_code": row.item_code,
+				"item_name": row.item_name,
+				"asset": row.asset,
+				"issued": flt(row.issued_qty),
+				"outstanding": flt(row.outstanding_qty),
+				"returned": flt(row.returned_qty),
+				"used_up": flt(row.adjusted_qty) + flt(row.sold_qty),
+			}
+			for row in doc.items
+		]
+		loans.append({"name": name, "loan_type": doc.loan_type, "status": doc.status, "items": rows})
+	return {"loans": loans, "status": set_status([loan["status"] for loan in loans])}
+
+
 @frappe.whitelist()
 def loan_set_overview(loan: str | None = None, material_request: str | None = None):
 	"""What is still out of the set, for the Return dialog: Asset rows and Stock rows (with the lots that were lent)."""

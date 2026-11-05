@@ -290,12 +290,32 @@ class CustodyLoan(Document):
 			pick_list = self.make_pick_list()
 			self.db_set("pick_list", pick_list.name)
 			self.pick_list = pick_list.name
-		else:
-			transaction = self.make_asset_issue()
-			self.db_set("asset_movement", transaction.name)
-			self.asset_movement = transaction.name
-			transaction.submit()
+		elif not self.waits_for_stock_delivery():
+			self.release_assets()
 		self.update_status()
+
+	def waits_for_stock_delivery(self):
+		"""An Asset loan of a set (the request also lends stock) moves its Assets when the stock loan's goods leave: the
+		Delivery Note is submitted (Siwat, 5 Nov 2026, relayed by the user: a set is delivered together). An Asset-only
+		request moves at once."""
+		if self.loan_type != "Asset" or self.asset_movement:
+			return False
+		stock = frappe.db.get_value(
+			"Custody Loan",
+			{"material_request": self.material_request, "loan_type": "Stock", "docstatus": 1},
+			["name", "delivery_note"],
+			as_dict=True,
+		)
+		if not stock:
+			return False
+		return not stock.delivery_note or frappe.db.get_value("Delivery Note", stock.delivery_note, "docstatus") != 1
+
+	def release_assets(self):
+		"""Move the Assets of this Asset loan to the recipient now (the Asset Movement is made and submitted)."""
+		transaction = self.make_asset_issue()
+		self.db_set("asset_movement", transaction.name)
+		self.asset_movement = transaction.name
+		transaction.submit()
 
 	def make_pick_list(self):
 		internal_customer = get_internal_loan_customer(self.company)
@@ -598,6 +618,8 @@ class CustodyLoan(Document):
 		return status
 
 	def get_submitted_status(self):
+		if self.loan_type == "Asset" and not self.asset_movement and self.waits_for_stock_delivery():
+			return "Pending Delivery Note"
 		if self.loan_type == "Stock" and (
 			not self.pick_list or frappe.db.get_value("Pick List", self.pick_list, "docstatus") != 1
 		):
@@ -1865,6 +1887,7 @@ def update_custody_loan_status(doc, method=None):
 		loan = frappe.get_doc("Custody Loan", source_name)
 		if doc.doctype == "Delivery Note" and method == "on_submit":
 			loan.capture_delivery_note_details(doc)
+			release_held_assets(loan)
 		loan.update_status()
 	elif source_doctype == "Custody Loan Return":
 		return_doc = frappe.get_doc(source_doctype, source_name)
@@ -1873,6 +1896,24 @@ def update_custody_loan_status(doc, method=None):
 	elif source_doctype == "Custody Loan Adjustment":
 		adjustment = frappe.get_doc(source_doctype, source_name)
 		frappe.get_doc("Custody Loan", adjustment.custody_loan).update_status()
+
+
+def release_held_assets(stock_loan):
+	"""The goods of a stock loan have left (its Delivery Note is submitted): the Asset loan of the same request, held
+	until now, moves its Assets in the same transaction. If the Asset Movement fails the Delivery Note is not submitted
+	either, so a set never leaves half done."""
+	if stock_loan.loan_type != "Stock":
+		return
+	for name in frappe.get_all(
+		"Custody Loan",
+		filters={"material_request": stock_loan.material_request, "loan_type": "Asset", "docstatus": 1},
+		pluck="name",
+	):
+		asset_loan = frappe.get_doc("Custody Loan", name)
+		if asset_loan.asset_movement:
+			continue
+		asset_loan.release_assets()
+		asset_loan.update_status()
 
 
 def get_internal_loan_customer(company):

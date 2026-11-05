@@ -30,7 +30,7 @@
   {"fieldname": "return_section", "fieldtype": "Section Break"},
   {"fieldname": "custody_loan", "fieldtype": "Link", "label": "Custody Loan", "options": "Custody Loan", "reqd": 1, "in_list_view": 1, "bold": 1},
   {"fieldname": "loan_type", "fieldtype": "Select", "label": "Loan Type", "options": "Stock\nAsset", "read_only": 1, "reqd": 1},
-  {"fieldname": "status", "fieldtype": "Select", "label": "Status", "options": "Draft\nPending Shipment\nPending Quality Inspection\nPending Receipt\nReceived\nCancelled", "default": "Draft", "read_only": 1, "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "status", "fieldtype": "Select", "label": "Status", "options": "Draft\nPending Quality Inspection\nPending Receipt\nReceived\nCancelled", "default": "Draft", "read_only": 1, "in_list_view": 1, "in_standard_filter": 1},
   {"fieldname": "return_column", "fieldtype": "Column Break"},
   {"fieldname": "return_date", "fieldtype": "Date", "label": "Return Date", "default": "Today", "reqd": 1},
   {"fieldname": "responsible_column", "fieldtype": "Column Break"},

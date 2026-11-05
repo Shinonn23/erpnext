@@ -270,3 +270,107 @@ class TestTheSet(Patched):
 		):
 			self.assertEqual(module.loans_of_set("CL-A"), ["CL-A", "CL-S"])
 		self.assertEqual(get_all.call_args.kwargs["filters"], {"material_request": "MR-1", "docstatus": 1})
+
+
+class TestSetStatus(unittest.TestCase):
+	def test_one_status_for_the_loans_of_a_request(self):
+		status = module.set_status
+		self.assertEqual(status(["Pending Pick", "Pending Delivery Note"]), "Being delivered")
+		self.assertEqual(status(["Pending Delivery Note", "Active"]), "Being delivered")
+		self.assertEqual(status(["Active", "Active"]), "Out")
+		self.assertEqual(status(["Active", "Returned"]), "Partly back")
+		self.assertEqual(status(["Active", "Partially Returned"]), "Partly back")
+		self.assertEqual(status(["Active", "Pending Receipt"]), "Return being checked")
+		self.assertEqual(status(["Returned", "Closed"]), "Closed")
+		self.assertIsNone(status([]))
+
+	def test_the_summary_lists_each_readable_loan(self):
+		readable = MagicMock()
+		readable.name = "CL-A"
+		readable.loan_type = "Asset"
+		readable.status = "Active"
+		readable.has_permission.return_value = True
+		readable.items = [
+			frappe._dict(
+				item_code="DEVICE",
+				item_name="Device",
+				asset="AST-1",
+				issued_qty=1,
+				outstanding_qty=1,
+				returned_qty=0,
+				adjusted_qty=0,
+				sold_qty=0,
+			)
+		]
+		hidden = MagicMock()
+		hidden.has_permission.return_value = False
+		with (
+			patch.object(module, "loans_of_request", return_value=["CL-A", "CL-X"]),
+			patch.object(frappe, "get_doc", side_effect=[readable, hidden]),
+		):
+			summary = module.request_loan_summary("MR-1")
+		self.assertEqual(summary["status"], "Out")
+		self.assertEqual([loan["name"] for loan in summary["loans"]], ["CL-A"])
+		self.assertEqual(summary["loans"][0]["items"][0]["outstanding"], 1)
+
+
+class TestSetDelivery(unittest.TestCase):
+	"""An Asset loan of a set moves its Assets with the stock loan's Delivery Note (Siwat, 5 Nov 2026)."""
+
+	def waits(self, stock_loan, delivery_note_status=None, **values):
+		from types import SimpleNamespace
+
+		from erpnext.loan.doctype.custody_loan.custody_loan_core import CustodyLoan
+
+		loan = SimpleNamespace(
+			loan_type="Asset", asset_movement=None, material_request="MR-1", name="CL-A", **values
+		)
+
+		def get_value(doctype, *args, **kwargs):
+			return stock_loan if doctype == "Custody Loan" else delivery_note_status
+
+		with patch.object(frappe, "db", MagicMock(get_value=MagicMock(side_effect=get_value))):
+			return CustodyLoan.waits_for_stock_delivery(loan)
+
+	def test_an_asset_only_request_moves_at_once(self):
+		self.assertFalse(self.waits(None))
+
+	def test_a_set_waits_until_the_delivery_note_is_submitted(self):
+		from types import SimpleNamespace
+
+		self.assertTrue(self.waits(SimpleNamespace(name="CL-S", delivery_note="DN-1"), 0))
+		self.assertTrue(self.waits(SimpleNamespace(name="CL-S", delivery_note=None)))
+		self.assertFalse(self.waits(SimpleNamespace(name="CL-S", delivery_note="DN-1"), 1))
+
+	def test_a_moved_asset_loan_never_waits(self):
+		from types import SimpleNamespace
+
+		from erpnext.loan.doctype.custody_loan.custody_loan_core import CustodyLoan
+
+		loan = SimpleNamespace(loan_type="Asset", asset_movement="AM-1")
+		self.assertFalse(CustodyLoan.waits_for_stock_delivery(loan))
+		self.assertFalse(CustodyLoan.waits_for_stock_delivery(SimpleNamespace(loan_type="Stock", asset_movement=None)))
+
+	def test_the_held_asset_loan_moves_with_the_delivery_note(self):
+		from types import SimpleNamespace
+
+		from erpnext.loan.doctype.custody_loan import custody_loan_core as core
+
+		calls = []
+		held = SimpleNamespace(asset_movement=None, release_assets=lambda: calls.append("moved"), update_status=lambda: None)
+		done = SimpleNamespace(asset_movement="AM-1", release_assets=lambda: calls.append("again"), update_status=lambda: None)
+		with (
+			patch.object(core.frappe, "get_all", return_value=["CL-A", "CL-B"]),
+			patch.object(core.frappe, "get_doc", side_effect=[held, done]),
+		):
+			core.release_held_assets(SimpleNamespace(loan_type="Stock", material_request="MR-1"))
+		self.assertEqual(calls, ["moved"])
+
+	def test_an_asset_loan_releases_nothing(self):
+		from types import SimpleNamespace
+
+		from erpnext.loan.doctype.custody_loan import custody_loan_core as core
+
+		with patch.object(core.frappe, "get_all") as get_all:
+			core.release_held_assets(SimpleNamespace(loan_type="Asset", material_request="MR-1"))
+		get_all.assert_not_called()
