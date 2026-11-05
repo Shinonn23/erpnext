@@ -28,12 +28,16 @@ class TestSnapshotRows(unittest.TestCase):
 		StockCount.keep_snapshot_rows(doc)
 		self.assertEqual([row.system_qty for row in doc["items"]], [10, 3])
 
-	def test_rows_cannot_be_added_or_dropped(self):
+	def test_an_added_row_is_found_stock(self):
+		# A row the snapshot lacks is stock the counter found: System Qty 0 (Connect Diagnostics, 5 Nov 2026)
+		added = {"item_code": "ITEM-C", "batch_no": None, "serial_no": None, "storage_location": "L1"}
+		doc = count([*SNAPSHOT, dict(added, system_qty=5, counted_qty=2)], SNAPSHOT)
+		StockCount.keep_snapshot_rows(doc)
+		self.assertEqual([row.system_qty for row in doc["items"]], [10, 3, 0])
+
+	def test_rows_cannot_be_dropped(self):
 		self.enterContext(patch.object(stock_count, "_", side_effect=lambda text: text))
 		self.enterContext(patch.object(stock_count.frappe, "throw", side_effect=frappe.ValidationError))
-		extra = [*SNAPSHOT, {"item_code": "ITEM-C", "batch_no": None, "serial_no": None, "storage_location": "L1", "system_qty": 0}]
-		with self.assertRaises(frappe.ValidationError):
-			StockCount.keep_snapshot_rows(count(extra, SNAPSHOT))
 		with self.assertRaises(frappe.ValidationError):
 			StockCount.keep_snapshot_rows(count(SNAPSHOT[:1], SNAPSHOT))
 
