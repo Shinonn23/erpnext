@@ -88,6 +88,18 @@ class TestWarehousePolicy(unittest.TestCase):
 		with patch.object(frappe, "get_roles", return_value=["Stock Manager"]):
 			warehouse_policy.validate_warehouse_operation("WH", "transfer", outgoing=True)
 
+	def test_quarantine_outgoing_role_message_names_the_way_out(self):
+		self.policy.outgoing_role = "Stock Manager"
+		self.warehouse.warehouse_type = "Quarantine"
+		with self.assertRaises(frappe.PermissionError) as raised:
+			warehouse_policy.validate_warehouse_operation("WH", "transfer", outgoing=True)
+		self.assertIn("requires the Stock Manager role", str(raised.exception))
+		self.assertIn("Move out of quarantine", str(raised.exception))
+		self.warehouse.warehouse_type = "Frozen"
+		with self.assertRaises(frappe.PermissionError) as raised:
+			warehouse_policy.validate_warehouse_operation("WH", "transfer", outgoing=True)
+		self.assertNotIn("Move out of quarantine", str(raised.exception))
+
 	def test_an_app_waiver_lifts_the_outgoing_role_only_for_the_document_it_owns(self):
 		self.policy.outgoing_role = "Stock Manager"
 		owned, other = Mock(name="owned"), Mock(name="other")

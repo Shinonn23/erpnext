@@ -166,12 +166,16 @@ def validate_warehouse_operation(
 		and policy.outgoing_role not in frappe.get_roles()
 		and not outgoing_role_waived(doc, location, policy)
 	):
-		frappe.throw(
-			_("Moving stock out of warehouse {0} requires the {1} role.").format(
-				warehouse, policy.outgoing_role
-			),
-			frappe.PermissionError,
+		message = _("Moving stock out of warehouse {0} requires the {1} role.").format(
+			warehouse, policy.outgoing_role
 		)
+		if location.warehouse_type in ("Quarantine", "QA"):
+			# the same way out as the app's refusal of a manual move out (Connect Diagnostics, 5 Nov 2026)
+			message += " " + _(
+				"Open the receipt that put them in quarantine and press Move out of quarantine once the "
+				"Quality Inspection is done."
+			)
+		frappe.throw(message, frappe.PermissionError)
 
 
 def outgoing_role_waived(doc, warehouse, policy):
