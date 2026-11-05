@@ -77,17 +77,6 @@
    "dependencies": "",
    "hidden": 0,
    "is_query_report": 0,
-   "label": "Override",
-   "link_count": 0,
-   "link_to": "Regulatory Override",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "dependencies": "",
-   "hidden": 0,
-   "is_query_report": 0,
    "label": "Alert Log",
    "link_count": 0,
    "link_to": "Regulatory Alert Log",

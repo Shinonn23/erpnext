@@ -5,14 +5,12 @@ LAST field of its tab or row form, so no native section is swallowed by a new Se
 """
 
 from erpnext.regulatory_affairs.constants import (
+	ITEM_CATEGORIES,
 	ITEM_CATEGORY_FIELD,
 	MEDICAL_DEVICE,
 	MODULE,
 	OTHER_CATEGORY,
-	PRODUCT_CATEGORIES,
 	PRODUCT_REGISTRATION,
-	REGULATORY_OVERRIDE,
-	TRANSACTION_DOCTYPES,
 	TRANSACTION_ITEM_DOCTYPES,
 )
 
@@ -39,7 +37,6 @@ SNAPSHOT_FIELDNAMES = (
 	"regulatory_registration_status",
 	"regulatory_registration_expiry",
 	"regulatory_coverage_date",
-	"regulatory_override",
 )
 
 
@@ -63,11 +60,11 @@ def item_fields():
 			"Select",
 			"Product Category",
 			"regulatory_tab",
-			options="\n" + "\n".join(PRODUCT_CATEGORIES),
+			options="\n" + "\n".join(ITEM_CATEGORIES),
 			in_standard_filter=1,
 			permlevel=ITEM_CATEGORY_PERMLEVEL,
-			description="The Thai FDA product group of this Item. Leave it blank for an Item that needs no "
-			"FDA registration: only Items with a Product Category are validated on transactions.",
+			description="Set by Regulatory Affairs. A Thai FDA product group needs a registration in force to be sold; "
+			"Not Regulated needs none. An Item that is still blank is unclassified and is not sold.",
 		),
 		_field(
 			"regulatory_other_category",
@@ -191,28 +188,6 @@ def snapshot_fields(anchor):
 		_field(
 			"regulatory_coverage_date", "Date", "Coverage Date", "regulatory_registration_expiry", **read_only
 		),
-		_field(
-			"regulatory_override",
-			"Link",
-			"Regulatory Override",
-			"regulatory_coverage_date",
-			options=REGULATORY_OVERRIDE,
-			**read_only,
-		),
-	]
-
-
-def transaction_fields():
-	return [
-		_field(
-			"regulatory_override_ref",
-			"Link",
-			"Regulatory Override",
-			"items",
-			options=REGULATORY_OVERRIDE,
-			no_copy=1,
-			description="Approved override for this document; it must be bound to this document's name.",
-		)
 	]
 
 
@@ -220,8 +195,6 @@ def get_custom_fields():
 	fields = {"Item": item_fields()}
 	for item_doctype in TRANSACTION_ITEM_DOCTYPES.values():
 		fields[item_doctype] = snapshot_fields(ITEM_ROW_ANCHORS[item_doctype])
-	for doctype in TRANSACTION_DOCTYPES:
-		fields[doctype] = transaction_fields()
 	return fields
 
 

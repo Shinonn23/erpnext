@@ -24,6 +24,7 @@ from erpnext.regulatory_affairs.constants import (
 	EXPIRED,
 	EXPIRY_UNCONFIRMED,
 	ITEM_CATEGORY_FIELD,
+	NOT_REGULATED,
 	PRODUCT_REGISTRATION,
 	REGISTERED_PRODUCT,
 	REGULATORY_DOCUMENT,
@@ -661,7 +662,7 @@ def detect_required_items_without_coverage(
 	candidates = build_mapping_candidates(lines, registrations_by_name, today_date)
 	gaps = []
 	for item in items:
-		if not item.get(ITEM_CATEGORY_FIELD):
+		if not item.get(ITEM_CATEGORY_FIELD) or item.get(ITEM_CATEGORY_FIELD) == NOT_REGULATED:
 			continue
 		mapping, ambiguous = resolve_item_mapping(candidates.get(item.get("name"), []), today_date)
 		reason = coverage_gap_reason(mapping, ambiguous, today_date)
@@ -1028,7 +1029,11 @@ def fetch_regulated_items() -> list[frappe._dict]:
 	"""Enabled Items with a Product Category (only the columns the gaps use)."""
 	return frappe.get_all(
 		"Item",
-		filters={"disabled": 0, ITEM_CATEGORY_FIELD: ["is", "set"]},
+		filters=[
+			["Item", "disabled", "=", 0],
+			["Item", ITEM_CATEGORY_FIELD, "is", "set"],
+			["Item", ITEM_CATEGORY_FIELD, "!=", NOT_REGULATED],
+		],
 		fields=list(ITEM_GAP_FIELDS),
 		limit_page_length=0,
 	)

@@ -33,6 +33,22 @@ STAGE_RENEWAL_STATUS = {
 IN_PROGRESS_RENEWAL = tuple(STAGE_RENEWAL_STATUS.values())
 STAGES_REQUIRING_SUBMISSION = ("Submitted", "FDA Query", "Approved")
 LIVE_REGISTRATION_STATUSES = (ACTIVE, SUSPENDED, EXPIRED)
+# The next stages the form offers as buttons, and what each one needs asked in its dialog (Siwat, 5 Nov 2026).
+NEXT_STAGES = {
+	"Preparing": ("Internal Review", "Submitted", "Cancelled"),
+	"Internal Review": ("Submitted", "Cancelled"),
+	"Submitted": ("FDA Query", "Approved", "Rejected", "Cancelled"),
+	"FDA Query": ("Submitted", "Approved", "Rejected", "Cancelled"),
+}
+STAGE_VALUES = (
+	"fda_application_number",
+	"submitted_date",
+	"fda_query_date",
+	"response_due_date",
+	"approval_date",
+	"new_expiry_date",
+	"resulting_registration",
+)
 OUTCOME_FIELDS = ("current_stage", "new_expiry_date", "resulting_registration", "approval_date")
 
 
@@ -47,6 +63,25 @@ class RegulatoryRegistrationAction(Document):
 
 	def on_update(self):
 		self._sync_registration()
+
+	@frappe.whitelist(methods=["POST"])
+	def advance_stage(self, stage: str, values: str | dict | None = None):
+		"""Move the action to its next stage with the dates that stage needs (the form asks for them in a dialog)."""
+		self.check_permission("write")
+		if stage not in NEXT_STAGES.get(self.current_stage or "Preparing", ()):
+			frappe.throw(
+				_("An action at stage {0} cannot move to {1}.").format(
+					_(self.current_stage or "Preparing"), _(stage)
+				)
+			)
+		if isinstance(values, str):
+			values = frappe.parse_json(values)
+		for fieldname, value in (values or {}).items():
+			if fieldname in STAGE_VALUES and value not in (None, ""):
+				self.set(fieldname, value)
+		self.current_stage = stage
+		self.save()
+		return self.current_stage
 
 	def _previous_stage(self):
 		previous = self.get_doc_before_save()
@@ -260,6 +295,12 @@ class RegulatoryRegistrationAction(Document):
 
 	def _apply_successor(self, registration):
 		successor = frappe.get_doc(PRODUCT_REGISTRATION, self.resulting_registration)
+		if registration.official_status == SUPERSEDED:
+			# activating the successor already superseded this registration (Previous Registration)
+			frappe.db.set_value(
+				PRODUCT_REGISTRATION, registration.name, "renewal_status", "Approved", update_modified=False
+			)
+			return
 		frappe.db.set_value(
 			PRODUCT_REGISTRATION,
 			successor.name,

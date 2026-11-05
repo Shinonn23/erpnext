@@ -11,9 +11,6 @@ from erpnext.regulatory_affairs.doctype.regulatory_document import (
 from erpnext.regulatory_affairs.doctype.regulatory_document.regulatory_document import (
 	RegulatoryDocument,
 )
-from erpnext.regulatory_affairs.doctype.regulatory_override.regulatory_override import (
-	RegulatoryOverride,
-)
 from erpnext.regulatory_affairs.doctype.regulatory_product_registration import (
 	regulatory_product_registration as registration_module,
 )
@@ -187,219 +184,178 @@ class TestSettingsAndTables(unittest.TestCase):
 		self.assertNotIn("Approved", action_module.STAGE_RENEWAL_STATUS)
 
 
-class MDDecisionOverride(RegulatoryOverride):
-	def _is_decision_approver(self):
-		return "Managing Director" in frappe.get_roles()
+class TestVerifyActivateAndSupersede(unittest.TestCase):
+	"""Siwat, 5 Nov 2026: one action verifies the certificate and activates; a new number replaces the old one itself."""
 
-	def _decision_approver_role(self):
-		return "Managing Director"
-
-
-class TestOverrideWorkflow(unittest.TestCase):
-	def setUp(self):
-		from erpnext.regulatory_affairs.doctype.regulatory_override import (
-			regulatory_override as override_module,
+	def draft(self, **values):
+		line = frappe._dict(
+			item_code="ITEM-1", line_status="Active", effective_from=None, effective_to=None, parent="NEW"
+		)
+		return FakeRegistration(
+			official_status="Draft",
+			name="NEW",
+			issue_date="2026-11-01",
+			expiry_date="2031-11-01",
+			expiry_basis="Expiry Date Specified",
+			previous_registration=None,
+			registered_products=[line],
+			**values,
 		)
 
-		patcher = patch.object(override_module, "today", return_value="2026-10-18")
-		patcher.start()
-		self.addCleanup(patcher.stop)
-
-	def override(self, controller=RegulatoryOverride, **values):
-		defaults = dict(
-			status="Requested",
-			requested_by="maker@example.com",
-			transaction_doctype="Sales Invoice",
-			transaction_name="SINV-1",
-			item_code=None,
-			reason="Urgent",
+	def old_line(self):
+		return frappe._dict(
+			item_code="ITEM-1",
+			parent="OLD",
+			effective_from=None,
+			effective_to=None,
+			issue_date="2021-01-01",
+			expiry_date="2026-12-31",
+			expiry_basis="Expiry Date Specified",
 		)
-		defaults.update(values)
-		return bare(controller, **defaults)
 
-	def session(self, user):
-		return patch.object(frappe, "session", frappe._dict(user=user), create=True)
+	def test_a_single_overlapping_registration_is_linked_as_previous(self):
+		registration = self.draft()
+		with patch.object(registration_module, "get_other_lines", return_value=[self.old_line()]):
+			registration_module.link_previous_registration(registration)
+		self.assertEqual(registration.previous_registration, "OLD")
+		self.assertEqual(len(registration.comments), 1)
 
-	def test_requester_cannot_approve_own_override(self):
-		override = self.override(status="Approved")
-		previous = frappe._dict(status="Requested", requested_by="maker@example.com")
+	def test_two_overlapping_registrations_are_not_guessed(self):
+		registration = self.draft()
+		other = self.old_line()
+		other.parent = "OLD-2"
+		with patch.object(registration_module, "get_other_lines", return_value=[self.old_line(), other]):
+			registration_module.link_previous_registration(registration)
+		self.assertIsNone(registration.previous_registration)
+
+	def test_a_chosen_previous_registration_is_kept(self):
+		registration = self.draft()
+		registration.previous_registration = "CHOSEN"
+		with patch.object(registration_module, "get_other_lines", return_value=[self.old_line()]):
+			registration_module.link_previous_registration(registration)
+		self.assertEqual(registration.previous_registration, "CHOSEN")
+
+	def test_activation_links_closes_the_old_lines_and_supersedes_it(self):
+		registration = self.draft()
+		calls = []
 		with (
-			self.session("maker@example.com"),
-			patch.object(frappe, "get_roles", return_value=["Regulatory Approver"]),
-			throws(),
+			patch.object(registration_module, "get_other_lines", return_value=[self.old_line()]),
+			patch.object(
+				registration_module, "close_predecessor_lines", side_effect=lambda r: calls.append("close")
+			),
+			patch.object(
+				registration_module,
+				"supersede_predecessor",
+				side_effect=lambda r: calls.append(("supersede", r.previous_registration)),
+			),
+			patch.object(frappe, "session", frappe._dict(user="u"), create=True),
+			patch.object(registration_module, "now_datetime", return_value=datetime(2026, 11, 5)),
 		):
-			with self.assertRaises(Thrown):
-				override._validate_status(previous)
+			registration_module.change_status(registration, "Active")
+		self.assertEqual(calls, ["close", ("supersede", "OLD")])
+		self.assertEqual(registration.official_status, "Active")
 
-	def test_other_approver_can_approve_and_is_stamped(self):
-		override = self.override(status="Approved")
-		previous = frappe._dict(status="Requested", requested_by="maker@example.com")
-		with (
-			self.session("checker@example.com"),
-			patch.object(frappe, "get_roles", return_value=["Regulatory Approver"]),
-		):
-			override._validate_status(previous)
-		self.assertEqual(override.approved_by, "checker@example.com")
-
-	def test_non_approver_cannot_approve_or_reject(self):
-		for status in ("Approved", "Rejected"):
-			override = self.override(status=status)
-			previous = frappe._dict(status="Requested", requested_by="maker@example.com")
+	def test_supersede_moves_a_live_predecessor_and_leaves_a_superseded_one(self):
+		registration = self.draft()
+		registration.previous_registration = "OLD"
+		for status, expected in (("Active", 1), ("Superseded", 0), ("Cancelled", 0)):
+			predecessor = FakeRegistration(official_status=status, name="OLD")
 			with (
-				self.session("checker@example.com"),
-				patch.object(frappe, "get_roles", return_value=["Regulatory Operator"]),
-				throws(),
+				patch.object(frappe, "get_doc", return_value=predecessor),
+				patch.object(registration_module, "change_status") as change,
 			):
-				with self.assertRaises(Thrown):
-					override._validate_status(previous)
+				registration_module.supersede_predecessor(registration)
+			self.assertEqual(change.call_count, expected, status)
+			if expected:
+				self.assertEqual(change.call_args.args[1], "Superseded")
+				self.assertEqual(change.call_args.kwargs["changes"], {"superseded_by": "NEW"})
 
-	def test_approved_override_is_frozen_and_terminal_states_stay(self):
-		approved_before = frappe._dict(
-			status="Approved",
-			requested_by="maker@example.com",
-			transaction_doctype="Sales Invoice",
-			transaction_name="SINV-1",
-			item_code=None,
-			reason="Urgent",
+	def test_verify_and_activate_is_for_an_approver_and_a_draft(self):
+		registration = bare(
+			registration_module.RegulatoryProductRegistration,
+			name="NEW",
+			official_status="Draft",
+			check_permission=lambda *a: None,
+			is_new=lambda: False,
 		)
-		edited = self.override(status="Approved", reason="Changed")
-		with (
-			self.session("checker@example.com"),
-			patch.object(frappe, "get_roles", return_value=["Regulatory Approver"]),
-			throws(),
-		):
+		with patch.object(registration_module, "is_approver", return_value=False), throws():
 			with self.assertRaises(Thrown):
-				edited._validate_status(approved_before)
-			rejected_before = frappe._dict(status="Rejected", requested_by="maker@example.com")
+				registration.verify_and_activate()
+		registration.official_status = "Active"
+		with patch.object(registration_module, "is_approver", return_value=True), throws():
 			with self.assertRaises(Thrown):
-				self.override(status="Approved")._validate_status(rejected_before)
+				registration.verify_and_activate()
 
-	def test_native_default_keeps_regulatory_system_and_administrator_approval(self):
-		for user, roles, allowed in (
-			("checker@example.com", ["Regulatory Approver"], True),
-			("manager@example.com", ["System Manager"], True),
-			("Administrator", [], True),
-			("md@example.com", ["Managing Director"], False),
-		):
-			with (
-				self.subTest(user=user),
-				self.session(user),
-				patch.object(frappe, "get_roles", return_value=roles),
-			):
-				self.assertEqual(self.override()._is_decision_approver(), allowed)
-				self.assertEqual(self.override()._decision_approver_role(), "Regulatory Approver")
-				if allowed:
-					doc = self.override(status="Approved")
-					doc._approve()
-					self.assertEqual(doc.approved_by, user)
-				else:
-					with patch.object(frappe, "throw", side_effect=frappe.PermissionError) as throw:
-						with self.assertRaises(frappe.PermissionError):
-							self.override(status="Approved")._approve()
-					self.assertEqual(
-						throw.call_args.args[0],
-						"Only a Regulatory Approver can approve a regulatory override.",
-					)
-
-	def test_company_subclass_decides_approve_reject_cancel_without_changing_fda_helper(self):
-		previous = frappe._dict(status="Requested", requested_by="maker@example.com")
-		for status in ("Approved", "Rejected", "Cancelled"):
-			with self.subTest(status=status):
-				doc = self.override(controller=MDDecisionOverride, status=status)
-				with (
-					self.session("ra@example.com"),
-					patch.object(frappe, "get_roles", return_value=["Regulatory Approver"]),
-				):
-					self.assertTrue(permissions.is_approver())
-					with patch.object(frappe, "throw", side_effect=frappe.PermissionError) as throw:
-						with self.assertRaises(frappe.PermissionError):
-							doc._validate_status(previous)
-					self.assertIn("Managing Director", throw.call_args.args[0])
-					self.assertNotIn("Regulatory Approver", throw.call_args.args[0])
-				with (
-					self.session("md@example.com"),
-					patch.object(frappe, "get_roles", return_value=["Managing Director"]),
-				):
-					self.assertFalse(permissions.is_approver())
-					doc._validate_status(previous)
-				if status == "Approved":
-					self.assertEqual(doc.approved_by, "md@example.com")
-					self.assertEqual(doc.approved_on, "2026-10-18")
-
-	def test_company_subclass_also_controls_initial_non_requested_status(self):
-		with (
-			self.session("ra@example.com"),
-			patch.object(frappe, "get_roles", return_value=["Regulatory Approver"]),
-		):
-			with throws(), self.assertRaises(Thrown):
-				self.override(controller=MDDecisionOverride, status="Rejected")._validate_status(None)
-		with (
-			self.session("md@example.com"),
-			patch.object(frappe, "get_roles", return_value=["Managing Director"]),
-		):
-			self.override(controller=MDDecisionOverride, status="Rejected")._validate_status(None)
-
-	def test_company_subclass_keeps_self_approval_ban_and_requester_cancellation(self):
-		previous = frappe._dict(status="Requested", requested_by="maker@example.com")
-		with (
-			self.session("maker@example.com"),
-			patch.object(frappe, "get_roles", return_value=["Managing Director"]),
-		):
-			with throws(), self.assertRaises(Thrown):
-				self.override(controller=MDDecisionOverride, status="Approved")._validate_status(previous)
-		with (
-			self.session("maker@example.com"),
-			patch.object(frappe, "get_roles", return_value=["Regulatory Operator"]),
-		):
-			self.override(controller=MDDecisionOverride, status="Cancelled")._validate_status(previous)
-			approved = frappe._dict(
-				status="Approved",
-				requested_by="maker@example.com",
-				transaction_doctype="Sales Invoice",
-				transaction_name="SINV-1",
-				item_code=None,
-				reason="Urgent",
-			)
-			self.override(controller=MDDecisionOverride, status="Cancelled")._validate_status(approved)
-
-	def test_company_subclass_preserves_stamps_and_approved_business_binding(self):
-		previous = frappe._dict(
-			status="Approved",
-			requested_by="maker@example.com",
-			requested_on="2026-10-01",
-			approved_by="checker@example.com",
-			approved_on="2026-10-02",
-			transaction_doctype="Sales Invoice",
-			transaction_name="SINV-1",
-			item_code=None,
-			reason="Urgent",
+	def test_verify_and_activate_verifies_then_activates(self):
+		registration = bare(
+			registration_module.RegulatoryProductRegistration,
+			name="NEW",
+			official_status="Draft",
+			check_permission=lambda *a: None,
+			is_new=lambda: False,
 		)
-		doc = self.override(
-			controller=MDDecisionOverride,
-			status="Approved",
-			requested_by="forged@example.com",
-			requested_on="2030-01-01",
-			approved_by="forged@example.com",
-			approved_on="2030-01-01",
-		)
-		doc._protect_audit_stamps(previous)
-		for field in ("requested_by", "requested_on", "approved_by", "approved_on"):
-			self.assertEqual(doc.get(field), previous[field])
-		for field, value in (
-			("transaction_doctype", "Delivery Note"),
-			("transaction_name", "SINV-2"),
-			("item_code", "ITEM-2"),
-			("reason", "Changed"),
+		with (
+			patch.object(registration_module, "is_approver", return_value=True),
+			patch.object(
+				registration_module, "verify_pending_certificates", return_value=["DOC-1"]
+			) as verify,
+			patch.object(registration_module, "change_status") as change,
 		):
-			with (
-				self.subTest(field=field),
-				self.session("md@example.com"),
-				patch.object(frappe, "get_roles", return_value=["Managing Director"]),
-			):
-				with throws(), self.assertRaises(Thrown):
-					self.override(
-						controller=MDDecisionOverride, status="Approved", **{field: value}
-					)._validate_status(previous)
+			result = registration.verify_and_activate()
+		verify.assert_called_once_with("NEW")
+		change.assert_called_once_with(registration, "Active", enforce_activation=True)
+		self.assertEqual(result["verified"], ["DOC-1"])
+
+	def test_a_superseded_registration_is_not_superseded_again_by_the_renewal_action(self):
+		action = bare(action_module.RegulatoryRegistrationAction, name="ACT-1", resulting_registration="NEW")
+		registration = FakeRegistration(official_status="Superseded", name="OLD")
+		with (
+			patch.object(frappe, "get_doc", return_value=FakeRegistration(name="NEW")),
+			patch.object(frappe, "db", new=MagicMock()) as db,
+			patch.object(action_module, "change_status") as change,
+		):
+			action._apply_successor(registration)
+		change.assert_not_called()
+		db.set_value.assert_called_once()
+
+
+class TestAdvanceStage(unittest.TestCase):
+	def action(self, stage):
+		saved = []
+		doc = bare(
+			action_module.RegulatoryRegistrationAction,
+			current_stage=stage,
+			check_permission=lambda *a: None,
+			save=lambda: saved.append(1),
+		)
+		doc.set = lambda key, value: setattr(doc, key, value)
+		return doc, saved
+
+	def test_the_next_stage_takes_its_dates_and_saves(self):
+		doc, saved = self.action("Preparing")
+		doc.advance_stage("Submitted", '{"submitted_date": "2026-11-05", "evil": "x"}')
+		self.assertEqual((doc.current_stage, doc.submitted_date, len(saved)), ("Submitted", "2026-11-05", 1))
+		self.assertFalse(hasattr(doc, "evil"))
+
+	def test_a_stage_that_is_not_next_is_refused(self):
+		doc, saved = self.action("Preparing")
+		with throws(), self.assertRaises(Thrown):
+			doc.advance_stage("Approved")
+		self.assertEqual(saved, [])
+
+	def test_every_next_stage_is_a_real_stage(self):
+		stages = {
+			"Preparing",
+			"Internal Review",
+			"Submitted",
+			"FDA Query",
+			"Approved",
+			"Rejected",
+			"Cancelled",
+		}
+		for stage, nxt in action_module.NEXT_STAGES.items():
+			self.assertIn(stage, stages)
+			self.assertTrue(set(nxt) <= stages, stage)
 
 
 class TestDocumentVerification(unittest.TestCase):
@@ -522,7 +478,7 @@ class TestRegistrationCategory(unittest.TestCase):
 		message = msgprint.call_args.args[0]
 		self.assertIn(frappe.bold("UNCAT"), message)
 		self.assertNotIn(frappe.bold("REG"), message)
-		self.assertIn("have no Product Category", message)
+		self.assertIn("are not marked as regulated", message)
 		self.assertEqual(msgprint.call_args.kwargs, {"indicator": "orange", "alert": True})
 
 
@@ -634,38 +590,6 @@ class TestRegistrationHardening(unittest.TestCase):
 
 
 class TestHardenedAudit(unittest.TestCase):
-	def test_override_audit_stamps_cannot_be_changed(self):
-		override = bare(
-			RegulatoryOverride,
-			status="Approved",
-			requested_by="forged@example.com",
-			requested_on="2000-01-01",
-			approved_by="forged@example.com",
-			approved_on="2000-01-01",
-		)
-		previous = frappe._dict(
-			status="Approved",
-			requested_by="maker@example.com",
-			requested_on="2026-10-01",
-			approved_by="checker@example.com",
-			approved_on="2026-10-02",
-		)
-		override._protect_audit_stamps(previous)
-		self.assertEqual(
-			(override.requested_by, override.requested_on, override.approved_by, override.approved_on),
-			("maker@example.com", "2026-10-01", "checker@example.com", "2026-10-02"),
-		)
-
-	def test_new_override_cannot_arrive_pre_approved_by_stamp(self):
-		override = bare(
-			RegulatoryOverride,
-			status="Requested",
-			approved_by="x@example.com",
-			approved_on="2026-01-01",
-		)
-		override._protect_audit_stamps(None)
-		self.assertEqual((override.approved_by, override.approved_on), (None, None))
-
 	def test_editing_a_verified_document_voids_the_verification(self):
 		doc = bare(
 			RegulatoryDocument,
