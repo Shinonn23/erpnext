@@ -63,9 +63,6 @@ frappe.ui.form.on("Stock Count", {
 		frm.set_query("item_code", "selected_items", () => ({
 			filters: { is_stock_item: 1, disabled: 0 },
 		}));
-		frm.set_query("scan_storage_location", () => ({
-			filters: { warehouse: frm.doc.warehouse, disabled: 0 },
-		}));
 		frm.set_query("storage_location", "items", (doc, cdt, cdn) =>
 			erpnext.queries.storage_location(doc.warehouse, locals[cdt][cdn].item_code)
 		);
@@ -100,6 +97,25 @@ frappe.ui.form.on("Stock Count", {
 		frm.set_df_property("quarantine_storage_location", "read_only", frm.doc.status !== "Draft");
 		frm.set_df_property("found_warehouse", "read_only", frm.doc.status !== "Draft");
 
+		if (can_count && (frm.doc.items || []).some((row) => !row.is_counted)) {
+			// explicit, never automatic: the counter says that what was not found is zero
+			frm.add_custom_button(__("Set uncounted rows to 0"), () => {
+				let changed = 0;
+				for (const row of frm.doc.items || []) {
+					if (row.is_counted) continue;
+					row.counted_qty = 0;
+					row.is_counted = 1;
+					row.difference_qty = 0 - flt(row.system_qty);
+					changed += 1;
+				}
+				frm.refresh_field("items");
+				if (changed) frm.dirty();
+				frappe.show_alert({
+					message: __("{0} row(s) set to 0. Save to keep them.", [changed]),
+					indicator: "green",
+				});
+			});
+		}
 		if (!frm.doc.docstatus && frm.doc.status === "Draft" && frm.doc.warehouse) {
 			frm.add_custom_button(__("Add Storage Locations"), () =>
 				erpnext.stock_count.add_storage_locations(frm)
@@ -180,6 +196,33 @@ frappe.ui.form.on("Stock Count", {
 		frm.toggle_display("item_count", monthly && frm.doc.item_selection !== "Selected Items");
 		frm.toggle_display("quarantine_warehouse", monthly);
 		frm.toggle_display("found_warehouse", monthly);
+		// the Lost Storage Location is rarely used: shown only when the count names one
+		frm.toggle_display("quarantine_storage_location", monthly && !!frm.doc.quarantine_storage_location);
+		// the series has one option and the counter never chooses it
+		frm.toggle_display("naming_series", false);
+		// the Accounts, Final and CEO steps exist only on an Annual count (company policy fields)
+		for (const stage of ["accounts_approved", "final_approved", "ceo_acknowledged"]) {
+			for (const suffix of ["by", "on"]) {
+				frm.toggle_display(`${stage}_${suffix}`, !monthly && !!frm.doc[`${stage}_${suffix}`]);
+			}
+		}
+	},
+
+	scan_storage_location(frm) {
+		const value = (frm.doc.scan_storage_location || "").trim();
+		if (!value || !frm.doc.warehouse) return;
+		// a scanned label may be the location's code as well as its full name
+		frappe
+			.call({
+				method: "erpnext.stock.doctype.stock_count.stock_count.resolve_storage_location",
+				args: { warehouse: frm.doc.warehouse, value },
+			})
+			.then((r) => {
+				if (r.message && r.message !== frm.doc.scan_storage_location) {
+					frm.set_value("scan_storage_location", r.message);
+				}
+			})
+			.catch(() => frm.set_value("scan_storage_location", ""));
 	},
 
 	item_selection(frm) {
@@ -331,9 +374,13 @@ frappe.ui.form.on("Stock Count Item", {
 frappe.provide("erpnext.stock_count");
 erpnext.stock_count.add_storage_locations = async (frm) => {
 	const method = "erpnext.stock.doctype.stock_count.stock_count.";
-	const zones = (
-		await frappe.call({ method: method + "get_storage_location_zones", args: { warehouse: frm.doc.warehouse } })
-	).message || [];
+	const zones =
+		(
+			await frappe.call({
+				method: method + "get_storage_location_zones",
+				args: { warehouse: frm.doc.warehouse },
+			})
+		).message || [];
 	const location_query = () => ({ filters: { warehouse: frm.doc.warehouse, disabled: 0 } });
 	const dialog = new frappe.ui.Dialog({
 		title: __("Add Storage Locations"),

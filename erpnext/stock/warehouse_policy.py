@@ -137,7 +137,11 @@ def validate_warehouse_operation(
 		return
 	location = _current_doc("Warehouse", warehouse) if for_update else frappe.get_doc("Warehouse", warehouse)
 	if location.is_group:
-		frappe.throw(_("Group warehouse {0} cannot be used for stock transactions. Please select a child warehouse.").format(warehouse))
+		frappe.throw(
+			_(
+				"Group warehouse {0} cannot be used for stock transactions. Please select a child warehouse."
+			).format(warehouse)
+		)
 	if not location.warehouse_type:
 		return
 	policy = (
@@ -152,9 +156,9 @@ def validate_warehouse_operation(
 		operation = "transfer"
 	if not cint(policy.get(f"allow_{operation}")):
 		frappe.throw(
-			_("Warehouse {0} of type {1} does not allow {2} transactions. Please select a suitable warehouse.").format(
-				warehouse, policy.name, _(operation)
-			)
+			_(
+				"Warehouse {0} of type {1} does not allow {2} transactions. Please select a suitable warehouse."
+			).format(warehouse, policy.name, _(operation))
 		)
 	if (
 		outgoing
@@ -163,7 +167,9 @@ def validate_warehouse_operation(
 		and not outgoing_role_waived(doc, location, policy)
 	):
 		frappe.throw(
-			_("Moving stock out of warehouse {0} requires the {1} role.").format(warehouse, policy.outgoing_role),
+			_("Moving stock out of warehouse {0} requires the {1} role.").format(
+				warehouse, policy.outgoing_role
+			),
 			frappe.PermissionError,
 		)
 
@@ -176,6 +182,12 @@ def outgoing_role_waived(doc, warehouse, policy):
 	"""
 	if doc is None:
 		return False
+	from erpnext.stock.doctype.stock_count.stock_count import is_count_posting
+
+	# The Stock Entry a Stock Count posts itself when it is approved (moving found stock back out of Lost): the count
+	# is the evidence and its approval the decision, by identity of that one document (Connect Diagnostics, 5 Nov 2026).
+	if is_count_posting(doc):
+		return True
 	return any(
 		frappe.get_attr(path)(doc, warehouse, policy)
 		for path in frappe.get_hooks("warehouse_outgoing_role_waivers")
@@ -198,7 +210,11 @@ def is_loan_movement(doc):
 			doc.get("custody_loan_source_doctype") != "Custody Loan Adjustment"
 			or doc.purpose != "Material Issue"
 		):
-			frappe.throw(_("Loan warehouses only accept transactions generated from correctly linked loan, return or loan adjustment documents."))
+			frappe.throw(
+				_(
+					"Loan warehouses only accept transactions generated from correctly linked loan, return or loan adjustment documents."
+				)
+			)
 		loan = frappe.get_doc("Custody Loan", doc.custody_loan)
 		adjustment = frappe.get_doc("Custody Loan Adjustment", doc.custody_loan_source_name)
 		if (
@@ -209,7 +225,11 @@ def is_loan_movement(doc):
 				row.s_warehouse != loan.customer_loan_warehouse or row.t_warehouse for row in doc.get("items")
 			)
 		):
-			frappe.throw(_("Loan warehouse adjustments must match the loan adjustment document and the customer's loan warehouse."))
+			frappe.throw(
+				_(
+					"Loan warehouse adjustments must match the loan adjustment document and the customer's loan warehouse."
+				)
+			)
 	return True
 
 
