@@ -76,7 +76,7 @@
   },
   {
    "default": "0",
-   "description": "Equipment in this category is lent to customers for demos. Customer Demo requests accept only Assets from these categories.",
+   "description": "Equipment in this category is lent to customers for demos. A Demo request names Items; an Asset of this category is what the back office lends.",
    "fieldname": "is_demo_category",
    "fieldtype": "Check",
    "label": "Is Demo Category"

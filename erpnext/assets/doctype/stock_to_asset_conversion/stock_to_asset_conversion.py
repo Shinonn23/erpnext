@@ -100,7 +100,9 @@ class StocktoAssetConversion(StockController):
 			if row.item_code:
 				item = frappe.get_cached_doc("Item", row.item_code)
 				row.stock_uom = item.stock_uom
-				row.asset_item_code = item.demo_asset_item_code
+				# the row names the asset Item; the stock Item's own mapping only fills an empty row
+				# (Siwat's UX review, 6 Nov 2026: the stock team no longer edits each Item first)
+				row.asset_item_code = row.asset_item_code or item.demo_asset_item_code
 				if row.warehouse:
 					args = frappe._dict(
 						item_code=row.item_code,
@@ -141,9 +143,10 @@ class StocktoAssetConversion(StockController):
 			item = frappe.get_cached_doc("Item", row.item_code)
 			if not item.is_stock_item:
 				frappe.throw(_("Row {0}: {1} must be a Stock Item").format(row.idx, row.item_code))
-			if not item.demo_asset_item_code:
+			target_code = row.asset_item_code or item.demo_asset_item_code
+			if not target_code:
 				frappe.throw(_("Row {0}: Set Asset Item Code on {1}").format(row.idx, row.item_code))
-			target = frappe.get_cached_doc("Item", item.demo_asset_item_code)
+			target = frappe.get_cached_doc("Item", target_code)
 			if not target.is_fixed_asset or target.is_stock_item:
 				frappe.throw(_("Row {0}: Target Item must be a non-stock Fixed Asset Item").format(row.idx))
 			if not target.asset_category:
