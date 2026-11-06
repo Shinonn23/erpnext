@@ -1280,7 +1280,10 @@ class PaymentEntry(AccountsController):
 			return
 
 		if self.payment_type in ("Receive", "Pay"):
-			self.title = self.party
+			# an Employee is titled by name, not by the employee number (UX review, Siwat, 6 Nov 2026)
+			self.title = (
+				self.party_name if self.party_type == "Employee" and self.party_name else self.party
+			)
 		else:
 			self.title = self.paid_from + " - " + self.paid_to
 
