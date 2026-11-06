@@ -1007,8 +1007,18 @@ erpnext.utils.update_child_items = function (opts) {
 		);
 	}
 
+	if (opts.date_only) {
+		// only the date column can be edited: the rest is shown for reference
+		fields.forEach((field) => {
+			if (!["schedule_date", "delivery_date"].includes(field.fieldname)) {
+				field.read_only = 1;
+				delete field.read_only_depends_on;
+			}
+		});
+	}
+
 	let dialog = new frappe.ui.Dialog({
-		title: __("Update Items"),
+		title: opts.date_only ? __("Change Required By Date") : __("Update Items"),
 		size: "extra-large",
 		fields: [
 			{
@@ -1488,7 +1498,8 @@ erpnext.utils.set_department_of_user = function (frm) {
 			if (frm.doc.company !== company) return;
 			if (frm.doc.department && frm.doc.department !== frm.department_of_user) return;
 			frm.department_of_user = department || null;
-			if ((frm.doc.department || null) !== frm.department_of_user) frm.set_value("department", department || "");
+			if ((frm.doc.department || null) !== frm.department_of_user)
+				frm.set_value("department", department || "");
 		});
 };
 

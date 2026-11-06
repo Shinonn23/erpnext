@@ -13,6 +13,10 @@ from erpnext.stock.get_item_details import NOT_APPLICABLE_TAX, _get_item_details
 from erpnext.stock.utils import _get_incoming_rate
 
 
+def fmt_rate(value):
+	return frappe.format(flt(value), {"fieldtype": "Float", "precision": 2})
+
+
 class UOMMustBeIntegerError(frappe.ValidationError):
 	pass
 
@@ -169,14 +173,22 @@ class TransactionBase(StatusUpdater):
 						if action == "Stop":
 							if role_allowed_to_override not in frappe.get_roles():
 								stop_actions.append(
-									_("Row #{0}: Rate must be same as {1}: {2} ({3} / {4})").format(
-										d.idx, ref_dt, d.get(ref_dn_field), d.rate, ref_rate
+									_(
+										"Row #{0}: Rate must be same as {1}: {2} (you entered {3}, it is {4})"
+									).format(
+										d.idx,
+										ref_dt,
+										d.get(ref_dn_field),
+										fmt_rate(d.rate),
+										fmt_rate(ref_rate),
 									)
 								)
 						else:
 							frappe.msgprint(
-								_("Row #{0}: Rate must be same as {1}: {2} ({3} / {4})").format(
-									d.idx, ref_dt, d.get(ref_dn_field), d.rate, ref_rate
+								_(
+									"Row #{0}: Rate must be same as {1}: {2} (you entered {3}, it is {4})"
+								).format(
+									d.idx, ref_dt, d.get(ref_dn_field), fmt_rate(d.rate), fmt_rate(ref_rate)
 								),
 								title=_("Warning"),
 								indicator="orange",

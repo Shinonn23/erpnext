@@ -4,6 +4,8 @@
 frappe.ui.form.on("Item", {
 	refresh(frm) {
 		add_category_button(frm);
+		// a form refreshes twice after a save: show each banner once
+		if (frm.dashboard.clear_headline) frm.dashboard.clear_headline();
 		if (frm.is_new()) return;
 		if (!frm.doc.regulatory_product_category) {
 			if (frm.doc.is_sales_item) {

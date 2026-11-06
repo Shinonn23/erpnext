@@ -1018,7 +1018,7 @@ DEPOSIT_CUSTOM_FIELDS = {
 			"insert_after": "use_untied_deposit",
 			"label": "Manual Deposit Allocation",
 			"read_only": 0,
-			"description": "Allow user to manually allowcate deposit amount to deduct.",
+			"description": "Allow user to manually allocate deposit amount to deduct.",
 		},
 		{
 			"fieldname": "deposits",
@@ -1070,7 +1070,7 @@ DEPOSIT_CUSTOM_FIELDS = {
 			"insert_after": "use_untied_deposit",
 			"label": "Manual Deposit Allocation",
 			"read_only": 0,
-			"description": "Allow user to manually allowcate deposit amount to deduct.",
+			"description": "Allow user to manually allocate deposit amount to deduct.",
 		},
 		{
 			"fieldname": "deposits",

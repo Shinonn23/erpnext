@@ -13,7 +13,6 @@
  "field_order": [
   "naming_series",
   "supplier_name",
-  "old_supplier_code",
   "supplier_type",
   "alias",
   "gender",
@@ -109,13 +108,6 @@
    "reqd": 1
   },
   {
-   "fieldname": "old_supplier_code",
-   "fieldtype": "Data",
-   "label": "Old Supplier Code",
-   "in_global_search": 1,
-   "search_index": 1
-  },
-  {
    "fieldname": "alias",
    "fieldtype": "Data",
    "in_global_search": 1,
@@ -137,7 +129,7 @@
    "options": "Bank Account"
   },
   {
-   "description": "Supplier's tax identification number (e.g. PAN, VAT, GST)",
+   "description": "Thai Tax ID (13 digits)",
    "fieldname": "tax_id",
    "fieldtype": "Data",
    "in_global_search": 1,
@@ -153,7 +145,7 @@
    "options": "Tax Category"
   },
   {
-   "description": "TDS / withholding tax category applied when paying this supplier",
+   "description": "Withholding tax category applied when paying this supplier",
    "fieldname": "tax_withholding_category",
    "fieldtype": "Link",
    "in_import_template": 1,
@@ -671,7 +663,7 @@
  ],
  "quick_entry": 1,
  "row_format": "Dynamic",
- "search_fields": "supplier_group,alias,old_supplier_code",
+ "search_fields": "supplier_group,alias",
  "show_name_in_global_search": 1,
  "sort_field": "creation",
  "sort_order": "ASC",
