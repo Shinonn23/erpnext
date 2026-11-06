@@ -107,7 +107,8 @@
    "fieldtype": "Select",
    "in_standard_filter": 1,
    "label": "Activity Type",
-   "options": "\nImport\nManufacture\nSale\nProduct Registration\nOther"
+   "options": "\nImport\nManufacture\nSale\nProduct Registration\nOther",
+   "depends_on": "eval:doc.product_category == 'Medical Device' || doc.activity_type"
   },
   {
    "fieldname": "identity_column",
@@ -336,7 +337,8 @@
   {
    "fieldname": "last_verified_on",
    "fieldtype": "Date",
-   "label": "Last Verified On"
+   "label": "Last Verified On",
+   "read_only": 1
   },
   {
    "fieldname": "lifecycle_column",

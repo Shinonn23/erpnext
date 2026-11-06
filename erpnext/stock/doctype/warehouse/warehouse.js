@@ -173,7 +173,11 @@ function render_warehouse_type_detail(summary) {
 				)}</b>: ${esc(row.documents.join("; "))}</li>`
 		)
 		.join("");
-	return `<ul class="list-unstyled small">${rows}</ul>`;
+	// one line first; the transaction families behind a "Details" toggle (Siwat, 6 Nov 2026)
+	return (
+		`<details class="small"><summary>${__("Details")}</summary>` +
+		`<ul class="list-unstyled">${rows}</ul></details>`
+	);
 }
 
 function original_warehouse_type_description() {

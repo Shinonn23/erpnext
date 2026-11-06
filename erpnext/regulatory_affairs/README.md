@@ -47,7 +47,7 @@ force to be sold) or **Not Regulated** (RA looked at it and it needs none). An I
 * returns, consolidated POS invoices and Sales Invoice rows already delivered are not checked; purchasing and stock keep their
   own rules (a Purchase Order only warns).
 
-RA classifies one Item with *Regulatory > Classify Item* (Product Category, Medical Device Category, Regulatory Owner in one
+Saving a registration whose product row names an Item with no Product Category sets that Item's category from the registration's (never overwrites an existing category or Not Regulated; the Item gets a comment; the orange warning only names the Items left; Siwat, 6 Nov 2026). Verify and Activate sets Last Verified On. RA classifies one Item with *Regulatory > Classify Item* (Product Category, Medical Device Category, Regulatory Owner in one
 dialog; `item.classify_item`) and many with the Item list *Actions > Classify as ...* (`item.classify_items`); the report
 *Regulatory Unclassified Items* counts and lists the sales Items still unclassified (filter by Item Group). Only a regulated
 Item shows the *Current Regulatory Coverage* section with the read-only coverage fields (`current_regulatory_registration`,

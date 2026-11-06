@@ -239,7 +239,8 @@ erpnext.SerialBatchPackageSelector = class SerialNoBatchBundleUpdate {
 				label: __("Import Using CSV file"),
 				fieldname: "import_using_csv_file",
 				depends_on: "eval:doc.enter_manually !== 1",
-				default: !this.item.has_serial_no ? 1 : 0,
+				// opens on manual entry, not on a CSV import (Siwat, 6 Nov 2026)
+				default: 0,
 				change() {
 					if (me.dialog.get_value("import_using_csv_file")) {
 						me.dialog.set_value("enter_manually", 0);
@@ -755,9 +756,10 @@ erpnext.SerialBatchPackageSelector = class SerialNoBatchBundleUpdate {
 			return this.item.rejected_warehouse;
 		}
 
+		// a Stock Entry row has no type_of_transaction yet: take the warehouse the row names
 		return this.item?.type_of_transaction === "Outward"
 			? this.item.warehouse || this.item.s_warehouse
-			: this.item.warehouse || this.item.t_warehouse;
+			: this.item.warehouse || this.item.t_warehouse || this.item.s_warehouse;
 	}
 
 	render_data() {
