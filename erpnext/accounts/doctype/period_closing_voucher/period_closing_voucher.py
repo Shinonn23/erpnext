@@ -697,6 +697,18 @@ def get_period_start_end_date(fiscal_year, company):
 	return period_start_date, fy_end_date
 
 
+@frappe.whitelist()
+def get_default_closing_account_head(company):
+	"""The Closing Account Head of the company's last submitted close: the retained earnings account is the same
+	every period, so a new Period Closing Voucher starts with it."""
+	return frappe.db.get_value(
+		"Period Closing Voucher",
+		filters={"company": company, "docstatus": 1},
+		fieldname="closing_account_head",
+		order_by="period_end_date desc",
+	)
+
+
 def get_previous_closed_period_in_current_year(fiscal_year, company):
 	prev_closed_period_end_date = frappe.db.get_value(
 		"Period Closing Voucher",

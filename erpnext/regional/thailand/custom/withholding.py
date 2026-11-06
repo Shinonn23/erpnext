@@ -454,8 +454,8 @@ def plan_receive_rows(doc, based_on=MANUAL, category=None, base_amount=None, wit
 			frappe.throw(
 				_(
 					"No item of the invoices this entry settles has a Tax Withholding Category (on the invoice "
-					"item, the Item's Sales Tax Withholding Category or the Customer). Use Based On Manual "
-					"Selection."
+					"item, the Item's Sales Tax Withholding Category or the Customer). Use Enter type "
+					"and amount."
 				),
 				title=_("Withhold Tax"),
 			)
@@ -467,7 +467,7 @@ def plan_receive_rows(doc, based_on=MANUAL, category=None, base_amount=None, wit
 		base = get_receive_base(doc, rate) if base_amount in (None, "") else flt(base_amount)
 		wanted = [(category, base, withholding_amount)]
 	else:
-		frappe.throw(_("Withhold Tax works Based On Manual Selection or on the line items."))
+		frappe.throw(_("Withhold Tax works from the type and amount you enter or from the line items."))
 	rows = []
 	for name, base, amount in wanted:
 		info = receive_category(name, doc.company, doc.posting_date)

@@ -96,7 +96,7 @@
    "reqd": 1
   },
   {
-   "description": "Selecting treshold date will get matched invoices",
+   "description": "Selecting the threshold date fetches the matching invoices",
    "fieldname": "threshold_date",
    "fieldtype": "Date",
    "label": "Threshold Date",

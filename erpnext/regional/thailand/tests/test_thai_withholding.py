@@ -568,7 +568,7 @@ class TestPlanRows(unittest.TestCase):
 
 	def test_line_items_without_any_type_say_so(self):
 		self.world.items = {}
-		with self.assertRaisesRegex(frappe.ValidationError, "Use Based On Manual Selection"):
+		with self.assertRaisesRegex(frappe.ValidationError, "Use Enter type and amount"):
 			self.plan(based_on="Line Items")
 		self.world.items = {"SERVICE-FEE": SERVICE}
 		(row,) = self.plan(based_on="Line Items")

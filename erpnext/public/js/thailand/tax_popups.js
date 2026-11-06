@@ -219,12 +219,8 @@ erpnext.regional.thailand.tax_popups.add_withhold_tax_buttons = function (frm) {
 	if (frm.doc.docstatus !== 0 || frm.read_only || !(frm.perm && frm.perm[0] && frm.perm[0].write)) return;
 	const popups = erpnext.regional.thailand.tax_popups;
 	const group = __("Withhold Tax");
-	frm.add_custom_button(__("Based On Manual Selection"), () => popups.withhold_manual(frm), group);
-	frm.add_custom_button(
-		__("Based On Paying Document's Line Items"),
-		() => popups.withhold_from_items(frm),
-		group
-	);
+	frm.add_custom_button(__("Enter type and amount"), () => popups.withhold_manual(frm), group);
+	frm.add_custom_button(__("From invoice lines"), () => popups.withhold_from_items(frm), group);
 };
 
 erpnext.regional.thailand.tax_popups.not_withholding = function () {
@@ -252,7 +248,7 @@ erpnext.regional.thailand.tax_popups.withhold_from_items = function (frm) {
 	if (direction === "Pay") {
 		frappe.msgprint(
 			__(
-				"A Journal Entry withholds one type of income for the whole entry: use Based On Manual Selection."
+				"A Journal Entry withholds one type of income for the whole entry: use Enter type and amount."
 			),
 			__("Withhold Tax")
 		);
@@ -295,7 +291,7 @@ erpnext.regional.thailand.tax_popups.load_pay_categories = async function (frm) 
 	if (!(frm.doc.tax_withholding_categories || []).length) {
 		frappe.msgprint(
 			__(
-				"No item of the paid invoices has a Purchase Tax Withholding Category. Use Based On Manual Selection."
+				"No item of the paid invoices has a Purchase Tax Withholding Category. Use Enter type and amount."
 			),
 			__("Withhold Tax")
 		);

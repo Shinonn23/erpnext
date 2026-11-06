@@ -118,7 +118,7 @@ frappe.treeview_settings["Account"] = {
 
 		if (frappe.boot.user.can_read.indexOf("GL Entry") == -1) return;
 		if (!cur_tree.account_balance_data) {
-			frappe.db.get_single_value("Accounts Settings", "show_balance_in_coa").then((value) => {
+			frappe.xcall("erpnext.accounts.doctype.account.account.show_balance_in_coa").then((value) => {
 				if (value) {
 					frappe.call({
 						method: "erpnext.accounts.utils.get_account_balances_coa",

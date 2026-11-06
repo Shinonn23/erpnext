@@ -39,9 +39,7 @@ class JournalEntry(JournalEntry):
 	def validate(self):
 		super().validate()
 		for line in self.accounts:
-			if not line.is_petty_cash_account and (
-				line.petty_cash_holder or line.petty_cash_holder_name
-			):
+			if not line.is_petty_cash_account and (line.petty_cash_holder or line.petty_cash_holder_name):
 				line.update(
 					{
 						"petty_cash_holder": "",
@@ -103,8 +101,8 @@ def validate_vat_tax_invoices(doc):
 		if line.account == accounts.sales_tax_account:
 			untaxed = _(
 				"Row #{0} posts {1} {2} of output VAT to {3} without a Sales Tax Invoice, so the Sales Tax Report "
-				"would miss it. Tick Create Tax Invoice (and choose the Customer on the Tax Invoice tab) before "
-				"submitting; the month-end closing goes in an Entry Type VAT Closing."
+				"would miss it. Tick Create Tax Invoice and choose the Customer in the Tax Invoice (this row) "
+				"section of that row before submitting; the month-end closing goes in an Entry Type VAT Closing."
 			)
 		elif line.account == accounts.purchase_tax_account:
 			untaxed = _(
