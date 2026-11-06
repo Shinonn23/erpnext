@@ -207,22 +207,6 @@ class TestVatTaxInvoices(_Stubs, unittest.TestCase):
 		# the Sales Tax Invoice the entry makes gives the number and date
 		journal_entry.validate_vat_tax_invoices(_vat_journal(*sale, create_tax_invoice=1))
 
-	def test_the_makers_save_ticks_create_tax_invoice_for_output_vat(self):
-		sale = [_line("1130-01", debit=10700), _line("4100-01", credit=10000), _line("2135-00", credit=700)]
-		journal = _vat_journal(*sale)
-		journal_entry.tick_output_vat_tax_invoice(journal)
-		self.assertEqual(journal.create_tax_invoice, 1)
-		journal_entry.validate_vat_tax_invoices(journal)
-
-	def test_the_save_ticks_nothing_for_input_vat_closings_or_system_journals(self):
-		for journal in (
-			_input_vat(),
-			_vat_journal(_line("2135-00", debit=700), _line("1154-00", credit=700), voucher_type="VAT Closing"),
-			_vat_journal(_line("1130-01", debit=700), _line("2135-00", credit=700), is_system_generated=1),
-		):
-			journal_entry.tick_output_vat_tax_invoice(journal)
-			self.assertFalse(journal.get("create_tax_invoice"))
-
 	def test_reductions_need_their_tax_invoice_too(self):
 		"""A credit note or a supplier's credit note by journal: a debit on output VAT, a credit on input VAT."""
 		credit_note = [

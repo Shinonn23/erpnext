@@ -48,7 +48,6 @@ class JournalEntry(JournalEntry):
 						"petty_cash_holder_name": "",
 					}
 				)
-		tick_output_vat_tax_invoice(self)
 		validate_receive_rows(self)
 		validate_undue_vat_settlement(self)
 		validate_vat_closing(self)
@@ -83,30 +82,6 @@ def company_tax_accounts(company):
 VAT_CLOSING = "VAT Closing"
 
 
-def tick_output_vat_tax_invoice(doc):
-	"""Siwat, 6 Nov 2026: output VAT needs only Create Tax Invoice (the Sales Tax Invoice gives its number and date), so
-	the maker's Save ticks it by itself and the approver is not the first to meet "Tax Invoice Required". Input VAT
-	still needs the supplier's number and date, which the maker gives in the dialog opened on Save. Entries that
-	validate_vat_tax_invoices leaves alone (VAT Closing, reversals, system journals, opening balances) are left alone."""
-	if (
-		doc.get("create_tax_invoice")
-		or doc.voucher_type == VAT_CLOSING
-		or doc.get("reversal_of")
-		or doc.get("is_system_generated")
-		or doc.voucher_type == "Opening Entry"
-		or doc.get("is_opening") == "Yes"
-	):
-		return
-	accounts = company_tax_accounts(doc.company)
-	if not accounts:
-		return
-	if any(
-		line.account == accounts.sales_tax_account and flt(line.debit) != flt(line.credit)
-		for line in doc.get("accounts") or []
-	):
-		doc.create_tax_invoice = 1
-
-
 def validate_vat_tax_invoices(doc):
 	"""Owner decisions 22-10-2026: VAT a Journal Entry posts to the due accounts of Thai Tax Settings (output VAT,
 	input VAT), either way, needs its tax invoice (Create Tax Invoice), or the Sales / Purchase Tax Reports miss it;
@@ -128,8 +103,8 @@ def validate_vat_tax_invoices(doc):
 		if line.account == accounts.sales_tax_account:
 			untaxed = _(
 				"Row #{0} posts {1} {2} of output VAT to {3} without a Sales Tax Invoice, so the Sales Tax Report "
-				"would miss it. Tick Create Tax Invoice (the Tax Invoice tab has the Customer) before "
-				"submitting; the month-end closing goes in an Entry Type VAT Closing."
+				"would miss it. Tick Create Tax Invoice and choose the Customer in the Tax Invoice (this row) "
+				"section of that row before submitting; the month-end closing goes in an Entry Type VAT Closing."
 			)
 		elif line.account == accounts.purchase_tax_account:
 			untaxed = _(
