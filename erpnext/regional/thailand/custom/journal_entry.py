@@ -39,9 +39,7 @@ class JournalEntry(JournalEntry):
 	def validate(self):
 		super().validate()
 		for line in self.accounts:
-			if not line.is_petty_cash_account and (
-				line.petty_cash_holder or line.petty_cash_holder_name
-			):
+			if not line.is_petty_cash_account and (line.petty_cash_holder or line.petty_cash_holder_name):
 				line.update(
 					{
 						"petty_cash_holder": "",

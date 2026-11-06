@@ -49,9 +49,11 @@ frappe.ui.form.on("Period Closing Voucher", {
 					if (r.message) {
 						frm.set_value("period_start_date", r.message[0]);
 						// the end of last month when that falls in the period, else the end of the fiscal year
-						const last_month_end = frappe.datetime.add_days(moment().startOf("month").format("YYYY-MM-DD"), -1);
-						const in_period =
-							last_month_end >= r.message[0] && last_month_end <= r.message[1];
+						const last_month_end = frappe.datetime.add_days(
+							moment().startOf("month").format("YYYY-MM-DD"),
+							-1
+						);
+						const in_period = last_month_end >= r.message[0] && last_month_end <= r.message[1];
 						frm.set_value("period_end_date", in_period ? last_month_end : r.message[1]);
 					}
 				},

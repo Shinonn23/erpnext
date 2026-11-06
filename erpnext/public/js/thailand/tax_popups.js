@@ -220,11 +220,7 @@ erpnext.regional.thailand.tax_popups.add_withhold_tax_buttons = function (frm) {
 	const popups = erpnext.regional.thailand.tax_popups;
 	const group = __("Withhold Tax");
 	frm.add_custom_button(__("Enter type and amount"), () => popups.withhold_manual(frm), group);
-	frm.add_custom_button(
-		__("From invoice lines"),
-		() => popups.withhold_from_items(frm),
-		group
-	);
+	frm.add_custom_button(__("From invoice lines"), () => popups.withhold_from_items(frm), group);
 };
 
 erpnext.regional.thailand.tax_popups.not_withholding = function () {

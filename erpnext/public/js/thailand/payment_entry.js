@@ -112,9 +112,14 @@ frappe.ui.form.on("Payment Entry", {
 			callback: function (r) {
 				if (r.message == true) {
 					// Add button
-					frm.add_custom_button(__("Clear Undue Tax"), function () {
-						frm.trigger("make_clear_vat_journal_entry");
-					}, undefined, "Journal Entry");
+					frm.add_custom_button(
+						__("Clear Undue Tax"),
+						function () {
+							frm.trigger("make_clear_vat_journal_entry");
+						},
+						undefined,
+						"Journal Entry"
+					);
 				}
 			},
 		});
