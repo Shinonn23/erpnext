@@ -154,9 +154,9 @@ class SellingController(StockController):
 			own_territory = get_territory_of_user(frappe.session.user)
 			if own_territory and own_territory != party_territory:
 				frappe.msgprint(
-					_("{0} belongs to Territory {1}, not to your Territory {2}").format(
-						bold(self.get_territory_party()[1]), bold(party_territory), bold(own_territory)
-					),
+					_(
+						"{0} is in Territory {1}, not in yours ({2}). You can continue; this is only a note."
+					).format(bold(self.get_territory_party()[1]), bold(party_territory), bold(own_territory)),
 					indicator="orange",
 					alert=True,
 				)
