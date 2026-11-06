@@ -63,7 +63,6 @@ class Supplier(TransactionBase):
 		language: DF.Link | None
 		mobile_no: DF.ReadOnly | None
 		naming_series: DF.Data
-		old_supplier_code: DF.Data | None
 		on_hold: DF.Check
 		payment_terms: DF.Link | None
 		portal_users: DF.Table[PortalUser]

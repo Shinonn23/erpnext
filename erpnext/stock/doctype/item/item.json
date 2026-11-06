@@ -16,7 +16,6 @@
   "item_code",
   "item_name",
   "item_group",
-  "product_group",
   "stock_uom",
   "image",
   "column_break0",
@@ -219,15 +218,6 @@
    "oldfieldtype": "Link",
    "options": "UOM",
    "reqd": 1
-  },
-  {
-   "fieldname": "product_group",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Product Group",
-   "options": "Product Group",
-   "search_index": 1
   },
   {
    "fieldname": "column_break0",

@@ -321,13 +321,19 @@ erpnext.buying.PurchaseOrderController = class PurchaseOrderController extends (
 					flt(this.frm.doc.per_received) < 100 &&
 					flt(this.frm.doc.per_billed) < 100
 				) {
-					if (!this.frm.doc.__onload || this.frm.doc.__onload.can_update_items) {
-						this.frm.add_custom_button(__("Update Items"), () => {
+					if (
+						(!this.frm.doc.__onload || this.frm.doc.__onload.can_update_items) &&
+						frappe.model.can_write("Purchase Order")
+					) {
+						// An approved order keeps its items, quantities and prices (cancel and amend it);
+						// only the date to receive changes in place, so the dialog offers nothing else
+						this.frm.add_custom_button(__("Change Required By Date"), () => {
 							erpnext.utils.update_child_items({
 								frm: this.frm,
 								child_docname: "items",
 								child_doctype: "Purchase Order Detail",
-								cannot_add_row: false,
+								cannot_add_row: true,
+								date_only: true,
 							});
 						});
 					}

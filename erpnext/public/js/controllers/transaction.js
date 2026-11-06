@@ -1825,7 +1825,14 @@ erpnext.TransactionController = class TransactionController extends erpnext.taxe
 		];
 
 		taxes_fields.forEach((field) => {
-			this.frm.toggle_display(field, this.frm.doc[field] !== 0 || this.frm.doc.docstatus !== 1);
+			// the company-currency totals stay hidden while the document is in the company currency
+			// (this loop used to show them again on every draft, so each total appeared twice)
+			const in_company_currency =
+				field.startsWith("base_") && this.frm.doc.currency == company_currency;
+			this.frm.toggle_display(
+				field,
+				!in_company_currency && (this.frm.doc[field] !== 0 || this.frm.doc.docstatus !== 1)
+			);
 		});
 
 		let show =

@@ -6,6 +6,8 @@ frappe.ui.form.on("Item", {
 		// the headline appends a block on every refresh: clear it first, so a save never shows it twice
 		frm.dashboard.clear_headline?.();
 		add_category_button(frm);
+		// a form refreshes twice after a save: show each banner once
+		if (frm.dashboard.clear_headline) frm.dashboard.clear_headline();
 		if (frm.is_new()) return;
 		if (!frm.doc.regulatory_product_category) {
 			if (frm.doc.is_sales_item) {

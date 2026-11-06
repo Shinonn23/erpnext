@@ -450,6 +450,21 @@ def validate_company_address(doc, method):
 		doc.company_tax_address = get_company_tax_address(doc.company)
 
 
+def copy_supplier_invoice_to_tax_invoice(doc, method=None):
+	"""A Purchase Invoice with input VAT takes the Supplier Invoice No / Date as its Tax Invoice Number / Date while
+	those are empty, so the clerk types the pair once (the supplier's invoice is normally the tax invoice)."""
+	if doc.docstatus != 0 or doc.get("split_tax_invoice") or doc.get("tax_invoice_number"):
+		return
+	if not doc.get("bill_no") or not doc.get("taxes"):
+		return
+	tax_account = get_thai_tax_settings(doc.company).purchase_tax_account
+	if not tax_account or not any(tax.account_head == tax_account for tax in doc.taxes):
+		return
+	doc.tax_invoice_number = doc.bill_no
+	if not doc.get("tax_invoice_date"):
+		doc.tax_invoice_date = doc.get("bill_date") or doc.get("posting_date")
+
+
 def validate_tax_invoice(doc, method):
 	# If taxes contain tax account, tax invoice is required.
 	setting = get_thai_tax_settings(doc.company)

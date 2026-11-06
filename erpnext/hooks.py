@@ -243,6 +243,7 @@ _thailand_doc_events = {
 		"before_validate": [
 			"erpnext.regional.thailand.custom.deposit_utils.validate_invoice",
 			"erpnext.regional.thailand.custom.deposit_utils.apply_deposit_deduction",
+			"erpnext.regional.thailand.custom.custom_api.copy_supplier_invoice_to_tax_invoice",
 		],
 		"on_cancel": "erpnext.regional.thailand.custom.deposit_utils.cancel_deposit_invoice",
 		"on_trash": "erpnext.regional.thailand.custom.deposit_utils.cancel_deposit_invoice",
