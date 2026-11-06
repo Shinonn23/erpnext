@@ -200,6 +200,14 @@ def _lookup_mapping(item_code, coverage_date, warn_only, reported):
 		return AMBIGUOUS
 
 
+def _is_administrator():
+	"""Administrator does everything (Siwat, 6 Nov 2026, for his testing)."""
+	try:
+		return frappe.session.user == "Administrator"
+	except RuntimeError:  # no session bound (an offline test)
+		return False
+
+
 def report_messages(reported, *, warn_only, doc=None, item_codes=()):
 	"""Show warning messages; raise when a message blocks. The text is plain English: which Item, why, what to do."""
 	if not reported:
@@ -207,7 +215,7 @@ def report_messages(reported, *, warn_only, doc=None, item_codes=()):
 
 	body = "<br>".join(display_message(message) for message in reported)
 	# Administrator does everything (Siwat, 6 Nov 2026, for his testing): he is told, never stopped.
-	blocking = not warn_only and has_blocking_message(reported) and frappe.session.user != "Administrator"
+	blocking = not warn_only and has_blocking_message(reported) and not _is_administrator()
 	advice = what_to_do(doc, blocking=blocking, warn_only=warn_only)
 	if advice:
 		body += "<br><br>" + advice

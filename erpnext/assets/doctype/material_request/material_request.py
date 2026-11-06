@@ -17,7 +17,14 @@ MATERIAL_REQUEST_PURPOSES = (
 	"Customer Borrow / Loan",
 )
 ASSET_STATUSES_NOT_AVAILABLE = (
-	"Draft", "Cancelled", "Scrapped", "Sold", "Capitalized", "In Maintenance", "Out of Order", "Work In Progress",
+	"Draft",
+	"Cancelled",
+	"Scrapped",
+	"Sold",
+	"Capitalized",
+	"In Maintenance",
+	"Out of Order",
+	"Work In Progress",
 )
 
 
@@ -162,11 +169,11 @@ def get_customer_delivery_snapshot(
 		customer_contact_email=contact_email,
 	)
 
+
 class CustomerMaterialRequest(MaterialRequest):
 	def is_auto_created_by_reorder(self):
 		return bool(
-			self.get("auto_created_via_reorder")
-			and frappe.flags.get("in_auto_reorder_material_request")
+			self.get("auto_created_via_reorder") and frappe.flags.get("in_auto_reorder_material_request")
 		)
 
 	def _validate_selects(self):
@@ -182,7 +189,10 @@ class CustomerMaterialRequest(MaterialRequest):
 		super()._validate_selects()
 
 	def validate_material_request_type(self):
-		if self.material_request_type not in MATERIAL_REQUEST_PURPOSES and not self.is_auto_created_by_reorder():
+		if (
+			self.material_request_type not in MATERIAL_REQUEST_PURPOSES
+			and not self.is_auto_created_by_reorder()
+		):
 			frappe.throw(_("Purpose must be one of: {0}").format(", ".join(MATERIAL_REQUEST_PURPOSES)))
 		if self.is_auto_created_by_reorder():
 			return super().validate_material_request_type()
@@ -344,9 +354,10 @@ class CustomerMaterialRequest(MaterialRequest):
 			frappe.throw(_("Recipient Type must be Employee, Customer, Supplier or Contact"))
 		if not self.loan_recipient or not frappe.db.exists(self.loan_recipient_type, self.loan_recipient):
 			frappe.throw(_("Select a valid {0} Recipient").format(self.loan_recipient_type))
-		if self.loan_recipient_type == "Employee" and frappe.db.get_value(
-			"Employee", self.loan_recipient, "company"
-		) != self.company:
+		if (
+			self.loan_recipient_type == "Employee"
+			and frappe.db.get_value("Employee", self.loan_recipient, "company") != self.company
+		):
 			frappe.throw(_("Loan Employee must belong to Company {0}").format(self.company))
 
 		if self.loan_recipient_type == "Customer":
@@ -370,6 +381,7 @@ class CustomerMaterialRequest(MaterialRequest):
 				contact = get_customer_contact_snapshot(self.loan_recipient_contact)
 				self.loan_recipient_contact_display = format_contact_display(contact)
 				self.loan_recipient_contact_email = contact.email
+
 	def validate_asset_items(self, purpose):
 		if not self.items:
 			frappe.throw(_("Add at least one Asset"))
@@ -387,12 +399,18 @@ class CustomerMaterialRequest(MaterialRequest):
 			seen.add(row.asset)
 
 			asset = frappe.db.get_value(
-				"Asset", row.asset,
+				"Asset",
+				row.asset,
 				["item_code", "company", "docstatus", "status", "location", "demo_loan_status", "custodian"],
-				as_dict=True, for_update=True,
+				as_dict=True,
+				for_update=True,
 			)
 			if not asset or asset.docstatus != 1 or asset.company != self.company:
-				frappe.throw(_("Row {0}: Asset must be submitted and belong to Company {1}").format(row.idx, self.company))
+				frappe.throw(
+					_("Row {0}: Asset must be submitted and belong to Company {1}").format(
+						row.idx, self.company
+					)
+				)
 			if asset.status in ASSET_STATUSES_NOT_AVAILABLE:
 				frappe.throw(_("Row {0}: {1} Asset cannot be selected").format(row.idx, asset.status))
 			if not asset.location:
@@ -412,9 +430,13 @@ class CustomerMaterialRequest(MaterialRequest):
 			if self.get("asset_item_filter") and asset.item_code != self.get("asset_item_filter"):
 				frappe.throw(_("Row {0}: Asset does not match the Fixed Asset Item filter").format(row.idx))
 			if self.has_active_asset_request(row.asset):
-				frappe.throw(_("Row {0}: Asset is already reserved by another active Material Request").format(row.idx))
+				frappe.throw(
+					_("Row {0}: Asset is already reserved by another active Material Request").format(row.idx)
+				)
 			if purpose == "Customer Demo" and not frappe.db.get_value("Asset", row.asset, "is_demo_asset"):
-				frappe.throw(_("Row {0}: Customer Demo requires an Asset from a Demo Asset Category").format(row.idx))
+				frappe.throw(
+					_("Row {0}: Customer Demo requires an Asset from a Demo Asset Category").format(row.idx)
+				)
 
 			row.item_code = asset.item_code
 			row.asset_name = frappe.db.get_value("Asset", row.asset, "asset_name")
@@ -431,17 +453,25 @@ class CustomerMaterialRequest(MaterialRequest):
 				if not row.target_location:
 					frappe.throw(_("Row {0}: Select a Target Location").format(row.idx))
 				if row.target_location == asset.location:
-					frappe.throw(_("Row {0}: Target Location must differ from the Source Location").format(row.idx))
+					frappe.throw(
+						_("Row {0}: Target Location must differ from the Source Location").format(row.idx)
+					)
 			elif purpose == "Customer Demo":
 				row.target_location = row.target_location or self.customer_location
 				if not row.target_location:
-					frappe.throw(_("Row {0}: Customer Location is required for this Demo Asset").format(row.idx))
+					frappe.throw(
+						_("Row {0}: Customer Location is required for this Demo Asset").format(row.idx)
+					)
 			else:
 				row.target_location = row.target_location or self.loan_recipient_location
 				if self.loan_recipient_type != "Employee" and not row.target_location:
-					frappe.throw(_("Row {0}: Recipient Location is required for this Asset Loan").format(row.idx))
+					frappe.throw(
+						_("Row {0}: Recipient Location is required for this Asset Loan").format(row.idx)
+					)
 				if row.target_location and row.target_location == asset.location:
-					frappe.throw(_("Row {0}: Recipient Location must differ from the Source Location").format(row.idx))
+					frappe.throw(
+						_("Row {0}: Recipient Location must differ from the Source Location").format(row.idx)
+					)
 
 	def has_active_asset_request(self, asset_name):
 		from erpnext.loan.doctype.custody_loan.custody_loan_core import (
@@ -459,13 +489,19 @@ class CustomerMaterialRequest(MaterialRequest):
 				and coalesce(mr.asset_transfer_status, '') not in ('Fulfilled', 'Cancelled'))
 			or (mr.material_request_type in ('Customer Demo', 'Customer Borrow / Loan')
 				and coalesce(mr.request_progress_status, '') not in ('Returned', 'Closed', 'Cancelled')))
-			for update""", (asset_name, self.name or ""), as_dict=True,
+			for update""",
+			(asset_name, self.name or ""),
+			as_dict=True,
 		)
 		allocations = get_asset_custody_allocations(asset_name) if requests else []
 		for request in requests:
 			if request.material_request_type == "Asset Transfer":
 				return True
-			matched = [row for row in allocations if row.material_request == request.name and row.material_request_item == request.request_item]
+			matched = [
+				row
+				for row in allocations
+				if row.material_request == request.name and row.material_request_item == request.request_item
+			]
 			if not matched or any(not asset_allocation_is_returned(row) for row in matched):
 				return True
 		return False
@@ -511,7 +547,9 @@ class CustomerMaterialRequest(MaterialRequest):
 			"Employee", self.responsible_employee, ["status", "company"], as_dict=True
 		)
 		if not employee or employee.status != "Active" or employee.company != self.company:
-			frappe.throw(_("The Responsible Employee must be an Active Employee of {0}.").format(self.company))
+			frappe.throw(
+				_("The Responsible Employee must be an Active Employee of {0}.").format(self.company)
+			)
 
 	def set_default_contact(self):
 		"""The Customer's primary Contact when the requester names none (it is optional for him)."""
@@ -525,7 +563,12 @@ class CustomerMaterialRequest(MaterialRequest):
 			frappe.throw(_("Customer Contact is required"))
 		if self.contact_person and not frappe.db.exists(
 			"Dynamic Link",
-			{"parent": self.contact_person, "parenttype": "Contact", "link_doctype": "Customer", "link_name": self.customer},
+			{
+				"parent": self.contact_person,
+				"parenttype": "Contact",
+				"link_doctype": "Customer",
+				"link_name": self.customer,
+			},
 		):
 			frappe.throw(_("Customer Contact must be linked to Customer {0}").format(self.customer))
 
@@ -573,7 +616,9 @@ class CustomerMaterialRequest(MaterialRequest):
 			frappe.throw(_("Add at least one Stock Item to borrow"))
 		super().validate_items()
 		for row in self.items:
-			item = frappe.get_cached_value("Item", row.item_code, ["is_stock_item", "stock_uom"], as_dict=True)
+			item = frappe.get_cached_value(
+				"Item", row.item_code, ["is_stock_item", "stock_uom"], as_dict=True
+			)
 			if not item or not item.is_stock_item:
 				frappe.throw(_("Row {0}: Stock Loans support Stock Items only").format(row.idx))
 			row.item_type = "Stock Item"
@@ -612,9 +657,9 @@ class CustomerMaterialRequest(MaterialRequest):
 			items = [row.asset_name or row.item_name or row.asset or row.item_code for row in self.items]
 		else:
 			return super().set_title()
-		self.title = _("{0} Request for {1}").format(
-			_(self.material_request_type), ", ".join(items[:3])
-		)[:100]
+		self.title = _("{0} Request for {1}").format(_(self.material_request_type), ", ".join(items[:3]))[
+			:100
+		]
 
 	def before_submit(self):
 		super().before_submit()
@@ -725,7 +770,9 @@ class CustomerMaterialRequest(MaterialRequest):
 			)
 			row.fulfilled_qty = sum(flt(entry.qty) for entry in entries if entry.purpose == "Transfer")
 			row.returned_qty = (
-				sum(flt(entry.qty) for entry in entries if entry.purpose == "Receipt") if not is_transfer else 0
+				sum(flt(entry.qty) for entry in entries if entry.purpose == "Receipt")
+				if not is_transfer
+				else 0
 			)
 			row.outstanding_qty = max(flt(row.fulfilled_qty) - flt(row.returned_qty), 0)
 			row.asset_movement = entries[0].name if entries else None
@@ -734,7 +781,8 @@ class CustomerMaterialRequest(MaterialRequest):
 			row.status = self.get_row_status(row)
 			if row.name and self.docstatus == 1:
 				frappe.db.set_value(
-					child_doctype, row.name,
+					child_doctype,
+					row.name,
 					{
 						"fulfilled_qty": row.fulfilled_qty,
 						"returned_qty": row.returned_qty,
@@ -763,7 +811,7 @@ class CustomerMaterialRequest(MaterialRequest):
 
 	def update_custody_loan_progress(self):
 		loan_items = frappe.db.sql(
-				"""select cli.name, cli.material_request_item, cli.qty, cli.returned_qty,
+			"""select cli.name, cli.material_request_item, cli.qty, cli.returned_qty,
 				cli.outstanding_qty, l.status, l.delivery_note, l.asset_movement, l.name as custody_loan
 				from `tabCustody Loan Item` cli
 			join `tabCustody Loan` l on l.name = cli.parent
@@ -784,15 +832,15 @@ class CustomerMaterialRequest(MaterialRequest):
 			from erpnext.loan.doctype.custody_loan.custody_loan_core import transaction_is_received
 
 			issued_rows = [
-				item
-				for item in loan_rows
-				if transaction_is_received(item.delivery_note, item.asset_movement)
+				item for item in loan_rows if transaction_is_received(item.delivery_note, item.asset_movement)
 			]
 			row.fulfilled_qty = sum(flt(item.qty) for item in issued_rows)
 			row.returned_qty = sum(flt(item.returned_qty) for item in loan_rows)
 			row.outstanding_qty = sum(flt(item.outstanding_qty) for item in issued_rows)
 			row.delivery_note = next((item.delivery_note for item in loan_rows if item.delivery_note), None)
-			row.asset_movement = next((item.asset_movement for item in loan_rows if item.asset_movement), None)
+			row.asset_movement = next(
+				(item.asset_movement for item in loan_rows if item.asset_movement), None
+			)
 			row.custody_loan = next((item.custody_loan for item in loan_rows), None)
 			row.status = self.get_row_status(row)
 			requested_total += flt(row.qty)
@@ -866,7 +914,10 @@ class CustomerMaterialRequest(MaterialRequest):
 	@frappe.whitelist()
 	def make_custody_loan(self, loan_type):
 		self.reload()
-		if self.docstatus != 1 or self.material_request_type not in ("Customer Demo", "Customer Borrow / Loan"):
+		if self.docstatus != 1 or self.material_request_type not in (
+			"Customer Demo",
+			"Customer Borrow / Loan",
+		):
 			frappe.throw(_("Submit a Customer Demo or Customer Borrow / Loan Material Request first"))
 		from erpnext.loan.doctype.custody_loan.custody_loan_core import make_custody_loan_from_request
 
@@ -899,14 +950,18 @@ class CustomerMaterialRequest(MaterialRequest):
 				transfer_rows.append(row)
 
 		asset_names = list({row.asset for row in transfer_rows})
-		asset_details = {
-			asset.name: asset
-			for asset in frappe.get_all(
-				"Asset",
-				filters={"name": ["in", asset_names]},
-				fields=["name", "asset_name", "asset_serial_number", "is_demo_asset", "demo_loan_status"],
-			)
-		} if asset_names else {}
+		asset_details = (
+			{
+				asset.name: asset
+				for asset in frappe.get_all(
+					"Asset",
+					filters={"name": ["in", asset_names]},
+					fields=["name", "asset_name", "asset_serial_number", "is_demo_asset", "demo_loan_status"],
+				)
+			}
+			if asset_names
+			else {}
+		)
 
 		for row in transfer_rows:
 			asset = asset_details.get(row.asset) or frappe._dict()
@@ -928,8 +983,13 @@ class CustomerMaterialRequest(MaterialRequest):
 			frappe.throw(_("There are no unfulfilled Assets on this request"))
 		return movement
 
+
 def get_available_assets(item_code, company, demo_only=False, location=None, exclude_custodian=True):
-	filters = ["a.company=%s", "a.docstatus=1", "a.status not in ('Draft','Cancelled','Sold','Scrapped','Capitalized','In Maintenance','Out of Order','Work In Progress')"]
+	filters = [
+		"a.company=%s",
+		"a.docstatus=1",
+		"a.status not in ('Draft','Cancelled','Sold','Scrapped','Capitalized','In Maintenance','Out of Order','Work In Progress')",
+	]
 	values = [company]
 	if item_code:
 		filters.append("a.item_code=%s")
@@ -948,14 +1008,18 @@ def get_available_assets(item_code, company, demo_only=False, location=None, exc
 		and ifnull(a.demo_loan_status, 'Available') = 'Available'
 		and not {active_asset_request_condition('a.name')}
 		order by name""",
-		values, as_dict=True,
+		values,
+		as_dict=True,
 	)
 
 
 @frappe.whitelist()
 def get_asset_request_details(
-	asset_name: str, company: str, material_request_type: str,
-	item_code: str | None = None, acquisition_method: str | None = None,
+	asset_name: str,
+	company: str,
+	material_request_type: str,
+	item_code: str | None = None,
+	acquisition_method: str | None = None,
 ):
 	"""Physical picker metadata for a selectable Asset; never expose its accounting record."""
 	if material_request_type not in ("Asset Transfer", "Customer Demo", "Customer Borrow / Loan"):
@@ -967,11 +1031,29 @@ def get_asset_request_details(
 	frappe.has_permission("Company", "select", doc=company, throw=True)
 	frappe.has_permission("Asset", "select", doc=asset_name, throw=True)
 	asset = frappe.db.get_value(
-		"Asset", asset_name,
-		["name", "asset_name", "asset_serial_number", "item_code", "company", "location", "docstatus", "status",
-		 "is_demo_asset", "demo_loan_status", "custodian"], as_dict=True,
+		"Asset",
+		asset_name,
+		[
+			"name",
+			"asset_name",
+			"asset_serial_number",
+			"item_code",
+			"company",
+			"location",
+			"docstatus",
+			"status",
+			"is_demo_asset",
+			"demo_loan_status",
+			"custodian",
+		],
+		as_dict=True,
 	)
-	if not asset or asset.company != company or asset.docstatus != 1 or (item_code and item_code != asset.item_code):
+	if (
+		not asset
+		or asset.company != company
+		or asset.docstatus != 1
+		or (item_code and item_code != asset.item_code)
+	):
 		frappe.throw(_("Select a submitted Asset matching the requested company and model."))
 	if material_request_type == "Customer Demo" and not asset.is_demo_asset:
 		frappe.throw(_("Customer Demo requires a Demo Asset."))
@@ -981,15 +1063,25 @@ def get_asset_request_details(
 		unavailable.update({"In Maintenance", "Out of Order"})
 	if asset.status in unavailable or not asset.location:
 		frappe.throw(_("This Asset is not available for the selected acquisition method."))
-	if not waiting and (asset.demo_loan_status == "With Customer" or (material_request_type != "Asset Transfer" and asset.custodian)):
+	if not waiting and (
+		asset.demo_loan_status == "With Customer"
+		or (material_request_type != "Asset Transfer" and asset.custodian)
+	):
 		frappe.throw(_("This Asset is still assigned to another borrower."))
 	frappe.has_permission("Item", "select", doc=asset.item_code, throw=True)
-	item = frappe.db.get_value("Item", asset.item_code, ["is_fixed_asset", "disabled", "stock_uom"], as_dict=True)
+	item = frappe.db.get_value(
+		"Item", asset.item_code, ["is_fixed_asset", "disabled", "stock_uom"], as_dict=True
+	)
 	if not item or not item.is_fixed_asset or item.disabled:
 		frappe.throw(_("Select an enabled Fixed Asset Item."))
 	return {
-		"name": asset.name, "asset_name": asset.asset_name, "asset_serial_number": asset.asset_serial_number,
-		"item_code": asset.item_code, "company": asset.company, "location": asset.location, "stock_uom": item.stock_uom,
+		"name": asset.name,
+		"asset_name": asset.asset_name,
+		"asset_serial_number": asset.asset_serial_number,
+		"item_code": asset.item_code,
+		"company": asset.company,
+		"location": asset.location,
+		"stock_uom": item.stock_uom,
 	}
 
 
@@ -1050,7 +1142,9 @@ def asset_query(doctype, txt, searchfield, start, page_len, filters, as_dict=Fal
 	if filters.location:
 		conditions.append("tabAsset.location=%(location)s")
 		values["location"] = filters.location
-	conditions.append("(tabAsset.name like %(txt)s or tabAsset.asset_name like %(txt)s or tabAsset.asset_serial_number like %(txt)s)")
+	conditions.append(
+		"(tabAsset.name like %(txt)s or tabAsset.asset_name like %(txt)s or tabAsset.asset_serial_number like %(txt)s)"
+	)
 	match_condition = get_match_cond("Asset")
 	result_fields = (
 		"tabAsset.name, tabAsset.asset_serial_number, tabAsset.asset_name, "
