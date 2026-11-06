@@ -367,3 +367,9 @@ so with the default **Block** policies an expired or suspended legacy registrati
   merged.
 * Legacy reminder logs are not migrated (alert idempotency starts fresh, so the first daily run may send alerts again).
 * Legacy tables remain in the database until dropped manually.
+
+## Administrator (Siwat, 6 Nov 2026)
+
+Administrator does everything, for Siwat's testing: `transactions.report_messages` shows him the sale block as a
+warning and does not stop him, and the sales Item picker (`controllers/queries.py`) does not hide unregistered Items
+from him. Nobody else is affected; there is still no override for any other user.

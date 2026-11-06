@@ -504,6 +504,8 @@ class CustomerMaterialRequest(MaterialRequest):
 				"name",
 			)
 		if not self.get("responsible_employee"):
+			if (self.owner or frappe.session.user) == "Administrator":
+				return  # Administrator has no Employee (Siwat, 6 Nov 2026: he does everything)
 			frappe.throw(_("Select the Responsible Employee."))
 		employee = frappe.db.get_value(
 			"Employee", self.responsible_employee, ["status", "company"], as_dict=True

@@ -556,6 +556,8 @@ erpnext.stock_count.show_review_summary = (frm) => {
 // sees it at once instead of losing the work on Save.
 erpnext.stock_count.guard_first_counter = async (frm) => {
 	if (!frm.doc.recount_of || frm.doc.docstatus || frm.doc.status === "Completed") return;
+	// Administrator does everything (Siwat, 6 Nov 2026): he may count a recount of his own count.
+	if (frappe.session.user === "Administrator") return;
 	const r = await frappe.db.get_value("Stock Count", frm.doc.recount_of, "counted_by");
 	if (r?.message?.counted_by !== frappe.session.user) return;
 	frm.set_df_property("items", "read_only", 1);

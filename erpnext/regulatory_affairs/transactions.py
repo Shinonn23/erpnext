@@ -206,7 +206,8 @@ def report_messages(reported, *, warn_only, doc=None, item_codes=()):
 		return
 
 	body = "<br>".join(display_message(message) for message in reported)
-	blocking = not warn_only and has_blocking_message(reported)
+	# Administrator does everything (Siwat, 6 Nov 2026, for his testing): he is told, never stopped.
+	blocking = not warn_only and has_blocking_message(reported) and frappe.session.user != "Administrator"
 	advice = what_to_do(doc, blocking=blocking, warn_only=warn_only)
 	if advice:
 		body += "<br><br>" + advice

@@ -229,6 +229,8 @@ def item_query(
 		from erpnext.regulatory_affairs.transactions import sellable_items_condition
 
 		regulatory_cond = sellable_items_condition(filters.pop("regulatory_date", None))
+		if frappe.session.user == "Administrator":
+			regulatory_cond = ""  # Administrator does everything (Siwat, 6 Nov 2026)
 	elif filters and isinstance(filters, dict):
 		filters.pop("regulatory_date", None)
 	if filters and isinstance(filters, dict):
