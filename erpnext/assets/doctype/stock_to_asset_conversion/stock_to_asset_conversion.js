@@ -10,6 +10,7 @@ frappe.ui.form.on("Stock to Asset Conversion", {
 		}));
 		frm.set_query("warehouse", "stock_items", (doc) => ({ filters: { company: doc.company, is_group: 0 } }));
 		frm.set_query("item_code", "stock_items", () => ({ filters: { is_stock_item: 1 } }));
+		frm.set_query("asset_item_code", "stock_items", () => ({ filters: { is_fixed_asset: 1, is_stock_item: 0 } }));
 		const bundle_field = frm.get_docfield("stock_items", "serial_and_batch_bundle");
 		if (bundle_field) {
 			bundle_field.get_route_options_for_new_doc = (row) => ({

@@ -40,9 +40,10 @@ code_only_modules = {
 	# Its records are country-specific tax settings and returns, so they sit with the rest of the
 	# tax setup and reports in Accounts.
 	"Regional": ["Accounts"],
-	# Maintenance schedules and visits are after-sales upkeep of what was sold, so they live in a
-	# Maintenance section of the Quality sidebar.
-	"Maintenance": ["Quality Management"],
+	# Maintenance schedules and visits are after-sales upkeep of what was sold and are done by the
+	# service team, so they open in the Support sidebar (Issue, Service Equipment, service reports) and
+	# not in Quality (Siwat's UX review, 6 Nov 2026: QA is retired, service staff do not do QI).
+	"Maintenance": ["Support"],
 }
 
 develop_version = "15.x.x-develop"

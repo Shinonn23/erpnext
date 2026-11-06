@@ -84,12 +84,11 @@
    "read_only": 1
   },
   {
+   "description": "Filled from the stock Item's Asset Item Code; choose another Fixed Asset Item here if it is empty.",
    "fieldname": "asset_item_code",
    "fieldtype": "Link",
-   "hidden": 1,
    "label": "Target Asset Item",
-   "options": "Item",
-   "read_only": 1
+   "options": "Item"
   },
   {
    "fieldname": "valuation_rate",
