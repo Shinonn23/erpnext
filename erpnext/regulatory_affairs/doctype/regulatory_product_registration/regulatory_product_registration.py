@@ -200,7 +200,7 @@ class RegulatoryProductRegistration(Document):
 			seen.add(key)
 			if row.line_status == "Active" and not (row.newcode or row.identifier):
 				frappe.throw(
-					_("Row {0}: an Active registered product needs a NEWCODE or an Identifier.").format(
+					_("Row {0}: enter the FDA Product Code (NEWCODE) or the Model / Catalogue No.").format(
 						row.idx
 					)
 				)
@@ -225,6 +225,7 @@ class RegulatoryProductRegistration(Document):
 							row.idx, other.idx, frappe.bold(row.item_code)
 						)
 					)
+		uncategorized = self._classify_items_from_registration(uncategorized, item_names)
 		if uncategorized:
 			frappe.msgprint(
 				_(
@@ -233,6 +234,30 @@ class RegulatoryProductRegistration(Document):
 				indicator="orange",
 				alert=True,
 			)
+
+	def _classify_items_from_registration(self, item_codes, items):
+		"""An Item with no Product Category takes this registration's (Siwat, 6 Nov 2026: the system does it, the
+		user does not open each Item). An Item marked Not Regulated, or already classified, is never overwritten.
+		Returns the Items still unclassified (to warn about once)."""
+		if self.product_category not in PRODUCT_CATEGORIES:
+			return item_codes
+		left = set()
+		for item_code in sorted(item_codes):
+			item = items.get(item_code)
+			if item is not None and item.get(ITEM_CATEGORY_FIELD) in (None, ""):
+				frappe.db.set_value(
+					"Item", item_code, ITEM_CATEGORY_FIELD, self.product_category, update_modified=False
+				)
+				item[ITEM_CATEGORY_FIELD] = self.product_category
+				frappe.get_doc("Item", item_code).add_comment(
+					"Info",
+					_("Product Category set to {0} from Regulatory Registration {1}.").format(
+						_(self.product_category), self.name or self.registration_number or ""
+					),
+				)
+			else:
+				left.add(item_code)
+		return left
 
 	def _validate_effective_mapping_overlaps(self):
 		if self.official_status not in IN_FORCE_STATUSES:
@@ -294,6 +319,7 @@ class RegulatoryProductRegistration(Document):
 		if self.official_status != DRAFT:
 			frappe.throw(_("Only a Draft registration is activated this way."))
 		verified = verify_pending_certificates(self.name)
+		self.last_verified_on = today()
 		change_status(self, ACTIVE, enforce_activation=True)
 		return {"status": self.official_status, "verified": verified}
 
