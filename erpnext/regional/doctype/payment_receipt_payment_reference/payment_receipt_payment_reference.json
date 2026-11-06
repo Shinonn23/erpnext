@@ -19,7 +19,7 @@
  ],
  "fields": [
   {
-   "columns": 1,
+   "columns": 3,
    "fieldname": "payment_entry",
    "fieldtype": "Link",
    "in_list_view": 1,
@@ -27,28 +27,22 @@
    "options": "Payment Entry"
   },
   {
-   "columns": 1,
    "fieldname": "mode_of_payment",
    "fieldtype": "Data",
-   "in_list_view": 1,
    "is_virtual": 1,
    "label": "Mode of Payment",
    "read_only": 1
   },
   {
-   "columns": 1,
    "fieldname": "party_bank_account",
    "fieldtype": "Data",
-   "in_list_view": 1,
    "is_virtual": 1,
    "label": "Party Bank Account",
    "read_only": 1
   },
   {
-   "columns": 1,
    "fieldname": "company_bank_account",
    "fieldtype": "Data",
-   "in_list_view": 1,
    "is_virtual": 1,
    "label": "Company Bank Account",
    "read_only": 1
@@ -63,10 +57,8 @@
    "read_only": 1
   },
   {
-   "columns": 1,
    "fieldname": "chequereference_date",
    "fieldtype": "Data",
-   "in_list_view": 1,
    "is_virtual": 1,
    "label": "Cheque/Reference Date",
    "read_only": 1
@@ -95,10 +87,8 @@
    "read_only": 1
   },
   {
-   "columns": 1,
    "fieldname": "status",
    "fieldtype": "Data",
-   "in_list_view": 1,
    "is_virtual": 1,
    "label": "Status",
    "read_only": 1

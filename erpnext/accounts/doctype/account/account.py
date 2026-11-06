@@ -655,6 +655,13 @@ def merge_account(old, new):
 
 
 @frappe.whitelist()
+def show_balance_in_coa():
+	"""Accounts Settings "Show Balances in Chart Of Accounts", read for every user of the tree (an Accounts User
+	cannot read the Accounts Settings form, and the tree must not pop up a permission error)."""
+	return cint(frappe.db.get_single_value("Accounts Settings", "show_balance_in_coa"))
+
+
+@frappe.whitelist()
 def get_root_company(company):
 	# return the topmost company in the hierarchy
 	ancestors = get_ancestors_of("Company", company, "lft asc")

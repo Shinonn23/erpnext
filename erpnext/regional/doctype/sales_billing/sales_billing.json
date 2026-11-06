@@ -57,7 +57,7 @@
    "label": "Date"
   },
   {
-   "description": "Selecting treshold date will get matched invoices",
+   "description": "Selecting the threshold date fetches the matching invoices",
    "fieldname": "threshold_date",
    "fieldtype": "Date",
    "label": "Threshold Date",
@@ -185,7 +185,7 @@
   },
   {
    "default": "0",
-   "description": "If not unchedked, only submtted invoice will be retrieved",
+   "description": "If unchecked, only submitted invoices are fetched",
    "fieldname": "include_draft_invoices",
    "fieldtype": "Check",
    "label": "Include Draft Invoices"

@@ -4,6 +4,22 @@
 frappe.ui.form.on("Period Closing Voucher", {
 	onload: function (frm) {
 		if (!frm.doc.transaction_date) frm.doc.transaction_date = frappe.datetime.obj_to_str(new Date());
+		// Siwat, 6 Nov 2026: the system fills what it knows -- the fiscal year of today (its handler sets the start
+		// the day after the last close), the end of last month and the retained earnings account of the last close
+		if (frm.is_new() && frm.doc.company) {
+			if (!frm.doc.fiscal_year) {
+				const fiscal_year = erpnext.utils.get_fiscal_year(frm.doc.transaction_date, false, false);
+				if (fiscal_year) frm.set_value("fiscal_year", fiscal_year);
+			}
+			if (!frm.doc.closing_account_head) {
+				frappe
+					.xcall(
+						"erpnext.accounts.doctype.period_closing_voucher.period_closing_voucher.get_default_closing_account_head",
+						{ company: frm.doc.company }
+					)
+					.then((account) => account && frm.set_value("closing_account_head", account));
+			}
+		}
 
 		frm.ignore_doctypes_on_cancel_all = ["Process Period Closing Voucher"];
 	},
@@ -32,7 +48,11 @@ frappe.ui.form.on("Period Closing Voucher", {
 				callback: function (r) {
 					if (r.message) {
 						frm.set_value("period_start_date", r.message[0]);
-						frm.set_value("period_end_date", r.message[1]);
+						// the end of last month when that falls in the period, else the end of the fiscal year
+						const last_month_end = frappe.datetime.add_days(moment().startOf("month").format("YYYY-MM-DD"), -1);
+						const in_period =
+							last_month_end >= r.message[0] && last_month_end <= r.message[1];
+						frm.set_value("period_end_date", in_period ? last_month_end : r.message[1]);
 					}
 				},
 			});

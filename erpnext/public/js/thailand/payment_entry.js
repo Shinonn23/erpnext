@@ -54,7 +54,7 @@ frappe.ui.form.on("Payment Entry", {
 	},
 
 	apply_tds: function (frm) {
-		// Withhold Tax → Based On Paying Document's Line Items ticks it to load the items' categories instead
+		// Withhold Tax → From invoice lines ticks it to load the items' categories instead
 		if (!frm.doc.apply_tds || frm.__thai_skip_withholding_popup) return;
 		frm.trigger("thai_ask_withholding");
 	},

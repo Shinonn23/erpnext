@@ -455,7 +455,7 @@ ERP_CUSTOM_FIELDS = {
 			"fieldname": "overwrite_tax_invoice",
 			"fieldtype": "Section Break",
 			"insert_after": "credit",
-			"label": "Overwrite Tax Invoice",
+			"label": "Tax Invoice (this row)",
 		},
 		{
 			"fieldname": "tax_invoice_number",
