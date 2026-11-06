@@ -372,4 +372,6 @@ so with the default **Block** policies an expired or suspended legacy registrati
 
 Administrator does everything, for Siwat's testing: `transactions.report_messages` shows him the sale block as a
 warning and does not stop him, and the sales Item picker (`controllers/queries.py`) does not hide unregistered Items
-from him. Nobody else is affected; there is still no override for any other user.
+from him. Nobody else is affected; there is still no override for any other user. A system run as Administrator
+(migrate, patch, install, data import, a scheduled job such as Auto Repeat or Subscription making a Sales Invoice) is
+not him and stays blocked (`transactions._is_administrator`).

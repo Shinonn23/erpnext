@@ -200,12 +200,26 @@ def _lookup_mapping(item_code, coverage_date, warn_only, reported):
 		return AMBIGUOUS
 
 
+_SYSTEM_RUN_FLAGS = ("in_migrate", "in_install", "in_patch", "in_import", "in_setup_wizard")
+_SCHEDULED_JOB = "frappe.core.doctype.scheduled_job_type.scheduled_job_type.run_scheduled_job"
+
+
 def _is_administrator():
-	"""Administrator does everything (Siwat, 6 Nov 2026, for his testing)."""
+	"""Administrator does everything (Siwat, 6 Nov 2026, for his testing): Administrator at the desk, never a system
+	run as Administrator (migrate, patch, install, data import, a scheduled job such as Auto Repeat or Subscription
+	making a Sales Invoice), which stays blocked like everyone (the app's ``workflows/superuser.is_system_run``)."""
 	try:
-		return frappe.session.user == "Administrator"
+		if frappe.session.user != "Administrator":
+			return False
 	except RuntimeError:  # no session bound (an offline test)
 		return False
+	try:
+		if any(frappe.flags.get(flag) for flag in _SYSTEM_RUN_FLAGS):
+			return False
+		job = getattr(frappe.local, "job", None)
+	except RuntimeError:  # nothing else bound (an offline test): not a system run
+		return True
+	return not (job and job.get("method") == _SCHEDULED_JOB)
 
 
 def report_messages(reported, *, warn_only, doc=None, item_codes=()):
