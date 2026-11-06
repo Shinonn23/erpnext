@@ -35,13 +35,6 @@ frappe.ui.form.on("Purchase Invoice", {
 	validate: function (frm) {
 		// Input VAT needs the supplier's tax invoice: ask for it instead of failing the save
 		if (frm.doc.docstatus != 0 || frm.doc.split_tax_invoice) return;
-		// The supplier's invoice number and date are the tax invoice's unless the clerk typed others: copy them
-		// instead of asking the same two values again (the server does the same when it validates)
-		if (!frm.doc.tax_invoice_number && frm.doc.bill_no) {
-			frm.doc.tax_invoice_number = frm.doc.bill_no;
-			frm.doc.tax_invoice_date = frm.doc.tax_invoice_date || frm.doc.bill_date || frm.doc.posting_date;
-			frm.refresh_fields(["tax_invoice_number", "tax_invoice_date"]);
-		}
 		if (frm.doc.tax_invoice_number) return;
 		return erpnext.regional.thailand.tax_popups.get_tax_accounts(frm.doc.company).then((accounts) => {
 			const vat = (frm.doc.taxes || [])
@@ -50,6 +43,16 @@ frappe.ui.form.on("Purchase Invoice", {
 				)
 				.reduce((total, t) => total + flt(t.tax_amount_after_discount_amount || t.tax_amount), 0);
 			if (!vat) return;
+			// The supplier's invoice number and date are the tax invoice's unless the clerk typed others: copy
+			// them instead of asking the same two values again. Only a document with input VAT takes a Tax
+			// Invoice Number (the server refuses one without due VAT), so this stays below the VAT check.
+			if (frm.doc.bill_no) {
+				frm.doc.tax_invoice_number = frm.doc.bill_no;
+				frm.doc.tax_invoice_date =
+					frm.doc.tax_invoice_date || frm.doc.bill_date || frm.doc.posting_date;
+				frm.refresh_fields(["tax_invoice_number", "tax_invoice_date"]);
+				return;
+			}
 			frappe.validated = false;
 			erpnext.regional.thailand.tax_popups.ask_tax_invoice(frm, {
 				vat_amount: vat,
