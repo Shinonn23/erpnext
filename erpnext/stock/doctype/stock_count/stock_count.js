@@ -93,9 +93,13 @@ frappe.ui.form.on("Stock Count", {
 		for (const fieldname of ["item_selection", "count_template", "selected_items"]) {
 			frm.set_df_property(fieldname, "read_only", frm.doc.status !== "Draft");
 		}
-		frm.set_df_property("quarantine_warehouse", "read_only", frm.doc.status !== "Draft");
+		// the system names the Lost and the Found Warehouse (the company's LOST and FOUND); nobody picks them
+		frm.set_df_property("quarantine_warehouse", "read_only", 1);
 		frm.set_df_property("quarantine_storage_location", "read_only", frm.doc.status !== "Draft");
-		frm.set_df_property("found_warehouse", "read_only", frm.doc.status !== "Draft");
+		frm.set_df_property("found_warehouse", "read_only", 1);
+		erpnext.stock_count.fill_loss_warehouses?.(frm);
+		erpnext.stock_count.show_review_summary?.(frm);
+		erpnext.stock_count.guard_first_counter?.(frm);
 
 		if (can_count && (frm.doc.items || []).some((row) => !row.is_counted)) {
 			// explicit, never automatic: the counter says that what was not found is zero
@@ -193,6 +197,7 @@ frappe.ui.form.on("Stock Count", {
 
 	count_type(frm) {
 		const monthly = frm.doc.count_type === "Monthly";
+		erpnext.stock_count.fill_loss_warehouses?.(frm);
 		frm.toggle_display("item_count", monthly && frm.doc.item_selection !== "Selected Items");
 		frm.toggle_display("quarantine_warehouse", monthly);
 		frm.toggle_display("found_warehouse", monthly);
@@ -206,6 +211,14 @@ frappe.ui.form.on("Stock Count", {
 				frm.toggle_display(`${stage}_${suffix}`, !monthly && !!frm.doc[`${stage}_${suffix}`]);
 			}
 		}
+	},
+
+	warehouse(frm) {
+		erpnext.stock_count.fill_loss_warehouses?.(frm);
+	},
+
+	company(frm) {
+		erpnext.stock_count.fill_loss_warehouses?.(frm);
 	},
 
 	scan_storage_location(frm) {
@@ -277,10 +290,16 @@ frappe.ui.form.on("Stock Count", {
 			.then((r) => {
 				const scanned = r.message;
 				if (!scanned || !scanned.item_code) {
-					frappe.show_alert({
-						message: __("Item, Batch, or Serial No was not found."),
-						indicator: "red",
-					});
+					// say which scan failed and where, and stay long enough to be read
+					frappe.show_alert(
+						{
+							message: location
+								? __("Code {0} was not found at {1}.", [value, location])
+								: __("Code {0} was not found.", [value]),
+							indicator: "red",
+						},
+						20
+					);
 					return;
 				}
 
@@ -460,4 +479,86 @@ erpnext.stock_count.add_storage_locations = async (frm) => {
 		},
 	});
 	dialog.show();
+};
+
+// A Monthly count moves what it did not find to the company's LOST warehouse and what a recount found into FOUND; the
+// system fills both when the company, the warehouse or the type changes (they are read-only).
+erpnext.stock_count.fill_loss_warehouses = async (frm) => {
+	// a saved count keeps what it holds (the server fills a blank on save); opening it never marks it unsaved
+	if (
+		!frm.is_new() ||
+		frm.doc.docstatus ||
+		frm.doc.status !== "Draft" ||
+		frm.doc.count_type !== "Monthly" ||
+		!frm.doc.company
+	)
+		return;
+	const key = `${frm.doc.company}|${frm.doc.warehouse || ""}`;
+	if (frm.__loss_warehouses_for === key) return;
+	frm.__loss_warehouses_for = key;
+	const r = await frappe.call({
+		method: "erpnext.stock.doctype.stock_count.stock_count.get_loss_warehouses",
+		args: { company: frm.doc.company, warehouse: frm.doc.warehouse || null },
+	});
+	const found = r?.message || {};
+	for (const [fieldname, value] of [
+		["quarantine_warehouse", found.lost],
+		["found_warehouse", found.found],
+	]) {
+		// an empty field, or one that now names the counted warehouse itself, takes the default; a saved value stays
+		if (value && (!frm.doc[fieldname] || frm.doc[fieldname] === frm.doc.warehouse))
+			await frm.set_value(fieldname, value);
+	}
+};
+
+// The approver of a counted result sees how far it differs before approving: rows short and over, and the units
+// (money is never shown here), on the Review tab, which opens first for the approver's states.
+erpnext.stock_count.variance_summary = (rows) => {
+	let short = 0;
+	let over = 0;
+	let short_qty = 0;
+	let over_qty = 0;
+	for (const row of rows || []) {
+		if (!row.is_counted) continue;
+		const difference = flt(row.counted_qty) - flt(row.system_qty);
+		if (difference < 0) {
+			short += 1;
+			short_qty += -difference;
+		} else if (difference > 0) {
+			over += 1;
+			over_qty += difference;
+		}
+	}
+	return { short, over, short_qty, over_qty };
+};
+
+erpnext.stock_count.show_review_summary = (frm) => {
+	const state = frm.doc.workflow_state || "";
+	const waiting = !frm.doc.docstatus && frm.doc.status === "In Progress" && /Pending/.test(state);
+	if (!waiting) return;
+	const v = erpnext.stock_count.variance_summary(frm.doc.items);
+	frm.set_intro?.(
+		__("{0} row(s) short ({1} units), {2} row(s) over ({3} units) against the system quantity.", [
+			v.short,
+			v.short_qty,
+			v.over,
+			v.over_qty,
+		]),
+		v.short || v.over ? "orange" : "green"
+	);
+	if (!frm.__review_tab_opened) {
+		frm.__review_tab_opened = true;
+		frm.layout?.tabs?.find((tab) => tab.df.fieldname === "review_tab")?.set_active();
+	}
+};
+
+// A recount is done by another person (the server refuses the first counter at the counted stamp): the first counter
+// sees it at once instead of losing the work on Save.
+erpnext.stock_count.guard_first_counter = async (frm) => {
+	if (!frm.doc.recount_of || frm.doc.docstatus || frm.doc.status === "Completed") return;
+	const r = await frappe.db.get_value("Stock Count", frm.doc.recount_of, "counted_by");
+	if (r?.message?.counted_by !== frappe.session.user) return;
+	frm.set_df_property("items", "read_only", 1);
+	frm.remove_custom_button?.(__("Prepare Count"));
+	frm.set_intro?.(__("You counted the first count; another person must do this recount."), "red");
 };

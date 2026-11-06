@@ -139,7 +139,7 @@
    "fieldtype": "Link",
    "label": "Lost Warehouse",
    "options": "Warehouse",
-   "description": "Where a monthly count moves the quantity it did not find (Warehouse Type Lost; the company's LOST warehouse by default). Not needed when the Warehouse posts count differences as a Stock Reconciliation."
+   "description": "Missing goods move here."
   },
   {
    "depends_on": "eval:doc.count_type == 'Monthly'",
@@ -155,7 +155,7 @@
    "fieldtype": "Link",
    "label": "Found Warehouse",
    "options": "Warehouse",
-   "description": "Where what a recount confirms beyond the system quantity is received, at the Item's current valuation rate (Warehouse Type Found; the company's FOUND warehouse by default). Not needed when the Warehouse posts count differences as a Stock Reconciliation."
+   "description": "What both counts found beyond the system quantity is received here."
   },
   {
    "fieldname": "selected_items_section",
@@ -305,7 +305,7 @@
    "options": "Stock Entry",
    "read_only": 1,
    "allow_on_submit": 1,
-   "description": "Draft Material Receipt into the Found Warehouse of what a recount confirmed beyond the system quantity, at the Item's current valuation rate."
+   "description": "Material Receipt into the Found Warehouse of what both counts found, at the Item's current valuation rate."
   },
   {
    "fieldname": "found_transfer_entry",
@@ -314,7 +314,7 @@
    "options": "Stock Entry",
    "read_only": 1,
    "allow_on_submit": 1,
-   "description": "Draft Material Transfer into the counted Warehouse of counted serial numbers the system holds in another warehouse (e.g. LOST)."
+   "description": "Material Transfer back into the counted Warehouse of counted serial numbers the system holds in another warehouse (e.g. LOST)."
   },
   {
    "fieldname": "recount_stock_count",

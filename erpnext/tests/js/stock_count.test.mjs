@@ -50,7 +50,8 @@ function setup(rows, scanned, location, resolved) {
     },
   };
   const context = {
-    __: (message) => message,
+    __: (message, args = []) =>
+      message.replace(/\{(\d+)\}/g, (_, index) => args[index]),
     erpnext: { stock_count: {}, queries: {} },
     flt: (value) => Number(value) || 0,
     frappe: {
@@ -62,6 +63,12 @@ function setup(rows, scanned, location, resolved) {
         },
       },
       provide: () => {},
+      session: { user: "first@example.com" },
+      db: {
+        get_value: async () => ({
+          message: { counted_by: "first@example.com" },
+        }),
+      },
       call: (args) =>
         Promise.resolve({
           message:
@@ -400,4 +407,59 @@ test("Set uncounted rows to 0 is an explicit button that completes only the unco
     [1, 1]
   );
   assert.equal(rows[0].difference_qty, -3);
+});
+
+test("a failed scan names the scanned code and the location", async () => {
+  const fixture = setup([row("SHELF")], null, "SHELF");
+  await scan(fixture);
+  await Promise.resolve();
+  assert.match(
+    fixture.messages[0].message,
+    /Code barcode was not found at SHELF/
+  );
+  const none = setup([row("SHELF")], null, "");
+  await scan(none);
+  await Promise.resolve();
+  assert.match(none.messages[0].message, /Code barcode was not found\./);
+});
+
+test("the Lost and Found Warehouses are read-only: the system fills them", () => {
+  const fixture = setup([], null, "");
+  fixture.handlers.refresh(fixture.frm);
+  assert.equal(fixture.properties["quarantine_warehouse.read_only"], 1);
+  assert.equal(fixture.properties["found_warehouse.read_only"], 1);
+});
+
+test("the variance summary counts rows and units short and over, never money", () => {
+  const ctx = {
+    __: (m) => m,
+    flt: (v) => Number(v) || 0,
+    erpnext: { stock_count: {} },
+    frappe: { provide() {}, ui: { form: { on() {} } } },
+  };
+  vm.runInNewContext(source, ctx);
+  const v = ctx.erpnext.stock_count.variance_summary([
+    { is_counted: 1, counted_qty: 3, system_qty: 5 },
+    { is_counted: 1, counted_qty: 9, system_qty: 5 },
+    { is_counted: 1, counted_qty: 2, system_qty: 2 },
+    { is_counted: 0, counted_qty: 0, system_qty: 4 },
+  ]);
+  assert.deepEqual(JSON.parse(JSON.stringify(v)), {
+    short: 1,
+    over: 1,
+    short_qty: 2,
+    over_qty: 4,
+  });
+});
+
+test("the first counter of a recount cannot count it", async () => {
+  const fixture = setup([row("SHELF")], null, "");
+  const intros = [];
+  fixture.frm.doc.recount_of = "SC-1";
+  fixture.frm.set_intro = (text) => intros.push(text);
+  fixture.frm.remove_custom_button = () => {};
+  fixture.handlers.refresh(fixture.frm);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(fixture.properties["items.read_only"], 1);
+  assert.match(intros.at(-1), /another person must do this recount/);
 });

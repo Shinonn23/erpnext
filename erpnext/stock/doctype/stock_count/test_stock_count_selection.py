@@ -274,7 +274,16 @@ class StockCountSelectionTest(unittest.TestCase):
 		live.assert_not_called()
 		validate.assert_called_once_with("5130-02 - CD", "C")
 		self.assertEqual(reconciliation.expense_account, "5130-02 - CD")
-		self.assertEqual(reconciliation.department, "Lab Dept")
+
+	def test_the_reconciliation_takes_the_counted_warehouses_department_not_the_creators(self):
+		# also for a count that does not post variance (CD STOCK keeps the creator's when it has none)
+		doc = count(warehouse="LAB - C")
+		for warehouse_department, expected in (("Lab Dept", "Lab Dept"), (None, "Creator Dept")):
+			reconciliation = frappe._dict(meta=Mock(has_field=lambda field: True), department="Creator Dept")
+			db = fake_db(has_column=True, get_value=lambda dt, name, field, *a, **kw: warehouse_department)
+			with patch.object(stock_count.frappe, "db", db):
+				StockCount.set_reconciliation_department(doc, reconciliation)
+			self.assertEqual(reconciliation.department, expected)
 
 	def test_a_count_without_a_recorded_account_cannot_post_variance(self):
 		doc = count(variance_account_snapshot=None)

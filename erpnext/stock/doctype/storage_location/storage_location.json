@@ -30,9 +30,8 @@
    "fieldname": "location_code",
    "fieldtype": "Data",
    "label": "Location Code",
-   "reqd": 1,
    "in_list_view": 1,
-   "description": "Unique within the Warehouse. Example: A-01-02."
+   "description": "Unique within the Warehouse. Left blank, it is built from Zone, Rack and Shelf (A-01-02)."
   },
   {
    "fieldname": "warehouse_column",

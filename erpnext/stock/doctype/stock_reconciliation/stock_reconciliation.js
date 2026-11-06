@@ -70,10 +70,16 @@ frappe.ui.form.on("Stock Reconciliation", {
 		// an Adjustment Entry's rows are the stock its items are reset to, made from the
 		// Stock Valuation Comparison report, so they are not edited here
 		const is_adjustment_entry = frm.doc.purpose === "Adjustment Entry";
-		frm.set_df_property("items", "read_only", is_adjustment_entry ? 1 : 0);
+		// the rows, the difference account and the department of a reconciliation made by a Stock Count are
+		// the result its approvers decided: shown, not edited (the server refuses a changed row)
+		const from_stock_count = !!frm.doc.stock_count;
+		frm.set_df_property("items", "read_only", is_adjustment_entry || from_stock_count ? 1 : 0);
 		frm.set_df_property("purpose", "read_only", is_adjustment_entry ? 1 : 0);
+		for (const fieldname of ["expense_account", "department"]) {
+			if (from_stock_count) frm.set_df_property(fieldname, "read_only", 1);
+		}
 
-		if (frm.doc.docstatus < 1 && !is_adjustment_entry) {
+		if (frm.doc.docstatus < 1 && !is_adjustment_entry && !from_stock_count) {
 			frm.add_custom_button(__("Fetch Items from Warehouse"), function () {
 				frm.events.get_items(frm);
 			});

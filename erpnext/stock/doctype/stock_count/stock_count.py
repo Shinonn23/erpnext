@@ -1132,10 +1132,17 @@ class StockCount(Document):
 			frappe.throw(_("This count has no Count Variance Account recorded. Prepare it again."))
 		validate_variance_account(account, self.company)
 		reconciliation.expense_account = account
+
+	def set_reconciliation_department(self, reconciliation):
+		"""The reconciliation belongs to the counted Warehouse's department, never to the department of the user whose
+		save made it (Siwat, 6 Nov 2026). A Warehouse with no department (CD STOCK) keeps the creator's."""
+		if not reconciliation.meta.has_field("department"):
+			return
+		department = None
 		if frappe.db.has_column("Warehouse", "department"):
 			department = frappe.db.get_value("Warehouse", self.warehouse, "department")
-			if department and reconciliation.meta.has_field("department"):
-				reconciliation.department = department
+		if department:
+			reconciliation.department = department
 
 	def make_stock_reconciliation(self):
 		reconciliation_rows = defaultdict(lambda: {"system_qty": 0.0, "counted_qty": 0.0, "serial_nos": []})
@@ -1169,6 +1176,7 @@ class StockCount(Document):
 		reconciliation.stock_count = self.name
 		if self.posts_variance():
 			self.set_variance_account(reconciliation)
+		self.set_reconciliation_department(reconciliation)
 		if reconciliation.meta.has_field("stock_adjustment_reason"):
 			reconciliation.stock_adjustment_reason = _(
 				"Physical count differences from Stock Count {0}."
@@ -1347,6 +1355,16 @@ def get_storage_location_zones(warehouse: str):
 		distinct=True,
 		order_by="zone",
 	)
+
+
+@frappe.whitelist()
+def get_loss_warehouses(company, warehouse=None):
+	"""The company's Lost and Found warehouses a Monthly count would name by default (the form fills them)."""
+	frappe.has_permission("Stock Count", "read", throw=True)
+	return {
+		"lost": get_lost_warehouse(company, exclude=warehouse),
+		"found": get_found_warehouse(company, exclude=warehouse),
+	}
 
 
 def get_lost_warehouse(company, exclude=None):

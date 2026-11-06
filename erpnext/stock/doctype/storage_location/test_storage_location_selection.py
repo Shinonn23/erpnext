@@ -198,3 +198,31 @@ class TestStorageLocationStock(unittest.TestCase):
 		) as where:
 			self.assertEqual([row[0] for row in self.query(serial_no="SN-1\nSN-2\n")], ["A-1"])
 		self.assertEqual(where.call_args.args, (["SN-1", "SN-2"], "W"))
+
+
+class TestLocationCodeFromPosition(unittest.TestCase):
+	def location(self, **values):
+		from erpnext.stock.doctype.storage_location.storage_location import StorageLocation
+
+		doc = StorageLocation.__new__(StorageLocation)
+		doc.__dict__.update({"location_code": "", "zone": "", "rack": "", "shelf": "", **values})
+		doc.get = lambda field: doc.__dict__.get(field)
+		return doc
+
+	def test_a_blank_code_is_built_from_zone_rack_and_shelf(self):
+		doc = self.location(zone="A", rack="01", shelf="02")
+		doc.set_location_code()
+		self.assertEqual(doc.location_code, "A-01-02")
+		doc = self.location(zone="A", shelf="02")
+		doc.set_location_code()
+		self.assertEqual(doc.location_code, "A-02")
+
+	def test_a_typed_code_is_kept(self):
+		doc = self.location(location_code="X-9", zone="A", rack="01", shelf="02")
+		doc.set_location_code()
+		self.assertEqual(doc.location_code, "X-9")
+
+	def test_nothing_to_build_from_is_refused(self):
+		with patch("frappe.throw", side_effect=frappe.ValidationError):
+			with self.assertRaises(frappe.ValidationError):
+				self.location().set_location_code()

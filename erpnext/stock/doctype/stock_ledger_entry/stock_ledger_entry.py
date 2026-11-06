@@ -157,17 +157,15 @@ class StockLedgerEntry(Document):
 		return available_qty[0][0] or 0
 
 	def throw_validation_error(self, diff, dimensions):
-		msg = _(
-			"{0} units of {1} are required in {2} with the inventory dimension: {3} on {4} {5} for {6} to complete the transaction."
-		).format(
-			abs(diff),
+		# A Storage Location's name already holds its Warehouse, so the place is printed once, without the
+		# fieldname and the microseconds of the posting time (Siwat, 6 Nov 2026).
+		places = ", ".join(str(values.get("value")) for values in dimensions.values())
+		msg = _("Only {0} of {1} at {2} on {3}; {4} more needed for {5} to complete the transaction.").format(
+			frappe.bold(flt(self.get_available_qty_after_prev_transaction(dimensions))),
 			frappe.get_desk_link("Item", self.item_code),
-			frappe.get_desk_link("Warehouse", self.warehouse),
-			frappe.bold(
-				", ".join([f"{dimension}: {values.get('value')}" for dimension, values in dimensions.items()])
-			),
-			self.posting_date,
-			self.posting_time,
+			frappe.bold(places),
+			formatdate(self.posting_date),
+			frappe.bold(abs(diff)),
 			frappe.get_desk_link(self.voucher_type, self.voucher_no),
 		)
 

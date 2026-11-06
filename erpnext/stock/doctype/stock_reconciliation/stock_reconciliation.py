@@ -72,6 +72,7 @@ class StockReconciliation(StockController):
 		self.head_row = ["Item Code", "Warehouse", "Quantity", "Valuation Rate"]
 
 	def validate(self):
+		self.validate_stock_count_rows_kept()
 		self.set_department()
 		if self.purpose == ADJUSTMENT_ENTRY:
 			self.validate_adjustment_entry()
@@ -109,6 +110,27 @@ class StockReconciliation(StockController):
 
 		if self._action == "submit":
 			self.validate_reserved_stock()
+
+	def validate_stock_count_rows_kept(self):
+		"""The rows of a reconciliation made by a Stock Count are the result the count's approvers decided (Connect
+		Diagnostics, 6 Nov 2026): the item, warehouse, storage location, batch and quantity cannot be edited, added
+		or removed afterwards; reject the count's difference by cancelling the count, not by editing its rows."""
+		if not self.stock_count or self.is_new() or self.flags.allow_stock_count_row_changes:
+			return
+		before = self.get_doc_before_save()
+		if not before:
+			return
+
+		def rows(doc):
+			return [
+				(row.item_code, row.warehouse, row.storage_location or "", row.batch_no or "", flt(row.qty))
+				for row in doc.get("items") or []
+			]
+
+		if rows(self) != rows(before):
+			frappe.throw(
+				_("The rows come from Stock Count {0} and cannot be changed here.").format(self.stock_count)
+			)
 
 	def validate_adjustment_entry(self):
 		"""An Adjustment Entry resets each item-warehouse to its rows (erpnext.stock.valuation_adjustment),
