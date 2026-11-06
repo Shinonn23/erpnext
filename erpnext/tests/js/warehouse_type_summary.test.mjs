@@ -79,7 +79,9 @@ test("summary lists allowed and blocked operations and the outgoing role", () =>
   assert.match(line, /Allowed: Receipt, Issue/);
   assert.match(line, /Not allowed: Transfer, Sales, Loan, Reconciliation/);
   assert.match(line, /Stock &lt;Manager>/);
-  assert.match(f.intros.at(-1)[0], /Doc receipt/);
+  // one plain line: no list of document names
+  assert.doesNotMatch(f.intros.at(-1)[0], /Doc receipt|<ul/);
+  assert.match(f.intros.at(-1)[0], /Allowed: Receipt, Issue/);
 });
 
 test("group warehouse shows no type summary", () => {

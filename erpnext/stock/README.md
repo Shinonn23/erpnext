@@ -20,3 +20,18 @@ stock and has no selection.
   of the quarantine Stock Entry (the Quarantine Warehouse is then optional). The mode is fixed at Prepare Count, the
   account must be an enabled, non-Stock expense account of the Company and becomes the Difference Account, and a
   Warehouse `department` (if that field exists) becomes the department. Without that field or value nothing changes.
+
+## Stock UX review (Connect Diagnostics, 6 Nov 2026)
+
+- **Stock Count**: the Lost and Found Warehouse are read-only; the form fills them from the company's LOST / FOUND
+  warehouses (`get_loss_warehouses`) and the server still fills a blank on save. A failed scan names the code and the
+  location. An approver's state shows how many rows are short and over (units only, never money) and opens the Review
+  tab first. The first counter of a recount sees at once that another person must count it.
+- **Stock Reconciliation made by a Stock Count**: rows, Difference Account and Department are read-only, Add row / Upload /
+  Fetch Items from Warehouse are hidden, and the server refuses a changed item, warehouse, storage location, batch or
+  quantity (`validate_stock_count_rows_kept`; `flags.allow_stock_count_row_changes` lifts it for code). Its Department is
+  the counted Warehouse's department; a Warehouse without one keeps the creator's.
+- **Storage Location**: a blank Location Code is built from Zone-Rack-Shelf.
+- **Stock Ledger Entry**: the inventory-dimension shortage reads "Only N of ITEM at LOCATION on DATE; M more needed".
+- **Warehouse**: the Warehouse Type intro is one line (the groups of operations), not every document name.
+- **Item**: the Regulatory Affairs headline is cleared before it is set, so it shows once.

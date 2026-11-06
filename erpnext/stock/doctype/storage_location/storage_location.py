@@ -12,7 +12,21 @@ DEFAULT_LOCATION_CODE = "STAGING"
 
 
 class StorageLocation(Document):
+	def before_insert(self):
+		# before the name is made ("{warehouse} / {location_code}")
+		self.set_location_code()
+
+	def set_location_code(self):
+		"""A blank Location Code is built from Zone, Rack and Shelf (A-01-02): the same parts are not typed twice
+		(Siwat, 6 Nov 2026, UX review)."""
+		if not cstr(self.location_code).strip():
+			parts = [cstr(self.get(field)).strip() for field in ("zone", "rack", "shelf")]
+			self.location_code = "-".join(part for part in parts if part)
+		if not cstr(self.location_code).strip():
+			frappe.throw(_("Enter the Location Code, or the Zone, Rack and Shelf it is built from."))
+
 	def validate(self):
+		self.set_location_code()
 		conditions = [row.storage_condition for row in self.get("supported_storage_conditions") or []]
 		if len(conditions) != len(set(conditions)):
 			frappe.throw(_("Storage Conditions cannot be repeated."))

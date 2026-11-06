@@ -160,22 +160,6 @@ function render_warehouse_type_summary(summary) {
 	return parts.join(". ");
 }
 
-function render_warehouse_type_detail(summary) {
-	if (!summary || !summary.restricted) {
-		return "";
-	}
-	const esc = frappe.utils.escape_html;
-	const rows = summary.operations
-		.map(
-			(row) =>
-				`<li>${row.allowed ? "&#10003;" : "&#10007;"} <b>${esc(
-					__(OPERATION_LABELS[row.operation] || row.operation, null, "Warehouse Type Operation")
-				)}</b>: ${esc(row.documents.join("; "))}</li>`
-		)
-		.join("");
-	return `<ul class="list-unstyled small">${rows}</ul>`;
-}
-
 function original_warehouse_type_description() {
 	const df = (frappe.get_meta("Warehouse").fields || []).find(
 		(field) => field.fieldname === "warehouse_type"
@@ -202,7 +186,8 @@ function show_warehouse_type_summary(frm) {
 			return;
 		}
 		const line = render_warehouse_type_summary(summary);
-		frm.set_intro(line + render_warehouse_type_detail(summary), "blue");
+		// one line in plain words: the groups of operations, not every document name (Siwat, 6 Nov 2026)
+		frm.set_intro(line, "blue");
 		frm.__warehouse_type_intro = true;
 		frm.set_df_property(
 			"warehouse_type",
