@@ -29,6 +29,8 @@
   "enable_accounting_dimensions",
   "column_break_vtnr",
   "journals_section",
+  "enable_accounting_approval_workflow",
+  "journal_entry_controller_review_threshold",
   "merge_similar_account_heads",
   "deferred_accounting_settings_section",
   "book_deferred_entries_based_on",
@@ -791,6 +793,21 @@
    "fieldname": "disable_include_dimensions",
    "fieldtype": "Check",
    "label": "Disable \"Consider Accounting Dimension\" Filter"
+  },
+  {
+   "default": "1",
+   "description": "Accounting documents must pass their configured approval workflow.",
+   "fieldname": "enable_accounting_approval_workflow",
+   "fieldtype": "Check",
+   "label": "Enable Accounting Approval Workflow",
+   "read_only": 1
+  },
+  {
+   "default": "100000",
+   "description": "Amounts are compared in the Journal Entry company currency.",
+   "fieldname": "journal_entry_controller_review_threshold",
+   "fieldtype": "Currency",
+   "label": "Journal Entry Controller Review Threshold"
   }
  ],
  "grid_page_length": 50,
@@ -799,7 +816,7 @@
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-09-04 10:08:30.115003",
+ "modified": "2026-11-07 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Accounts Settings",

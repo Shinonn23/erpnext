@@ -12,6 +12,8 @@
  "field_order": [
   "entry_type_and_date",
   "company",
+  "bank_transaction_to_reconcile",
+  "advance_refund_of",
   "voucher_type",
   "column_break1",
   "naming_series",
@@ -83,7 +85,20 @@
   "custom_remark",
   "remark",
   "mode_of_payment",
-  "party_not_required"
+  "party_not_required",
+  "connect_operations_tab",
+  "connect_journal_evidence_section",
+  "journal_entry_purpose",
+  "journal_entry_reason",
+  "connect_journal_evidence_column",
+  "supporting_document",
+  "connect_journal_review_section",
+  "requires_controller_review",
+  "tax_suspense_clearance",
+  "connect_journal_review_column",
+  "requires_md_provision_approval",
+  "md_provision_approved",
+  "approval_snapshot"
  ],
  "fields": [
   {
@@ -665,6 +680,99 @@
    "fieldname": "custom_remark",
    "fieldtype": "Check",
    "label": "Custom Remark"
+  },
+  {
+   "fieldname": "bank_transaction_to_reconcile",
+   "fieldtype": "Link",
+   "label": "Bank Transaction to Reconcile",
+   "options": "Bank Transaction",
+   "read_only": 1
+  },
+  {
+   "description": "The customer deposit or supplier advance (Payment Entry) this entry pays back.",
+   "fieldname": "advance_refund_of",
+   "fieldtype": "Link",
+   "label": "Advance Payment Refunded",
+   "no_copy": 1,
+   "options": "Payment Entry"
+  },
+  {
+   "default": "General Entry",
+   "fieldname": "journal_entry_purpose",
+   "fieldtype": "Select",
+   "label": "Journal Entry Purpose",
+   "options": "General Entry\nDoubtful Debt Provision"
+  },
+  {
+   "depends_on": "eval:doc.journal_entry_purpose == 'Doubtful Debt Provision' || doc.requires_md_provision_approval",
+   "fieldname": "requires_md_provision_approval",
+   "fieldtype": "Check",
+   "label": "Requires MD Provision Approval",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.journal_entry_purpose == 'Doubtful Debt Provision' || doc.md_provision_approved",
+   "fieldname": "md_provision_approved",
+   "fieldtype": "Check",
+   "label": "MD Provision Approved",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "supporting_document",
+   "fieldtype": "Attach",
+   "label": "Supporting Document",
+   "no_copy": 1
+  },
+  {
+   "fieldname": "journal_entry_reason",
+   "fieldtype": "Small Text",
+   "label": "Reason for Journal Entry"
+  },
+  {
+   "fieldname": "requires_controller_review",
+   "fieldtype": "Check",
+   "label": "Requires Controller Review",
+   "read_only": 1
+  },
+  {
+   "fieldname": "tax_suspense_clearance",
+   "fieldtype": "Check",
+   "label": "Tax Suspense Clearance",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "approval_snapshot",
+   "fieldtype": "Long Text",
+   "hidden": 1,
+   "label": "Approval Snapshot",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "connect_operations_tab",
+   "fieldtype": "Tab Break",
+   "label": "Operations and Approval"
+  },
+  {
+   "fieldname": "connect_journal_evidence_section",
+   "fieldtype": "Section Break",
+   "label": "Journal Purpose and Evidence"
+  },
+  {
+   "fieldname": "connect_journal_evidence_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "connect_journal_review_section",
+   "fieldtype": "Section Break",
+   "label": "Approval Requirements"
+  },
+  {
+   "fieldname": "connect_journal_review_column",
+   "fieldtype": "Column Break"
   }
  ],
  "icon": "notebook-pen",
@@ -679,7 +787,7 @@
    "table_fieldname": "payment_entries"
   }
  ],
- "modified": "2026-10-22 12:00:00.000000",
+ "modified": "2026-11-07 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Journal Entry",

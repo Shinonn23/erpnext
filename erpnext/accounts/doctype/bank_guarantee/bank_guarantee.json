@@ -39,7 +39,13 @@
   "margin_money",
   "charges",
   "fixed_deposit_number",
-  "amended_from"
+  "amended_from",
+  "connect_guarantee_reason_section",
+  "bank_guarantee_reason",
+  "connect_approval_section",
+  "workflow_state",
+  "connect_approval_column",
+  "approval_snapshot"
  ],
  "fields": [
   {
@@ -214,13 +220,48 @@
    "options": "Bank Guarantee",
    "print_hide": 1,
    "read_only": 1
+  },
+  {
+   "fieldname": "bank_guarantee_reason",
+   "fieldtype": "Small Text",
+   "label": "Reason for Bank Guarantee"
+  },
+  {
+   "fieldname": "workflow_state",
+   "fieldtype": "Link",
+   "label": "Workflow State",
+   "no_copy": 1,
+   "options": "Workflow State",
+   "read_only": 1
+  },
+  {
+   "fieldname": "approval_snapshot",
+   "fieldtype": "Long Text",
+   "hidden": 1,
+   "label": "Approval Snapshot",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "connect_guarantee_reason_section",
+   "fieldtype": "Section Break",
+   "label": "Bank Guarantee Review"
+  },
+  {
+   "fieldname": "connect_approval_section",
+   "fieldtype": "Section Break",
+   "label": "Approval Status"
+  },
+  {
+   "fieldname": "connect_approval_column",
+   "fieldtype": "Column Break"
   }
  ],
  "grid_page_length": 50,
  "icon": "shield-check",
  "is_submittable": 1,
  "links": [],
- "modified": "2026-05-25 18:12:10.768835",
+ "modified": "2026-11-07 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Bank Guarantee",
@@ -239,7 +280,7 @@
    "write": 1
   },
   {
-    "cancel": 1,
+   "cancel": 1,
    "create": 0,
    "delete": 0,
    "email": 1,

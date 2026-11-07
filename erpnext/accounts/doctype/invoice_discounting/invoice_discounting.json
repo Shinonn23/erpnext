@@ -31,7 +31,13 @@
   "accounts_receivable_credit",
   "accounts_receivable_discounted",
   "accounts_receivable_unpaid",
-  "amended_from"
+  "amended_from",
+  "connect_discounting_review_section",
+  "invoice_discounting_reason",
+  "connect_approval_section",
+  "workflow_state",
+  "connect_approval_column",
+  "approval_snapshot"
  ],
  "fields": [
   {
@@ -169,12 +175,49 @@
    "options": "Invoice Discounting",
    "print_hide": 1,
    "read_only": 1
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "workflow_state",
+   "fieldtype": "Link",
+   "label": "Workflow State",
+   "no_copy": 1,
+   "options": "Workflow State",
+   "read_only": 1
+  },
+  {
+   "fieldname": "invoice_discounting_reason",
+   "fieldtype": "Small Text",
+   "label": "Invoice Discounting Reason",
+   "no_copy": 1
+  },
+  {
+   "fieldname": "approval_snapshot",
+   "fieldtype": "Long Text",
+   "hidden": 1,
+   "label": "Approval Snapshot",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "connect_discounting_review_section",
+   "fieldtype": "Section Break",
+   "label": "Finance Review"
+  },
+  {
+   "fieldname": "connect_approval_section",
+   "fieldtype": "Section Break",
+   "label": "Approval Status"
+  },
+  {
+   "fieldname": "connect_approval_column",
+   "fieldtype": "Column Break"
   }
  ],
  "icon": "ticket-percent",
  "is_submittable": 1,
  "links": [],
- "modified": "2026-09-09 17:04:59.512294",
+ "modified": "2026-11-07 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Invoice Discounting",
