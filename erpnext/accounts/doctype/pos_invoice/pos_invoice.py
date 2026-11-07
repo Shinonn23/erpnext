@@ -134,6 +134,7 @@ class POSInvoice(SalesInvoice):
 		price_list_currency: DF.Link
 		pricing_rules: DF.Table[PricingRuleDetail]
 		project: DF.Link | None
+		receipt_customer_name: DF.Data | None
 		redeem_loyalty_points: DF.Check
 		remarks: DF.SmallText | None
 		return_against: DF.Link | None

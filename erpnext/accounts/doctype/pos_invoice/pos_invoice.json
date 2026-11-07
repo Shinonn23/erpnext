@@ -13,6 +13,7 @@
   "naming_series",
   "customer",
   "customer_name",
+  "receipt_customer_name",
   "tax_id",
   "pos_profile",
   "consolidated_invoice",
@@ -238,6 +239,16 @@
    "oldfieldname": "customer_name",
    "oldfieldtype": "Data",
    "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.customer_group === \"Temporary Customer\" && (doc.docstatus === 0 || doc.receipt_customer_name)",
+   "description": "Cash customers only: the name the bill shows (customer_name stays the cash customer). Required when the invoice carries a buyer Tax ID (a full-form tax invoice).",
+   "fieldname": "receipt_customer_name",
+   "fieldtype": "Data",
+   "label": "Name on receipt",
+   "no_copy": 1,
+   "print_hide": 1,
+   "read_only_depends_on": "eval:doc.docstatus > 0 || (doc.workflow_state && !/(Draft|Rejected)$/.test(doc.workflow_state))"
   },
   {
    "fieldname": "tax_id",
@@ -1659,7 +1670,7 @@
  "icon": "receipt-text",
  "is_submittable": 1,
  "links": [],
- "modified": "2026-11-07 16:00:00.000000",
+ "modified": "2026-11-07 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "POS Invoice",
