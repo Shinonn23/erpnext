@@ -1330,7 +1330,13 @@ def get_asset_item_details(asset_items):
 
 def validate_item_type(doc, fieldname, message):
 	# iterate through items and check if they are valid sales or purchase items
-	items = [d.item_code for d in doc.items if d.item_code]
+	# A fixed asset sold on a Sales Invoice (the row names its Asset) is a disposal, not a sale of a "sales item": the Item
+	# of a fixed asset has "Is Sales Item" unticked (Siwat, 7 Nov 2026), and the sale of the asset must stay possible.
+	items = [
+		d.item_code
+		for d in doc.items
+		if d.item_code and not (fieldname == "is_sales_item" and d.get("is_fixed_asset") and d.get("asset"))
+	]
 
 	# No validation check inase of creating transaction using 'Opening Invoice Creation Tool'
 	if not items:
