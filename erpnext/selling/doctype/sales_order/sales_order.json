@@ -14,7 +14,6 @@
   "customer_section",
   "column_break0",
   "company",
-  "department",
   "naming_series",
   "customer",
   "customer_name",
@@ -1794,17 +1793,6 @@
    "no_copy": 1,
    "options": "User",
    "read_only": 1
-  },
-  {
-   "description": "Filled when you save: from the source document (a lab invoice: its warehouse), else your Employee; change it while Draft or Rejected.",
-   "fieldname": "department",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Selling Department",
-   "no_copy": 0,
-   "options": "Department",
-   "read_only_depends_on": "eval:doc.docstatus > 0 || (doc.workflow_state && !/(Draft|Rejected)$/.test(doc.workflow_state))"
   },
   {
    "fieldname": "connect_operations_tab",

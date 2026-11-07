@@ -22,8 +22,6 @@
   "column_break1",
   "order_type",
   "company",
-  "department",
-  "quotation_department_manager",
   "has_unit_price_items",
   "amended_from",
   "currency_and_price_list",
@@ -1174,28 +1172,6 @@
    "fieldtype": "Small Text",
    "label": "Item Group Approver Roles",
    "no_copy": 1,
-   "read_only": 1
-  },
-  {
-   "description": "Filled when you save: from the source document (a lab invoice: its warehouse), else your Employee; change it while Draft or Rejected.",
-   "fieldname": "department",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Selling Department",
-   "no_copy": 0,
-   "options": "Department",
-   "read_only_depends_on": "eval:doc.docstatus > 0 || (doc.workflow_state && !/(Draft|Rejected)$/.test(doc.workflow_state))"
-  },
-  {
-   "description": "Retired (2 Nov 2026): a Quotation is approved by the Sales Manager, the Managing Director or the Chief Executive Officer only. Nothing sets this field any more.",
-   "fieldname": "quotation_department_manager",
-   "fieldtype": "Link",
-   "hidden": 1,
-   "label": "Quotation Department Manager",
-   "no_copy": 1,
-   "options": "User",
-   "print_hide": 1,
    "read_only": 1
   },
   {
