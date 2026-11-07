@@ -1337,7 +1337,8 @@
    "label": "Receiving Warehouse Manager",
    "no_copy": 1,
    "options": "User",
-   "read_only": 1
+   "read_only": 1,
+   "depends_on": "eval:doc.receiving_warehouse_manager"
   },
   {
    "fieldname": "approval_snapshot",
@@ -1368,7 +1369,7 @@
  "idx": 261,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-11-07 16:00:00.000000",
+ "modified": "2026-11-07 20:00:00.000000",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Purchase Receipt",

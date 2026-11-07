@@ -1733,7 +1733,8 @@
    "fieldname": "p2p_exception_required",
    "fieldtype": "Check",
    "label": "P2P Exception Approval Required",
-   "read_only": 1
+   "read_only": 1,
+   "depends_on": "eval:doc.p2p_exception_required"
   },
   {
    "depends_on": "eval:doc.p2p_exception_required || doc.p2p_exception_reason",
@@ -1770,7 +1771,7 @@
  "idx": 204,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-11-07 14:00:00.000000",
+ "modified": "2026-11-07 20:00:00.000000",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Purchase Invoice",
