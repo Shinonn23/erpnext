@@ -17,6 +17,7 @@
   "buying",
   "selling",
   "price_not_uom_dependent",
+  "is_estimate",
   "column_break_3",
   "countries"
  ],
@@ -71,6 +72,15 @@
    "fieldname": "price_not_uom_dependent",
    "fieldtype": "Check",
    "label": "Price Not UOM Dependent"
+  },
+  {
+   "default": "0",
+   "description": "Estimated Buying lists hold the prices a Material Request is estimated with. They are never used on a Purchase Order, Supplier Quotation, Purchase Invoice or Purchase Receipt.",
+   "fieldname": "is_estimate",
+   "fieldtype": "Check",
+   "label": "Estimated Prices Only",
+   "no_copy": 1,
+   "read_only": 1
   },
   {
    "fieldname": "column_break_3",

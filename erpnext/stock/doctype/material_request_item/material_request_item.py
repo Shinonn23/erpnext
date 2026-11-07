@@ -31,6 +31,12 @@ class MaterialRequestItem(Document):
 		delivery_note: DF.Link | None
 		department: DF.Link | None
 		description: DF.TextEditor | None
+		estimate_currency: DF.Link | None
+		estimate_exchange_rate: DF.Float
+		estimate_price_date: DF.Date | None
+		estimate_rate: DF.Currency
+		estimate_source: DF.Literal["", "Estimated Buying", "Last Purchase", "Valuation", "Purchasing"]
+		estimate_supplier: DF.Link | None
 		expense_account: DF.Link | None
 		from_warehouse: DF.Link | None
 		from_storage_location: DF.Link | None

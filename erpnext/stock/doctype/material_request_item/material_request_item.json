@@ -51,6 +51,14 @@
   "price_list_rate",
   "col_break3",
   "amount",
+  "estimate_section",
+  "estimate_supplier",
+  "estimate_currency",
+  "estimate_rate",
+  "estimate_column",
+  "estimate_exchange_rate",
+  "estimate_source",
+  "estimate_price_date",
   "accounting_details_section",
   "expense_account",
   "column_break_glru",
@@ -278,6 +286,63 @@
    "fieldtype": "Currency",
    "label": "Amount",
    "options": "Company:company:default_currency",
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "estimate_section",
+   "fieldtype": "Section Break",
+   "label": "Estimated Price",
+   "collapsible": 1,
+   "collapsible_depends_on": "eval:doc.estimate_rate"
+  },
+  {
+   "fieldname": "estimate_supplier",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Estimate Supplier",
+   "options": "Supplier",
+   "print_hide": 1
+  },
+  {
+   "fieldname": "estimate_currency",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Estimate Currency",
+   "options": "Currency",
+   "print_hide": 1
+  },
+  {
+   "fieldname": "estimate_rate",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Estimated Rate",
+   "options": "estimate_currency",
+   "print_hide": 1
+  },
+  {
+   "fieldname": "estimate_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "estimate_exchange_rate",
+   "fieldtype": "Float",
+   "label": "Estimate Exchange Rate",
+   "precision": "9",
+   "print_hide": 1
+  },
+  {
+   "fieldname": "estimate_source",
+   "fieldtype": "Select",
+   "label": "Estimate Source",
+   "options": "\nEstimated Buying\nLast Purchase\nValuation\nPurchasing",
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "estimate_price_date",
+   "fieldtype": "Date",
+   "label": "Estimate Price Date",
    "print_hide": 1,
    "read_only": 1
   },
@@ -713,7 +778,7 @@
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-10-21 05:30:00.000000",
+ "modified": "2026-11-07 12:00:00.000000",
  "modified_by": "arirat.ba@connectdiagnostics.com",
  "module": "Stock",
  "name": "Material Request Item",
