@@ -1,12 +1,16 @@
-"""Remove the Item "Product Group" and the Supplier "Old Supplier Code" fields (Siwat's UX review, 6 Nov 2026).
+"""Remove the Supplier "Old Supplier Code" field (Siwat's UX review, 6 Nov 2026).
 
-Neither field is read by any code or report. Schema only: the fields left the DocType JSON; this drops their
-leftover columns, and only while no row holds a value (a value is never discarded). Idempotent.
+The field is not read by any code or report. Schema only: it left the DocType JSON; this drops its leftover column,
+and only while no row holds a value (a value is never discarded). Idempotent.
+
+The Item "Product Group" was removed by the same review but came back on 7 Nov 2026 (Siwat: approvals and QI route by
+Product Group), so it is no longer dropped here: a site where this patch already ran keeps whatever the field's
+column held, and model sync re-adds the column from the DocType JSON where it was dropped.
 """
 
 import frappe
 
-COLUMNS = (("Item", "product_group"), ("Supplier", "old_supplier_code"))
+COLUMNS = (("Supplier", "old_supplier_code"),)
 
 
 def execute():

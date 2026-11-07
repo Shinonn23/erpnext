@@ -16,6 +16,7 @@
   "item_code",
   "item_name",
   "item_group",
+  "product_group",
   "stock_uom",
   "image",
   "column_break0",
@@ -220,6 +221,17 @@
    "oldfieldtype": "Link",
    "options": "Item Group",
    "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "description": "The product line (POCT, LAB, SMART ...). It routes Quotation discount and Demo / Borrow approvals and gives the default QI team. Required for an Item that is sold (not a fixed asset).",
+   "fieldname": "product_group",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Product Group",
+   "mandatory_depends_on": "eval:doc.is_sales_item && !doc.is_fixed_asset",
+   "options": "Product Group",
    "search_index": 1
   },
   {
@@ -1250,7 +1262,7 @@
  "image_field": "image",
  "links": [],
  "make_attachments_public": 1,
- "modified": "2026-11-07 16:00:00.000000",
+ "modified": "2026-11-07 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Item",
