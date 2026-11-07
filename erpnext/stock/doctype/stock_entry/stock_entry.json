@@ -82,6 +82,7 @@
   "operation_request_column",
   "operation_issue_type",
   "maintenance_visit",
+  "write_off_reason",
   "operation_evidence_section",
   "operation_receipt_document",
   "operation_evidence_column",
@@ -932,7 +933,7 @@
    "label": "Request and Operation"
   },
   {
-   "depends_on": "eval:(doc.purpose == 'Material Issue' && doc.operation_issue_type != 'Disposal') || doc.operation_requester",
+   "depends_on": "eval:(doc.purpose == 'Material Issue' && doc.operation_issue_type != 'Disposal' && doc.stock_entry_type != 'Stock Write-Off') || doc.operation_requester",
    "fieldname": "operation_requester",
    "fieldtype": "Link",
    "label": "Requesting Employee",
@@ -940,7 +941,7 @@
    "read_only_depends_on": "eval:(doc.items || []).some(row => row.material_request)"
   },
   {
-   "depends_on": "eval:(doc.purpose == 'Material Issue' && doc.operation_issue_type != 'Disposal') || doc.workflow_department",
+   "depends_on": "eval:(doc.purpose == 'Material Issue' && doc.operation_issue_type != 'Disposal' && doc.stock_entry_type != 'Stock Write-Off') || doc.workflow_department",
    "fieldname": "workflow_department",
    "fieldtype": "Link",
    "label": "Requesting Department",
@@ -953,7 +954,7 @@
   },
   {
    "default": "Internal Use",
-   "depends_on": "eval:doc.purpose == 'Material Issue'",
+   "depends_on": "eval:doc.purpose == 'Material Issue' && doc.stock_entry_type != 'Stock Write-Off'",
    "fieldname": "operation_issue_type",
    "fieldtype": "Select",
    "label": "Issue Type",
@@ -965,6 +966,15 @@
    "fieldtype": "Link",
    "label": "Maintenance Visit",
    "options": "Maintenance Visit"
+  },
+  {
+   "depends_on": "eval:doc.stock_entry_type == 'Stock Write-Off'",
+   "description": "Why the stock a Lost warehouse holds is written off. Accounting reads it before approving.",
+   "fieldname": "write_off_reason",
+   "fieldtype": "Small Text",
+   "label": "Write-Off Reason",
+   "mandatory_depends_on": "eval:doc.stock_entry_type == 'Stock Write-Off'",
+   "no_copy": 1
   },
   {
    "depends_on": "eval:doc.purpose == 'Material Receipt' || doc.operation_receipt_document || doc.operation_receipt_reference",
@@ -1046,7 +1056,7 @@
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-11-07 14:00:00.000000",
+ "modified": "2026-11-07 20:30:00.000000",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Stock Entry",
