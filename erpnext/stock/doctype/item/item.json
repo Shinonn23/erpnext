@@ -45,6 +45,7 @@
   "over_billing_allowance",
   "section_break_11",
   "brand",
+  "model",
   "description",
   "accounting",
   "section_break_wfkx",
@@ -96,6 +97,8 @@
   "batch_number_series",
   "has_expiry_date",
   "shelf_life_in_days",
+  "min_remaining_shelf_life",
+  "max_storage_days",
   "retain_sample",
   "sample_quantity",
   "column_break_37",
@@ -1152,6 +1155,21 @@
    "label": "Preferred Storage Locations",
    "options": "Item Storage Location",
    "description": "Locations are suggested in this row order, followed by other compatible locations in the selected warehouse."
+  },
+  {
+   "fieldname": "model",
+   "fieldtype": "Data",
+   "label": "Model"
+  },
+  {
+   "fieldname": "min_remaining_shelf_life",
+   "fieldtype": "Int",
+   "label": "Min Remaining Shelf Life"
+  },
+  {
+   "fieldname": "max_storage_days",
+   "fieldtype": "Int",
+   "label": "Max Storage Days"
   }
  ],
  "icon": "package",
@@ -1159,7 +1177,7 @@
  "image_field": "image",
  "links": [],
  "make_attachments_public": 1,
- "modified": "2026-10-27 12:00:00.000000",
+ "modified": "2026-11-07 14:00:00.000000",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Item",

@@ -13,8 +13,16 @@
   "naming_series",
   "title",
   "material_request_type",
+  "loan_approval_band",
+  "loan_group_approver_roles",
+  "loan_release_pending",
+  "loan_issue_problem",
   "customer",
   "company",
+  "pricing_complete",
+  "requesting_employee",
+  "requesting_department",
+  "requesting_department_manager",
   "responsible_employee",
   "responsible_employee_user",
   "department",
@@ -77,7 +85,14 @@
   "job_card",
   "column_break_35",
   "work_order",
-  "connections_tab"
+  "connections_tab",
+  "connect_operations_tab",
+  "connect_placement_section",
+  "placement_confirmation",
+  "connect_placement_column",
+  "placement_confirmed_by",
+  "connect_approval_section",
+  "connect_approval_column"
  ],
  "fields": [
   {
@@ -637,13 +652,119 @@
    "hidden": 1,
    "read_only": 1,
    "no_copy": 1
+  },
+  {
+   "fieldname": "pricing_complete",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "Prices Ready",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "requesting_employee",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Requesting Employee",
+   "no_copy": 1,
+   "options": "Employee",
+   "read_only": 1
+  },
+  {
+   "fieldname": "requesting_department",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Requesting Department",
+   "no_copy": 1,
+   "options": "Department",
+   "read_only": 1
+  },
+  {
+   "fieldname": "requesting_department_manager",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Requesting Department Manager",
+   "no_copy": 1,
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "placement_confirmation",
+   "fieldtype": "Attach",
+   "label": "Placement Location Confirmation",
+   "no_copy": 1
+  },
+  {
+   "fieldname": "placement_confirmed_by",
+   "fieldtype": "Link",
+   "label": "Placement Confirmed By",
+   "no_copy": 1,
+   "options": "Employee"
+  },
+  {
+   "depends_on": "eval:['Customer Demo', 'Customer Borrow / Loan'].includes(doc.material_request_type)",
+   "fieldname": "loan_approval_band",
+   "fieldtype": "Select",
+   "label": "Loan Approval Band",
+   "no_copy": 1,
+   "options": "\nItem Group\nManaging Director\nChief Executive Officer",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.loan_approval_band == 'Item Group'",
+   "fieldname": "loan_group_approver_roles",
+   "fieldtype": "Small Text",
+   "label": "Item Group Approver Roles",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "loan_release_pending",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "Loan Release Pending",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.loan_issue_problem",
+   "fieldname": "loan_issue_problem",
+   "fieldtype": "Small Text",
+   "label": "Loan Problem",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:!['Customer Demo', 'Customer Borrow / Loan'].includes(doc.material_request_type) || doc.docstatus > 0",
+   "fieldname": "connect_operations_tab",
+   "fieldtype": "Tab Break",
+   "label": "Operations and Approval"
+  },
+  {
+   "depends_on": "eval:(doc.material_request_type == 'Asset Transfer' && (doc.customer || doc.customer_location)) || doc.placement_confirmation || doc.placement_confirmed_by",
+   "fieldname": "connect_placement_section",
+   "fieldtype": "Section Break",
+   "label": "Placement Confirmation"
+  },
+  {
+   "fieldname": "connect_placement_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "connect_approval_section",
+   "fieldtype": "Section Break",
+   "label": "Approval Status"
+  },
+  {
+   "fieldname": "connect_approval_column",
+   "fieldtype": "Column Break"
   }
  ],
  "icon": "clipboard-list",
  "idx": 70,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-10-10 11:25:34.000000",
+ "modified": "2026-11-07 14:00:00.000000",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Material Request",
