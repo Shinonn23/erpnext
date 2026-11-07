@@ -71,6 +71,16 @@ class TestQuarantineWarehouse(Patched):
 		):
 			core.require_quarantine_warehouse(self.doc("DEVICE"))
 
+	def test_the_warehouse_of_the_row_is_asked_so_a_taken_company_quarantine_is_refused(self):
+		doc = Row(docstatus=0, company="CD", items=[Row(item_code="DEVICE", warehouse="STORES - CD")])
+		with (
+			patch.object(core, "quarantine_warehouse_for", return_value=None) as lookup,
+			patch.object(core, "custody_loan_return_row_requires_inspection", return_value=True),
+		):
+			with self.assertRaisesRegex(frappe.ValidationError, "DEVICE is inspected"):
+				core.require_quarantine_warehouse(doc)
+		lookup.assert_called_with("CD", "STORES - CD")
+
 	def test_the_receipt_of_a_rejected_row_does_not_silently_wait_without_quarantine(self):
 		note = Row(
 			docstatus=0,

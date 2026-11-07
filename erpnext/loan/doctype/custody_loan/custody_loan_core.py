@@ -1293,10 +1293,13 @@ def _original_return_template(candidates, original_rows, return_item):
 def require_quarantine_warehouse(return_doc):
 	"""Goods that fail their return inspection are received into the company's Quarantine warehouse, so a return
 	with an inspected Item needs one: say so plainly when the return is saved, never leave the goods unreceived."""
-	if return_doc.docstatus != 0 or quarantine_warehouse_for(return_doc.company):
+	if return_doc.docstatus != 0:
 		return
 	inspected = [
-		row.item_code for row in return_doc.items if custody_loan_return_row_requires_inspection(row)
+		row.item_code
+		for row in return_doc.items
+		if custody_loan_return_row_requires_inspection(row)
+		and not quarantine_warehouse_for(return_doc.company, getattr(row, "warehouse", None))
 	]
 	if inspected:
 		frappe.throw(
