@@ -47,7 +47,24 @@
   "recount_stock_count",
   "surplus_notes",
   "references_column",
-  "stock_reconciliation"
+  "stock_reconciliation",
+  "connect_approval_section",
+  "workflow_state",
+  "connect_approval_column",
+  "connect_count_review_section",
+  "counted_by",
+  "counted_on",
+  "connect_count_review_column",
+  "stock_approved_by",
+  "stock_approved_on",
+  "connect_final_review_section",
+  "accounts_approved_by",
+  "accounts_approved_on",
+  "connect_final_review_column",
+  "final_approved_by",
+  "final_approved_on",
+  "ceo_acknowledged_by",
+  "ceo_acknowledged_on"
  ],
  "fields": [
   {
@@ -344,12 +361,126 @@
    "options": "Stock Reconciliation",
    "read_only": 1,
    "allow_on_submit": 1
+  },
+  {
+   "fieldname": "connect_approval_section",
+   "fieldtype": "Section Break",
+   "label": "Approval Status"
+  },
+  {
+   "fieldname": "workflow_state",
+   "label": "Workflow State",
+   "fieldtype": "Link",
+   "options": "Workflow State",
+   "read_only": 1,
+   "no_copy": 1,
+   "allow_on_submit": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "connect_approval_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "connect_count_review_section",
+   "fieldtype": "Section Break",
+   "label": "Count and Stock Review"
+  },
+  {
+   "fieldname": "counted_by",
+   "label": "Counted By",
+   "fieldtype": "Link",
+   "options": "User",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "counted_on",
+   "label": "Counted On",
+   "fieldtype": "Datetime",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "connect_count_review_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "stock_approved_by",
+   "label": "Stock Approved By",
+   "fieldtype": "Link",
+   "options": "User",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "stock_approved_on",
+   "label": "Stock Approved On",
+   "fieldtype": "Datetime",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "connect_final_review_section",
+   "fieldtype": "Section Break",
+   "label": "Accounts and Final Approval"
+  },
+  {
+   "fieldname": "accounts_approved_by",
+   "label": "Accounts Approved By",
+   "fieldtype": "Link",
+   "options": "User",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "accounts_approved_on",
+   "label": "Accounts Approved On",
+   "fieldtype": "Datetime",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "connect_final_review_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "final_approved_by",
+   "label": "Final Approved By",
+   "fieldtype": "Link",
+   "options": "User",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "final_approved_on",
+   "label": "Final Approved On",
+   "fieldtype": "Datetime",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "ceo_acknowledged_by",
+   "label": "Ceo Acknowledged By",
+   "fieldtype": "Link",
+   "options": "User",
+   "read_only": 1,
+   "no_copy": 1,
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "ceo_acknowledged_on",
+   "label": "Ceo Acknowledged On",
+   "fieldtype": "Datetime",
+   "read_only": 1,
+   "no_copy": 1,
+   "allow_on_submit": 1
   }
  ],
  "is_submittable": 1,
  "grid_page_length": 50,
  "links": [],
- "modified": "2026-11-05 12:00:00.000000",
+ "modified": "2026-11-07 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Stock Count",

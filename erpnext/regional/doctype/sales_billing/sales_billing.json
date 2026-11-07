@@ -33,7 +33,14 @@
   "total_outstanding_amount",
   "section_break_15",
   "narration",
-  "amended_from"
+  "amended_from",
+  "cd_collection_section",
+  "cd_collection_date",
+  "cd_collection_column",
+  "cd_billing_status",
+  "cd_customer_signed_section",
+  "cd_customer_signed_document",
+  "cd_customer_signed_date"
  ],
  "fields": [
   {
@@ -199,13 +206,67 @@
    "options": "Address",
    "print_hide": 1,
    "read_only": 1
+  },
+  {
+   "fieldname": "cd_collection_section",
+   "label": "Collection",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "cd_collection_date",
+   "label": "Collection Date",
+   "fieldtype": "Date",
+   "mandatory_depends_on": "eval:doc.docstatus==0",
+   "allow_on_submit": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "The day the customer pays or hands over the cheque."
+  },
+  {
+   "fieldname": "cd_collection_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "cd_billing_status",
+   "label": "Billing Status",
+   "fieldtype": "Select",
+   "options": "\nSent\nCustomer Acknowledged\nPaid",
+   "read_only": 1,
+   "allow_on_submit": 1,
+   "no_copy": 1,
+   "in_standard_filter": 1,
+   "description": "Sent after submit, Customer Acknowledged once the signed copy is attached, Paid when no invoice of the billing is outstanding."
+  },
+  {
+   "fieldname": "cd_customer_signed_section",
+   "label": "Customer Signature",
+   "fieldtype": "Section Break",
+   "collapsible": 1,
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "cd_customer_signed_document",
+   "label": "Customer Signed Copy",
+   "fieldtype": "Attach",
+   "allow_on_submit": 1,
+   "no_copy": 1,
+   "print_hide": 1,
+   "description": "The scan of the copy the customer signed. Can be attached after submit."
+  },
+  {
+   "fieldname": "cd_customer_signed_date",
+   "label": "Customer Signed On",
+   "fieldtype": "Date",
+   "allow_on_submit": 1,
+   "no_copy": 1,
+   "print_hide": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-10-29 10:00:00.000000",
+ "modified": "2026-11-07 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Regional",
  "name": "Sales Billing",
