@@ -224,13 +224,14 @@ class TestSetProductCategory(unittest.TestCase):
 		import json
 		import os
 
-		from erpnext.regulatory_affairs.custom_fields import ITEM_CATEGORY_PERMLEVEL, item_fields
+		from erpnext.regulatory_affairs.custom_fields import ITEM_CATEGORY_PERMLEVEL
 
-		field = next(f for f in item_fields() if f["fieldname"] == ITEM_CATEGORY_FIELD)
-		self.assertEqual(field["permlevel"], ITEM_CATEGORY_PERMLEVEL)
 		path = os.path.join(os.path.dirname(__file__), "../../stock/doctype/item/item.json")
 		with open(path) as handle:
-			rows = [p for p in json.load(handle)["permissions"] if p.get("permlevel") == 1]
+			document = json.load(handle)
+		field = next(f for f in document["fields"] if f["fieldname"] == ITEM_CATEGORY_FIELD)
+		self.assertEqual(field["permlevel"], ITEM_CATEGORY_PERMLEVEL)
+		rows = [p for p in document["permissions"] if p.get("permlevel") == 1]
 		writers = {p["role"] for p in rows if p.get("write")}
 		self.assertEqual(writers, {"Regulatory Operator", "Regulatory Approver"})
 		self.assertIn("Item Manager", {p["role"] for p in rows if p.get("read")})

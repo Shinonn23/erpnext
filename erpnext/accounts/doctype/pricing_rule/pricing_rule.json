@@ -9,6 +9,7 @@
  "documentation": "https://docs.frappe.io/erpnext/user/manual/en/pricing-rule",
  "engine": "InnoDB",
  "field_order": [
+  "workflow_state",
   "applicability_section",
   "naming_series",
   "title",
@@ -654,12 +655,21 @@
    "fieldname": "dont_enforce_free_item_qty",
    "fieldtype": "Check",
    "label": "Don't Enforce Free Item Qty"
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "workflow_state",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Workflow State",
+   "no_copy": 1,
+   "options": "Workflow State"
   }
  ],
  "icon": "badge-percent",
  "idx": 1,
  "links": [],
- "modified": "2026-02-17 12:24:07.553505",
+ "modified": "2026-11-07 16:00:00.000000",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Pricing Rule",

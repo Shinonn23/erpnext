@@ -10,6 +10,7 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "workflow_state",
   "section_break_1",
   "apply_on",
   "disable",
@@ -279,11 +280,20 @@
    "fieldtype": "Table",
    "label": "Promotional Scheme Product Discount",
    "options": "Promotional Scheme Product Discount"
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "workflow_state",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Workflow State",
+   "no_copy": 1,
+   "options": "Workflow State"
   }
  ],
  "icon": "megaphone",
  "links": [],
- "modified": "2025-08-20 11:48:23.231081",
+ "modified": "2026-11-07 16:00:00.000000",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Promotional Scheme",

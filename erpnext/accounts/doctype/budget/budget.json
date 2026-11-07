@@ -51,7 +51,12 @@
   "action_if_annual_exceeded_on_cumulative_expense",
   "action_if_accumulated_monthly_exceeded_on_cumulative_expense",
   "section_break_kkan",
-  "revision_of"
+  "revision_of",
+  "connect_budget_review_section",
+  "budget_reason",
+  "connect_approval_section",
+  "connect_approval_column",
+  "approval_snapshot"
  ],
  "fields": [
   {
@@ -359,6 +364,33 @@
    "label": "Budget Distribution Total",
    "no_copy": 1,
    "read_only": 1
+  },
+  {
+   "fieldname": "budget_reason",
+   "fieldtype": "Small Text",
+   "label": "Reason for Budget"
+  },
+  {
+   "fieldname": "approval_snapshot",
+   "fieldtype": "Long Text",
+   "hidden": 1,
+   "label": "Approval Snapshot",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "connect_budget_review_section",
+   "fieldtype": "Section Break",
+   "label": "Budget Review"
+  },
+  {
+   "fieldname": "connect_approval_section",
+   "fieldtype": "Section Break",
+   "label": "Approval Status"
+  },
+  {
+   "fieldname": "connect_approval_column",
+   "fieldtype": "Column Break"
   }
  ],
  "grid_page_length": 50,
@@ -366,7 +398,7 @@
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-10-21 05:30:00.000000",
+ "modified": "2026-11-07 16:00:00.000000",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Budget",

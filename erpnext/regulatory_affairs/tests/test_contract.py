@@ -6,12 +6,9 @@ import re
 import unittest
 from pathlib import Path
 
-import frappe
-from frappe.model.meta import Meta
-
 from erpnext import hooks
 from erpnext.regulatory_affairs import constants
-from erpnext.regulatory_affairs.custom_fields import CUSTOM_FIELDS, SNAPSHOT_FIELDNAMES
+from erpnext.regulatory_affairs.custom_fields import RA_FIELDS, SNAPSHOT_FIELDNAMES
 
 APP = Path(__file__).resolve().parents[2]  # .../erpnext (the python package directory)
 RA = APP / "regulatory_affairs"
@@ -133,33 +130,40 @@ NATIVE_JSON = {
 }
 
 
-def simulate_layout(doctype):
-	"""Order native + custom fields with Frappe's own `Meta.sort_fields`, without a database."""
-	native_doc = load(APP / NATIVE_JSON[doctype])
-	by_name = {field["fieldname"]: field for field in native_doc["fields"]}
-	native = [frappe._dict(by_name[name]) for name in native_doc["field_order"] if name in by_name]
-	custom = [frappe._dict(spec, is_custom_field=True) for spec in CUSTOM_FIELDS[doctype]]
-	meta = object.__new__(Meta)
-	meta.fields = [*native, *custom]
-	meta._fields = {field.fieldname: field for field in meta.fields}
-	meta.sort_fields()
-	return [field.fieldname for field in native], [field.fieldname for field in meta.fields]
+def ra_specs(doctype):
+	"""The RA DocFields of a DocType JSON, in the order of its field_order."""
+	document = load(APP / NATIVE_JSON[doctype])
+	by_name = {field["fieldname"]: field for field in document["fields"]}
+	names = [name for name in document["field_order"] if name in RA_FIELDS[doctype]]
+	return [by_name[name] for name in names], document["field_order"]
 
 
-class TestCustomFields(unittest.TestCase):
-	def test_every_target_is_covered_and_native_order_is_preserved(self):
-		self.assertEqual(set(CUSTOM_FIELDS), set(NATIVE_JSON))
-		for doctype in CUSTOM_FIELDS:
-			native, combined = simulate_layout(doctype)
-			self.assertEqual([name for name in combined if name in set(native)], native, doctype)
-			custom = [spec["fieldname"] for spec in CUSTOM_FIELDS[doctype]]
-			start = combined.index(custom[0])
+class TestRegulatoryFields(unittest.TestCase):
+	"""The RA fields are DocFields in the JSON of Item and of the six item tables, not Custom Fields (migrate does only
+	schema, Role Profile Authority Design 12.1)."""
+
+	def test_every_target_holds_every_field_once_in_order_and_in_one_block(self):
+		self.assertEqual(set(RA_FIELDS), set(NATIVE_JSON))
+		self.assertEqual(sum(len(names) for names in RA_FIELDS.values()), 71)
+		for doctype, names in RA_FIELDS.items():
+			document = load(APP / NATIVE_JSON[doctype])
+			fieldnames = [field["fieldname"] for field in document["fields"]]
+			self.assertEqual(len(fieldnames), len(set(fieldnames)), doctype)
+			self.assertEqual(sorted(document["field_order"]), sorted(fieldnames), doctype)
+			specs, order = ra_specs(doctype)
+			self.assertEqual([spec["fieldname"] for spec in specs], list(names), doctype)
+			start = order.index(names[0])
 			self.assertEqual(
-				combined[start : start + len(custom)], custom, f"{doctype}: custom block is not contiguous"
+				order[start : start + len(names)], list(names), f"{doctype}: block is not contiguous"
 			)
 
+	def test_the_fields_are_not_made_as_custom_fields_any_more(self):
+		self.assertFalse(
+			hasattr(importlib.import_module("erpnext.regulatory_affairs.custom_fields"), "CUSTOM_FIELDS")
+		)
+
 	def test_item_product_category_replaces_the_retired_classification_fields(self):
-		specs = {spec["fieldname"]: spec for spec in CUSTOM_FIELDS["Item"]}
+		specs = {spec["fieldname"]: spec for spec in ra_specs("Item")[0]}
 		retired_fields = (
 			"is_medical_device",
 			"regulatory_registration_requirement",
@@ -173,7 +177,6 @@ class TestCustomFields(unittest.TestCase):
 		category = specs[constants.ITEM_CATEGORY_FIELD]
 		self.assertEqual(category["fieldtype"], "Select")
 		self.assertEqual(category["options"].split("\n"), ["", *constants.ITEM_CATEGORIES])
-		self.assertEqual(category["insert_after"], "regulatory_tab")
 		self.assertNotIn("default", category)
 		self.assertIn("unclassified and is not sold", category["description"])
 		self.assertIn("Other", specs["regulatory_other_category"]["depends_on"])
@@ -184,28 +187,28 @@ class TestCustomFields(unittest.TestCase):
 			specs["regulatory_current_section"]["depends_on"], "eval:doc.regulatory_product_category"
 		)
 
-	def test_regulatory_tab_chain_starts_from_a_native_last_field(self):
-		chain = CUSTOM_FIELDS["Item"]
-		known = {spec["fieldname"] for spec in chain}
-		self.assertEqual(chain[0]["insert_after"], "quality_inspection_template")
-		for spec in chain[1:]:
-			self.assertIn(spec["insert_after"], known, spec["fieldname"])
-
 	def test_item_tab_sits_between_quality_and_pricing(self):
-		_, combined = simulate_layout("Item")
-		self.assertEqual(combined[combined.index("regulatory_tab") - 1], "quality_inspection_template")
-		self.assertEqual(combined[combined.index("current_registration_status") + 1], "pricing_tab")
+		_, order = ra_specs("Item")
+		self.assertEqual(order[order.index("regulatory_tab") - 1], "quality_inspection_template")
+		self.assertEqual(order[order.index("current_registration_status") + 1], "pricing_tab")
 
 	def test_snapshot_fields_match_declared_names(self):
 		for item_doctype in constants.TRANSACTION_ITEM_DOCTYPES.values():
-			fieldnames = {spec["fieldname"] for spec in CUSTOM_FIELDS[item_doctype]}
+			fieldnames = {spec["fieldname"] for spec in ra_specs(item_doctype)[0]}
 			self.assertTrue(set(SNAPSHOT_FIELDNAMES) <= fieldnames, item_doctype)
 
-	def test_custom_field_links_point_to_ra_doctypes(self):
+	def test_snapshot_section_is_collapsed_and_the_fields_read_only(self):
+		for item_doctype in constants.TRANSACTION_ITEM_DOCTYPES.values():
+			specs = {spec["fieldname"]: spec for spec in ra_specs(item_doctype)[0]}
+			self.assertEqual(specs["regulatory_snapshot_section"]["collapsible"], 1, item_doctype)
+			for name in SNAPSHOT_FIELDNAMES:
+				self.assertEqual(specs[name]["read_only"], 1, (item_doctype, name))
+
+	def test_field_links_point_to_ra_doctypes(self):
 		names = {load(path)["name"] for path in doctype_files()}
-		for doctype, specs in CUSTOM_FIELDS.items():
-			for spec in specs:
-				if spec["fieldtype"] == "Link" and spec["options"].startswith("Medical Device"):
+		for doctype in RA_FIELDS:
+			for spec in ra_specs(doctype)[0]:
+				if spec["fieldtype"] == "Link" and spec["options"].startswith("Regulatory"):
 					self.assertIn(spec["options"], names, (doctype, spec["fieldname"]))
 
 

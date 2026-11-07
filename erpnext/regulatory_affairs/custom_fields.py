@@ -1,32 +1,19 @@
-"""Custom Fields the RA module adds to Item and to the stock/sales/purchase documents it guards.
+"""The Regulatory Affairs fields of Item and of the item tables of the guarded transactions.
 
-Layout rules (see the DKSH notes on `insert_after`): every chain starts from a native field that is the
-LAST field of its tab or row form, so no native section is swallowed by a new Section/Tab Break.
+They are DocFields in the DocType JSON (Item, Purchase Order Item, Purchase Receipt Item, Stock Entry Detail, Sales Order
+Item, Delivery Note Item, Sales Invoice Item), not Custom Fields: migrate only does schema (Role Profile Authority Design
+12.1, batch e). This module lists their names and the constants the code and the tests share.
+
+Layout rules (see the DKSH notes on `insert_after`): the Regulatory tab of Item opens after `quality_inspection_template`,
+the last field of the Quality tab, and each item table's Regulatory Snapshot section is the last section of the row form,
+so no native section is swallowed by a new Section/Tab Break (`field_order` in each JSON).
 """
 
-from erpnext.regulatory_affairs.constants import (
-	ITEM_CATEGORIES,
-	ITEM_CATEGORY_FIELD,
-	MEDICAL_DEVICE,
-	MODULE,
-	OTHER_CATEGORY,
-	PRODUCT_REGISTRATION,
-	TRANSACTION_ITEM_DOCTYPES,
-)
+from erpnext.regulatory_affairs.constants import TRANSACTION_ITEM_DOCTYPES
 
 # The Product Category switches the FDA checks on and off, so it sits on its own permission level: every Item
 # reader sees it, only the Regulatory roles change it (through `item.set_product_category`).
 ITEM_CATEGORY_PERMLEVEL = 1
-
-# Last field of each item row's form; the snapshot section is appended after it.
-ITEM_ROW_ANCHORS = {
-	"Purchase Order Item": "job_card",
-	"Purchase Receipt Item": "subcontracting_receipt_item",
-	"Stock Entry Detail": "bom_secondary_item",
-	"Sales Order Item": "project",
-	"Delivery Note Item": "page_break",
-	"Sales Invoice Item": "page_break",
-}
 
 SNAPSHOT_FIELDNAMES = (
 	"regulatory_registration",
@@ -39,163 +26,29 @@ SNAPSHOT_FIELDNAMES = (
 	"regulatory_coverage_date",
 )
 
+ITEM_FIELDNAMES = (
+	"regulatory_tab",
+	"regulatory_product_category",
+	"regulatory_other_category",
+	"medical_device_category",
+	"regulatory_owner",
+	"regulatory_current_section",
+	"current_regulatory_registration",
+	"current_newcode",
+	"regulatory_current_column",
+	"current_registration_expiry",
+	"current_registration_status",
+)
 
-def _field(fieldname, fieldtype, label, insert_after, **kwargs):
-	return {
-		"fieldname": fieldname,
-		"fieldtype": fieldtype,
-		"label": label,
-		"insert_after": insert_after,
-		"module": MODULE,
-		"is_system_generated": 1,
-		**kwargs,
-	}
+# The section and column breaks of an item row's snapshot, around the eight snapshot fields.
+SNAPSHOT_BREAKS = ("regulatory_snapshot_section", "regulatory_snapshot_column")
 
-
-def item_fields():
-	return [
-		_field("regulatory_tab", "Tab Break", "Regulatory", "quality_inspection_template"),
-		_field(
-			ITEM_CATEGORY_FIELD,
-			"Select",
-			"Product Category",
-			"regulatory_tab",
-			options="\n" + "\n".join(ITEM_CATEGORIES),
-			in_standard_filter=1,
-			permlevel=ITEM_CATEGORY_PERMLEVEL,
-			description="Set by Regulatory Affairs. A Thai FDA product group needs a registration in force to be sold; "
-			"Not Regulated needs none. An Item that is still blank is unclassified and is not sold.",
-		),
-		_field(
-			"regulatory_other_category",
-			"Data",
-			"Other Category",
-			ITEM_CATEGORY_FIELD,
-			depends_on=f"eval:doc.{ITEM_CATEGORY_FIELD} == '{OTHER_CATEGORY}'",
-		),
-		_field(
-			"medical_device_category",
-			"Select",
-			"Medical Device Category",
-			"regulatory_other_category",
-			options="\nIVD\nNon-IVD\nOther",
-			depends_on=f"eval:doc.{ITEM_CATEGORY_FIELD} == '{MEDICAL_DEVICE}'",
-		),
-		_field(
-			"regulatory_owner",
-			"Link",
-			"Regulatory Owner",
-			"medical_device_category",
-			options="User",
-		),
-		_field(
-			"regulatory_current_section",
-			"Section Break",
-			"Current Regulatory Coverage",
-			"regulatory_owner",
-			depends_on=f"eval:doc.{ITEM_CATEGORY_FIELD}",
-		),
-		_field(
-			"current_regulatory_registration",
-			"Link",
-			"Current Registration",
-			"regulatory_current_section",
-			options=PRODUCT_REGISTRATION,
-			read_only=1,
-			no_copy=1,
-		),
-		_field(
-			"current_newcode",
-			"Data",
-			"Current NEWCODE",
-			"current_regulatory_registration",
-			read_only=1,
-			no_copy=1,
-		),
-		_field("regulatory_current_column", "Column Break", None, "current_newcode"),
-		_field(
-			"current_registration_expiry",
-			"Date",
-			"Current Registration Expiry",
-			"regulatory_current_column",
-			read_only=1,
-			no_copy=1,
-		),
-		_field(
-			"current_registration_status",
-			"Data",
-			"Current Registration Status",
-			"current_registration_expiry",
-			read_only=1,
-			no_copy=1,
-		),
-	]
-
-
-def snapshot_fields(anchor):
-	"""Read-only regulatory facts stamped on an item row at submission."""
-	collapsible = {"collapsible": 1, "depends_on": "eval:doc.regulatory_coverage_date"}
-	read_only = {"read_only": 1, "no_copy": 1}
-	return [
-		_field(
-			"regulatory_snapshot_section",
-			"Section Break",
-			"Regulatory Snapshot",
-			anchor,
-			**collapsible,
-		),
-		_field(
-			"regulatory_registration",
-			"Link",
-			"Registration",
-			"regulatory_snapshot_section",
-			options=PRODUCT_REGISTRATION,
-			**read_only,
-		),
-		_field("regulatory_newcode", "Data", "FDA NEWCODE", "regulatory_registration", **read_only),
-		_field("regulatory_identifier", "Data", "Identifier", "regulatory_newcode", **read_only),
-		_field(
-			"regulatory_manufacturer",
-			"Link",
-			"Regulatory Manufacturer",
-			"regulatory_identifier",
-			options="Manufacturer",
-			**read_only,
-		),
-		_field("regulatory_snapshot_column", "Column Break", None, "regulatory_manufacturer"),
-		_field(
-			"regulatory_manufacturer_country",
-			"Link",
-			"Regulatory Manufacturer Country",
-			"regulatory_snapshot_column",
-			options="Country",
-			**read_only,
-		),
-		_field(
-			"regulatory_registration_status",
-			"Data",
-			"Registration Status at Coverage Date",
-			"regulatory_manufacturer_country",
-			**read_only,
-		),
-		_field(
-			"regulatory_registration_expiry",
-			"Date",
-			"Registration Expiry",
-			"regulatory_registration_status",
-			**read_only,
-		),
-		_field(
-			"regulatory_coverage_date", "Date", "Coverage Date", "regulatory_registration_expiry", **read_only
-		),
-	]
-
-
-def get_custom_fields():
-	fields = {"Item": item_fields()}
-	for item_doctype in TRANSACTION_ITEM_DOCTYPES.values():
-		fields[item_doctype] = snapshot_fields(ITEM_ROW_ANCHORS[item_doctype])
-	return fields
-
-
-CUSTOM_FIELDS = get_custom_fields()
+# DocType -> fieldnames, in the order of the form (71 fields).
+RA_FIELDS = {
+	"Item": ITEM_FIELDNAMES,
+	**{
+		item_doctype: ("regulatory_snapshot_section", *SNAPSHOT_FIELDNAMES[:4], "regulatory_snapshot_column")
+		+ SNAPSHOT_FIELDNAMES[4:]
+		for item_doctype in TRANSACTION_ITEM_DOCTYPES.values()
+	},
+}

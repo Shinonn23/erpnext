@@ -32,7 +32,8 @@
   "pause_sla_on",
   "support_and_resolution_section_break",
   "holiday_list",
-  "support_and_resolution"
+  "support_and_resolution",
+  "operation_policy_snapshot"
  ],
  "fields": [
   {
@@ -191,11 +192,19 @@
   {
    "fieldname": "column_break_22",
    "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "operation_policy_snapshot",
+   "fieldtype": "Long Text",
+   "hidden": 1,
+   "label": "Managed Operation Policy Snapshot",
+   "no_copy": 1,
+   "read_only": 1
   }
  ],
  "icon": "signature",
  "links": [],
- "modified": "2024-03-27 13:10:39.518860",
+ "modified": "2026-11-07 16:00:00.000000",
  "modified_by": "Administrator",
  "module": "Support",
  "name": "Service Level Agreement",

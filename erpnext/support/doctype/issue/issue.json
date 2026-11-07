@@ -56,7 +56,20 @@
   "company",
   "via_customer_portal",
   "attachment",
-  "content_type"
+  "content_type",
+  "connect_resolution_section",
+  "operation_action_type",
+  "connect_resolution_column",
+  "connect_service_coverage_section",
+  "service_coverage",
+  "outside_service_coverage",
+  "connect_service_coverage_column",
+  "service_coverage_document",
+  "service_quotation",
+  "connect_approval_section",
+  "workflow_state",
+  "connect_approval_column",
+  "approval_snapshot"
  ],
  "fields": [
   {
@@ -395,12 +408,87 @@
    "oldfieldname": "resolution_date",
    "oldfieldtype": "Date",
    "read_only": 1
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "workflow_state",
+   "fieldtype": "Link",
+   "label": "Workflow State",
+   "no_copy": 1,
+   "options": "Workflow State",
+   "read_only": 1
+  },
+  {
+   "fieldname": "approval_snapshot",
+   "fieldtype": "Long Text",
+   "hidden": 1,
+   "label": "Approval Snapshot",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "operation_action_type",
+   "fieldtype": "Select",
+   "label": "Requested Resolution Authority",
+   "options": "\nReplacement\nCompensation\nCAPA\nRecall\nRegulatory"
+  },
+  {
+   "fieldname": "outside_service_coverage",
+   "fieldtype": "Check",
+   "label": "Outside Warranty / Service Contract"
+  },
+  {
+   "fieldname": "service_coverage",
+   "fieldtype": "Select",
+   "label": "Service Coverage Declaration",
+   "options": "\nWarranty\nService Contract\nOutside Coverage"
+  },
+  {
+   "depends_on": "eval:['Warranty', 'Service Contract'].includes(doc.service_coverage) || doc.service_coverage_document",
+   "fieldname": "service_coverage_document",
+   "fieldtype": "Attach",
+   "label": "Warranty / Service Contract Evidence"
+  },
+  {
+   "depends_on": "eval:doc.outside_service_coverage || doc.service_coverage == 'Outside Coverage' || doc.service_quotation",
+   "fieldname": "service_quotation",
+   "fieldtype": "Link",
+   "label": "Service Quotation",
+   "mandatory_depends_on": "eval:!!doc.outside_service_coverage",
+   "options": "Quotation"
+  },
+  {
+   "fieldname": "connect_resolution_section",
+   "fieldtype": "Section Break",
+   "label": "Resolution Authorization"
+  },
+  {
+   "fieldname": "connect_resolution_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "connect_service_coverage_section",
+   "fieldtype": "Section Break",
+   "label": "Service Coverage"
+  },
+  {
+   "fieldname": "connect_service_coverage_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "connect_approval_section",
+   "fieldtype": "Section Break",
+   "label": "Approval Status"
+  },
+  {
+   "fieldname": "connect_approval_column",
+   "fieldtype": "Column Break"
   }
  ],
  "icon": "ticket",
  "idx": 7,
  "links": [],
- "modified": "2026-09-30 23:24:44.044604",
+ "modified": "2026-11-07 16:00:00.000000",
  "modified_by": "Administrator",
  "module": "Support",
  "name": "Issue",

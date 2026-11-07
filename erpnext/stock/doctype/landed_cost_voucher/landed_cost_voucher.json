@@ -27,7 +27,14 @@
   "distribute_charges_based_on",
   "amended_from",
   "sec_break2",
-  "landed_cost_help"
+  "landed_cost_help",
+  "connect_cost_review_section",
+  "landed_cost_reason",
+  "requires_finance_review",
+  "connect_approval_section",
+  "workflow_state",
+  "connect_approval_column",
+  "approval_snapshot"
  ],
  "fields": [
   {
@@ -158,6 +165,50 @@
    "no_copy": 1,
    "print_hide": 1,
    "read_only": 1
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "workflow_state",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Workflow State",
+   "no_copy": 1,
+   "options": "Workflow State",
+   "read_only": 1
+  },
+  {
+   "fieldname": "landed_cost_reason",
+   "fieldtype": "Small Text",
+   "label": "Landed Cost Reason"
+  },
+  {
+   "fieldname": "requires_finance_review",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "Requires Finance Review",
+   "read_only": 1
+  },
+  {
+   "fieldname": "approval_snapshot",
+   "fieldtype": "Long Text",
+   "hidden": 1,
+   "label": "Approval Snapshot",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "connect_cost_review_section",
+   "fieldtype": "Section Break",
+   "label": "Landed Cost Review"
+  },
+  {
+   "fieldname": "connect_approval_section",
+   "fieldtype": "Section Break",
+   "label": "Approval Status"
+  },
+  {
+   "fieldname": "connect_approval_column",
+   "fieldtype": "Column Break"
   }
  ],
  "grid_page_length": 50,
@@ -165,7 +216,7 @@
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2025-08-27 00:41:53.537375",
+ "modified": "2026-11-07 16:00:00.000000",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Landed Cost Voucher",

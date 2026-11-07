@@ -7,17 +7,20 @@ from erpnext.regulatory_affairs import install
 
 
 class TestEnsureConfiguration(unittest.TestCase):
-	def test_runs_module_then_roles_then_custom_fields_then_settings(self):
+	def test_runs_module_then_roles_then_item_permissions_then_settings(self):
 		calls = []
 		with (
 			patch.object(install, "ensure_module_def", lambda: calls.append("module")),
 			patch.object(install, "ensure_roles", lambda: calls.append("roles")),
-			patch.object(install, "ensure_custom_fields", lambda: calls.append("fields")),
 			patch.object(install, "ensure_item_category_permissions", lambda: calls.append("item perms")),
 			patch.object(install, "ensure_settings", lambda: calls.append("settings")),
 		):
 			install.ensure_configuration()
-		self.assertEqual(calls, ["module", "roles", "fields", "item perms", "settings"])
+		self.assertEqual(calls, ["module", "roles", "item perms", "settings"])
+
+	def test_it_makes_no_custom_field(self):
+		self.assertFalse(hasattr(install, "ensure_custom_fields"))
+		self.assertFalse(hasattr(install, "create_custom_fields"))
 
 
 class TestEnsureModuleDef(unittest.TestCase):
@@ -136,7 +139,9 @@ class TestEnsureItemCategoryPermissions(unittest.TestCase):
 
 	def test_a_new_row_grants_only_its_own_right(self):
 		self.run_with(["Item Manager"], set())
-		calls = {c.args[1]: c.args[2] for c in self.db.set_value.call_args_list if isinstance(c.args[2], dict)}
+		calls = {
+			c.args[1]: c.args[2] for c in self.db.set_value.call_args_list if isinstance(c.args[2], dict)
+		}
 		cleared = calls["row-Regulatory Operator-0"]
 		self.assertEqual(cleared["export"], 0)
 		for extra in ("print", "email", "share", "report", "write", "create", "delete"):

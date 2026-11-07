@@ -57,8 +57,10 @@ or Not Assessed state.
 
 The **Regulatory** tab also has `regulatory_other_category` (for Other), `medical_device_category` (only for Medical Device) and
 `regulatory_owner`. Each item row of the six guarded transactions
-(not the Quotation) gets a collapsed, read-only **Regulatory Snapshot** section (`regulatory_*` fields listed in `custom_fields.SNAPSHOT_FIELDNAMES`). Custom Field definitions live
-in `custom_fields.py` (RA is their only owner). The legacy Item fields *Thai FDA Assessment Status* (`custom_thai_fda_applicability`)
+(not the Quotation) gets a collapsed, read-only **Regulatory Snapshot** section (`regulatory_*` fields listed in `custom_fields.SNAPSHOT_FIELDNAMES`). The 71 RA fields are DocFields in the DocType JSON of Item and of
+the six item tables, not Custom Fields (migrate does only schema: Role Profile Authority Design 12.1, batch e); `custom_fields.RA_FIELDS` lists
+their names. A site that made them as Custom Fields loses those rows to the schema patch `move_fork_only_fields_e` of the Connect Diagnostics
+app (the column and its data stay, what the site changed in Customize Form stays as a Property Setter). The legacy Item fields *Thai FDA Assessment Status* (`custom_thai_fda_applicability`)
 and *Thai FDA Assessment Reason / Notes* (`custom_thai_fda_assessment_note`) are retired by the patch described under
 [Retiring the Thai FDA Assessment Status](#retiring-the-thai-fda-assessment-status). Sites installed before the module was
 renamed from "Medical Device" also kept Item `is_medical_device`, `regulatory_registration_requirement`,
@@ -211,7 +213,7 @@ are shown to every RA role; stock **value** only to users who can read Bin.
 `translate_thai_fda_to_english` (which turns Thai select values into English; the merge accepts both forms). It reads the legacy
 tables with SQL only, is a no-op when they do not exist, and is idempotent. It never drops or deletes legacy data.
 
-* It first calls `install.ensure_configuration()` so that the Custom Fields exist before Items are written.
+* It first calls `install.ensure_configuration()` so that the module, the roles and the settings exist before Items are written.
 * Legacy rows are grouped by the normalized registration number (spaces, punctuation and case ignored). A group becomes **one**
   Regulatory Product Registration named like the number on the newest row, with one registered-product line per legacy row (Item,
   product name, identifier = registration number, line status Active). A blank number becomes `LEGACY-<legacy name>`.
@@ -280,8 +282,7 @@ rows in `tabSingles`; nothing in the code requires it. The Item columns `custom_
 `erpnext.patches.v16_0.remove_thai_fda_assessment_status` runs in `[post_model_sync]` right after the merge patch, so the categories
 copied from the merged registrations come first.
 
-* While the Custom Field `custom_thai_fda_applicability` (and its column) still exists, it creates the RA Custom Fields if they are
-  missing (the merge patch does so only when it has legacy registrations) and gives every Item assessed *Registration Required*
+* While the Custom Field `custom_thai_fda_applicability` (and its column) still exists, it gives every Item assessed *Registration Required*
   (English or Thai value) that still has no Product Category the category **Other** with Other Category **Not specified (legacy)**, so
   it stays checked on transactions. It prints that count, and the count of Items assessed *Not Required / Exempt* that already have a
   Product Category (only possible when categories were set before this patch): those are checked from now on unless the category is
@@ -312,11 +313,10 @@ union all select 'Notification', name from `tabNotification` where concat_ws(' '
 Then run `bench --site <site> migrate`, which will
 
 1. sync the RA DocTypes, reports and the workspace (the *Regulatory Affairs* Module Def and the three roles are created by the
-   DocType sync itself; `install.ensure_module_def` also creates the Module Def if the sync did not, because the Custom Fields name it);
+   DocType sync itself; `install.ensure_module_def` also creates the Module Def if the sync did not, because the DocTypes name it);
 2. run the post-model-sync patches: `translate_thai_fda_to_english`, then the merge patch (which calls
    `install.ensure_configuration`), then `remove_thai_fda_assessment_status`;
-3. run `erpnext.regulatory_affairs.install.after_migrate`: ensures the roles, creates the Custom Fields on Item, the six transactions and
-   their item rows, and seeds the expiry alert rules once (only when the settings have never been saved).
+3. run `erpnext.regulatory_affairs.install.after_migrate`: ensures the roles and the level-1 Item rights, and seeds the expiry alert rules once (only when the settings have never been saved).
 
 **Warning: first scheduler run.** The migrated registrations are new RA records, so the first daily run after migrating treats every
 one inside the renewal window as new work: with *Auto Create Renewal Action* on (renewal window default 365 days) it creates a Renewal

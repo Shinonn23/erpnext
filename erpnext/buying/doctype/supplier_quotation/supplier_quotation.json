@@ -120,7 +120,10 @@
   "column_break_57",
   "title",
   "opportunity",
-  "connections_tab"
+  "connections_tab",
+  "connect_operations_tab",
+  "connect_approval_section",
+  "connect_approval_column"
  ],
  "fields": [
   {
@@ -941,6 +944,20 @@
    "fieldname": "auto_repeat_section",
    "fieldtype": "Section Break",
    "label": "Auto Repeat"
+  },
+  {
+   "fieldname": "connect_operations_tab",
+   "fieldtype": "Tab Break",
+   "label": "Operations and Approval"
+  },
+  {
+   "fieldname": "connect_approval_section",
+   "fieldtype": "Section Break",
+   "label": "Approval Status"
+  },
+  {
+   "fieldname": "connect_approval_column",
+   "fieldtype": "Column Break"
   }
  ],
  "grid_page_length": 50,
@@ -949,7 +966,7 @@
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-09-30 23:24:44.044604",
+ "modified": "2026-11-07 16:00:00.000000",
  "modified_by": "Administrator",
  "module": "Buying",
  "name": "Supplier Quotation",

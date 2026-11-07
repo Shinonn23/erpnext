@@ -41,10 +41,7 @@ def execute():
 
 def keep_required_items_regulated() -> list[str]:
 	"""Give Items assessed as Registration Required without a Product Category the Other category."""
-	# The merge patch creates the Custom Fields only when it has legacy registrations to merge.
-	from erpnext.regulatory_affairs.install import ensure_custom_fields
-
-	ensure_custom_fields()
+	# (the Product Category column is a DocField of Item: the model sync made it before this patch)
 	rows = frappe.db.sql(
 		f"""select name from `tabItem`
 		where `{LEGACY_ASSESSMENT_FIELD}` in %(required)s and ifnull(`{ITEM_CATEGORY_FIELD}`, '') = ''""",

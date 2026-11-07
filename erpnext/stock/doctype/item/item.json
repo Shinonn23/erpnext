@@ -147,6 +147,17 @@
   "inspection_required_before_delivery",
   "column_break_pxjh",
   "quality_inspection_template",
+  "regulatory_tab",
+  "regulatory_product_category",
+  "regulatory_other_category",
+  "medical_device_category",
+  "regulatory_owner",
+  "regulatory_current_section",
+  "current_regulatory_registration",
+  "current_newcode",
+  "regulatory_current_column",
+  "current_registration_expiry",
+  "current_registration_status",
   "pricing_tab",
   "item_prices_column",
   "prices_html",
@@ -1160,6 +1171,78 @@
    "fieldname": "max_storage_days",
    "fieldtype": "Int",
    "label": "Max Storage Days"
+  },
+  {
+   "fieldname": "regulatory_tab",
+   "fieldtype": "Tab Break",
+   "label": "Regulatory"
+  },
+  {
+   "description": "Set by Regulatory Affairs. A Thai FDA product group needs a registration in force to be sold; Not Regulated needs none. An Item that is still blank is unclassified and is not sold.",
+   "fieldname": "regulatory_product_category",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Product Category",
+   "options": "\nMedical Device\nFood\nDrug\nCosmetic\nHazardous Substance\nHerbal Product\nOther\nNot Regulated",
+   "permlevel": 1
+  },
+  {
+   "depends_on": "eval:doc.regulatory_product_category == 'Other'",
+   "fieldname": "regulatory_other_category",
+   "fieldtype": "Data",
+   "label": "Other Category"
+  },
+  {
+   "depends_on": "eval:doc.regulatory_product_category == 'Medical Device'",
+   "fieldname": "medical_device_category",
+   "fieldtype": "Select",
+   "label": "Medical Device Category",
+   "options": "\nIVD\nNon-IVD\nOther"
+  },
+  {
+   "fieldname": "regulatory_owner",
+   "fieldtype": "Link",
+   "label": "Regulatory Owner",
+   "options": "User"
+  },
+  {
+   "depends_on": "eval:doc.regulatory_product_category",
+   "fieldname": "regulatory_current_section",
+   "fieldtype": "Section Break",
+   "label": "Current Regulatory Coverage"
+  },
+  {
+   "fieldname": "current_regulatory_registration",
+   "fieldtype": "Link",
+   "label": "Current Registration",
+   "no_copy": 1,
+   "options": "Regulatory Product Registration",
+   "read_only": 1
+  },
+  {
+   "fieldname": "current_newcode",
+   "fieldtype": "Data",
+   "label": "Current NEWCODE",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "regulatory_current_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "current_registration_expiry",
+   "fieldtype": "Date",
+   "label": "Current Registration Expiry",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "current_registration_status",
+   "fieldtype": "Data",
+   "label": "Current Registration Status",
+   "no_copy": 1,
+   "read_only": 1
   }
  ],
  "icon": "package",
@@ -1167,7 +1250,7 @@
  "image_field": "image",
  "links": [],
  "make_attachments_public": 1,
- "modified": "2026-11-07 14:00:00.000000",
+ "modified": "2026-11-07 16:00:00.000000",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Item",

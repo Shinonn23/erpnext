@@ -38,6 +38,7 @@
   "phone_ext",
   "organization_section",
   "company_name",
+  "tax_id",
   "no_of_employees",
   "column_break_28",
   "annual_revenue",
@@ -548,6 +549,11 @@
    "fieldname": "utm_analytics_section",
    "fieldtype": "Section Break",
    "label": "Analytics"
+  },
+  {
+   "fieldname": "tax_id",
+   "fieldtype": "Data",
+   "label": "Tax ID"
   }
  ],
  "grid_page_length": 50,
@@ -555,7 +561,7 @@
  "idx": 5,
  "image_field": "image",
  "links": [],
- "modified": "2026-09-30 23:24:44.044604",
+ "modified": "2026-11-07 16:00:00.000000",
  "modified_by": "Administrator",
  "module": "CRM",
  "name": "Lead",

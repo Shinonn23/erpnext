@@ -10,6 +10,7 @@
  "field_order": [
   "customer_section",
   "company",
+  "department",
   "company_tax_id",
   "naming_series",
   "customer",
@@ -246,7 +247,17 @@
   "custody_loan_source_doctype",
   "custody_loan_source_name",
   "is_discounted",
-  "connections_tab"
+  "connections_tab",
+  "connect_operations_tab",
+  "connect_project_acceptance_section",
+  "operation_acceptance",
+  "connect_asset_disposal_section",
+  "operation_disposal_approval",
+  "connect_asset_disposal_column",
+  "requires_asset_disposal_approval",
+  "asset_disposal_value",
+  "connect_approval_section",
+  "connect_approval_column"
  ],
  "fields": [
   {
@@ -2410,6 +2421,74 @@
    "label": "Title",
    "no_copy": 1,
    "print_hide": 1
+  },
+  {
+   "description": "Optional: attach the approved disposal evidence if you have it.",
+   "fieldname": "operation_disposal_approval",
+   "fieldtype": "Attach",
+   "label": "Asset Disposal Approval Evidence",
+   "no_copy": 1
+  },
+  {
+   "fieldname": "requires_asset_disposal_approval",
+   "fieldtype": "Check",
+   "label": "Requires Asset Disposal Approval",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "asset_disposal_value",
+   "fieldtype": "Currency",
+   "label": "Asset Disposal Net Book Value",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "description": "Filled when you save: from the source document (a lab invoice: its warehouse), else your Employee; change it while Draft or Rejected.",
+   "fieldname": "department",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Selling Department",
+   "no_copy": 0,
+   "options": "Department",
+   "read_only_depends_on": "eval:doc.docstatus > 0 || (doc.workflow_state && !/(Draft|Rejected)$/.test(doc.workflow_state))"
+  },
+  {
+   "fieldname": "operation_acceptance",
+   "fieldtype": "Attach",
+   "label": "Project Milestone Acceptance",
+   "no_copy": 1
+  },
+  {
+   "fieldname": "connect_operations_tab",
+   "fieldtype": "Tab Break",
+   "label": "Operations and Approval"
+  },
+  {
+   "depends_on": "eval:doc.project || (doc.items || []).some(row => row.project) || doc.operation_acceptance",
+   "fieldname": "connect_project_acceptance_section",
+   "fieldtype": "Section Break",
+   "label": "Project Acceptance"
+  },
+  {
+   "depends_on": "eval:(!doc.is_return && (doc.items || []).some(row => row.is_fixed_asset && row.asset)) || doc.operation_disposal_approval",
+   "fieldname": "connect_asset_disposal_section",
+   "fieldtype": "Section Break",
+   "label": "Asset Disposal"
+  },
+  {
+   "fieldname": "connect_asset_disposal_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "connect_approval_section",
+   "fieldtype": "Section Break",
+   "label": "Approval Status"
+  },
+  {
+   "fieldname": "connect_approval_column",
+   "fieldtype": "Column Break"
   }
  ],
  "grid_page_length": 50,
@@ -2423,7 +2502,7 @@
    "link_fieldname": "consolidated_invoice"
   }
  ],
- "modified": "2026-10-21 05:30:00.000000",
+ "modified": "2026-11-07 16:00:00.000000",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Sales Invoice",

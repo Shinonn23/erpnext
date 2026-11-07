@@ -91,7 +91,17 @@
   "column_break_51",
   "reference_purchase_receipt",
   "job_card_item",
-  "bom_secondary_item"
+  "bom_secondary_item",
+  "regulatory_snapshot_section",
+  "regulatory_registration",
+  "regulatory_newcode",
+  "regulatory_identifier",
+  "regulatory_manufacturer",
+  "regulatory_snapshot_column",
+  "regulatory_manufacturer_country",
+  "regulatory_registration_status",
+  "regulatory_registration_expiry",
+  "regulatory_coverage_date"
  ],
  "fields": [
   {
@@ -732,6 +742,76 @@
    "label": "Valuation Type",
    "options": "\nValuation Rate\n% of Component Cost\nManual",
    "read_only_depends_on": "eval:!doc.secondary_item_type || doc.bom_secondary_item"
+  },
+  {
+   "collapsible": 1,
+   "depends_on": "eval:doc.regulatory_coverage_date",
+   "fieldname": "regulatory_snapshot_section",
+   "fieldtype": "Section Break",
+   "label": "Regulatory Snapshot"
+  },
+  {
+   "fieldname": "regulatory_registration",
+   "fieldtype": "Link",
+   "label": "Registration",
+   "no_copy": 1,
+   "options": "Regulatory Product Registration",
+   "read_only": 1
+  },
+  {
+   "fieldname": "regulatory_newcode",
+   "fieldtype": "Data",
+   "label": "FDA NEWCODE",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "regulatory_identifier",
+   "fieldtype": "Data",
+   "label": "Identifier",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "regulatory_manufacturer",
+   "fieldtype": "Link",
+   "label": "Regulatory Manufacturer",
+   "no_copy": 1,
+   "options": "Manufacturer",
+   "read_only": 1
+  },
+  {
+   "fieldname": "regulatory_snapshot_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "regulatory_manufacturer_country",
+   "fieldtype": "Link",
+   "label": "Regulatory Manufacturer Country",
+   "no_copy": 1,
+   "options": "Country",
+   "read_only": 1
+  },
+  {
+   "fieldname": "regulatory_registration_status",
+   "fieldtype": "Data",
+   "label": "Registration Status at Coverage Date",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "regulatory_registration_expiry",
+   "fieldtype": "Date",
+   "label": "Registration Expiry",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "regulatory_coverage_date",
+   "fieldtype": "Date",
+   "label": "Coverage Date",
+   "no_copy": 1,
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,
@@ -739,7 +819,7 @@
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-10-21 05:30:00.000000",
+ "modified": "2026-11-07 16:00:00.000000",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Stock Entry Detail",

@@ -1,11 +1,10 @@
-"""Idempotent RA setup: roles, Custom Fields and seed alert rules.
+"""Idempotent RA setup: roles, the Item category rights and seed alert rules.
 
 Runs after install and on every migrate; it never assigns users or owners.
 """
 
 import frappe
 from frappe.cache_manager import clear_global_cache
-from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
 from erpnext.regulatory_affairs.constants import (
 	MANAGED_ROLES,
@@ -15,7 +14,7 @@ from erpnext.regulatory_affairs.constants import (
 	ROLE_VIEWER,
 	SETTINGS,
 )
-from erpnext.regulatory_affairs.custom_fields import CUSTOM_FIELDS, ITEM_CATEGORY_PERMLEVEL
+from erpnext.regulatory_affairs.custom_fields import ITEM_CATEGORY_PERMLEVEL
 
 DEFAULT_ALERT_RULES = (
 	(365, "Info", "Create Renewal Action"),
@@ -69,13 +68,12 @@ def after_migrate():
 def ensure_configuration():
 	ensure_module_def()
 	ensure_roles()
-	ensure_custom_fields()
 	ensure_item_category_permissions()
 	ensure_settings()
 
 
 def ensure_module_def():
-	"""Custom Fields name this module, so its Module Def must exist even when DocType sync has not made it."""
+	"""The module's DocTypes name it, so its Module Def must exist even when DocType sync has not made it."""
 	if frappe.db.exists("Module Def", MODULE):
 		return
 	frappe.get_doc({"doctype": "Module Def", "module_name": MODULE, "app_name": "erpnext"}).insert(
@@ -94,10 +92,6 @@ def ensure_roles():
 		frappe.get_doc({"doctype": "Role", "role_name": role_name, "desk_access": 1, "is_custom": 1}).insert(
 			ignore_permissions=True
 		)
-
-
-def ensure_custom_fields():
-	create_custom_fields(CUSTOM_FIELDS, ignore_validate=True)
 
 
 def ensure_item_category_permissions():

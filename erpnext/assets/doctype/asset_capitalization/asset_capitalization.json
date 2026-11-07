@@ -48,7 +48,11 @@
   "dimension_col_break",
   "project",
   "department",
-  "target_fixed_asset_account"
+  "target_fixed_asset_account",
+  "connect_approval_section",
+  "workflow_state",
+  "connect_approval_column",
+  "approval_snapshot"
  ],
  "fields": [
   {
@@ -299,13 +303,39 @@
   {
    "fieldname": "column_break_katv",
    "fieldtype": "Column Break"
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "workflow_state",
+   "fieldtype": "Link",
+   "label": "Workflow State",
+   "no_copy": 1,
+   "options": "Workflow State",
+   "read_only": 1
+  },
+  {
+   "fieldname": "approval_snapshot",
+   "fieldtype": "Long Text",
+   "hidden": 1,
+   "label": "Approval Snapshot",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "connect_approval_section",
+   "fieldtype": "Section Break",
+   "label": "Approval Status"
+  },
+  {
+   "fieldname": "connect_approval_column",
+   "fieldtype": "Column Break"
   }
  ],
  "icon": "trending-up",
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-10-21 05:30:00.000000",
+ "modified": "2026-11-07 16:00:00.000000",
  "modified_by": "Administrator",
  "module": "Assets",
  "name": "Asset Capitalization",

@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, call, patch
 import frappe
 
 from erpnext.patches.v16_0 import remove_thai_fda_assessment_status as removal
-from erpnext.regulatory_affairs.custom_fields import CUSTOM_FIELDS
+from erpnext.regulatory_affairs.custom_fields import RA_FIELDS
 
 STATUS_FIELD = frappe._dict(
 	name="Item-custom_thai_fda_applicability", fieldname="custom_thai_fda_applicability"
@@ -23,16 +23,14 @@ class TestKeepRequiredItemsRegulated(unittest.TestCase):
 		db.sql.side_effect = [[{"name": item} for item in items], None]
 		with (
 			patch.object(removal.frappe, "db", db),
-			patch("erpnext.regulatory_affairs.install.ensure_custom_fields") as ensure_custom_fields,
 			patch("builtins.print") as printed,
 		):
 			result = removal.keep_required_items_regulated()
-		return result, db, ensure_custom_fields, printed
+		return result, db, printed
 
 	def test_required_items_without_a_category_become_other_not_specified(self):
-		result, db, ensure_custom_fields, printed = self.keep(["ITEM-1", "ITEM-2"])
+		result, db, printed = self.keep(["ITEM-1", "ITEM-2"])
 		self.assertEqual(result, ["ITEM-1", "ITEM-2"])
-		ensure_custom_fields.assert_called_once_with()
 		select, params = db.sql.call_args_list[0].args
 		self.assertIn("`custom_thai_fda_applicability` in %(required)s", select)
 		self.assertIn("ifnull(`regulatory_product_category`, '') = ''", select)
@@ -47,7 +45,7 @@ class TestKeepRequiredItemsRegulated(unittest.TestCase):
 		self.assertIn("2 Item(s)", printed.call_args.args[0])
 
 	def test_nothing_to_convert_writes_nothing(self):
-		result, db, _, printed = self.keep([])
+		result, db, printed = self.keep([])
 		self.assertEqual(result, [])
 		self.assertEqual(db.sql.call_count, 1)
 		printed.assert_not_called()
@@ -140,5 +138,5 @@ class TestRegistration(unittest.TestCase):
 		self.assertEqual(lines.index("erpnext.patches.v16_0.remove_thai_fda_assessment_status"), merge + 1)
 
 	def test_regulatory_affairs_does_not_create_the_deleted_fields_again(self):
-		fieldnames = {spec["fieldname"] for specs in CUSTOM_FIELDS.values() for spec in specs}
+		fieldnames = {name for names in RA_FIELDS.values() for name in names}
 		self.assertFalse(fieldnames & set(removal.LEGACY_FIELDS))

@@ -26,13 +26,14 @@ class TestStockToAssetConversion(unittest.TestCase):
 	def test_below_threshold_is_expensed_without_depreciation(self):
 		self.assertEqual(get_accounting_treatment(99.99, 100), ("Expense", 0))
 
-	def test_at_or_above_threshold_is_capitalized_and_depreciated(self):
-		self.assertEqual(get_accounting_treatment(100, 100), ("Capitalized", 1))
+	def test_above_threshold_is_capitalized_and_depreciated(self):
+		# exactly the threshold is expensed (Siwat, 2 Nov 2026); see test_capitalization_threshold.py
+		self.assertEqual(get_accounting_treatment(100, 100), ("Expense", 0))
 		self.assertEqual(get_accounting_treatment(100.01, 100), ("Capitalized", 1))
 
-	def test_threshold_defaults_to_expense_below_and_scheduled_at_or_above(self):
+	def test_threshold_defaults_to_expense_up_to_and_scheduled_above(self):
 		self.assertEqual(get_default_accounting_treatment(99.99, 100), "Expense")
-		self.assertEqual(get_default_accounting_treatment(100, 100), "Scheduled Depreciation")
+		self.assertEqual(get_default_accounting_treatment(100, 100), "Expense")
 		self.assertEqual(get_default_accounting_treatment(100.01, 100), "Scheduled Depreciation")
 
 	def test_zero_threshold_defaults_to_scheduled_depreciation(self):

@@ -709,7 +709,7 @@ def run(dry_run: bool = False) -> dict:
 	if dry_run:
 		return result
 
-	# Custom Fields must exist before Items are written (RA's own after_migrate runs later).
+	# The module, roles and settings must exist before Items are written (RA's own after_migrate runs later).
 	from erpnext.regulatory_affairs.install import ensure_configuration
 
 	ensure_configuration()

@@ -28,12 +28,24 @@
   "items",
   "section_break_9",
   "expense_account",
+  "count_variance_applied",
   "column_break_13",
   "difference_amount",
   "amended_from",
   "accounting_dimensions_section",
   "cost_center",
-  "dimension_col_break"
+  "dimension_col_break",
+  "connect_count_review_section",
+  "stock_adjustment_reason",
+  "stock_counted_by",
+  "stock_posted_by",
+  "connect_count_review_column",
+  "requires_finance_review",
+  "approval_adjustment_value",
+  "connect_approval_section",
+  "workflow_state",
+  "connect_approval_column",
+  "approval_snapshot"
  ],
  "fields": [
   {
@@ -203,13 +215,94 @@
    "fieldtype": "Data",
    "is_virtual": 1,
    "label": "Last Scanned Warehouse"
+  },
+  {
+   "fieldname": "stock_counted_by",
+   "fieldtype": "Link",
+   "label": "Physical Counted By",
+   "no_copy": 1,
+   "options": "User"
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "stock_posted_by",
+   "fieldtype": "Link",
+   "label": "Adjustment Posted By",
+   "no_copy": 1,
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "approval_adjustment_value",
+   "fieldtype": "Currency",
+   "label": "Gross Stock Adjustment Value",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "workflow_state",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Workflow State",
+   "no_copy": 1,
+   "options": "Workflow State",
+   "read_only": 1
+  },
+  {
+   "fieldname": "stock_adjustment_reason",
+   "fieldtype": "Small Text",
+   "label": "Stock Adjustment Reason",
+   "reqd": 1
+  },
+  {
+   "fieldname": "requires_finance_review",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "Requires Finance Review",
+   "read_only": 1
+  },
+  {
+   "fieldname": "approval_snapshot",
+   "fieldtype": "Long Text",
+   "hidden": 1,
+   "label": "Approval Snapshot",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "count_variance_applied",
+   "fieldtype": "Small Text",
+   "hidden": 1,
+   "label": "Count Variance Applied",
+   "no_copy": 1,
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "connect_count_review_section",
+   "fieldtype": "Section Break",
+   "label": "Count and Adjustment Review"
+  },
+  {
+   "fieldname": "connect_count_review_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "connect_approval_section",
+   "fieldtype": "Section Break",
+   "label": "Approval Status"
+  },
+  {
+   "fieldname": "connect_approval_column",
+   "fieldtype": "Column Break"
   }
  ],
  "icon": "scale",
  "idx": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-10-21 05:30:00.000000",
+ "modified": "2026-11-07 16:00:00.000000",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Stock Reconciliation",

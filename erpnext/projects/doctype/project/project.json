@@ -68,7 +68,18 @@
   "copied_from",
   "section_break0",
   "notes",
-  "connections_tab"
+  "connections_tab",
+  "connect_operations_tab",
+  "connect_project_acceptance_section",
+  "operation_acceptance",
+  "connect_project_acceptance_column",
+  "operation_approved_cost",
+  "operation_source_doctype",
+  "operation_source_name",
+  "connect_approval_section",
+  "workflow_state",
+  "connect_approval_column",
+  "approval_snapshot"
  ],
  "fields": [
   {
@@ -486,6 +497,78 @@
    "fieldtype": "Tab Break",
    "label": "Connections",
    "show_dashboard": 1
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "workflow_state",
+   "fieldtype": "Link",
+   "label": "Workflow State",
+   "no_copy": 1,
+   "options": "Workflow State",
+   "read_only": 1
+  },
+  {
+   "fieldname": "approval_snapshot",
+   "fieldtype": "Long Text",
+   "hidden": 1,
+   "label": "Approval Snapshot",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "operation_source_doctype",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Native HR Source Type",
+   "no_copy": 1,
+   "options": "DocType",
+   "read_only": 1
+  },
+  {
+   "fieldname": "operation_source_name",
+   "fieldtype": "Dynamic Link",
+   "hidden": 1,
+   "label": "Native HR Source",
+   "no_copy": 1,
+   "options": "operation_source_doctype",
+   "read_only": 1
+  },
+  {
+   "fieldname": "operation_acceptance",
+   "fieldtype": "Attach",
+   "label": "Customer Acceptance",
+   "no_copy": 1
+  },
+  {
+   "fieldname": "operation_approved_cost",
+   "fieldtype": "Currency",
+   "label": "MD Approved Cost",
+   "no_copy": 1,
+   "options": "Company:company:default_currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "connect_operations_tab",
+   "fieldtype": "Tab Break",
+   "label": "Operations and Approval"
+  },
+  {
+   "fieldname": "connect_project_acceptance_section",
+   "fieldtype": "Section Break",
+   "label": "Completion and Cost Approval"
+  },
+  {
+   "fieldname": "connect_project_acceptance_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "connect_approval_section",
+   "fieldtype": "Section Break",
+   "label": "Approval Status"
+  },
+  {
+   "fieldname": "connect_approval_column",
+   "fieldtype": "Column Break"
   }
  ],
  "icon": "folder-kanban",
@@ -493,7 +576,7 @@
  "index_web_pages_for_search": 1,
  "links": [],
  "max_attachments": 4,
- "modified": "2026-09-30 23:24:44.044604",
+ "modified": "2026-11-07 16:00:00.000000",
  "modified_by": "Administrator",
  "module": "Projects",
  "name": "Project",

@@ -22,6 +22,8 @@
   "column_break1",
   "order_type",
   "company",
+  "department",
+  "quotation_department_manager",
   "has_unit_price_items",
   "amended_from",
   "currency_and_price_list",
@@ -76,6 +78,9 @@
   "coupon_code",
   "column_break_46",
   "additional_discount_percentage",
+  "approval_discount_percentage",
+  "quotation_approval_band",
+  "quotation_group_approver_roles",
   "discount_amount",
   "referral_sales_partner",
   "sec_tax_breakup",
@@ -141,7 +146,10 @@
   "opportunity",
   "enq_det",
   "supplier_quotation",
-  "connections_tab"
+  "connections_tab",
+  "connect_operations_tab",
+  "connect_approval_section",
+  "connect_approval_column"
  ],
  "fields": [
   {
@@ -1143,13 +1151,73 @@
    "label": "Title",
    "no_copy": 1,
    "print_hide": 1
+  },
+  {
+   "fieldname": "approval_discount_percentage",
+   "fieldtype": "Percent",
+   "label": "Approval Discount Percentage",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "quotation_approval_band",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Approval Band",
+   "no_copy": 1,
+   "options": "\nNo Approval\nItem Group\nManaging Director\nChief Executive Officer",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.quotation_approval_band == 'Item Group'",
+   "fieldname": "quotation_group_approver_roles",
+   "fieldtype": "Small Text",
+   "label": "Item Group Approver Roles",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "description": "Filled when you save: from the source document (a lab invoice: its warehouse), else your Employee; change it while Draft or Rejected.",
+   "fieldname": "department",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Selling Department",
+   "no_copy": 0,
+   "options": "Department",
+   "read_only_depends_on": "eval:doc.docstatus > 0 || (doc.workflow_state && !/(Draft|Rejected)$/.test(doc.workflow_state))"
+  },
+  {
+   "description": "Retired (2 Nov 2026): a Quotation is approved by the Sales Manager, the Managing Director or the Chief Executive Officer only. Nothing sets this field any more.",
+   "fieldname": "quotation_department_manager",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Quotation Department Manager",
+   "no_copy": 1,
+   "options": "User",
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "connect_operations_tab",
+   "fieldtype": "Tab Break",
+   "label": "Operations and Approval"
+  },
+  {
+   "fieldname": "connect_approval_section",
+   "fieldtype": "Section Break",
+   "label": "Approval Status"
+  },
+  {
+   "fieldname": "connect_approval_column",
+   "fieldtype": "Column Break"
   }
  ],
  "icon": "file-text",
  "idx": 82,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-09-30 23:24:44.044604",
+ "modified": "2026-11-07 16:00:00.000000",
  "modified_by": "Administrator",
  "module": "Selling",
  "name": "Quotation",

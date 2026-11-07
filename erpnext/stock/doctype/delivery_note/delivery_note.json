@@ -20,10 +20,12 @@
   "set_posting_time",
   "column_break_10",
   "company",
+  "department",
   "amended_from",
   "is_return",
   "issue_credit_note",
   "return_against",
+  "return_reason",
   "accounting_dimensions_section",
   "cost_center",
   "column_break_18",
@@ -181,7 +183,10 @@
   "column_break5",
   "excise_page",
   "instructions",
-  "connections_tab"
+  "connections_tab",
+  "connect_operations_tab",
+  "connect_approval_section",
+  "connect_approval_column"
  ],
  "fields": [
   {
@@ -1533,13 +1538,45 @@
    "label": "Title",
    "no_copy": 1,
    "print_hide": 1
+  },
+  {
+   "description": "Filled when you save: from the source document (a lab invoice: its warehouse), else your Employee; change it while Draft or Rejected.",
+   "fieldname": "department",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Selling Department",
+   "no_copy": 0,
+   "options": "Department",
+   "read_only_depends_on": "eval:doc.docstatus > 0 || (doc.workflow_state && !/(Draft|Rejected)$/.test(doc.workflow_state))"
+  },
+  {
+   "depends_on": "eval:doc.is_return && !doc.is_custody_loan_transaction",
+   "fieldname": "return_reason",
+   "fieldtype": "Small Text",
+   "label": "Return Reason",
+   "no_copy": 1
+  },
+  {
+   "fieldname": "connect_operations_tab",
+   "fieldtype": "Tab Break",
+   "label": "Operations and Approval"
+  },
+  {
+   "fieldname": "connect_approval_section",
+   "fieldtype": "Section Break",
+   "label": "Approval Status"
+  },
+  {
+   "fieldname": "connect_approval_column",
+   "fieldtype": "Column Break"
   }
  ],
  "icon": "truck",
  "idx": 146,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-10-21 05:30:00.000000",
+ "modified": "2026-11-07 16:00:00.000000",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Delivery Note",

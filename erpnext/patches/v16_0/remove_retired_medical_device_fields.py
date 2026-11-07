@@ -1,6 +1,6 @@
 """Delete the Custom Fields left over from the first "Medical Device" version of Regulatory Affairs.
 
-`ensure_custom_fields` only creates and updates the fields it defines, so the retired ones stayed on sites
+The installer only created and updated the fields it defined, so the retired ones stayed on sites
 installed before the rename: Item "Is Medical Device", "Registration Requirement", "Exemption Reason" and a
 second "Current Registration", and a second "Regulatory Override" on the six guarded transactions. The two
 Links point to DocTypes that no longer exist. The Item "Regulatory Owner" kept `depends_on` on the retired
