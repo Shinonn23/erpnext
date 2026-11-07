@@ -565,7 +565,57 @@ def set_missing_values(source, target_doc):
 	if target_doc.doctype == "Purchase Order" and getdate(target_doc.schedule_date) < getdate(nowdate()):
 		target_doc.schedule_date = None
 	target_doc.run_method("set_missing_values")
+	if target_doc.doctype == "Purchase Order":
+		apply_estimated_rates(target_doc)
 	target_doc.run_method("calculate_taxes_and_totals")
+
+
+def apply_estimated_rates(purchase_order):
+	"""Start a Purchase Order row from the Material Request row's estimated price in the Purchase Order's currency.
+
+	The mapper copies `rate` by field name, but a Material Request rate is always in the company currency, so a USD order
+	would start at the Baht amount. The row's `estimate_rate` (in `estimate_currency`) is used instead; another currency
+	goes through the company currency at the order's exchange rate. A row without an estimate keeps what was mapped."""
+	company_currency = frappe.get_cached_value("Company", purchase_order.company, "default_currency")
+	currency = purchase_order.get("currency") or company_currency
+	order_rate = flt(purchase_order.get("conversion_rate"))
+	for row in purchase_order.get("items") or []:
+		if not row.get("material_request_item"):
+			continue
+		source = frappe.db.get_value(
+			"Material Request Item",
+			row.material_request_item,
+			["estimate_rate", "estimate_currency", "estimate_exchange_rate", "rate"],
+			as_dict=True,
+		)
+		if not source or flt(source.estimate_rate) <= 0:
+			continue
+		estimate_currency = source.estimate_currency or company_currency
+		if estimate_currency == currency:
+			rate = flt(source.estimate_rate)
+		else:
+			base_rate = (
+				flt(source.estimate_rate) * (flt(source.estimate_exchange_rate) or 1)
+				if estimate_currency != company_currency
+				else flt(source.estimate_rate)
+			)
+			if currency == company_currency:
+				rate = base_rate
+			else:
+				if order_rate <= 0:
+					from erpnext.setup.utils import get_exchange_rate
+
+					order_rate = flt(
+						get_exchange_rate(
+							currency, company_currency, purchase_order.get("transaction_date"), "for_buying"
+						)
+					)
+				rate = base_rate / order_rate if order_rate > 0 else 0
+		if rate > 0:
+			row.rate = rate
+			row.price_list_rate = rate
+			row.discount_percentage = 0
+			row.discount_amount = 0
 
 
 def get_source_item_for_qty(item, qty):

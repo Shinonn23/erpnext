@@ -23,6 +23,7 @@ class PriceList(Document):
 		countries: DF.Table[PriceListCountry]
 		currency: DF.Link
 		enabled: DF.Check
+		is_estimate: DF.Check
 		price_list_name: DF.Data
 		price_not_uom_dependent: DF.Check
 		selling: DF.Check
@@ -42,7 +43,8 @@ class PriceList(Document):
 			if not frappe.get_single_value("Selling Settings", "selling_price_list"):
 				frappe.set_value("Selling Settings", "Selling Settings", "selling_price_list", self.name)
 
-		elif cint(self.buying):
+		elif cint(self.buying) and not cint(self.is_estimate):
+			# an Estimated Buying list is never the default buying list: a Purchase Order cannot use it
 			if not frappe.db.get_single_value("Buying Settings", "buying_price_list"):
 				frappe.set_value("Buying Settings", "Buying Settings", "buying_price_list", self.name)
 
