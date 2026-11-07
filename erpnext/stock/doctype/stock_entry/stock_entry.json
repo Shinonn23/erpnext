@@ -1010,7 +1010,8 @@
    "fieldname": "operation_approval_route",
    "fieldtype": "Data",
    "label": "Approval Route",
-   "read_only": 1
+   "read_only": 1,
+   "depends_on": "eval:doc.operation_approval_route"
   },
   {
    "fieldname": "lab_self_submission",

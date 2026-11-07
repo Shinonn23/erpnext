@@ -2435,14 +2435,16 @@
    "fieldtype": "Check",
    "label": "Requires Asset Disposal Approval",
    "no_copy": 1,
-   "read_only": 1
+   "read_only": 1,
+   "depends_on": "eval:doc.requires_asset_disposal_approval"
   },
   {
    "fieldname": "asset_disposal_value",
    "fieldtype": "Currency",
    "label": "Asset Disposal Net Book Value",
    "no_copy": 1,
-   "read_only": 1
+   "read_only": 1,
+   "depends_on": "eval:doc.asset_disposal_value"
   },
   {
    "description": "Filled when you save: from the source document (a lab invoice: its warehouse), else your Employee; change it while Draft or Rejected.",
