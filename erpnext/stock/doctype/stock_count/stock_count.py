@@ -457,7 +457,7 @@ class StockCount(Document):
 	def add_first_count_surplus_rows(self):
 		"""A recount lists what the first count found beyond the system quantity, even where the system holds nothing (the
 		found-elsewhere case): the rows the snapshot lacks are added with System Qty 0, so the recount always prepares and
-		the second counter counts exactly what the first reported. Returns the Item codes of the rows added."""
+		the recount counts exactly what the first reported. Returns the Item codes of the rows added."""
 		if not self.recount_of:
 			return set()
 		pending = self.split_surplus_of(self.recount_of)
@@ -902,7 +902,7 @@ class StockCount(Document):
 		* A serial number the system shows as delivered, lent or issued: noted (``surplus_notes``), the return
 		  document is made, not a receipt.
 		* Any other surplus (a quantity, an unknown serial number): on a first count, a draft recount of those Items
-		  and locations (``recount_stock_count``, a My Tasks "Recount" for the stock team), counted by another person;
+		  and locations (``recount_stock_count``, a My Tasks "Recount" for the stock team);
 		  on the recount, what both counts found is first moved back from the Lost Warehouse as far as it holds the same
 		  Item and batch (the same transfer, no new value), and only the rest is received into the Found Warehouse
 		  (``found_stock_entry``) at the Item's current valuation rate."""
@@ -1035,7 +1035,7 @@ class StockCount(Document):
 		recount.insert(ignore_permissions=True)
 		recount.add_comment(
 			"Info",
-			_("Recount of the surplus found by {0}: another person counts it.").format(self.name),
+			_("Recount of the surplus found by {0}.").format(self.name),
 		)
 		return recount
 

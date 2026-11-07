@@ -173,7 +173,7 @@ frappe.ui.form.on("Stock Count", {
 				frappe.set_route("Form", "Stock Entry", frm.doc.found_transfer_entry)
 			);
 		}
-		// what a count found beyond the system quantity is counted again by another person first
+		// what a count found beyond the system quantity is counted again first
 		if (frm.doc.recount_stock_count) {
 			frm.add_custom_button(__("Recount"), () =>
 				frappe.set_route("Form", "Stock Count", frm.doc.recount_stock_count)
