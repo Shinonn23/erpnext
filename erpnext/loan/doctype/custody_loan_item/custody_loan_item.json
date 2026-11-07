@@ -10,6 +10,7 @@
   "material_request_item",
   "item_column",
   "asset",
+  "quality_inspection",
   "source_location",
   "target_location",
   "balance_section",
@@ -162,6 +163,15 @@
    "label": "Issue Valuation Rate",
    "read_only": 1,
    "hidden": 1
+  },
+  {
+   "fieldname": "quality_inspection",
+   "label": "Quality Inspection",
+   "fieldtype": "Link",
+   "options": "Quality Inspection",
+   "read_only": 1,
+   "no_copy": 1,
+   "print_hide": 1
   }
  ],
  "istable": 1,

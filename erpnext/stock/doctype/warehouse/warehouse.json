@@ -25,6 +25,7 @@
   "customer",
   "stock_control_section",
   "warehouse_type",
+  "warehouse_manager",
   "column_break_qajx",
   "asset_location_section",
   "asset_location",
@@ -44,6 +45,10 @@
   "pin",
   "transit_section",
   "default_in_transit_warehouse",
+  "count_variance_section",
+  "stock_adjustment_account",
+  "count_variance_column",
+  "department",
   "tree_details",
   "lft",
   "rgt",
@@ -313,6 +318,39 @@
    "fieldname": "stock_control_section",
    "fieldtype": "Section Break",
    "label": "Stock Control"
+  },
+  {
+   "fieldname": "count_variance_section",
+   "fieldtype": "Section Break",
+   "label": "Count Variance"
+  },
+  {
+   "description": "A Stock Reconciliation of this warehouse posts its difference here (an Expense account that is not a stock account). Leave empty for the company's Stock Adjustment Account.",
+   "fieldname": "stock_adjustment_account",
+   "fieldtype": "Link",
+   "label": "Count Variance Account",
+   "no_copy": 1,
+   "options": "Account"
+  },
+  {
+   "fieldname": "count_variance_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "The Department that bears the cost of a Stock Reconciliation of this warehouse. Leave empty for the creator's Department.",
+   "fieldname": "department",
+   "fieldtype": "Link",
+   "label": "Cost Department",
+   "no_copy": 1,
+   "options": "Department"
+  },
+  {
+   "description": "Accepts this warehouse's Purchase Receipts. Leave empty for the Stock Manager.",
+   "fieldname": "warehouse_manager",
+   "fieldtype": "Link",
+   "label": "Warehouse Manager",
+   "no_copy": 1,
+   "options": "Employee"
   }
  ],
  "grid_page_length": 50,
@@ -320,7 +358,7 @@
  "idx": 1,
  "is_tree": 1,
  "links": [],
- "modified": "2026-10-20 10:00:00.000000",
+ "modified": "2026-11-07 14:00:00.000000",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Warehouse",

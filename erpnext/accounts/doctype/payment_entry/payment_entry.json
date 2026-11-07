@@ -21,12 +21,15 @@
   "party_type",
   "party",
   "party_name",
+  "thai_advance_for",
   "book_advance_payments_in_separate_party_account",
   "reconcile_on_advance_payment_date",
   "apply_tds",
   "tax_withholding_category",
   "column_break_11",
   "bank_account",
+  "bank_transaction_to_reconcile",
+  "mirror_bank_transaction_to_reconcile",
   "party_bank_account",
   "contact_person",
   "contact_email",
@@ -71,6 +74,7 @@
   "total_taxes_and_charges",
   "deductions_or_loss_section",
   "deductions",
+  "approval_writeoff_amount",
   "section_tax_withholding_entry",
   "tax_withholding_categories",
   "tax_withholding_group",
@@ -104,7 +108,10 @@
   "in_words",
   "amended_from",
   "auto_repeat_section",
-  "auto_repeat"
+  "auto_repeat",
+  "connect_operations_tab",
+  "connect_approval_section",
+  "connect_approval_column"
  ],
  "fields": [
   {
@@ -815,6 +822,49 @@
    "fieldname": "auto_repeat_section",
    "fieldtype": "Section Break",
    "label": "Auto Repeat"
+  },
+  {
+   "depends_on": "eval:(doc.payment_type=='Receive' && doc.party_type=='Customer') || (doc.payment_type=='Pay' && doc.party_type=='Supplier')",
+   "description": "Choose for the amount not allocated to an invoice. Services: VAT and the tax invoice are due on the date the money is received. Goods: VAT arises with the invoice.",
+   "fieldname": "thai_advance_for",
+   "fieldtype": "Select",
+   "label": "Advance For",
+   "options": "\nGoods\nServices"
+  },
+  {
+   "fieldname": "bank_transaction_to_reconcile",
+   "fieldtype": "Link",
+   "label": "Bank Transaction to Reconcile",
+   "options": "Bank Transaction",
+   "read_only": 1
+  },
+  {
+   "fieldname": "mirror_bank_transaction_to_reconcile",
+   "fieldtype": "Link",
+   "label": "Mirror Bank Transaction to Reconcile",
+   "options": "Bank Transaction",
+   "read_only": 1
+  },
+  {
+   "fieldname": "approval_writeoff_amount",
+   "fieldtype": "Currency",
+   "label": "Approval Writeoff Amount",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "connect_operations_tab",
+   "fieldtype": "Tab Break",
+   "label": "Operations and Approval"
+  },
+  {
+   "fieldname": "connect_approval_section",
+   "fieldtype": "Section Break",
+   "label": "Approval Status"
+  },
+  {
+   "fieldname": "connect_approval_column",
+   "fieldtype": "Column Break"
   }
  ],
  "grid_page_length": 50,
@@ -830,7 +880,7 @@
    "table_fieldname": "payment_entries"
   }
  ],
- "modified": "2026-10-21 05:30:00.000000",
+ "modified": "2026-11-07 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Payment Entry",

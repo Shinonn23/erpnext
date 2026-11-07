@@ -13,6 +13,7 @@
   "company",
   "naming_series",
   "stock_entry_type",
+  "issuing_warehouse_manager",
   "purpose",
   "col2",
   "set_posting_time",
@@ -75,6 +76,22 @@
   "dimension_col_break",
   "cost_center",
   "other_info_tab",
+  "operation_request_section",
+  "operation_requester",
+  "workflow_department",
+  "operation_request_column",
+  "operation_issue_type",
+  "maintenance_visit",
+  "operation_evidence_section",
+  "operation_receipt_document",
+  "operation_evidence_column",
+  "operation_receipt_reference",
+  "operation_approval_section",
+  "workflow_state",
+  "operation_approval_column",
+  "operation_approval_route",
+  "lab_self_submission",
+  "approval_snapshot",
   "printing_settings",
   "select_print_heading",
   "print_settings_col_break",
@@ -907,6 +924,120 @@
    "fieldtype": "Link",
    "label": "Cost Center",
    "options": "Cost Center"
+  },
+  {
+   "depends_on": "eval:doc.purpose == 'Material Issue' || doc.operation_requester || doc.workflow_department || doc.maintenance_visit",
+   "fieldname": "operation_request_section",
+   "fieldtype": "Section Break",
+   "label": "Request and Operation"
+  },
+  {
+   "depends_on": "eval:(doc.purpose == 'Material Issue' && doc.operation_issue_type != 'Disposal') || doc.operation_requester",
+   "fieldname": "operation_requester",
+   "fieldtype": "Link",
+   "label": "Requesting Employee",
+   "options": "Employee",
+   "read_only_depends_on": "eval:(doc.items || []).some(row => row.material_request)"
+  },
+  {
+   "depends_on": "eval:(doc.purpose == 'Material Issue' && doc.operation_issue_type != 'Disposal') || doc.workflow_department",
+   "fieldname": "workflow_department",
+   "fieldtype": "Link",
+   "label": "Requesting Department",
+   "options": "Department",
+   "read_only_depends_on": "eval:(doc.items || []).some(row => row.material_request)"
+  },
+  {
+   "fieldname": "operation_request_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Internal Use",
+   "depends_on": "eval:doc.purpose == 'Material Issue'",
+   "fieldname": "operation_issue_type",
+   "fieldtype": "Select",
+   "label": "Issue Type",
+   "options": "Internal Use\nDemo\nMaintenance Spare Parts\nDisposal"
+  },
+  {
+   "depends_on": "eval:(doc.purpose == 'Material Issue' && doc.operation_issue_type == 'Maintenance Spare Parts') || doc.maintenance_visit",
+   "fieldname": "maintenance_visit",
+   "fieldtype": "Link",
+   "label": "Maintenance Visit",
+   "options": "Maintenance Visit"
+  },
+  {
+   "depends_on": "eval:doc.purpose == 'Material Receipt' || doc.operation_receipt_document || doc.operation_receipt_reference",
+   "fieldname": "operation_evidence_section",
+   "fieldtype": "Section Break",
+   "label": "Supporting Documents"
+  },
+  {
+   "depends_on": "eval:doc.purpose == 'Material Receipt' || doc.operation_receipt_document",
+   "fieldname": "operation_receipt_document",
+   "fieldtype": "Attach",
+   "label": "Receipt Supporting Document"
+  },
+  {
+   "fieldname": "operation_evidence_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:doc.purpose == 'Material Receipt' || doc.operation_receipt_reference",
+   "fieldname": "operation_receipt_reference",
+   "fieldtype": "Data",
+   "label": "Receipt Supporting Reference"
+  },
+  {
+   "fieldname": "operation_approval_section",
+   "fieldtype": "Section Break",
+   "label": "Approval Status"
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "workflow_state",
+   "fieldtype": "Link",
+   "label": "Workflow State",
+   "no_copy": 1,
+   "options": "Workflow State",
+   "read_only": 1
+  },
+  {
+   "fieldname": "operation_approval_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "operation_approval_route",
+   "fieldtype": "Data",
+   "label": "Approval Route",
+   "read_only": 1
+  },
+  {
+   "fieldname": "lab_self_submission",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "Lab Self Submission",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "approval_snapshot",
+   "fieldtype": "Long Text",
+   "hidden": 1,
+   "label": "Approval Snapshot",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "description": "Approves this Material Issue of a laboratory warehouse. Taken from the Warehouse Manager of its source warehouse; empty means the Stock Manager.",
+   "fieldname": "issuing_warehouse_manager",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Issuing Warehouse Manager",
+   "no_copy": 1,
+   "options": "User",
+   "print_hide": 1,
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,
@@ -915,7 +1046,7 @@
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-10-21 05:30:00.000000",
+ "modified": "2026-11-07 14:00:00.000000",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Stock Entry",

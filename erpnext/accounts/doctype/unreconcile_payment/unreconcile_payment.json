@@ -13,7 +13,13 @@
   "voucher_no",
   "get_allocations",
   "allocations",
-  "amended_from"
+  "amended_from",
+  "connect_unreconcile_reason_section",
+  "unreconcile_reason",
+  "connect_approval_section",
+  "workflow_state",
+  "connect_approval_column",
+  "approval_snapshot"
  ],
  "fields": [
   {
@@ -53,13 +59,48 @@
    "fieldtype": "Table",
    "label": "Allocations",
    "options": "Unreconcile Payment Entries"
+  },
+  {
+   "fieldname": "unreconcile_reason",
+   "fieldtype": "Small Text",
+   "label": "Reason for Unreconciliation"
+  },
+  {
+   "fieldname": "workflow_state",
+   "fieldtype": "Link",
+   "label": "Workflow State",
+   "no_copy": 1,
+   "options": "Workflow State",
+   "read_only": 1
+  },
+  {
+   "fieldname": "approval_snapshot",
+   "fieldtype": "Long Text",
+   "hidden": 1,
+   "label": "Approval Snapshot",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "connect_unreconcile_reason_section",
+   "fieldtype": "Section Break",
+   "label": "Unreconciliation Review"
+  },
+  {
+   "fieldname": "connect_approval_section",
+   "fieldtype": "Section Break",
+   "label": "Approval Status"
+  },
+  {
+   "fieldname": "connect_approval_column",
+   "fieldtype": "Column Break"
   }
  ],
  "icon": "unlink",
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2024-10-10 12:03:50.022444",
+ "modified": "2026-11-07 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Unreconcile Payment",

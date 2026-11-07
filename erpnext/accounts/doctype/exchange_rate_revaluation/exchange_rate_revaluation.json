@@ -21,7 +21,13 @@
   "gain_loss_booked",
   "column_break_10",
   "total_gain_loss",
-  "amended_from"
+  "amended_from",
+  "connect_revaluation_review_section",
+  "exchange_rate_revaluation_reason",
+  "connect_approval_section",
+  "workflow_state",
+  "connect_approval_column",
+  "approval_snapshot"
  ],
  "fields": [
   {
@@ -107,12 +113,49 @@
    "fieldtype": "Float",
    "label": "Rounding Loss Allowance",
    "precision": "9"
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "workflow_state",
+   "fieldtype": "Link",
+   "label": "Workflow State",
+   "no_copy": 1,
+   "options": "Workflow State",
+   "read_only": 1
+  },
+  {
+   "fieldname": "exchange_rate_revaluation_reason",
+   "fieldtype": "Small Text",
+   "label": "Reason for Exchange Rate Revaluation",
+   "no_copy": 1
+  },
+  {
+   "fieldname": "approval_snapshot",
+   "fieldtype": "Long Text",
+   "hidden": 1,
+   "label": "Approval Snapshot",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "connect_revaluation_review_section",
+   "fieldtype": "Section Break",
+   "label": "Finance Review"
+  },
+  {
+   "fieldname": "connect_approval_section",
+   "fieldtype": "Section Break",
+   "label": "Approval Status"
+  },
+  {
+   "fieldname": "connect_approval_column",
+   "fieldtype": "Column Break"
   }
  ],
  "icon": "arrow-right-left",
  "is_submittable": 1,
  "links": [],
- "modified": "2024-03-27 13:09:42.951164",
+ "modified": "2026-11-07 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Exchange Rate Revaluation",

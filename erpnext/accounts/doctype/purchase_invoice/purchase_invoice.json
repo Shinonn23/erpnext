@@ -210,7 +210,15 @@
   "inter_company_invoice_reference",
   "is_old_subcontracting_flow",
   "remarks",
-  "connections_tab"
+  "connections_tab",
+  "connect_operations_tab",
+  "connect_invoice_review_section",
+  "supplier_tax_document_verified",
+  "connect_invoice_review_column",
+  "p2p_exception_required",
+  "p2p_exception_reason",
+  "connect_approval_section",
+  "connect_approval_column"
  ],
  "fields": [
   {
@@ -1713,6 +1721,48 @@
    "label": "Title",
    "no_copy": 1,
    "print_hide": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "supplier_tax_document_verified",
+   "fieldtype": "Check",
+   "label": "Supplier Tax Documents Verified (VAT/WHT)"
+  },
+  {
+   "default": "0",
+   "fieldname": "p2p_exception_required",
+   "fieldtype": "Check",
+   "label": "P2P Exception Approval Required",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.p2p_exception_required || doc.p2p_exception_reason",
+   "fieldname": "p2p_exception_reason",
+   "fieldtype": "Small Text",
+   "label": "P2P Exception Reason"
+  },
+  {
+   "fieldname": "connect_operations_tab",
+   "fieldtype": "Tab Break",
+   "label": "Operations and Approval"
+  },
+  {
+   "fieldname": "connect_invoice_review_section",
+   "fieldtype": "Section Break",
+   "label": "Supplier Document Review"
+  },
+  {
+   "fieldname": "connect_invoice_review_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "connect_approval_section",
+   "fieldtype": "Section Break",
+   "label": "Approval Status"
+  },
+  {
+   "fieldname": "connect_approval_column",
+   "fieldtype": "Column Break"
   }
  ],
  "grid_page_length": 50,
@@ -1720,7 +1770,7 @@
  "idx": 204,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-10-21 05:30:00.000000",
+ "modified": "2026-11-07 14:00:00.000000",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Purchase Invoice",

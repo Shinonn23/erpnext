@@ -165,7 +165,23 @@
   "is_internal_supplier",
   "inter_company_order_reference",
   "is_old_subcontracting_flow",
-  "connections_tab"
+  "connections_tab",
+  "connect_operations_tab",
+  "connect_supplier_review_section",
+  "nonlowest_supplier_selection",
+  "supplier_selection_reason",
+  "connect_supplier_review_column",
+  "requires_supplier_selection_approval",
+  "connect_purchase_exception_section",
+  "p2p_exception_type",
+  "p2p_exception_reason",
+  "connect_purchase_exception_column",
+  "p2p_exception_document",
+  "requires_executive_review",
+  "material_request_approval_reused",
+  "material_request_approval_changes",
+  "connect_approval_section",
+  "connect_approval_column"
  ],
  "fields": [
   {
@@ -1326,6 +1342,100 @@
    "label": "Title",
    "no_copy": 1,
    "print_hide": 1
+  },
+  {
+   "description": "Declare this when the comparison was performed outside the linked submitted quotations.",
+   "fieldname": "nonlowest_supplier_selection",
+   "fieldtype": "Check",
+   "label": "Select a Supplier Other Than the Lowest Comparable Quote"
+  },
+  {
+   "description": "Explain selecting a Supplier above the lowest comparable quotation; linked quotations are also compared when saving.",
+   "fieldname": "supplier_selection_reason",
+   "fieldtype": "Small Text",
+   "label": "Supplier Selection Reason",
+   "mandatory_depends_on": "eval:doc.nonlowest_supplier_selection || doc.requires_supplier_selection_approval"
+  },
+  {
+   "fieldname": "requires_supplier_selection_approval",
+   "fieldtype": "Check",
+   "label": "Requires Supplier Selection Approval",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "p2p_exception_type",
+   "fieldtype": "Select",
+   "label": "P2P Exception Type",
+   "options": "\nNo Material Request\nEmergency Purchase\nOther"
+  },
+  {
+   "depends_on": "eval:!!doc.p2p_exception_type || doc.p2p_exception_reason",
+   "fieldname": "p2p_exception_reason",
+   "fieldtype": "Small Text",
+   "label": "P2P Exception Reason",
+   "mandatory_depends_on": "eval:!!doc.p2p_exception_type && (doc.docstatus == 1 || ![undefined, null, '', 'Purchase Order Draft'].includes(doc.workflow_state))"
+  },
+  {
+   "depends_on": "eval:!!doc.p2p_exception_type || doc.p2p_exception_document",
+   "description": "Optional: attach a supporting document if you have one.",
+   "fieldname": "p2p_exception_document",
+   "fieldtype": "Attach",
+   "label": "P2P Exception Document"
+  },
+  {
+   "fieldname": "requires_executive_review",
+   "fieldtype": "Check",
+   "label": "Requires Executive Review",
+   "read_only": 1
+  },
+  {
+   "fieldname": "material_request_approval_reused",
+   "fieldtype": "Check",
+   "label": "Approved Material Request Covers This Order",
+   "no_copy": 1,
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "material_request_approval_changes",
+   "fieldtype": "Long Text",
+   "label": "Material Request Approval Changes",
+   "no_copy": 1,
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "connect_operations_tab",
+   "fieldtype": "Tab Break",
+   "label": "Operations and Approval"
+  },
+  {
+   "fieldname": "connect_supplier_review_section",
+   "fieldtype": "Section Break",
+   "label": "Supplier Selection"
+  },
+  {
+   "fieldname": "connect_supplier_review_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "connect_purchase_exception_section",
+   "fieldtype": "Section Break",
+   "label": "Purchase Exception"
+  },
+  {
+   "fieldname": "connect_purchase_exception_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "connect_approval_section",
+   "fieldtype": "Section Break",
+   "label": "Approval Status"
+  },
+  {
+   "fieldname": "connect_approval_column",
+   "fieldtype": "Column Break"
   }
  ],
  "grid_page_length": 50,
@@ -1333,7 +1443,7 @@
  "idx": 105,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-10-21 05:30:00.000000",
+ "modified": "2026-11-07 14:00:00.000000",
  "modified_by": "Administrator",
  "module": "Buying",
  "name": "Purchase Order",
