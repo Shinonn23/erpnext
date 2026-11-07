@@ -543,7 +543,7 @@ class LostWarehouseAndLocationsTest(unittest.TestCase):
 
 
 class FoundWarehouseTest(unittest.TestCase):
-	"""A count's surplus is counted again by another person; what both found is received into FOUND (5 Nov 2026)."""
+	"""A count's surplus is counted again; what both found is received into FOUND (5 Nov 2026)."""
 
 	def surplus_count(self, *count_rows, recount_of=None):
 		doc = Doc(
