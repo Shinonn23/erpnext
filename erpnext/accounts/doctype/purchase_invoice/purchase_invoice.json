@@ -33,6 +33,7 @@
   "bill_no",
   "column_break_15",
   "bill_date",
+  "supplier_tax_document_verified",
   "accounting_dimensions_section",
   "cost_center",
   "dimension_col_break",
@@ -213,11 +214,10 @@
   "connections_tab",
   "connect_operations_tab",
   "connect_invoice_review_section",
-  "supplier_tax_document_verified",
-  "connect_invoice_review_column",
   "p2p_exception_required",
   "p2p_exception_reason",
   "connect_approval_section",
+  "workflow_state",
   "connect_approval_column"
  ],
  "fields": [
@@ -1752,13 +1752,18 @@
    "label": "Supplier Document Review"
   },
   {
-   "fieldname": "connect_invoice_review_column",
-   "fieldtype": "Column Break"
-  },
-  {
    "fieldname": "connect_approval_section",
    "fieldtype": "Section Break",
    "label": "Approval Status"
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "workflow_state",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Workflow State",
+   "no_copy": 1,
+   "options": "Workflow State"
   },
   {
    "fieldname": "connect_approval_column",
@@ -1770,7 +1775,7 @@
  "idx": 204,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-11-07 14:00:00.000000",
+ "modified": "2026-11-07 23:00:00.000000",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Purchase Invoice",

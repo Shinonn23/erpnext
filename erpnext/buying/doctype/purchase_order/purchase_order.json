@@ -181,6 +181,7 @@
   "material_request_approval_reused",
   "material_request_approval_changes",
   "connect_approval_section",
+  "workflow_state",
   "connect_approval_column"
  ],
  "fields": [
@@ -1374,7 +1375,7 @@
    "fieldname": "p2p_exception_reason",
    "fieldtype": "Small Text",
    "label": "P2P Exception Reason",
-   "mandatory_depends_on": "eval:!!doc.p2p_exception_type && (doc.docstatus == 1 || ![undefined, null, '', 'Purchase Order Draft'].includes(doc.workflow_state))"
+   "mandatory_depends_on": "eval:!!doc.p2p_exception_type"
   },
   {
    "depends_on": "eval:!!doc.p2p_exception_type || doc.p2p_exception_document",
@@ -1434,6 +1435,15 @@
    "label": "Approval Status"
   },
   {
+   "allow_on_submit": 1,
+   "fieldname": "workflow_state",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Workflow State",
+   "no_copy": 1,
+   "options": "Workflow State"
+  },
+  {
    "fieldname": "connect_approval_column",
    "fieldtype": "Column Break"
   }
@@ -1443,7 +1453,7 @@
  "idx": 105,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-11-07 14:00:00.000000",
+ "modified": "2026-11-07 23:00:00.000000",
  "modified_by": "Administrator",
  "module": "Buying",
  "name": "Purchase Order",

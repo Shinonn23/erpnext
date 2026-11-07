@@ -55,6 +55,7 @@
   "connect_budget_review_section",
   "budget_reason",
   "connect_approval_section",
+  "workflow_state",
   "connect_approval_column",
   "approval_snapshot"
  ],
@@ -368,7 +369,8 @@
   {
    "fieldname": "budget_reason",
    "fieldtype": "Small Text",
-   "label": "Reason for Budget"
+   "label": "Reason for Budget",
+   "mandatory_depends_on": "eval:doc.docstatus == 0"
   },
   {
    "fieldname": "approval_snapshot",
@@ -389,6 +391,15 @@
    "label": "Approval Status"
   },
   {
+   "allow_on_submit": 1,
+   "fieldname": "workflow_state",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Workflow State",
+   "no_copy": 1,
+   "options": "Workflow State"
+  },
+  {
    "fieldname": "connect_approval_column",
    "fieldtype": "Column Break"
   }
@@ -398,7 +409,7 @@
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-11-07 16:00:00.000000",
+ "modified": "2026-11-07 23:00:00.000000",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Budget",

@@ -144,7 +144,7 @@ class TestRegulatoryFields(unittest.TestCase):
 
 	def test_every_target_holds_every_field_once_in_order_and_in_one_block(self):
 		self.assertEqual(set(RA_FIELDS), set(NATIVE_JSON))
-		self.assertEqual(sum(len(names) for names in RA_FIELDS.values()), 71)
+		self.assertEqual(sum(len(names) for names in RA_FIELDS.values()), 70)
 		for doctype, names in RA_FIELDS.items():
 			document = load(APP / NATIVE_JSON[doctype])
 			fieldnames = [field["fieldname"] for field in document["fields"]]
@@ -182,7 +182,7 @@ class TestRegulatoryFields(unittest.TestCase):
 		self.assertIn("Other", specs["regulatory_other_category"]["depends_on"])
 		self.assertEqual(specs["regulatory_other_category"]["fieldtype"], "Data")
 		self.assertIn("Medical Device", specs["medical_device_category"]["depends_on"])
-		self.assertNotIn("depends_on", specs["regulatory_owner"])
+		self.assertNotIn("regulatory_owner", specs)
 		self.assertEqual(
 			specs["regulatory_current_section"]["depends_on"], "eval:doc.regulatory_product_category"
 		)

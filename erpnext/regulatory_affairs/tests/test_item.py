@@ -60,9 +60,7 @@ class TestValidate(unittest.TestCase):
 				self.assertIsNone(doc[fieldname], (blank, fieldname))
 
 	def test_other_fields_are_untouched(self):
-		values = dict(
-			regulatory_other_category="Toy", medical_device_category="IVD", regulatory_owner="a@b.c"
-		)
+		values = dict(regulatory_other_category="Toy", medical_device_category="IVD")
 		for category in ("Other", None):
 			doc = item(category, item_name="Gloves", **values, **COVERAGE)
 			self.run_validate(doc)
@@ -169,12 +167,9 @@ class TestSetProductCategory(unittest.TestCase):
 		return doc
 
 	def test_one_dialog_classifies_a_medical_device(self):
-		doc = self.classify(
-			category="Medical Device", medical_device_category="IVD", regulatory_owner="ra@example.com"
-		)
+		doc = self.classify(category="Medical Device", medical_device_category="IVD")
 		doc.set.assert_called_once_with(ITEM_CATEGORY_FIELD, "Medical Device")
 		self.assertEqual(doc.medical_device_category, "IVD")
-		self.assertEqual(doc.regulatory_owner, "ra@example.com")
 		self.assertIsNone(doc.regulatory_other_category)
 		self.assertTrue(doc.flags.ignore_permissions)
 		doc.save.assert_called_once_with()
@@ -202,7 +197,7 @@ class TestSetProductCategory(unittest.TestCase):
 			self.classify(category="Magic")
 
 	def test_bulk_classification_reports_what_failed(self):
-		def fake(code, category, device, owner):
+		def fake(code, category, device):
 			if code == "BAD":
 				raise frappe.ValidationError("no device category")
 

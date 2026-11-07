@@ -180,6 +180,7 @@
    "allow_on_submit": 1,
    "fieldname": "workflow_state",
    "fieldtype": "Link",
+   "hidden": 1,
    "label": "Workflow State",
    "no_copy": 1,
    "options": "Workflow State",
@@ -189,6 +190,7 @@
    "fieldname": "invoice_discounting_reason",
    "fieldtype": "Small Text",
    "label": "Invoice Discounting Reason",
+   "mandatory_depends_on": "eval:doc.docstatus == 0",
    "no_copy": 1
   },
   {
@@ -217,7 +219,7 @@
  "icon": "ticket-percent",
  "is_submittable": 1,
  "links": [],
- "modified": "2026-11-07 12:00:00.000000",
+ "modified": "2026-11-07 22:00:00.000000",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Invoice Discounting",

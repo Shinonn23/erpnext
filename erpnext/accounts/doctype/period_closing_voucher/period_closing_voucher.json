@@ -7,6 +7,7 @@
  "documentation": "https://docs.frappe.io/erpnext/user/manual/en/period-closing-voucher",
  "engine": "InnoDB",
  "field_order": [
+  "workflow_state",
   "transaction_date",
   "company",
   "fiscal_year",
@@ -24,6 +25,15 @@
   "approval_snapshot"
  ],
  "fields": [
+  {
+   "allow_on_submit": 1,
+   "fieldname": "workflow_state",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Workflow State",
+   "no_copy": 1,
+   "options": "Workflow State"
+  },
   {
    "default": "Today",
    "fieldname": "transaction_date",
@@ -151,7 +161,7 @@
  "idx": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-11-07 12:00:00.000000",
+ "modified": "2026-11-07 23:00:00.000000",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Period Closing Voucher",

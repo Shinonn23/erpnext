@@ -31,7 +31,6 @@ ITEM_FIELDNAMES = (
 	"regulatory_product_category",
 	"regulatory_other_category",
 	"medical_device_category",
-	"regulatory_owner",
 	"regulatory_current_section",
 	"current_regulatory_registration",
 	"current_newcode",

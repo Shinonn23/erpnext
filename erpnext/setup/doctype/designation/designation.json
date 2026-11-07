@@ -37,7 +37,7 @@
    "fieldtype": "Link",
    "label": "Role Profile",
    "link_filters": "[[\"Role Profile\", \"name\", \"not like\", \"Duty - %\"]]",
-   "mandatory_depends_on": "eval:!doc.no_system_access",
+   "mandatory_depends_on": "",
    "options": "Role Profile"
   },
   {
@@ -50,7 +50,7 @@
  "icon": "id-card",
  "idx": 1,
  "links": [],
- "modified": "2026-11-07 16:00:00.000000",
+ "modified": "2026-11-07 22:00:00.000000",
  "modified_by": "Administrator",
  "module": "Setup",
  "name": "Designation",

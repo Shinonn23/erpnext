@@ -10,11 +10,14 @@
  "documentation": "https://docs.frappe.io/erpnext/user/manual/en/journal-entry",
  "engine": "InnoDB",
  "field_order": [
+  "workflow_state",
   "entry_type_and_date",
   "company",
   "bank_transaction_to_reconcile",
   "advance_refund_of",
   "voucher_type",
+  "journal_entry_purpose",
+  "journal_entry_reason",
   "column_break1",
   "naming_series",
   "posting_date",
@@ -88,9 +91,6 @@
   "party_not_required",
   "connect_operations_tab",
   "connect_journal_evidence_section",
-  "journal_entry_purpose",
-  "journal_entry_reason",
-  "connect_journal_evidence_column",
   "supporting_document",
   "connect_journal_review_section",
   "requires_controller_review",
@@ -101,6 +101,15 @@
   "approval_snapshot"
  ],
  "fields": [
+  {
+   "allow_on_submit": 1,
+   "fieldname": "workflow_state",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Workflow State",
+   "no_copy": 1,
+   "options": "Workflow State"
+  },
   {
    "fieldname": "entry_type_and_date",
    "fieldtype": "Section Break",
@@ -728,7 +737,8 @@
   {
    "fieldname": "journal_entry_reason",
    "fieldtype": "Small Text",
-   "label": "Reason for Journal Entry"
+   "label": "Reason for Journal Entry",
+   "mandatory_depends_on": "eval:doc.docstatus == 0 && !['Exchange Rate Revaluation', 'Exchange Gain Or Loss'].includes(doc.voucher_type) && !doc.asset_scrap_request && !doc.is_system_generated"
   },
   {
    "fieldname": "requires_controller_review",
@@ -762,10 +772,6 @@
    "label": "Journal Purpose and Evidence"
   },
   {
-   "fieldname": "connect_journal_evidence_column",
-   "fieldtype": "Column Break"
-  },
-  {
    "fieldname": "connect_journal_review_section",
    "fieldtype": "Section Break",
    "label": "Approval Requirements"
@@ -787,7 +793,7 @@
    "table_fieldname": "payment_entries"
   }
  ],
- "modified": "2026-11-07 12:00:00.000000",
+ "modified": "2026-11-07 23:00:00.000000",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Journal Entry",

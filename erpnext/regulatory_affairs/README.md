@@ -47,7 +47,7 @@ force to be sold) or **Not Regulated** (RA looked at it and it needs none). An I
 * returns, consolidated POS invoices and Sales Invoice rows already delivered are not checked; purchasing and stock keep their
   own rules (a Purchase Order only warns).
 
-Saving a registration whose product row names an Item with no Product Category sets that Item's category from the registration's (never overwrites an existing category or Not Regulated; the Item gets a comment; the orange warning only names the Items left; Siwat, 6 Nov 2026). Verify and Activate sets Last Verified On. RA classifies one Item with *Regulatory > Classify Item* (Product Category, Medical Device Category, Regulatory Owner in one
+Saving a registration whose product row names an Item with no Product Category sets that Item's category from the registration's (never overwrites an existing category or Not Regulated; the Item gets a comment; the orange warning only names the Items left; Siwat, 6 Nov 2026). Verify and Activate sets Last Verified On. RA classifies one Item with *Regulatory > Classify Item* (Product Category, Medical Device Category in one
 dialog; `item.classify_item`) and many with the Item list *Actions > Classify as ...* (`item.classify_items`); the report
 *Regulatory Unclassified Items* counts and lists the sales Items still unclassified (filter by Item Group). Only a regulated
 Item shows the *Current Regulatory Coverage* section with the read-only coverage fields (`current_regulatory_registration`,
@@ -55,9 +55,8 @@ Item shows the *Current Regulatory Coverage* section with the read-only coverage
 Matrix* button; saving a Not Regulated Item clears its coverage fields. There is no separate assessment status, exemption reason
 or Not Assessed state.
 
-The **Regulatory** tab also has `regulatory_other_category` (for Other), `medical_device_category` (only for Medical Device) and
-`regulatory_owner`. Each item row of the six guarded transactions
-(not the Quotation) gets a collapsed, read-only **Regulatory Snapshot** section (`regulatory_*` fields listed in `custom_fields.SNAPSHOT_FIELDNAMES`). The 71 RA fields are DocFields in the DocType JSON of Item and of
+The **Regulatory** tab also has `regulatory_other_category` (for Other), `medical_device_category` (only for Medical Device); an Item names no Regulatory Owner (a person is no master data: the default owner of Regulatory Settings is asked). Each item row of the six guarded transactions
+(not the Quotation) gets a collapsed, read-only **Regulatory Snapshot** section (`regulatory_*` fields listed in `custom_fields.SNAPSHOT_FIELDNAMES`). The 70 RA fields are DocFields in the DocType JSON of Item and of
 the six item tables, not Custom Fields (migrate does only schema: Role Profile Authority Design 12.1, batch e); `custom_fields.RA_FIELDS` lists
 their names. A site that made them as Custom Fields loses those rows to the schema patch `move_fork_only_fields_e` of the Connect Diagnostics
 app (the column and its data stay, what the site changed in Customize Form stays as a Property Setter). The legacy Item fields *Thai FDA Assessment Status* (`custom_thai_fda_applicability`)
@@ -66,7 +65,7 @@ and *Thai FDA Assessment Reason / Notes* (`custom_thai_fda_assessment_note`) are
 renamed from "Medical Device" also kept Item `is_medical_device`, `regulatory_registration_requirement`,
 `regulatory_exemption_reason`, `current_medical_device_registration` and a `medical_device_regulatory_override` Link on the six
 guarded transactions; `erpnext.patches.v16_0.remove_retired_medical_device_fields` deletes those Custom Fields (columns and values
-stay) and clears the old `depends_on` of `regulatory_owner`.
+stay) and clears the old `depends_on` of `regulatory_owner`; the field itself is gone from the Item (the Connect Diagnostics app drops its column while empty).
 
 ## Roles
 
@@ -357,7 +356,7 @@ so with the default **Block** policies an expired or suspended legacy registrati
 * Product lines of a live registration can still be edited by an Operator (history is kept by version tracking); the issue/expiry
   dates cannot.
 * Product Category permission: see the section of that name; the Regulatory roles cannot edit other Item fields, so they change the
-  category with the *Regulatory > Classify Item* dialog (Product Category, Medical Device Category and Regulatory Owner in one step).
+  category with the *Regulatory > Classify Item* dialog (Product Category, Medical Device Category in one step).
 * The new code assumes `bench migrate` has run: submitting a guarded document on a site where the Settings DocType and the Item
   columns do not exist yet fails, like any other schema-dependent ERPNext change.
 * **Not verified end to end.** The DocTypes, patches and reports are checked by unit tests with mocks; run the dry run and

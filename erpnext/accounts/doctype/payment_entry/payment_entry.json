@@ -111,6 +111,7 @@
   "auto_repeat",
   "connect_operations_tab",
   "connect_approval_section",
+  "workflow_state",
   "connect_approval_column"
  ],
  "fields": [
@@ -846,6 +847,7 @@
    "read_only": 1
   },
   {
+   "depends_on": "eval:doc.party_type != 'Employee'",
    "fieldname": "approval_writeoff_amount",
    "fieldtype": "Currency",
    "label": "Approval Writeoff Amount",
@@ -861,6 +863,15 @@
    "fieldname": "connect_approval_section",
    "fieldtype": "Section Break",
    "label": "Approval Status"
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "workflow_state",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Workflow State",
+   "no_copy": 1,
+   "options": "Workflow State"
   },
   {
    "fieldname": "connect_approval_column",
@@ -880,7 +891,7 @@
    "table_fieldname": "payment_entries"
   }
  ],
- "modified": "2026-11-07 12:00:00.000000",
+ "modified": "2026-11-07 23:00:00.000000",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Payment Entry",

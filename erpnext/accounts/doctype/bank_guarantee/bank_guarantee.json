@@ -224,11 +224,13 @@
   {
    "fieldname": "bank_guarantee_reason",
    "fieldtype": "Small Text",
-   "label": "Reason for Bank Guarantee"
+   "label": "Reason for Bank Guarantee",
+   "mandatory_depends_on": "eval:doc.docstatus == 0"
   },
   {
    "fieldname": "workflow_state",
    "fieldtype": "Link",
+   "hidden": 1,
    "label": "Workflow State",
    "no_copy": 1,
    "options": "Workflow State",
@@ -261,7 +263,7 @@
  "icon": "shield-check",
  "is_submittable": 1,
  "links": [],
- "modified": "2026-11-07 12:00:00.000000",
+ "modified": "2026-11-07 22:00:00.000000",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Bank Guarantee",
