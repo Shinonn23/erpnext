@@ -501,7 +501,11 @@ class OwnLostWarehouseTest(unittest.TestCase):
 
 		def get_all(doctype, **kwargs):
 			calls.append(kwargs)
-			return ["LOST - CD STOCK - CD"] if "pluck" in kwargs and kwargs["pluck"] == "lost_warehouse" else ["LOST - CD"]
+			return (
+				["LOST - CD STOCK - CD"]
+				if "pluck" in kwargs and kwargs["pluck"] == "lost_warehouse"
+				else ["LOST - CD"]
+			)
 
 		with (
 			patch.object(stock_count.frappe, "db", fake_db(has_column=True)),
@@ -704,3 +708,29 @@ class FoundWarehouseTest(unittest.TestCase):
 		doc.get_countable_dimensions = lambda: []
 		StockCount.keep_snapshot_rows(doc)
 		self.assertEqual([row.system_qty for row in doc["items"]], [3, 0])
+
+
+class QuarantineIsNotCountedTest(unittest.TestCase):
+	"""Connect Diagnostics, 7 Nov 2026: what a warehouse's Quarantine, Lost or Found warehouse holds is not part of
+	its count: a count reads one leaf warehouse's ledger, never a group or the warehouses beside it."""
+
+	def test_the_snapshot_reads_the_counted_warehouse_alone(self):
+		import inspect
+
+		source = inspect.getsource(StockCount.get_stock_ledger_groups)
+		self.assertIn("sle.warehouse == self.warehouse", source)
+		for word in ("lft", "rgt", "get_descendants", "quarantine"):
+			self.assertNotIn(word, source)
+
+	def test_a_group_warehouse_cannot_be_counted(self):
+		doc = count(warehouse="QUARANTINE BY WAREHOUSE - CD", company="C", scan_storage_location=None)
+		doc.validate_generated_links = lambda: None
+		db = Mock(get_value=Mock(return_value=frappe._dict(company="C", is_group=1, disabled=0)))
+		with (
+			patch.object(stock_count.frappe, "db", db),
+			patch.object(stock_count, "_", side_effect=lambda text: text),
+			patch.object(stock_count, "validate_storage_location_warehouse"),
+			patch.object(stock_count.frappe, "throw", side_effect=frappe.ValidationError),
+			self.assertRaises(frappe.ValidationError),
+		):
+			StockCount.validate(doc)

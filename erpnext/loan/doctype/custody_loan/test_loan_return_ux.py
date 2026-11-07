@@ -95,6 +95,148 @@ class TestQuarantineWarehouse(Patched):
 				core.receive_inspected_return("DN-1")
 
 
+class FakeWarehouses:
+	"""A Warehouse table for the quarantine lookup: {name: {...}}."""
+
+	def __init__(self, rows):
+		self.rows = rows
+
+	def has_column(self, doctype, fieldname):
+		return True
+
+	def get_value(self, doctype, name, fields, as_dict=False):
+		row = self.rows.get(name)
+		if row is None:
+			return None
+		if isinstance(fields, str):
+			return row.get(fields)
+		return frappe._dict({field: row.get(field) for field in fields})
+
+	def patched(self):
+		def get_all(doctype, filters=None, fields=None, order_by=None, pluck=None):
+			if pluck:
+				return [row[pluck] for row in self.rows.values() if row.get(pluck)]
+			return [
+				frappe._dict(name=name, **{field: row.get(field) for field in fields if field != "name"})
+				for name, row in sorted(self.rows.items())
+				if row["company"] == filters["company"]
+				and not row.get("is_group")
+				and not row.get("disabled")
+			]
+
+		return (
+			patch.object(frappe, "db", self),
+			patch.object(frappe, "get_all", side_effect=get_all),
+		)
+
+
+def warehouses(**extra):
+	base = {
+		"CD STOCK - CD": {"company": "CD", "parent_warehouse": "All - CD", "warehouse_type": "Stock"},
+		"LAB CWT - CD": {"company": "CD", "parent_warehouse": "All - CD", "warehouse_type": "Stock"},
+		"LAB GS - CD": {"company": "CD", "parent_warehouse": "All - CD", "warehouse_type": "Stock"},
+		"QUARANTINE - CD": {"company": "CD", "parent_warehouse": "All - CD", "warehouse_type": "Quarantine"},
+		"QUARANTINE - CD STOCK - CD": {
+			"company": "CD",
+			"parent_warehouse": "QUARANTINE BY WAREHOUSE - CD",
+			"warehouse_type": "Quarantine",
+		},
+		"QUARANTINE - LAB CWT - CD": {
+			"company": "CD",
+			"parent_warehouse": "QUARANTINE BY WAREHOUSE - CD",
+			"warehouse_type": "Quarantine",
+		},
+	}
+	base["CD STOCK - CD"]["quarantine_warehouse"] = "QUARANTINE - CD STOCK - CD"
+	base["LAB CWT - CD"]["quarantine_warehouse"] = "QUARANTINE - LAB CWT - CD"
+	for name, values in extra.items():
+		base[name.replace("_", " ")].update(values)
+	return base
+
+
+class TestQuarantinePerWarehouse(Patched):
+	"""Siwat, 7 Nov 2026: goods are held in the quarantine of the warehouse they belong to; the company's one stays
+	the fallback of a warehouse with no link."""
+
+	def lookup(self, rows, company, near=None):
+		first, second = FakeWarehouses(rows).patched()
+		with first, second:
+			return core.quarantine_warehouse_for(company, near)
+
+	def test_a_warehouse_with_its_own_quarantine_uses_it(self):
+		rows = warehouses()
+		self.assertEqual(self.lookup(rows, "CD", "CD STOCK - CD"), "QUARANTINE - CD STOCK - CD")
+		self.assertEqual(self.lookup(rows, "CD", "LAB CWT - CD"), "QUARANTINE - LAB CWT - CD")
+
+	def test_a_warehouse_without_the_link_falls_back_to_the_company_one(self):
+		self.assertEqual(self.lookup(warehouses(), "CD", "LAB GS - CD"), "QUARANTINE - CD")
+
+	def test_the_companys_one_never_is_another_warehouses_own(self):
+		rows = warehouses()
+		del rows["QUARANTINE - CD"]
+		self.assertIsNone(self.lookup(rows, "CD", "LAB GS - CD"))
+		# asked for the company without a warehouse, any quarantine will do
+		self.assertIn(self.lookup(rows, "CD"), {"QUARANTINE - CD STOCK - CD", "QUARANTINE - LAB CWT - CD"})
+
+	def test_a_link_to_a_disabled_group_or_foreign_warehouse_is_not_used(self):
+		for change in ({"disabled": 1}, {"is_group": 1}, {"company": "X"}):
+			rows = warehouses()
+			rows["QUARANTINE - LAB CWT - CD"].update(change)
+			self.assertEqual(self.lookup(rows, "CD", "LAB CWT - CD"), "QUARANTINE - CD", change)
+
+	def test_a_site_without_the_field_keeps_the_old_lookup(self):
+		rows = warehouses()
+		db = FakeWarehouses(rows)
+		db.has_column = lambda *args: False
+		first, second = db.patched()
+		with first, second:
+			self.assertEqual(core.quarantine_warehouse_for("CD", "LAB CWT - CD"), "QUARANTINE - CD")
+
+	def test_every_warehouse_of_the_type_is_a_quarantine_warehouse(self):
+		rows = warehouses()
+		first, second = FakeWarehouses(rows).patched()
+		with first, second:
+			for name in ("QUARANTINE - CD", "QUARANTINE - CD STOCK - CD", "QUARANTINE - LAB CWT - CD"):
+				self.assertTrue(core.is_quarantine_warehouse(name, "CD"), name)
+			self.assertFalse(core.is_quarantine_warehouse("LAB CWT - CD", "CD"))
+			self.assertFalse(core.is_quarantine_warehouse("QUARANTINE - LAB CWT - CD", "OTHER"))
+
+	def test_a_rejected_return_row_is_received_into_the_quarantine_of_its_warehouse(self):
+		note = Row(
+			docstatus=0,
+			company="CD",
+			name="DN-1",
+			flags=SimpleNamespace(),
+			items=[
+				Row(name="R1", idx=1, item_code="D", warehouse="LAB CWT - CD", quality_inspection="QI-1"),
+				Row(name="R2", idx=2, item_code="E", warehouse="LAB GS - CD", quality_inspection="QI-2"),
+			],
+			save=lambda: None,
+		)
+		db = FakeWarehouses(warehouses())
+		plain_get_value = db.get_value
+
+		def get_value(doctype, name, fields=None, as_dict=False):
+			if doctype == "Quality Inspection":
+				return SimpleNamespace(docstatus=1, status="Rejected")
+			return plain_get_value(doctype, name, fields, as_dict)
+
+		db.get_value = get_value
+		first, second = db.patched()
+		with (
+			first,
+			second,
+			patch.object(frappe, "get_doc", return_value=note),
+			patch.object(core, "custody_loan_return_row_requires_inspection", return_value=True),
+			patch.object(core, "receive_return_delivery_note") as receive,
+		):
+			core.receive_inspected_return("DN-1")
+		self.assertEqual(
+			[row.warehouse for row in note.items], ["QUARANTINE - LAB CWT - CD", "QUARANTINE - CD"]
+		)
+		receive.assert_called_once_with("DN-1")
+
+
 class TestNoShipmentCoupling(Patched):
 	"""A Shipment is optional (Siwat, 5 Nov 2026): nothing in a loan waits for one."""
 

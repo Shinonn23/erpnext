@@ -1471,10 +1471,35 @@ def receive_inspected_return(delivery_note_name):
 	receive_return_delivery_note(delivery_note.name)
 
 
+def is_quarantine_row(row):
+	"""Whether a Warehouse row (warehouse_type, warehouse_name) is a Quarantine (or QA) warehouse."""
+	return row.warehouse_type in ("Quarantine", "QA") or (row.warehouse_name or "").casefold() in (
+		"qa",
+		"quarantine",
+	)
+
+
+def own_quarantine_warehouse(warehouse):
+	"""The Quarantine warehouse a warehouse names itself (``Warehouse.quarantine_warehouse``, Connect Diagnostics,
+	7 Nov 2026: goods are held in the quarantine of the warehouse they belong to), or None. A site that has not
+	migrated to the field has none."""
+	if not warehouse or not frappe.db.has_column("Warehouse", "quarantine_warehouse"):
+		return None
+	return frappe.db.get_value("Warehouse", warehouse, "quarantine_warehouse") or None
+
+
 def quarantine_warehouse_for(company, near=None):
-	"""The company's Quarantine warehouse (type Quarantine or QA, or named so), the one beside ``near`` first."""
+	"""The Quarantine warehouse that holds the goods of warehouse ``near``: its own ``quarantine_warehouse`` when it
+	names an enabled leaf of the company, else the company's one (an enabled leaf of type Quarantine or QA, or named so,
+	that no warehouse names as its own; the one beside ``near`` first). Without ``near`` the company's one, else any
+	enabled quarantine leaf of the company. None when there is none."""
 	if not company:
 		return None
+	own = own_quarantine_warehouse(near)
+	if own:
+		values = frappe.db.get_value("Warehouse", own, ["company", "is_group", "disabled"], as_dict=True)
+		if values and values.company == company and not values.is_group and not values.disabled:
+			return own
 	rows = [
 		row
 		for row in frappe.get_all(
@@ -1483,14 +1508,23 @@ def quarantine_warehouse_for(company, near=None):
 			fields=["name", "parent_warehouse", "warehouse_type", "warehouse_name"],
 			order_by="name",
 		)
-		if row.warehouse_type in ("Quarantine", "QA")
-		or (row.warehouse_name or "").casefold() in ("qa", "quarantine")
+		if is_quarantine_row(row)
 	]
+	owned = set()
+	if rows and frappe.db.has_column("Warehouse", "quarantine_warehouse"):
+		owned = set(
+			frappe.get_all(
+				"Warehouse", filters={"quarantine_warehouse": ["is", "set"]}, pluck="quarantine_warehouse"
+			)
+		)
+	shared = [row for row in rows if row.name not in owned]
+	if not near:
+		shared = shared or rows
 	parent = frappe.db.get_value("Warehouse", near, "parent_warehouse") if near else None
-	for row in rows:
+	for row in shared:
 		if parent and row.parent_warehouse == parent:
 			return row.name
-	return rows[0].name if rows else None
+	return shared[0].name if shared else None
 
 
 def receive_return_delivery_note(delivery_note_name):

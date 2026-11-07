@@ -26,6 +26,14 @@ stock and has no selection.
   warehouse's own Lost Warehouse and receives its confirmed surplus into its own Found Warehouse; a Warehouse without the
   link keeps the company's Lost / Found warehouse (the first enabled leaf of the Warehouse Type that no other warehouse
   names as its own). The Stock Count form picks the defaults again when the warehouse changes.
+- **Quarantine Warehouse of each warehouse** (Connect Diagnostics, 7 Nov 2026): the Warehouse has the link
+  `quarantine_warehouse` (same section). Goods that wait for a Quality Inspection or fail one are held in the quarantine
+  of the warehouse they belong to: a rejected sales or loan return is received into the quarantine of the warehouse
+  the goods came from (`custody_loan_core.quarantine_warehouse_for(company, near)`: the own link when it names an
+  enabled leaf of the company, else the company's Quarantine warehouse that no warehouse names as its own, the one
+  beside `near` first). Every test "is this a quarantine warehouse" accepts any warehouse of Warehouse Type Quarantine
+  (`is_quarantine_warehouse`). A Stock Count reads the ledger of its one leaf warehouse, so the quarantine (or Lost, or
+  Found) warehouse of the counted warehouse is never part of its count.
 - **Stock Write-Off**: a Stock Entry of the Stock Entry Type "Stock Write-Off" (Material Issue) may leave a warehouse of
   Warehouse Type Lost, which otherwise allows no issue and lets only the Stock Manager move stock out
   (`warehouse_policy.is_write_off_from_lost`). The company policy layer refuses the type from any other warehouse.
