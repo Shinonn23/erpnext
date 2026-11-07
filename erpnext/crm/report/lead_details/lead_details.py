@@ -46,7 +46,7 @@ def get_columns():
 			"label": _("Owner"),
 			"fieldname": "owner",
 			"fieldtype": "Link",
-			"options": "user",
+			"options": "User",
 			"width": 120,
 		},
 		{
