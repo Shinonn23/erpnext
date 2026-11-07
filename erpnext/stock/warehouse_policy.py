@@ -7,6 +7,9 @@ from frappe.utils import cint, flt
 
 from erpnext.accounts.doctype.pos_invoice_merge_log.pos_invoice_merge_log import is_verified_pos_consolidation
 
+WRITE_OFF_ENTRY_TYPE = "Stock Write-Off"
+LOST_WAREHOUSE_TYPE = "Lost"
+
 MOVEMENT_DOCTYPES = {
 	"Stock Entry",
 	"Stock Reconciliation",
@@ -154,7 +157,9 @@ def validate_warehouse_operation(
 		return
 	if operation == "loan" and location.warehouse_type == "Transit":
 		operation = "transfer"
-	if not cint(policy.get(f"allow_{operation}")):
+	if not cint(policy.get(f"allow_{operation}")) and not (
+		operation == "issue" and outgoing and is_write_off_from_lost(doc, location)
+	):
 		frappe.throw(
 			_(
 				"Warehouse {0} of type {1} does not allow {2} transactions. Please select a suitable warehouse."
@@ -178,6 +183,21 @@ def validate_warehouse_operation(
 		frappe.throw(message, frappe.PermissionError)
 
 
+def is_write_off_from_lost(doc, warehouse):
+	"""Whether ``doc`` is the Stock Entry that writes off what a Lost warehouse holds (Connect Diagnostics, 7 Nov 2026):
+	a Material Issue of the Stock Entry Type "Stock Write-Off" out of a warehouse of Warehouse Type "Lost". Accounting
+	prepares and approves it; the Lost type otherwise allows no issue and only the Stock Manager moves stock out. The
+	company policy layer refuses the type from any other warehouse and requires the reason, so this opens the one way
+	out of Lost for the one document that writes the stock off."""
+	return bool(
+		doc is not None
+		and doc.doctype == "Stock Entry"
+		and doc.get("stock_entry_type") == WRITE_OFF_ENTRY_TYPE
+		and doc.get("purpose") == "Material Issue"
+		and warehouse.get("warehouse_type") == LOST_WAREHOUSE_TYPE
+	)
+
+
 def outgoing_role_waived(doc, warehouse, policy):
 	"""Whether an app lets this document move stock out of `warehouse` without the type's outgoing role.
 
@@ -191,6 +211,8 @@ def outgoing_role_waived(doc, warehouse, policy):
 	# The Stock Entry a Stock Count posts itself when it is approved (moving found stock back out of Lost): the count
 	# is the evidence and its approval the decision, by identity of that one document (Connect Diagnostics, 5 Nov 2026).
 	if is_count_posting(doc):
+		return True
+	if is_write_off_from_lost(doc, warehouse):
 		return True
 	return any(
 		frappe.get_attr(path)(doc, warehouse, policy)

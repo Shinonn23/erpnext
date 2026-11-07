@@ -20,6 +20,15 @@ stock and has no selection.
   of the quarantine Stock Entry (the Quarantine Warehouse is then optional). The mode is fixed at Prepare Count, the
   account must be an enabled, non-Stock expense account of the Company and becomes the Difference Account, and a
   Warehouse `department` (if that field exists) becomes the department. Without that field or value nothing changes.
+  A Warehouse that names its own Lost Warehouse (below) never posts its differences that way: the shortage goes to Lost.
+- **Lost and Found Warehouse of each counted warehouse** (Connect Diagnostics, 7 Nov 2026): the Warehouse has the links
+  `lost_warehouse` and `found_warehouse` (section "Lost and Found"). A Monthly count moves its shortage to the counted
+  warehouse's own Lost Warehouse and receives its confirmed surplus into its own Found Warehouse; a Warehouse without the
+  link keeps the company's Lost / Found warehouse (the first enabled leaf of the Warehouse Type that no other warehouse
+  names as its own). The Stock Count form picks the defaults again when the warehouse changes.
+- **Stock Write-Off**: a Stock Entry of the Stock Entry Type "Stock Write-Off" (Material Issue) may leave a warehouse of
+  Warehouse Type Lost, which otherwise allows no issue and lets only the Stock Manager move stock out
+  (`warehouse_policy.is_write_off_from_lost`). The company policy layer refuses the type from any other warehouse.
 
 ## Stock UX review (Connect Diagnostics, 6 Nov 2026)
 

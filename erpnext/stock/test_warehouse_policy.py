@@ -119,6 +119,34 @@ class TestWarehousePolicy(unittest.TestCase):
 			with self.assertRaises(frappe.ValidationError):
 				warehouse_policy.validate_warehouse_operation("WH", "transfer", outgoing=True, doc=owned)
 
+	def test_stock_write_off_leaves_a_lost_warehouse_and_nothing_else_does(self):
+		# Connect Diagnostics, 7 Nov 2026: accounting writes off what a Lost warehouse holds
+		self.warehouse.warehouse_type = "Lost"
+		self.policy.name = "Lost"
+		self.policy.allow_issue = 0
+		self.policy.allow_sales = 0
+		self.policy.outgoing_role = "Stock Manager"
+		write_off = frappe._dict(
+			doctype="Stock Entry", purpose="Material Issue", stock_entry_type="Stock Write-Off"
+		)
+		warehouse_policy.validate_warehouse_operation("WH", "issue", outgoing=True, doc=write_off)
+		for other in (
+			frappe._dict(doctype="Stock Entry", purpose="Material Issue", stock_entry_type="Material Issue"),
+			frappe._dict(doctype="Stock Entry", purpose="Material Transfer", stock_entry_type="Stock Write-Off"),
+			frappe._dict(doctype="Delivery Note", stock_entry_type="Stock Write-Off", purpose="Material Issue"),
+			None,
+		):
+			with self.assertRaises(frappe.ValidationError):
+				warehouse_policy.validate_warehouse_operation("WH", "issue", outgoing=True, doc=other)
+		# a sale out of Lost stays refused for the write-off too
+		with self.assertRaises(frappe.ValidationError):
+			warehouse_policy.validate_warehouse_operation("WH", "sales", outgoing=True, doc=write_off)
+		# the type alone is not enough: another warehouse type keeps its own policy
+		self.warehouse.warehouse_type = "Quarantine"
+		self.policy.name = "Quarantine"
+		with self.assertRaises(frappe.ValidationError):
+			warehouse_policy.validate_warehouse_operation("WH", "issue", outgoing=True, doc=write_off)
+
 	def test_document_and_ledger_checks_hand_the_document_to_the_waiver(self):
 		self.policy.outgoing_role = "Stock Manager"
 		doc = frappe._dict(

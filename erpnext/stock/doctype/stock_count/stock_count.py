@@ -165,7 +165,7 @@ class StockCount(Document):
 		"""Fixed at Prepare Count; before that, what the warehouse says now."""
 		if self.snapshot_datetime:
 			return bool(self.posts_variance_snapshot)
-		return self.count_type == "Monthly" and bool(get_count_variance_account(self.warehouse))
+		return self.count_type == "Monthly" and bool(count_variance_account(self.warehouse))
 
 	def keep_variance_mode(self):
 		before = self.get_doc_before_save()
@@ -181,12 +181,16 @@ class StockCount(Document):
 		# it did not find there (Connect Diagnostics, 5 Nov 2026). A count that posts its differences as a Stock
 		# Reconciliation moves nothing.
 		if not self.uses_variance() and not self.quarantine_warehouse and self.company:
-			self.quarantine_warehouse = get_lost_warehouse(self.company, exclude=self.warehouse)
+			self.quarantine_warehouse = get_lost_warehouse(
+				self.company, exclude=self.warehouse, counted=self.warehouse
+			)
 		if self.quarantine_warehouse or not self.uses_variance():
 			self.validate_quarantine_warehouse()
 		# What the count finds beyond the system quantity is received into the Found Warehouse (5 Nov 2026)
 		if not self.uses_variance() and not self.found_warehouse and self.company:
-			self.found_warehouse = get_found_warehouse(self.company, exclude=self.warehouse)
+			self.found_warehouse = get_found_warehouse(
+				self.company, exclude=self.warehouse, counted=self.warehouse
+			)
 		if self.found_warehouse:
 			self.validate_found_warehouse()
 
@@ -417,7 +421,7 @@ class StockCount(Document):
 		self.posts_variance_snapshot = 0
 		self.variance_account_snapshot = None
 		variance_account = (
-			get_count_variance_account(self.warehouse) if self.count_type == "Monthly" else None
+			count_variance_account(self.warehouse) if self.count_type == "Monthly" else None
 		)
 		if variance_account:
 			validate_variance_account(variance_account, self.company)
@@ -1362,19 +1366,49 @@ def get_loss_warehouses(company, warehouse=None):
 	"""The company's Lost and Found warehouses a Monthly count would name by default (the form fills them)."""
 	frappe.has_permission("Stock Count", "read", throw=True)
 	return {
-		"lost": get_lost_warehouse(company, exclude=warehouse),
-		"found": get_found_warehouse(company, exclude=warehouse),
+		"lost": get_lost_warehouse(company, exclude=warehouse, counted=warehouse),
+		"found": get_found_warehouse(company, exclude=warehouse, counted=warehouse),
 	}
 
 
-def get_lost_warehouse(company, exclude=None):
-	"""The company's Lost warehouse (Warehouse Type "Lost", enabled, not a group), else None."""
-	return _typed_warehouse(company, LOST_WAREHOUSE_TYPE, exclude)
+def get_lost_warehouse(company, exclude=None, counted=None):
+	"""The Lost warehouse a count of ``counted`` moves its shortage to: the warehouse's own ``lost_warehouse`` (Connect
+	Diagnostics, 7 Nov 2026: one for each counted warehouse), else the company's Lost warehouse (Warehouse Type "Lost",
+	enabled, not a group, and not the own Lost warehouse of another counted warehouse), else None."""
+	return _holding_warehouse(company, LOST_WAREHOUSE_TYPE, "lost_warehouse", exclude, counted)
 
 
-def get_found_warehouse(company, exclude=None):
-	"""The company's Found warehouse (Warehouse Type "Found", enabled, not a group), else None."""
-	return _typed_warehouse(company, FOUND_WAREHOUSE_TYPE, exclude)
+def get_found_warehouse(company, exclude=None, counted=None):
+	"""The Found warehouse a count of ``counted`` receives its confirmed surplus into: its own ``found_warehouse``, else
+	the company's Found warehouse (same rules as ``get_lost_warehouse``), else None."""
+	return _holding_warehouse(company, FOUND_WAREHOUSE_TYPE, "found_warehouse", exclude, counted)
+
+
+def own_holding_warehouse(warehouse, fieldname="lost_warehouse"):
+	"""The Lost (or Found) warehouse a counted warehouse names itself, or None. The fields are on the Warehouse
+	DocType of this fork; a site that has not migrated yet has none."""
+	if not warehouse or not frappe.db.has_column("Warehouse", fieldname):
+		return None
+	return frappe.db.get_value("Warehouse", warehouse, fieldname) or None
+
+
+def count_variance_account(warehouse):
+	"""The Count Variance Account a Monthly count of ``warehouse`` posts its differences into, or None. A warehouse that
+	names its own Lost warehouse never posts them (Connect Diagnostics, 7 Nov 2026: the shortage moves to Lost and
+	accounting writes it off from there; the account stays for that write-off and for Stock Reconciliations)."""
+	account = get_count_variance_account(warehouse)
+	if account and own_holding_warehouse(warehouse):
+		return None
+	return account
+
+
+def _holding_warehouse(company, warehouse_type, fieldname, exclude=None, counted=None):
+	own = own_holding_warehouse(counted, fieldname)
+	if own and own != (exclude or ""):
+		data = frappe.db.get_value("Warehouse", own, ["company", "is_group", "disabled"], as_dict=True)
+		if data and data.company == company and not data.is_group and not data.disabled:
+			return own
+	return _typed_warehouse(company, warehouse_type, exclude, fieldname)
 
 
 def found_valuation_rate(item_code, warehouse, company, batch_no=None):
@@ -1412,7 +1446,14 @@ def found_valuation_rate(item_code, warehouse, company, batch_no=None):
 	return flt(frappe.db.get_value("Item", item_code, "last_purchase_rate"))
 
 
-def _typed_warehouse(company, warehouse_type, exclude=None):
+def _typed_warehouse(company, warehouse_type, exclude=None, owned_field=None):
+	"""The first enabled leaf of the type in the company. A warehouse that another warehouse names in ``owned_field``
+	(its own Lost or Found warehouse) is not the company's: it serves that warehouse alone."""
+	not_in = [exclude or ""]
+	if owned_field and frappe.db.has_column("Warehouse", owned_field):
+		not_in += frappe.get_all(
+			"Warehouse", filters={owned_field: ["is", "set"]}, pluck=owned_field, limit_page_length=0
+		)
 	rows = frappe.get_all(
 		"Warehouse",
 		filters={
@@ -1420,7 +1461,7 @@ def _typed_warehouse(company, warehouse_type, exclude=None):
 			"warehouse_type": warehouse_type,
 			"is_group": 0,
 			"disabled": 0,
-			"name": ["!=", exclude or ""],
+			"name": ["not in", not_in],
 		},
 		pluck="name",
 		order_by="name",

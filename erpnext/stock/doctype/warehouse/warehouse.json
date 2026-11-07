@@ -49,6 +49,9 @@
   "stock_adjustment_account",
   "count_variance_column",
   "department",
+  "holding_section",
+  "lost_warehouse",
+  "found_warehouse",
   "tree_details",
   "lft",
   "rgt",
@@ -351,6 +354,28 @@
    "label": "Warehouse Manager",
    "no_copy": 1,
    "options": "Employee"
+  },
+  {
+   "fieldname": "holding_section",
+   "fieldtype": "Section Break",
+   "label": "Lost and Found",
+   "depends_on": "eval:!doc.is_group"
+  },
+  {
+   "description": "A Monthly Stock Count of this warehouse moves what it did not find here. Leave empty for the company's Lost warehouse.",
+   "fieldname": "lost_warehouse",
+   "fieldtype": "Link",
+   "label": "Lost Warehouse",
+   "no_copy": 1,
+   "options": "Warehouse"
+  },
+  {
+   "description": "A Monthly Stock Count of this warehouse receives what two counts found beyond the system quantity here. Leave empty for the company's Found warehouse.",
+   "fieldname": "found_warehouse",
+   "fieldtype": "Link",
+   "label": "Found Warehouse",
+   "no_copy": 1,
+   "options": "Warehouse"
   }
  ],
  "grid_page_length": 50,
@@ -358,7 +383,7 @@
  "idx": 1,
  "is_tree": 1,
  "links": [],
- "modified": "2026-11-07 14:00:00.000000",
+ "modified": "2026-11-07 20:00:00.000000",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Warehouse",
