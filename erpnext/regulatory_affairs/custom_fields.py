@@ -4,7 +4,7 @@ They are DocFields in the DocType JSON (Item, Purchase Order Item, Purchase Rece
 Item, Delivery Note Item, Sales Invoice Item), not Custom Fields: migrate only does schema (Role Profile Authority Design
 12.1, batch e). This module lists their names and the constants the code and the tests share.
 
-Layout rules (see the DKSH notes on `insert_after`): the Regulatory tab of Item opens after `quality_inspection_template`,
+Layout rules (see the notes on `insert_after` of the Setup app's custom field specs): the Regulatory tab of Item opens after `quality_inspection_template`,
 the last field of the Quality tab, and each item table's Regulatory Snapshot section is the last section of the row form,
 so no native section is swallowed by a new Section/Tab Break (`field_order` in each JSON).
 """

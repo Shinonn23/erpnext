@@ -3,6 +3,8 @@
 
 
 import frappe
+
+from erpnext.assets import service_equipment
 from frappe import _
 from frappe.query_builder import DocType
 from frappe.utils import cstr, flt
@@ -33,7 +35,7 @@ def get_data(filters):
 		[
 			"against_voucher",
 			"not in",
-			frappe.get_all("Asset", filters={"asset_owner": "DKSH"}, pluck="name"),
+			service_equipment.names(),
 		]
 	)
 
