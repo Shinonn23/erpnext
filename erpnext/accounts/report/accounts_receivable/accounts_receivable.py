@@ -1051,8 +1051,11 @@ class ReceivablePayableReport:
 		if not user_permissions:
 			return
 
+		# Accounting pays every employee's claim and advance (Siwat, 27 Oct 2026: reads_hr_payable_documents): the user
+		# permission on an Employee (a person's own record) is HR privacy and does not hide the payable from accounting
+		accounting = {"Accounts User", "Accounts Manager", "Finance Controller"} & set(frappe.get_roles())
 		for party_type in self.party_type:
-			if party_type not in user_permissions:
+			if party_type not in user_permissions or (party_type == "Employee" and accounting):
 				continue
 
 			allowed_parties = get_allowed_docs_for_doctype(user_permissions[party_type], party_type)
