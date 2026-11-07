@@ -13,7 +13,6 @@
   "parent_department",
   "column_break_3",
   "company",
-  "sales_company_branch",
   "is_group",
   "disabled",
   "lft",
@@ -89,14 +88,6 @@
   {
    "fieldname": "column_break_3",
    "fieldtype": "Column Break"
-  },
-  {
-   "description": "The Company Branch (an address of the company) this department's sales documents default to; it can be changed on each document.",
-   "fieldname": "sales_company_branch",
-   "fieldtype": "Link",
-   "label": "Company Branch of Sales Documents",
-   "no_copy": 1,
-   "options": "Address"
   }
  ],
  "icon": "building",
