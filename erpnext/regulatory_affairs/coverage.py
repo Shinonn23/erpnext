@@ -198,9 +198,6 @@ def refresh_item_coverage_for_registration(registration: str) -> None:
 	refresh_item_coverage_for_items({item_code for item_code in item_codes if item_code})
 
 
-def get_regulatory_owner(item: Any) -> str | None:
-	"""Item-level owner, falling back to the configured default owner."""
-	owner = item.get("regulatory_owner")
-	if owner:
-		return owner
+def get_regulatory_owner(item: Any = None) -> str | None:
+	"""The configured default owner (an Item names no owner of its own: a person's name is no master data)."""
 	return frappe.db.get_single_value(SETTINGS, "default_regulatory_owner")

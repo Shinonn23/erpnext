@@ -1,6 +1,6 @@
 import unittest
 from datetime import date
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import frappe
 
@@ -111,8 +111,11 @@ class TestCoverage(unittest.TestCase):
 		from erpnext.regulatory_affairs.constants import ITEM_COVERAGE_FIELDS
 
 		self.assertEqual(set(coverage.coverage_values(None)), set(ITEM_COVERAGE_FIELDS))
-		owner = frappe._dict(regulatory_owner="o@example.com")
-		self.assertEqual(coverage.get_regulatory_owner(owner), "o@example.com")
+		# an Item names no owner of its own: the default owner of Regulatory Settings is asked
+		db = MagicMock()
+		db.get_single_value.return_value = "d@example.com"
+		with patch.object(coverage.frappe, "db", db):
+			self.assertEqual(coverage.get_regulatory_owner(frappe._dict()), "d@example.com")
 
 	def test_coverage_values(self):
 		self.assertEqual(set(coverage.coverage_values(None).values()), {None})

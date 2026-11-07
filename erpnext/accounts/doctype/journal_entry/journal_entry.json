@@ -15,6 +15,8 @@
   "bank_transaction_to_reconcile",
   "advance_refund_of",
   "voucher_type",
+  "journal_entry_purpose",
+  "journal_entry_reason",
   "column_break1",
   "naming_series",
   "posting_date",
@@ -88,9 +90,6 @@
   "party_not_required",
   "connect_operations_tab",
   "connect_journal_evidence_section",
-  "journal_entry_purpose",
-  "journal_entry_reason",
-  "connect_journal_evidence_column",
   "supporting_document",
   "connect_journal_review_section",
   "requires_controller_review",
@@ -728,7 +727,8 @@
   {
    "fieldname": "journal_entry_reason",
    "fieldtype": "Small Text",
-   "label": "Reason for Journal Entry"
+   "label": "Reason for Journal Entry",
+   "mandatory_depends_on": "eval:doc.docstatus == 0 && !['Exchange Rate Revaluation', 'Exchange Gain Or Loss'].includes(doc.voucher_type) && !doc.asset_scrap_request && !doc.is_system_generated"
   },
   {
    "fieldname": "requires_controller_review",
@@ -762,10 +762,6 @@
    "label": "Journal Purpose and Evidence"
   },
   {
-   "fieldname": "connect_journal_evidence_column",
-   "fieldtype": "Column Break"
-  },
-  {
    "fieldname": "connect_journal_review_section",
    "fieldtype": "Section Break",
    "label": "Approval Requirements"
@@ -787,7 +783,7 @@
    "table_fieldname": "payment_entries"
   }
  ],
- "modified": "2026-11-07 12:00:00.000000",
+ "modified": "2026-11-07 22:00:00.000000",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Journal Entry",

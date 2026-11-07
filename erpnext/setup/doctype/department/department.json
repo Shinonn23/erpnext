@@ -13,8 +13,6 @@
   "parent_department",
   "column_break_3",
   "company",
-  "department_manager",
-  "quotation_approval_by_manager",
   "sales_company_branch",
   "is_group",
   "disabled",
@@ -93,20 +91,6 @@
    "fieldtype": "Column Break"
   },
   {
-   "description": "Approves this Department's Material Requests first. Leave empty to send them straight to the next approver.",
-   "fieldname": "department_manager",
-   "fieldtype": "Link",
-   "label": "Department Manager",
-   "options": "Employee"
-  },
-  {
-   "description": "Retired (2 Nov 2026): the Department Manager no longer approves Quotations; they go to the Sales Manager, the Managing Director or the Chief Executive Officer.",
-   "fieldname": "quotation_approval_by_manager",
-   "fieldtype": "Check",
-   "label": "Department Manager approves Quotations",
-   "no_copy": 1
-  },
-  {
    "description": "The Company Branch (an address of the company) this department's sales documents default to; it can be changed on each document.",
    "fieldname": "sales_company_branch",
    "fieldtype": "Link",
@@ -119,7 +103,7 @@
  "idx": 1,
  "is_tree": 1,
  "links": [],
- "modified": "2026-11-07 16:00:00.000000",
+ "modified": "2026-11-07 22:30:00.000000",
  "modified_by": "Administrator",
  "module": "Setup",
  "name": "Department",

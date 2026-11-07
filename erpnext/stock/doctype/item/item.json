@@ -151,7 +151,6 @@
   "regulatory_product_category",
   "regulatory_other_category",
   "medical_device_category",
-  "regulatory_owner",
   "regulatory_current_section",
   "current_regulatory_registration",
   "current_newcode",
@@ -1163,11 +1162,13 @@
    "label": "Model"
   },
   {
+   "description": "Days. A batch with fewer days left before its expiry date is listed in the report Stock Age Limits. 0 = no limit.",
    "fieldname": "min_remaining_shelf_life",
    "fieldtype": "Int",
    "label": "Min Remaining Shelf Life"
   },
   {
+   "description": "Days. Goods kept in a warehouse longer than this since they were received are listed in the report Stock Age Limits. 0 = no limit.",
    "fieldname": "max_storage_days",
    "fieldtype": "Int",
    "label": "Max Storage Days"
@@ -1198,12 +1199,6 @@
    "fieldtype": "Select",
    "label": "Medical Device Category",
    "options": "\nIVD\nNon-IVD\nOther"
-  },
-  {
-   "fieldname": "regulatory_owner",
-   "fieldtype": "Link",
-   "label": "Regulatory Owner",
-   "options": "User"
   },
   {
    "depends_on": "eval:doc.regulatory_product_category",
@@ -1250,7 +1245,7 @@
  "image_field": "image",
  "links": [],
  "make_attachments_public": 1,
- "modified": "2026-11-07 16:00:00.000000",
+ "modified": "2026-11-07 22:30:00.000000",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Item",

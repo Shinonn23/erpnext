@@ -53,7 +53,7 @@ frappe.ui.form.on("Item", {
 });
 
 // The Product Category is read-only on the form (permission level 1) and the Regulatory roles cannot edit the Item:
-// one dialog classifies the Item (Product Category, Medical Device Category, Regulatory Owner) in one step.
+// one dialog classifies the Item (Product Category, Medical Device Category) in one step.
 function add_category_button(frm) {
 	if (frm.is_new()) return;
 	const is_approver = frappe.user.has_role("Regulatory Approver");
@@ -96,13 +96,6 @@ function add_category_button(frm) {
 						depends_on: "eval:doc.category == 'Medical Device'",
 						mandatory_depends_on: "eval:doc.category == 'Medical Device'",
 					},
-					{
-						fieldname: "regulatory_owner",
-						fieldtype: "Link",
-						options: "User",
-						label: __("Regulatory Owner"),
-						default: frm.doc.regulatory_owner || frappe.session.user,
-					},
 				],
 				primary_action_label: __("Save Classification"),
 				primary_action: (values) => {
@@ -111,7 +104,6 @@ function add_category_button(frm) {
 							item_code: frm.doc.name,
 							category: values.category,
 							medical_device_category: values.medical_device_category,
-							regulatory_owner: values.regulatory_owner,
 							other_category: values.other_category,
 						})
 						.then(() => {

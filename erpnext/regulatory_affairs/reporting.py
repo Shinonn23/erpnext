@@ -567,8 +567,8 @@ def registration_owner(registration: Any, default_owner: str | None = None) -> s
 
 
 def item_owner(item: Any, default_owner: str | None = None) -> str | None:
-	"""Regulatory owner of an Item, falling back to the configured default owner."""
-	return item.get("regulatory_owner") or default_owner
+	"""Regulatory owner of an Item: the configured default owner (an Item names no owner of its own)."""
+	return default_owner
 
 
 def is_lapsed(registration: Any, today_date: date) -> bool:
@@ -1022,7 +1022,7 @@ def required_datasets(gap_types: list[str], filters: Any) -> set[str]:
 	return datasets
 
 
-ITEM_GAP_FIELDS = ("name", "item_name", ITEM_CATEGORY_FIELD, "regulatory_owner")
+ITEM_GAP_FIELDS = ("name", "item_name", ITEM_CATEGORY_FIELD)
 
 
 def fetch_regulated_items() -> list[frappe._dict]:

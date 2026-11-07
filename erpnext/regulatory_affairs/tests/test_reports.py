@@ -402,7 +402,7 @@ class TestGapDetectors(unittest.TestCase):
 			item("I-RENEWED"),
 			item("I-REMOVED"),
 			item("I-FUTURE"),
-			item("I-NONE", regulatory_owner="item.owner@example.com"),
+			item("I-NONE"),
 			item("I-TWIN"),
 			item("I-UNREGULATED", None),
 		]
@@ -423,7 +423,7 @@ class TestGapDetectors(unittest.TestCase):
 		self.assertIsNone(by_item["I-DRAFT"]["registration"])
 		self.assertIn("TWIN-1", by_item["I-TWIN"]["detail"])
 		self.assertIn("TWIN-2", by_item["I-TWIN"]["detail"])
-		self.assertEqual(by_item["I-NONE"]["owner"], "item.owner@example.com")
+		self.assertEqual(by_item["I-NONE"]["owner"], "default@example.com")
 		self.assertEqual(by_item["I-NONE"]["item_name"], "I-NONE name")
 		self.assertEqual(by_item["I-LAPSED"]["owner"], "default@example.com")
 
@@ -802,9 +802,7 @@ class TestGapLoader(unittest.TestCase):
 				["Item", "regulatory_product_category", "!=", "Not Regulated"],
 			],
 		)
-		self.assertEqual(
-			kwargs["fields"], ["name", "item_name", "regulatory_product_category", "regulatory_owner"]
-		)
+		self.assertEqual(kwargs["fields"], ["name", "item_name", "regulatory_product_category"])
 		self.assertEqual(kwargs["limit_page_length"], 0)
 		self.assertNotIn("or_filters", kwargs)
 

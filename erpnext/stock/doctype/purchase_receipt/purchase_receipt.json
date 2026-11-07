@@ -16,7 +16,6 @@
   "naming_series",
   "supplier",
   "requires_excess_receipt_approval",
-  "receiving_warehouse_manager",
   "supplier_name",
   "supplier_delivery_note",
   "subcontracting_receipt",
@@ -1331,15 +1330,6 @@
    "read_only": 1
   },
   {
-   "description": "Laboratory warehouse: its Warehouse Manager or the lab's own Stock Users accept. Empty: the maker accepts it, or a Stock User / the Stock Manager once it is sent for inspection.",
-   "fieldname": "receiving_warehouse_manager",
-   "fieldtype": "Link",
-   "label": "Receiving Warehouse Manager",
-   "no_copy": 1,
-   "options": "User",
-   "read_only": 1
-  },
-  {
    "fieldname": "approval_snapshot",
    "fieldtype": "Long Text",
    "hidden": 1,
@@ -1368,7 +1358,7 @@
  "idx": 261,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-11-07 16:00:00.000000",
+ "modified": "2026-11-07 22:30:00.000000",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Purchase Receipt",

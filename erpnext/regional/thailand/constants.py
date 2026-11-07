@@ -1041,7 +1041,8 @@ DEPOSIT_CUSTOM_FIELDS = {
 	],
 	"Purchase Invoice": [
 		{
-			"depends_on": "",
+			# no Deposit Purchase Invoice since 4 Nov 2026: the tick shows only on an old one that holds it
+			"depends_on": "eval:doc.is_deposit_invoice",
 			"fieldname": "is_deposit_invoice",
 			"fieldtype": "Check",
 			"insert_after": "is_paid",
@@ -1051,7 +1052,9 @@ DEPOSIT_CUSTOM_FIELDS = {
 		{
 			"collapsible": 1,
 			"collapsible_depends_on": "deposits",
-			"depends_on": "eval:!doc.is_deposit_invoice",
+			# the section shows only where an old deposit invoice left rows or the tick (UX review, 6 Nov 2026)
+			"depends_on": "eval:!doc.is_deposit_invoice && ((doc.deposits || []).length || doc.use_untied_deposit"
+			" || doc.manual_deposit_allocation)",
 			"fieldname": "deposit_deductions",
 			"fieldtype": "Section Break",
 			"insert_after": "advance_tax",

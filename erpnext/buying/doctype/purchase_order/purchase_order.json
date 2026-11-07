@@ -1374,7 +1374,7 @@
    "fieldname": "p2p_exception_reason",
    "fieldtype": "Small Text",
    "label": "P2P Exception Reason",
-   "mandatory_depends_on": "eval:!!doc.p2p_exception_type && (doc.docstatus == 1 || ![undefined, null, '', 'Purchase Order Draft'].includes(doc.workflow_state))"
+   "mandatory_depends_on": "eval:!!doc.p2p_exception_type"
   },
   {
    "depends_on": "eval:!!doc.p2p_exception_type || doc.p2p_exception_document",
@@ -1443,7 +1443,7 @@
  "idx": 105,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-11-07 14:00:00.000000",
+ "modified": "2026-11-07 22:00:00.000000",
  "modified_by": "Administrator",
  "module": "Buying",
  "name": "Purchase Order",

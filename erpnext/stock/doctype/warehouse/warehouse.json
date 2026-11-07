@@ -25,7 +25,6 @@
   "customer",
   "stock_control_section",
   "warehouse_type",
-  "warehouse_manager",
   "column_break_qajx",
   "asset_location_section",
   "asset_location",
@@ -343,14 +342,6 @@
    "label": "Cost Department",
    "no_copy": 1,
    "options": "Department"
-  },
-  {
-   "description": "Accepts this warehouse's Purchase Receipts. Leave empty for the Stock Manager.",
-   "fieldname": "warehouse_manager",
-   "fieldtype": "Link",
-   "label": "Warehouse Manager",
-   "no_copy": 1,
-   "options": "Employee"
   }
  ],
  "grid_page_length": 50,
@@ -358,7 +349,7 @@
  "idx": 1,
  "is_tree": 1,
  "links": [],
- "modified": "2026-11-07 14:00:00.000000",
+ "modified": "2026-11-07 22:30:00.000000",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Warehouse",

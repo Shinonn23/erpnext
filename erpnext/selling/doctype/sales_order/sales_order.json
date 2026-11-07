@@ -130,7 +130,6 @@
   "ignore_default_payment_terms_template",
   "payment_terms_template",
   "requires_credit_approval",
-  "accounts_review_requested_by",
   "payment_schedule",
   "terms_section_break",
   "tc_name",
@@ -1787,15 +1786,6 @@
    "read_only": 1
   },
   {
-   "fieldname": "accounts_review_requested_by",
-   "fieldtype": "Link",
-   "hidden": 1,
-   "label": "Accounts Review Requested By",
-   "no_copy": 1,
-   "options": "User",
-   "read_only": 1
-  },
-  {
    "description": "Filled when you save: from the source document (a lab invoice: its warehouse), else your Employee; change it while Draft or Rejected.",
    "fieldname": "department",
    "fieldtype": "Link",
@@ -1826,7 +1816,7 @@
  "idx": 105,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-11-07 16:00:00.000000",
+ "modified": "2026-11-07 22:30:00.000000",
  "modified_by": "Administrator",
  "module": "Selling",
  "name": "Sales Order",

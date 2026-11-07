@@ -13,7 +13,7 @@
   "company",
   "naming_series",
   "stock_entry_type",
-  "issuing_warehouse_manager",
+  "operation_issue_type",
   "purpose",
   "col2",
   "set_posting_time",
@@ -80,7 +80,6 @@
   "operation_requester",
   "workflow_department",
   "operation_request_column",
-  "operation_issue_type",
   "maintenance_visit",
   "operation_evidence_section",
   "operation_receipt_document",
@@ -1007,6 +1006,7 @@
    "fieldtype": "Column Break"
   },
   {
+   "description": "Set by the system from the stock movement. It decides who approves this document.",
    "fieldname": "operation_approval_route",
    "fieldtype": "Data",
    "label": "Approval Route",
@@ -1027,17 +1027,6 @@
    "label": "Approval Snapshot",
    "no_copy": 1,
    "read_only": 1
-  },
-  {
-   "description": "Approves this Material Issue of a laboratory warehouse. Taken from the Warehouse Manager of its source warehouse; empty means the Stock Manager.",
-   "fieldname": "issuing_warehouse_manager",
-   "fieldtype": "Link",
-   "hidden": 1,
-   "label": "Issuing Warehouse Manager",
-   "no_copy": 1,
-   "options": "User",
-   "print_hide": 1,
-   "read_only": 1
   }
  ],
  "grid_page_length": 50,
@@ -1046,7 +1035,7 @@
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-11-07 14:00:00.000000",
+ "modified": "2026-11-07 22:30:00.000000",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Stock Entry",

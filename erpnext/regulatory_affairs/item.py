@@ -64,11 +64,10 @@ def classify_item(
 	item_code: str,
 	category: str | None = None,
 	medical_device_category: str | None = None,
-	regulatory_owner: str | None = None,
 	other_category: str | None = None,
 ) -> dict:
-	"""Classify an Item in one step (Regulatory Operator): Product Category, Medical Device Category, Regulatory
-	Owner and, for the category Other, its name. Nobody needs Item write rights: the change goes through this method;
+	"""Classify an Item in one step (Regulatory Operator): Product Category, Medical Device Category
+	and, for the category Other, its name. Nobody needs Item write rights: the change goes through this method;
 	`validate` still enforces the role rule (only an Approver clears the category).
 
 	The Medical Device Category is kept only for a Medical Device; the Other Category only for Other.
@@ -94,14 +93,11 @@ def classify_item(
 		frappe.throw(_("Product Category {0} is not valid.").format(frappe.bold(category)))
 	if category == OTHER_CATEGORY and not doc.regulatory_other_category:
 		frappe.throw(_("Enter the Other Category when the Product Category is Other."))
-	if regulatory_owner:
-		doc.regulatory_owner = regulatory_owner
 	doc.flags.ignore_permissions = True
 	doc.save()
 	return {
 		"category": doc.get(ITEM_CATEGORY_FIELD) or "",
 		"medical_device_category": doc.get("medical_device_category"),
-		"regulatory_owner": doc.get("regulatory_owner"),
 	}
 
 
@@ -135,7 +131,7 @@ def classify_items(item_codes: str | list, category: str, medical_device_categor
 	done, failed = [], {}
 	for code in codes or []:
 		try:
-			classify_item(code, category, medical_device_category, frappe.session.user)
+			classify_item(code, category, medical_device_category)
 			done.append(code)
 		except Exception as error:
 			frappe.clear_last_message()

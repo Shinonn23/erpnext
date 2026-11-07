@@ -368,7 +368,8 @@
   {
    "fieldname": "budget_reason",
    "fieldtype": "Small Text",
-   "label": "Reason for Budget"
+   "label": "Reason for Budget",
+   "mandatory_depends_on": "eval:doc.docstatus == 0"
   },
   {
    "fieldname": "approval_snapshot",
@@ -398,7 +399,7 @@
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-11-07 16:00:00.000000",
+ "modified": "2026-11-07 22:00:00.000000",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Budget",
