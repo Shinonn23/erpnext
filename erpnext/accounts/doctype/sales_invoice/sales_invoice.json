@@ -257,6 +257,7 @@
   "requires_asset_disposal_approval",
   "asset_disposal_value",
   "connect_approval_section",
+  "workflow_state",
   "connect_approval_column"
  ],
  "fields": [
@@ -2487,6 +2488,15 @@
    "label": "Approval Status"
   },
   {
+   "allow_on_submit": 1,
+   "fieldname": "workflow_state",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Workflow State",
+   "no_copy": 1,
+   "options": "Workflow State"
+  },
+  {
    "fieldname": "connect_approval_column",
    "fieldtype": "Column Break"
   }
@@ -2502,7 +2512,7 @@
    "link_fieldname": "consolidated_invoice"
   }
  ],
- "modified": "2026-11-07 16:00:00.000000",
+ "modified": "2026-11-07 23:00:00.000000",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Sales Invoice",

@@ -164,6 +164,7 @@
   "connections_tab",
   "connect_operations_tab",
   "connect_approval_section",
+  "workflow_state",
   "connect_approval_column",
   "approval_snapshot"
  ],
@@ -1349,6 +1350,15 @@
    "label": "Approval Status"
   },
   {
+   "allow_on_submit": 1,
+   "fieldname": "workflow_state",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Workflow State",
+   "no_copy": 1,
+   "options": "Workflow State"
+  },
+  {
    "fieldname": "connect_approval_column",
    "fieldtype": "Column Break"
   }
@@ -1358,7 +1368,7 @@
  "idx": 261,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-11-07 22:30:00.000000",
+ "modified": "2026-11-07 23:00:00.000000",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Purchase Receipt",

@@ -10,6 +10,7 @@
  "documentation": "https://docs.frappe.io/erpnext/user/manual/en/journal-entry",
  "engine": "InnoDB",
  "field_order": [
+  "workflow_state",
   "entry_type_and_date",
   "company",
   "bank_transaction_to_reconcile",
@@ -100,6 +101,15 @@
   "approval_snapshot"
  ],
  "fields": [
+  {
+   "allow_on_submit": 1,
+   "fieldname": "workflow_state",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Workflow State",
+   "no_copy": 1,
+   "options": "Workflow State"
+  },
   {
    "fieldname": "entry_type_and_date",
    "fieldtype": "Section Break",
@@ -783,7 +793,7 @@
    "table_fieldname": "payment_entries"
   }
  ],
- "modified": "2026-11-07 22:00:00.000000",
+ "modified": "2026-11-07 23:00:00.000000",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Journal Entry",
