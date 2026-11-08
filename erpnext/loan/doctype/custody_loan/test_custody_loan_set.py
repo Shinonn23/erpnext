@@ -147,9 +147,9 @@ class TestReturnLoanSet(Patched):
 
 
 class TestConsume(Patched):
-	"""A Demo writes consumed stock off as a demo expense; a Borrow to a Customer is also invoiced."""
+	"""Write off consumption; accounts explicitly starts invoicing a Customer Borrow."""
 
-	def consume(self, request_type, borrower_type="Customer", invoice="SINV-1"):
+	def consume(self, request_type, borrower_type="Customer"):
 		stock = loan(
 			"CL-S",
 			"Stock",
@@ -159,6 +159,7 @@ class TestConsume(Patched):
 			recipient_contact=None,
 		)
 		adjustment = MagicMock()
+		adjustment.name = "ADJ-1"
 		adjustment.items = []
 		adjustment.append.side_effect = lambda key, value: adjustment.items.append(value)
 		made = {"returns": [], "adjustments": [], "invoices": [], "waiting": [], "notes": []}
@@ -168,7 +169,7 @@ class TestConsume(Patched):
 
 		with (
 			patch.object(frappe, "db", MagicMock(get_value=MagicMock(side_effect=get_value))),
-			patch.object(frappe, "new_doc", return_value=adjustment),
+			patch.object(frappe, "new_doc", return_value=adjustment) as new_doc,
 			patch.object(frappe, "get_doc", return_value=stock),
 			patch.object(module, "loan_item_available_to_adjust", return_value=10),
 			patch.object(module, "is_tracked", return_value=True),
@@ -180,14 +181,17 @@ class TestConsume(Patched):
 					{"batch_no": "B-2", "serials": [], "qty": 5},
 				],
 			),
-			patch.object(module, "_draft_invoice", return_value=invoice) as draft,
+			patch.object(module, "_make_consumption_invoice") as invoice,
 		):
 			module._consume_stock(stock, {"S1": 4}, made)
-		return adjustment, draft, made
+		new_doc.assert_called_once_with("Custody Loan Adjustment")
+		adjustment.insert.assert_called_once_with()
+		adjustment.submit.assert_called_once_with()
+		return adjustment, invoice, made
 
 	def test_a_demo_is_written_off_as_a_demo_expense_from_the_earliest_lots(self):
-		adjustment, draft, made = self.consume("Customer Demo")
-		draft.assert_not_called()
+		adjustment, invoice, made = self.consume("Customer Demo")
+		invoice.assert_not_called()
 		self.assertEqual(adjustment.reason, "Consumed during demo")
 		self.assertEqual(adjustment.adjustment_account, "5150-02 - Stock Adjustment")
 		self.assertEqual(
@@ -195,16 +199,25 @@ class TestConsume(Patched):
 		)
 		adjustment.submit.assert_called_once_with()
 		self.assertEqual(len(made["adjustments"]), 1)
+		self.assertEqual(made["invoices"], [])
+		self.assertEqual(made["notes"], [])
 
-	def test_a_borrow_by_a_customer_is_invoiced_and_the_reason_names_the_invoice(self):
-		adjustment, draft, _made = self.consume("Customer Borrow / Loan")
-		draft.assert_called_once()
-		self.assertIn("SINV-1", adjustment.reason)
+	def test_a_borrow_by_a_customer_leaves_invoicing_to_an_explicit_accounts_action(self):
+		adjustment, invoice, made = self.consume("Customer Borrow / Loan")
+		invoice.assert_not_called()
+		self.assertEqual(adjustment.reason, "Consumed by the borrower")
+		self.assertEqual(made["adjustments"], ["ADJ-1"])
+		self.assertEqual(made["invoices"], [])
+		self.assertEqual(
+			made["notes"], ["Accounts must create the consumption invoice from adjustment ADJ-1."]
+		)
 
 	def test_a_borrow_by_an_employee_is_not_invoiced(self):
-		adjustment, draft, _made = self.consume("Customer Borrow / Loan", borrower_type="Employee")
-		draft.assert_not_called()
+		adjustment, invoice, made = self.consume("Customer Borrow / Loan", borrower_type="Employee")
+		invoice.assert_not_called()
 		self.assertEqual(adjustment.reason, "Consumed by the borrower")
+		self.assertEqual(made["invoices"], [])
+		self.assertEqual(made["notes"], [])
 
 
 class TestRegisterLot(Patched):
@@ -349,7 +362,9 @@ class TestSetDelivery(unittest.TestCase):
 
 		loan = SimpleNamespace(loan_type="Asset", asset_movement="AM-1")
 		self.assertFalse(CustodyLoan.waits_for_stock_delivery(loan))
-		self.assertFalse(CustodyLoan.waits_for_stock_delivery(SimpleNamespace(loan_type="Stock", asset_movement=None)))
+		self.assertFalse(
+			CustodyLoan.waits_for_stock_delivery(SimpleNamespace(loan_type="Stock", asset_movement=None))
+		)
 
 	def test_the_held_asset_loan_moves_with_the_delivery_note(self):
 		from types import SimpleNamespace
@@ -357,12 +372,19 @@ class TestSetDelivery(unittest.TestCase):
 		from erpnext.loan.doctype.custody_loan import custody_loan_core as core
 
 		calls = []
-		held = SimpleNamespace(asset_movement=None, release_assets=lambda: calls.append("moved"), update_status=lambda: None)
-		done = SimpleNamespace(asset_movement="AM-1", release_assets=lambda: calls.append("again"), update_status=lambda: None)
-		with (
-			patch.object(core.frappe, "get_all", return_value=["CL-A", "CL-B"]),
-			patch.object(core.frappe, "get_doc", side_effect=[held, done]),
-		):
+		held = SimpleNamespace(
+			loan_type="Asset",
+			asset_movement=None,
+			release_assets=lambda: calls.append("moved"),
+			update_status=lambda: None,
+		)
+		done = SimpleNamespace(
+			loan_type="Asset",
+			asset_movement="AM-1",
+			release_assets=lambda: calls.append("again"),
+			update_status=lambda: None,
+		)
+		with patch.object(core, "delivery_loans", return_value=[held, done]):
 			core.release_held_assets(SimpleNamespace(loan_type="Stock", material_request="MR-1"))
 		self.assertEqual(calls, ["moved"])
 

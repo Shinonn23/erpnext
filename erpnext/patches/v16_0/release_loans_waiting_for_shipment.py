@@ -1,8 +1,8 @@
-"""A Shipment is optional for a custody loan (Siwat, 5 Nov 2026): a loan that waited for one is released.
+"""Resume return checks and status updates for loans that previously waited for a Shipment.
 
 Loans made with "Ship via Shipment" kept their Delivery Note (out) or return Delivery Note (back) as a draft until the
-Shipment was delivered. The field is gone and nothing waits for a Shipment, so each such draft is delivered or received
-as for any loan. A failure is logged and leaves the draft for the Stock team (the loan's comment says why).
+Shipment was delivered. Outgoing delivery now requires an explicit handover action; this patch never delivers it.
+Draft returns resume their usual inspection or receipt handling. A failure is logged and leaves that loan unchanged.
 """
 
 import frappe
@@ -20,13 +20,6 @@ def execute():
 		savepoint = "release_loan_waiting_for_shipment"
 		frappe.db.savepoint(savepoint)
 		try:
-			loan = frappe.get_doc("Custody Loan", name)
-			if loan.pick_list and frappe.db.get_value("Pick List", loan.pick_list, "docstatus") == 1:
-				if (
-					not loan.delivery_note
-					or frappe.db.get_value("Delivery Note", loan.delivery_note, "docstatus") == 0
-				):
-					loan.deliver_after_pick()
 			for return_name in frappe.get_all(
 				"Custody Loan Return", filters={"custody_loan": name, "docstatus": 1}, pluck="name"
 			):

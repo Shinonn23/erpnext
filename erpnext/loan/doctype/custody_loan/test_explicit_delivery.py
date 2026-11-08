@@ -6,6 +6,7 @@ import frappe
 
 from erpnext.loan.doctype.custody_loan import custody_loan_core as core
 from erpnext.loan.doctype.custody_loan import custody_loan_set as loan_set
+from erpnext.patches.v16_0 import release_loans_waiting_for_shipment as shipment_patch
 
 
 class Document(SimpleNamespace):
@@ -59,6 +60,50 @@ class TestExplicitDelivery(TestCase):
 			core.update_custody_loan_pick_list_status(Document(custody_loan=loan.name, docstatus=1))
 		loan.update_status.assert_called_once()
 		loan.release_assets.assert_not_called()
+
+	def test_shipment_patch_keeps_outgoing_delivery_explicit_but_processes_returns_and_status(self):
+		loan = self.loan("Stock")
+		loan.requires_shipment = 1
+		loan.delivery_note = "DN-OUT"
+		loan.confirm_delivery = Mock()
+		outgoing = Document(docstatus=0, submit=Mock())
+		returned = Document(docstatus=0)
+		return_doc = Document(
+			delivery_note="DN-BACK",
+			update_status=Mock(),
+			inspect_or_receive=Mock(side_effect=lambda note: setattr(note, "docstatus", 1)),
+		)
+		documents = {
+			("Custody Loan", loan.name): loan,
+			("Custody Loan Return", "RETURN-1"): return_doc,
+			("Delivery Note", "DN-OUT"): outgoing,
+			("Delivery Note", "DN-BACK"): returned,
+		}
+		self.database.table_exists.return_value = True
+		self.database.has_column.return_value = True
+		self.database.sql_list.return_value = [loan.name]
+		self.database.get_value.side_effect = lambda doctype, name, field: (
+			1 if doctype == "Pick List" else documents[(doctype, name)].docstatus
+		)
+		with (
+			patch.object(frappe, "get_doc", side_effect=lambda doctype, name: documents[(doctype, name)]),
+			patch.object(frappe, "get_all", return_value=["RETURN-1"]) as get_all,
+			patch.object(frappe, "log_error") as log_error,
+		):
+			shipment_patch.execute()
+			shipment_patch.execute()
+		outgoing.submit.assert_not_called()
+		self.assertEqual(outgoing.docstatus, 0)
+		loan.confirm_delivery.assert_not_called()
+		return_doc.inspect_or_receive.assert_called_once_with(returned)
+		self.assertEqual(return_doc.update_status.call_count, 2)
+		self.assertEqual(loan.update_status.call_count, 2)
+		get_all.assert_called_with(
+			"Custody Loan Return", filters={"custody_loan": loan.name, "docstatus": 1}, pluck="name"
+		)
+		self.assertEqual(self.database.savepoint.call_count, 2)
+		self.database.rollback.assert_not_called()
+		log_error.assert_not_called()
 
 	def test_an_asset_loan_without_movement_waits_for_explicit_handover(self):
 		self.assertEqual(core.CustodyLoan.get_submitted_status(self.loan()), "Pending Delivery")
@@ -127,7 +172,9 @@ class TestExplicitDelivery(TestCase):
 		loan = self.loan("Stock")
 		loan.company = "CD"
 		request = Document(
-			docstatus=1, material_request_type="Customer Demo", company="CD",
+			docstatus=1,
+			material_request_type="Customer Demo",
+			company="CD",
 			items=[frappe._dict(demo_acquisition_method="Convert Stock", asset=None)],
 		)
 		with (
