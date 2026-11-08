@@ -51,6 +51,7 @@
   "holding_section",
   "lost_warehouse",
   "found_warehouse",
+  "quarantine_warehouse",
   "tree_details",
   "lft",
   "rgt",
@@ -349,7 +350,7 @@
   {
    "fieldname": "holding_section",
    "fieldtype": "Section Break",
-   "label": "Lost and Found",
+   "label": "Lost, Found and Quarantine",
    "depends_on": "eval:!doc.is_group"
   },
   {
@@ -365,6 +366,14 @@
    "fieldname": "found_warehouse",
    "fieldtype": "Link",
    "label": "Found Warehouse",
+   "no_copy": 1,
+   "options": "Warehouse"
+  },
+  {
+   "description": "Goods of this warehouse that wait for a Quality Inspection or fail one (a Quarantine Intake, a rejected sales or loan return) are held in this warehouse. Leave empty for the company's Quarantine warehouse.",
+   "fieldname": "quarantine_warehouse",
+   "fieldtype": "Link",
+   "label": "Quarantine Warehouse",
    "no_copy": 1,
    "options": "Warehouse"
   }
