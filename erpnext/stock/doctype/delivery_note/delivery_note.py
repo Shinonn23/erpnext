@@ -842,6 +842,8 @@ def make_sales_invoice(
 		args = json.loads(args)
 
 	doc = frappe.get_doc("Delivery Note", source_name)
+	if doc.get("is_custody_loan_transaction"):
+		frappe.throw(_("Use the Custody Loan to record consumption or sales of loaned items."))
 
 	to_make_invoice_qty_map = {}
 	returned_qty_map = get_returned_qty_map(source_name)
@@ -1173,6 +1175,8 @@ def make_shipment(source_name, target_doc=None):
 def make_sales_return(source_name, target_doc=None):
 	from erpnext.controllers.sales_and_purchase_return import make_return_doc
 
+	if frappe.get_doc("Delivery Note", source_name).get("is_custody_loan_transaction"):
+		frappe.throw(_("Use the Custody Loan to return loaned items."))
 	return make_return_doc("Delivery Note", source_name, target_doc)
 
 

@@ -1290,11 +1290,15 @@ class SalesInvoice(SellingController):
 				frappe.throw(_("Warehouse required for stock Item {0}").format(d.item_code))
 
 	def validate_delivery_note(self):
-		"""If items are linked with a delivery note, stock cannot be updated again."""
+		"""Loan movements cannot be billed; sales deliveries cannot update stock again."""
+		notes = [item.delivery_note for item in self.items if item.delivery_note]
+		if notes and frappe.db.exists(
+			"Delivery Note", {"name": ["in", notes], "is_custody_loan_transaction": 1}
+		):
+			frappe.throw(_("Use the Custody Loan to record consumption or sales of loaned items."))
 		if not cint(self.update_stock):
 			return
 
-		notes = [item.delivery_note for item in self.items if item.delivery_note]
 		if notes:
 			frappe.throw(
 				_("Stock cannot be updated against the following Delivery Notes: {0}").format(

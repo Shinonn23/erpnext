@@ -17,10 +17,21 @@ frappe.ui.form.on("Delivery Note", {
 	// Called from refresh below: this object also defines refresh, and a second key of an object literal
 	// replaces the first, so a loan Delivery Note never showed its loan buttons.
 	custody_loan_refresh(frm) {
+		if (!frm.doc.is_custody_loan_transaction) return;
+		frm.set_intro(
+			__(
+				"Loan / Demo stock movement. Manage delivery, returns and consumption from the Custody Loan."
+			),
+			"blue"
+		);
+		if (frm.doc.custody_loan) {
+			frm.add_custom_button(__("Open Loan"), () => {
+				frappe.set_route("Form", "Custody Loan", frm.doc.custody_loan);
+			});
+		}
 		if (
 			frm.doc.docstatus !== 0 ||
 			!frm.doc.is_return ||
-			!frm.doc.is_custody_loan_transaction ||
 			frm.doc.custody_loan_source_doctype !== "Custody Loan Return" ||
 			!frm.has_perm("write")
 		) {
@@ -181,6 +192,15 @@ erpnext.stock.DeliveryNoteController = class DeliveryNoteController extends (
 	refresh(doc, dt, dn) {
 		var me = this;
 		super.refresh();
+		if (!doc.is_return && doc.status != "Closed") {
+			if (doc.docstatus == 1 && frappe.model.can_create("Shipment")) {
+				this.frm.add_custom_button(__("Shipment"), () => me.make_shipment(), __("Create"));
+			}
+		}
+		if (doc.is_custody_loan_transaction) {
+			erpnext.stock.delivery_note.set_print_hide(doc, dt, dn);
+			return;
+		}
 		if (
 			!doc.is_return &&
 			(doc.status != "Closed" || this.frm.is_new()) &&
@@ -276,17 +296,6 @@ erpnext.stock.DeliveryNoteController = class DeliveryNoteController extends (
 		}
 
 		if (!doc.is_return && doc.status != "Closed") {
-			// A Shipment is optional for every Delivery Note, a loan's included (Siwat, 5 Nov 2026).
-			if (doc.docstatus == 1 && frappe.model.can_create("Shipment")) {
-				this.frm.add_custom_button(
-					__("Shipment"),
-					function () {
-						me.make_shipment();
-					},
-					__("Create")
-				);
-			}
-
 			if (
 				flt(doc.per_installed, 2) < 100 &&
 				doc.docstatus == 1 &&

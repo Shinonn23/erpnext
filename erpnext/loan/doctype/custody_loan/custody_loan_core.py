@@ -1069,9 +1069,9 @@ class CustodyLoanReturn(Document):
 			or frappe.db.get_value("Delivery Note", loan.delivery_note, "docstatus") != 1
 		):
 			frappe.throw(_("Submit the original Loan Delivery Note before receiving stock"))
-		from erpnext.stock.doctype.delivery_note.delivery_note import make_sales_return
+		from erpnext.controllers.sales_and_purchase_return import make_return_doc
 
-		delivery_note = make_sales_return(loan.delivery_note)
+		delivery_note = make_return_doc("Delivery Note", loan.delivery_note)
 		# one receiving row per return row: a loan item may come back from several batches, each to the warehouse
 		# and location it was picked from
 		original_doc = frappe.get_doc("Delivery Note", loan.delivery_note)
