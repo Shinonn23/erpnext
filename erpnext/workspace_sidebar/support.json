@@ -81,10 +81,10 @@
    "collapsible": 1,
    "indent": 0,
    "keep_closed": 0,
-   "label": "DKSH Equipment",
+   "label": "Service Equipment",
    "link_to": "Asset",
    "link_type": "DocType",
-   "route_options": "{\"asset_owner\": \"DKSH\"}",
+   "route_options": "{\"service_nonfinancial\": 1}",
    "type": "Link"
   },
   {
@@ -95,7 +95,7 @@
    "label": "Custody Movements",
    "link_to": "Asset Movement",
    "link_type": "DocType",
-   "route_options": "{\"dksh_movement_type\": [\"is\", \"set\"]}",
+   "route_options": "{\"service_movement_type\": [\"is\", \"set\"]}",
    "type": "Link"
   },
   {
@@ -106,7 +106,7 @@
    "label": "Service Visits",
    "link_to": "Maintenance Visit",
    "link_type": "DocType",
-   "route_options": "{\"dksh_asset\": [\"is\", \"set\"]}",
+   "route_options": "{\"service_equipment\": [\"is\", \"set\"]}",
    "type": "Link"
   },
   {
@@ -117,7 +117,7 @@
    "label": "Maintenance Schedules",
    "link_to": "Maintenance Schedule",
    "link_type": "DocType",
-   "route_options": "{\"dksh_asset\": [\"is\", \"set\"]}",
+   "route_options": "{\"service_equipment\": [\"is\", \"set\"]}",
    "type": "Link"
   },
   {
@@ -125,8 +125,8 @@
    "collapsible": 1,
    "indent": 0,
    "keep_closed": 0,
-   "label": "DKSH Settings",
-   "link_to": "DKSH Settings",
+   "label": "Service Equipment Settings",
+   "link_to": "Service Equipment Settings",
    "link_type": "DocType",
    "type": "Link"
   },
@@ -136,7 +136,7 @@
    "icon": "clipboard-list",
    "indent": 1,
    "keep_closed": 0,
-   "label": "DKSH Reports",
+   "label": "Service Equipment Reports",
    "link_type": "DocType",
    "type": "Section Break"
   },
@@ -146,7 +146,7 @@
    "indent": 0,
    "keep_closed": 0,
    "label": "Service Schedule",
-   "link_to": "DKSH Service Schedule",
+   "link_to": "Service Schedule",
    "link_type": "Report",
    "show_arrow": 0,
    "type": "Link"
@@ -157,7 +157,7 @@
    "indent": 0,
    "keep_closed": 0,
    "label": "Site Visit Plan",
-   "link_to": "DKSH Site Visit Plan",
+   "link_to": "Site Visit Plan",
    "link_type": "Report",
    "show_arrow": 0,
    "type": "Link"
@@ -168,7 +168,7 @@
    "indent": 0,
    "keep_closed": 0,
    "label": "Technician Workload",
-   "link_to": "DKSH Technician Workload",
+   "link_to": "Technician Workload",
    "link_type": "Report",
    "show_arrow": 0,
    "type": "Link"
@@ -179,7 +179,7 @@
    "indent": 0,
    "keep_closed": 0,
    "label": "Equipment Register",
-   "link_to": "DKSH Equipment Register",
+   "link_to": "Service Equipment Register",
    "link_type": "Report",
    "show_arrow": 0,
    "type": "Link"
@@ -190,7 +190,7 @@
    "indent": 0,
    "keep_closed": 0,
    "label": "Open Service Issues",
-   "link_to": "DKSH Open Service Issues",
+   "link_to": "Open Service Issues",
    "link_type": "Report",
    "show_arrow": 0,
    "type": "Link"
@@ -201,7 +201,7 @@
    "indent": 0,
    "keep_closed": 0,
    "label": "Service Visit History",
-   "link_to": "DKSH Service Visit History",
+   "link_to": "Service Visit History",
    "link_type": "Report",
    "show_arrow": 0,
    "type": "Link"
@@ -212,7 +212,7 @@
    "indent": 0,
    "keep_closed": 0,
    "label": "Coverage Expiry",
-   "link_to": "DKSH Coverage Expiry",
+   "link_to": "Service Equipment Coverage Expiry",
    "link_type": "Report",
    "show_arrow": 0,
    "type": "Link"
@@ -223,7 +223,7 @@
    "indent": 0,
    "keep_closed": 0,
    "label": "Service Data Gaps",
-   "link_to": "DKSH Service Data Gaps",
+   "link_to": "Service Data Gaps",
    "link_type": "Report",
    "show_arrow": 0,
    "type": "Link"

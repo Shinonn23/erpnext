@@ -5,6 +5,8 @@
 from itertools import chain
 
 import frappe
+
+from erpnext.assets import service_equipment
 from frappe import _
 from frappe.query_builder.functions import IfNull, Sum
 from frappe.utils import add_months, cstr, flt, formatdate, getdate, nowdate, today
@@ -132,7 +134,7 @@ def get_data(filters):
 def get_conditions(filters):
 	conditions = {
 		"docstatus": 1,
-		"name": ["not in", frappe.get_all("Asset", filters={"asset_owner": "DKSH"}, pluck="name")],
+		"name": ["not in", service_equipment.names()],
 	}
 	status = filters.status
 	date_field = frappe.scrub(filters.date_based_on or "Purchase Date")
@@ -289,7 +291,7 @@ def get_asset_depreciation_amount_map(filters, finance_book):
 		.where(asset.docstatus == 1)
 	)
 
-	query = query.where(IfNull(asset.asset_owner, "") != "DKSH")
+	query = query.where(service_equipment.not_service_equipment(asset))
 
 	if filters.only_existing_assets:
 		query = query.where(asset.asset_type == "Existing Asset")
@@ -342,7 +344,7 @@ def get_asset_value_adjustment_map(filters, finance_book):
 		.where(asset.docstatus == 1)
 	)
 
-	query = query.where(IfNull(asset.asset_owner, "") != "DKSH")
+	query = query.where(service_equipment.not_service_equipment(asset))
 
 	if filters.only_existing_assets:
 		query = query.where(asset.asset_type == "Existing Asset")
