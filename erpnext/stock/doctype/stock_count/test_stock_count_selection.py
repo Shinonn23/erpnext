@@ -234,8 +234,9 @@ class StockCountSelectionTest(unittest.TestCase):
 		):
 			StockCount.validate_quarantine_if_needed(doc)
 		self.assertEqual((doc.quarantine_warehouse, doc.found_warehouse), ("LOST - C", "FOUND - C"))
-		lost.assert_called_once_with("C", exclude="CD STOCK")
-		found.assert_called_once_with("C", exclude="CD STOCK")
+		# the counted warehouse chooses its own Lost and Found warehouse (7 Nov 2026)
+		lost.assert_called_once_with("C", exclude="CD STOCK", counted="CD STOCK")
+		found.assert_called_once_with("C", exclude="CD STOCK", counted="CD STOCK")
 		# a count that posts its differences needs none
 		doc = count(quarantine_warehouse=None, company="C")
 		doc.uses_variance = lambda: True
@@ -433,12 +434,81 @@ class PrepareCountTest(unittest.TestCase):
 		doc = preparing(selected_items=rows("A"))
 		with (
 			patch.object(stock_count, "get_count_variance_account", return_value="5130-02 - CD"),
+			patch.object(stock_count, "own_holding_warehouse", return_value=None),
 			patch.object(stock_count, "validate_variance_account") as validate,
 		):
 			self.prepare(doc, ["A"])
 		validate.assert_called_once_with("5130-02 - CD", "C")
 		self.assertEqual(doc.posts_variance_snapshot, 1)
 		self.assertEqual(doc.variance_account_snapshot, "5130-02 - CD")
+
+
+class OwnLostWarehouseTest(unittest.TestCase):
+	"""Connect Diagnostics, 7 Nov 2026: each counted warehouse names its own Lost and Found warehouse."""
+
+	def test_a_warehouse_with_its_own_lost_warehouse_never_posts_variance(self):
+		with (
+			patch.object(stock_count, "get_count_variance_account", return_value="5150-02 - CD"),
+			patch.object(stock_count, "own_holding_warehouse", return_value="LOST - CD STOCK - CD"),
+		):
+			self.assertIsNone(stock_count.count_variance_account("LAB"))
+		with (
+			patch.object(stock_count, "get_count_variance_account", return_value="5150-02 - CD"),
+			patch.object(stock_count, "own_holding_warehouse", return_value=None),
+		):
+			self.assertEqual(stock_count.count_variance_account("LAB"), "5150-02 - CD")
+
+	def test_own_holding_warehouse_needs_the_field_and_a_warehouse(self):
+		db = fake_db(has_column=False, get_value="LOST")
+		with patch.object(stock_count.frappe, "db", db):
+			self.assertIsNone(stock_count.own_holding_warehouse("W"))
+			self.assertIsNone(stock_count.own_holding_warehouse(None))
+		db = fake_db(has_column=True, get_value="LOST - W")
+		with patch.object(stock_count.frappe, "db", db):
+			self.assertEqual(stock_count.own_holding_warehouse("W"), "LOST - W")
+			db.get_value.assert_called_with("Warehouse", "W", "lost_warehouse")
+			stock_count.own_holding_warehouse("W", "found_warehouse")
+			db.get_value.assert_called_with("Warehouse", "W", "found_warehouse")
+
+	def test_the_own_lost_warehouse_wins_over_the_company_one(self):
+		own = frappe._dict(company="C", is_group=0, disabled=0)
+		db = fake_db(has_column=True, get_value=lambda *a, **k: own if k.get("as_dict") else "LOST - W")
+		with (
+			patch.object(stock_count.frappe, "db", db),
+			patch.object(stock_count, "_typed_warehouse", return_value="LOST - CD") as company,
+		):
+			self.assertEqual(stock_count.get_lost_warehouse("C", exclude="W", counted="W"), "LOST - W")
+			company.assert_not_called()
+			# another company's, a group or a disabled warehouse is not used: the company's is
+			for change in ({"company": "X"}, {"is_group": 1}, {"disabled": 1}):
+				own.update(change)
+				self.assertEqual(stock_count.get_lost_warehouse("C", exclude="W", counted="W"), "LOST - CD")
+				own.update(company="C", is_group=0, disabled=0)
+
+	def test_a_warehouse_without_the_link_keeps_the_company_lost_warehouse(self):
+		db = fake_db(has_column=True, get_value=None)
+		with (
+			patch.object(stock_count.frappe, "db", db),
+			patch.object(stock_count, "_typed_warehouse", return_value="LOST - CD") as company,
+		):
+			self.assertEqual(stock_count.get_lost_warehouse("C", counted="W"), "LOST - CD")
+			company.assert_called_once_with("C", "Lost", None, "lost_warehouse")
+			self.assertEqual(stock_count.get_found_warehouse("C"), "LOST - CD")
+			company.assert_called_with("C", "Found", None, "found_warehouse")
+
+	def test_the_company_search_skips_the_warehouses_that_serve_one_warehouse(self):
+		calls = []
+
+		def get_all(doctype, **kwargs):
+			calls.append(kwargs)
+			return ["LOST - CD STOCK - CD"] if "pluck" in kwargs and kwargs["pluck"] == "lost_warehouse" else ["LOST - CD"]
+
+		with (
+			patch.object(stock_count.frappe, "db", fake_db(has_column=True)),
+			patch.object(stock_count.frappe, "get_all", side_effect=get_all),
+		):
+			self.assertEqual(stock_count._typed_warehouse("C", "Lost", "W", "lost_warehouse"), "LOST - CD")
+		self.assertEqual(calls[1]["filters"]["name"], ["not in", ["W", "LOST - CD STOCK - CD"]])
 
 
 class StockCountTemplateTest(unittest.TestCase):

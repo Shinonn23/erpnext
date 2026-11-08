@@ -501,12 +501,20 @@ erpnext.stock_count.fill_loss_warehouses = async (frm) => {
 		args: { company: frm.doc.company, warehouse: frm.doc.warehouse || null },
 	});
 	const found = r?.message || {};
+	const before = frm.__loss_defaults || {};
+	frm.__loss_defaults = { quarantine_warehouse: found.lost, found_warehouse: found.found };
 	for (const [fieldname, value] of [
 		["quarantine_warehouse", found.lost],
 		["found_warehouse", found.found],
 	]) {
-		// an empty field, or one that now names the counted warehouse itself, takes the default; a saved value stays
-		if (value && (!frm.doc[fieldname] || frm.doc[fieldname] === frm.doc.warehouse))
+		// each counted warehouse has its own Lost and Found warehouse (7 Nov 2026): an empty field, one that names the
+		// counted warehouse itself or the default of the warehouse chosen before takes the new default; a saved value stays
+		if (
+			value &&
+			(!frm.doc[fieldname] ||
+				frm.doc[fieldname] === frm.doc.warehouse ||
+				frm.doc[fieldname] === before[fieldname])
+		)
 			await frm.set_value(fieldname, value);
 	}
 };
