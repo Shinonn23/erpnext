@@ -2320,7 +2320,12 @@ def show_accounting_ledger_preview(company: str, doctype: str, docname: str):
 
 @frappe.whitelist()
 def show_stock_ledger_preview(company: str, doctype: str, docname: str):
-	filters = frappe._dict(company=company, valuation_field_type="Currency")
+	filters = frappe._dict(
+		company=company,
+		valuation_field_type="Currency",
+		show_location_wise_stock=1,
+		segregate_serial_batch_bundle=1,
+	)
 	doc = frappe.get_lazy_doc(doctype, docname)
 	doc.check_permission("read")
 	doc.run_method("before_sl_preview")
@@ -2336,6 +2341,7 @@ def show_stock_ledger_preview(company: str, doctype: str, docname: str):
 
 
 def get_accounting_ledger_preview(doc, filters):
+	from erpnext.accounts.doctype.accounting_dimension.accounting_dimension import get_accounting_dimensions
 	from erpnext.accounts.report.general_ledger.general_ledger import get_columns as get_gl_columns
 
 	gl_columns, gl_data = [], []
@@ -2350,6 +2356,11 @@ def get_accounting_ledger_preview(doc, filters):
 		"cost_center",
 		"against_voucher_type",
 		"against_voucher",
+		"project",
+		"department",
+		"territory",
+		"sales_person",
+		*get_accounting_dimensions(),
 	]
 
 	doc.docstatus = 1
@@ -2359,15 +2370,16 @@ def get_accounting_ledger_preview(doc, filters):
 
 	doc.make_gl_entries()
 	columns = get_gl_columns(filters)
-	gl_entries = get_gl_entries_for_preview(doc.doctype, doc.name, fields)
-
 	gl_columns = get_columns(columns, fields, erpnext.get_company_currency(filters.company))
+	fields = [column["fieldname"] for column in gl_columns]
+	gl_entries = get_gl_entries_for_preview(doc.doctype, doc.name, fields)
 	gl_data = get_data(fields, gl_entries)
 
 	return gl_columns, gl_data
 
 
 def get_stock_ledger_preview(doc, filters):
+	from erpnext.stock.doctype.inventory_dimension.inventory_dimension import get_inventory_dimensions
 	from erpnext.stock.report.stock_ledger.stock_ledger import get_columns as get_sl_columns
 
 	sl_columns, sl_data = [], []
@@ -2381,19 +2393,12 @@ def get_stock_ledger_preview(doc, filters):
 		"valuation_rate",
 		"stock_value",
 		"stock_value_difference",
+		"serial_and_batch_bundle",
+		"batch_no",
+		"serial_no",
+		*[dimension.fieldname for dimension in get_inventory_dimensions()],
 	]
-	columns_fields = [
-		"item_code",
-		"stock_uom",
-		"in_qty",
-		"out_qty",
-		"qty_after_transaction",
-		"warehouse",
-		"incoming_rate",
-		"in_out_rate",
-		"stock_value",
-		"stock_value_difference",
-	]
+	columns_fields = [*fields, "in_qty", "out_qty", "in_out_rate"]
 
 	if doc.get("update_stock") or doc.doctype in ("Purchase Receipt", "Delivery Note", "Stock Entry"):
 		doc.docstatus = 1
@@ -2401,31 +2406,50 @@ def get_stock_ledger_preview(doc, filters):
 		doc.update_stock_ledger()
 
 		columns = get_sl_columns(filters)
-		sl_entries = get_sl_entries_for_preview(doc.doctype, doc.name, fields)
+		sl_entries = get_sl_entries_for_preview(doc.doctype, doc.name, fields, filters)
 
 		sl_columns = get_columns(columns, columns_fields, erpnext.get_company_currency(filters.company))
-		sl_data = get_data(columns_fields, sl_entries)
+		# SLE balances are warehouse-wide; displaying a location must not imply location running balances.
+		for column in sl_columns:
+			if column["fieldname"] == "qty_after_transaction":
+				column["name"] = _("Balance Qty (Warehouse)")
+			elif column["fieldname"] == "stock_value":
+				column["name"] = _("Stock Value (Warehouse)")
+		sl_data = get_data([column["fieldname"] for column in sl_columns], sl_entries)
 
 	return sl_columns, sl_data
 
 
-def get_sl_entries_for_preview(doctype, docname, fields):
-	sl_entries = frappe.get_all(
-		"Stock Ledger Entry", filters={"voucher_type": doctype, "voucher_no": docname}, fields=fields
+def get_sl_entries_for_preview(doctype, docname, fields, filters=None):
+	from erpnext.stock.report.stock_ledger.stock_ledger import (
+		get_segregated_bundle_entries,
+		get_serial_batch_bundle_details,
 	)
 
+	sl_entries = frappe.get_all(
+		"Stock Ledger Entry",
+		filters={"voucher_type": doctype, "voucher_no": docname},
+		fields=list(dict.fromkeys(fields)),
+		order_by="posting_date, posting_time, creation",
+	)
+	filters = filters or frappe._dict()
+	bundle_details = get_serial_batch_bundle_details(sl_entries, filters)
+	entries = []
 	for entry in sl_entries:
-		if entry.actual_qty > 0:
-			entry["in_qty"] = entry.actual_qty
-			entry["out_qty"] = 0
-		else:
-			entry["out_qty"] = abs(entry.actual_qty)
-			entry["in_qty"] = 0
+		if details := bundle_details.get(entry.serial_and_batch_bundle):
+			rows = get_segregated_bundle_entries(entry, details, {}, filters)
+			for row in rows:
+				row.out_qty = abs(row.out_qty)
+			entries.extend(rows)
+			continue
 
+		entry.in_qty = max(entry.actual_qty, 0)
+		entry.out_qty = abs(min(entry.actual_qty, 0))
 		if entry.actual_qty < 0:
-			entry["in_out_rate"] = entry.stock_value_difference / entry.actual_qty
+			entry.in_out_rate = entry.stock_value_difference / entry.actual_qty
+		entries.append(entry)
 
-	return sl_entries
+	return entries
 
 
 def get_gl_entries_for_preview(doctype, docname, fields):
@@ -2440,6 +2464,7 @@ def get_columns(raw_columns, fields, currency):
 
 		column = {
 			"name": source_column.get("label"),
+			"fieldname": source_column.get("fieldname"),
 			"editable": False,
 			"width": 110,
 			"fieldtype": source_column.get("fieldtype"),
@@ -2456,7 +2481,8 @@ def get_data(raw_columns, raw_data):
 	for row in raw_data:
 		data_row = []
 		for column in raw_columns:
-			data_row.append(row.get(column) or "")
+			value = row.get(column)
+			data_row.append("" if value is None else value)
 
 		datatable_data.append(data_row)
 

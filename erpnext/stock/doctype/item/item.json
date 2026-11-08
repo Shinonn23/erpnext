@@ -151,6 +151,7 @@
   "inspection_required_before_delivery",
   "qi_template_section",
   "quality_inspection_template",
+  "registration_requirement",
   "regulatory_tab",
   "regulatory_product_category",
   "regulatory_other_category",
@@ -1272,6 +1273,14 @@
    "fieldname": "is_deposit_item",
    "fieldtype": "Check",
    "label": "Is Deposit Item"
+  },
+  {
+   "fieldname": "registration_requirement",
+   "fieldtype": "Select",
+   "label": "Registration Requirement for Sale",
+   "options": "\nPending Assessment\nRequired\nNot Required",
+   "description": "Purchasing or an Item Manager assesses whether this Item requires registration before sale. Regulatory Affairs confirms compliance.",
+   "no_copy": 1
   }
  ],
  "icon": "package",
