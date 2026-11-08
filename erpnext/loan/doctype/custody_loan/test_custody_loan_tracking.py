@@ -131,6 +131,21 @@ class TrackingTest(unittest.TestCase):
 		with self.assertRaises(frappe.ValidationError):
 			self.validate(doc, [row], {"L1": [("B-1", "SN-1", 1), ("B-2", "SN-2", 1)]})
 
+	def test_a_serial_that_was_not_lent_never_comes_back_even_on_a_return(self):
+		# Siwat, 8 Nov 2026: only the serial numbers that were lent come back (a unit sold earlier is a Sales Return)
+		doc = loan(("L1", "SERIAL"))
+		row = frappe._dict(idx=1, custody_loan_item="L1", returned_qty=1, serial_no="SN-A", batch_no="B-1")
+		target = Doc(doctype="Custody Loan Return", name=None, items=[row])
+		with (
+			patch.object(tracking, "issued_entries", return_value={"L1": [("B-1", "SN-B", 1)]}),
+			patch.object(tracking, "_movement_rows", return_value=[]),
+			patch.object(tracking.frappe, "throw", side_effect=frappe.ValidationError),
+		):
+			with self.assertRaises(frappe.ValidationError):
+				tracking.validate_tracked_rows(target, doc, "returned_qty", allow_other_lots=True)
+			row.serial_no = "SN-B"
+			tracking.validate_tracked_rows(target, doc, "returned_qty", allow_other_lots=True)
+
 	def test_return_refuses_a_serial_already_on_a_pending_return(self):
 		doc = loan(("L1", "SERIAL"))
 		row = frappe._dict(idx=1, custody_loan_item="L1", returned_qty=1, serial_no="SN-1")
@@ -300,7 +315,9 @@ class OtherLotReturnTest(TrackingTest):
 		ret = Doc(
 			doctype="Custody Loan Return",
 			name=None,
-			items=[frappe._dict(idx=1, custody_loan_item="L1", batch_no=batch, serial_no=None, returned_qty=2)],
+			items=[
+				frappe._dict(idx=1, custody_loan_item="L1", batch_no=batch, serial_no=None, returned_qty=2)
+			],
 		)
 		return doc, ret
 
@@ -322,28 +339,3 @@ class OtherLotReturnTest(TrackingTest):
 	def test_a_batch_of_another_item_is_refused(self):
 		with self.assertRaisesRegex(frappe.ValidationError, "not a batch of"):
 			self.validate_return("OTHER", item_of_batch="ANOTHER-ITEM", allow_other_lots=True)
-
-
-class ForeignSerialTest(unittest.TestCase):
-	def run_check(self, values, on_loan=False):
-		with (
-			patch.object(tracking, "_", side_effect=lambda text: text),
-			patch.object(frappe, "throw", side_effect=raise_validation),
-			patch.object(
-				frappe, "db", MagicMock(get_value=MagicMock(return_value=values), exists=MagicMock(return_value=on_loan))
-			),
-		):
-			tracking.check_foreign_serial("SN-9", "SERIAL", "CL-1", 1)
-
-	def test_a_serial_nobody_holds_may_come_back(self):
-		self.run_check(frappe._dict(item_code="SERIAL", warehouse=None))
-
-	def test_a_serial_in_our_stock_an_unknown_one_or_another_loans_is_refused(self):
-		with self.assertRaisesRegex(frappe.ValidationError, "in stock in STORES"):
-			self.run_check(frappe._dict(item_code="SERIAL", warehouse="STORES"))
-		with self.assertRaisesRegex(frappe.ValidationError, "not known yet"):
-			self.run_check(None)
-		with self.assertRaisesRegex(frappe.ValidationError, "another open loan"):
-			self.run_check(frappe._dict(item_code="SERIAL", warehouse=None), on_loan=True)
-		with self.assertRaisesRegex(frappe.ValidationError, "another Item"):
-			self.run_check(frappe._dict(item_code="OTHER", warehouse=None))

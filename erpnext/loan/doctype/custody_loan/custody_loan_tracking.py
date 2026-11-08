@@ -204,25 +204,35 @@ def attribute_other_lots(balances):
 		if not entry.other_lot:
 			continue
 		label = entry.serial_no or entry.batch_no or _("no batch")
-		lent = sorted(lent_by_item.get(entry.custody_loan_item, []), key=lambda e: (e.batch_no or "", e.serial_no or ""))
+		lent = sorted(
+			lent_by_item.get(entry.custody_loan_item, []), key=lambda e: (e.batch_no or "", e.serial_no or "")
+		)
 		for field in ("returned_qty", "pending_return_qty"):
 			left = entry.get(field)
 			for target in lent:
 				if left <= 0:
 					break
-				room = target.issued_qty - target.returned_qty - target.adjusted_qty - target.pending_return_qty
+				room = (
+					target.issued_qty - target.returned_qty - target.adjusted_qty - target.pending_return_qty
+				)
 				take = min(max(room, 0), left)
 				if take <= 0:
 					continue
 				target[field] += take
 				left -= take
-				note = f"{label} x {flt(take):g}" + (f" ({_('pending')})" if field == "pending_return_qty" else "")
+				note = f"{label} x {flt(take):g}" + (
+					f" ({_('pending')})" if field == "pending_return_qty" else ""
+				)
 				target.returned_as = f"{target.returned_as}, {note}" if target.returned_as else note
 
 
 def tracking_status(entry):
 	if entry.issued_qty <= 0:
-		return "Returned in Other Lot" if (entry.returned_qty > 0 or entry.pending_return_qty > 0) else "Not Issued"
+		return (
+			"Returned in Other Lot"
+			if (entry.returned_qty > 0 or entry.pending_return_qty > 0)
+			else "Not Issued"
+		)
 	if entry.pending_return_qty > 0:
 		return "Pending Return"
 	if entry.outstanding_qty <= 0:
@@ -296,39 +306,10 @@ def grouped_open_rows(loan, loan_item_row):
 	return sorted(groups.values(), key=lambda group: group["batch_no"] or "")
 
 
-def check_foreign_serial(serial, item_code, loan_name, idx=None):
-	"""A serial number that was not lent on this loan may come back only if it is a known unit of the Item that nobody
-	holds: not in our stock and not on another open loan."""
-	prefix = _("Row {0}: ").format(idx) if idx else ""
-	values = frappe.db.get_value("Serial No", serial, ["item_code", "warehouse"], as_dict=True)
-	if not values:
-		frappe.throw(
-			prefix + _("Serial No {0} is not known yet: use 'New Batch / Serial' to add it first.").format(serial)
-		)
-	if values.item_code != item_code:
-		frappe.throw(prefix + _("Serial No {0} belongs to another Item.").format(serial))
-	if values.warehouse:
-		frappe.throw(
-			prefix
-			+ _("Serial No {0} is in stock in {1}: it cannot come back from a customer.").format(
-				serial, values.warehouse
-			)
-		)
-	if frappe.db.exists(
-		"Custody Loan Serial Batch",
-		{
-			"serial_no": serial,
-			"status": ["in", ["With Borrower", "Pending Return"]],
-			"parent": ["!=", loan_name],
-			"parenttype": "Custody Loan",
-		},
-	):
-		frappe.throw(prefix + _("Serial No {0} is on another open loan.").format(serial))
-
-
 def validate_tracked_rows(doc, loan, qty_field, allow_other_lots=False):
-	"""Each return/adjustment row of a tracked item must take open units: its serials and batch must have been issued
-	on this loan and not be returned, pending return or written off already."""
+	"""Each return/adjustment row of a tracked item must take open units: its serials must have been issued on this loan
+	and not be returned, pending return or written off already. A batch-tracked item without serial numbers may come
+	back in another batch of the same Item (``allow_other_lots``); a serial number never may (Siwat, 8 Nov 2026)."""
 	exclude = (doc.doctype, doc.name) if doc.name else None
 	balances = get_balances(loan, exclude=exclude, attribute=not allow_other_lots)
 	factors = conversion_factors(loan)
@@ -348,15 +329,13 @@ def validate_tracked_rows(doc, loan, qty_field, allow_other_lots=False):
 			batches = set()
 			for serial in serials:
 				entry = balances.get((loan_item.name, None, serial))
-				if allow_other_lots and (not entry or entry.issued_qty <= 0):
-					# a serial number that was not lent: a unit of the same Item that nobody holds
-					check_foreign_serial(serial, loan_item.item_code, loan.name, row.idx)
-					taken[(loan_item.name, None, serial)] += 1
-					batches.add(None)
-					continue
+				# Siwat, 8 Nov 2026: a serial-tracked unit comes back as the very unit that was lent, never another
+				# serial number (a unit sold earlier goes back through a Sales Return, not through the loan)
 				if not entry or entry.issued_qty <= 0:
 					frappe.throw(
-						_("Row {0}: Serial No {1} was not issued on this Loan Item").format(row.idx, serial)
+						_(
+							"Row {0}: Serial No {1} was not lent on this Loan Item. Only the serial numbers that were lent come back."
+						).format(row.idx, serial)
 					)
 				if entry.open_qty - taken[(loan_item.name, None, serial)] < 1:
 					frappe.throw(
@@ -366,10 +345,7 @@ def validate_tracked_rows(doc, loan, qty_field, allow_other_lots=False):
 					)
 				taken[(loan_item.name, None, serial)] += 1
 				batches.add(entry.batch_no)
-			if flags.has_batch_no and allow_other_lots:
-				if not row.batch_no:
-					frappe.throw(_("Row {0}: Select the Batch No").format(row.idx))
-			elif flags.has_batch_no:
+			if flags.has_batch_no:
 				if len(batches) > 1:
 					frappe.throw(
 						_(
@@ -394,7 +370,9 @@ def validate_tracked_rows(doc, loan, qty_field, allow_other_lots=False):
 				# a batch that was not lent comes back too, if it is a batch of this Item
 				if frappe.db.get_value("Batch", row.batch_no, "item") != loan_item.item_code:
 					frappe.throw(
-						_("Row {0}: Batch {1} is not a batch of {2}").format(row.idx, row.batch_no, loan_item.item_code)
+						_("Row {0}: Batch {1} is not a batch of {2}").format(
+							row.idx, row.batch_no, loan_item.item_code
+						)
 					)
 			elif allow_other_lots:
 				pass

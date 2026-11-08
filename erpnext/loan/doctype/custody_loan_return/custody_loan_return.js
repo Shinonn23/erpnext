@@ -290,7 +290,7 @@ function ask_who_returns(frm) {
 }
 
 // A customer may return another batch of the Item than the one lent (Siwat, 5 Nov 2026): any batch of the Item is
-// offered; a batch that does not exist yet is added from the Return Loan Set dialog ("New Batch / Serial").
+// offered; a batch that does not exist yet is added from the Return Loan Set dialog ("New Batch / Serial"); a serial number is never added: only the serials that were lent come back (Siwat, 8 Nov 2026).
 function set_open_batch_query(frm) {
 	frm.set_query("batch_no", "items", (doc, cdt, cdn) => {
 		const row = locals[cdt][cdn];
