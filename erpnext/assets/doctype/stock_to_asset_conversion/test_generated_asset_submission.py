@@ -16,9 +16,12 @@ class TestGeneratedAssetSubmission(unittest.TestCase):
 		doc = frappe._dict(
 			name="CONV-1",
 			posting_date="2026-10-19",
-			assets=[frappe._dict(asset="ASSET-1", source_serial_no=None, accounting_treatment="Capitalized")],
+			assets=[frappe._dict(asset="ASSET-1", source_serial_no=None)],
 		)
-		with patch.object(conversion.frappe, "get_doc", return_value=asset), patch.object(conversion.frappe, "db", Mock()):
+		with (
+			patch.object(conversion.frappe, "get_doc", return_value=asset),
+			patch.object(conversion.frappe, "db", Mock()),
+		):
 			conversion.StocktoAssetConversion.submit_generated_assets(doc)
 		# The approver may only read Assets; the approval itself authorises the system submission.
 		self.assertEqual(seen, {"ignore_permissions": True})
@@ -31,8 +34,14 @@ class TestSystemAssetReceiptMovement(unittest.TestCase):
 		movement = Mock()
 		movement.flags = frappe._dict()
 		doc = frappe._dict(
-			name="ACC-ASS-1", asset_name="Generated", location="Office", custodian=None, company="CD",
-			purchase_receipt=None, purchase_invoice=None, purchase_date="2026-10-19",
+			name="ACC-ASS-1",
+			asset_name="Generated",
+			location="Office",
+			custodian=None,
+			company="CD",
+			purchase_receipt=None,
+			purchase_invoice=None,
+			purchase_date="2026-10-19",
 			flags=frappe._dict(ignore_permissions=ignore_permissions),
 		)
 		with patch.object(asset_module.frappe, "get_doc", return_value=movement):

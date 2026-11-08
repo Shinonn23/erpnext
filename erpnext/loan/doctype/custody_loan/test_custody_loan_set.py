@@ -275,8 +275,8 @@ class TestTheSet(Patched):
 class TestSetStatus(unittest.TestCase):
 	def test_one_status_for_the_loans_of_a_request(self):
 		status = module.set_status
-		self.assertEqual(status(["Pending Pick", "Pending Delivery Note"]), "Being delivered")
-		self.assertEqual(status(["Pending Delivery Note", "Active"]), "Being delivered")
+		self.assertEqual(status(["Pending Pick", "Pending Delivery"]), "Being delivered")
+		self.assertEqual(status(["Pending Delivery", "Active"]), "Being delivered")
 		self.assertEqual(status(["Active", "Active"]), "Out")
 		self.assertEqual(status(["Active", "Returned"]), "Partly back")
 		self.assertEqual(status(["Active", "Partially Returned"]), "Partly back")

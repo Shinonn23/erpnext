@@ -94,8 +94,6 @@
   "split_from",
   "amended_from",
   "booked_fixed_asset",
-  "stock_to_asset_accounting_treatment",
-  "stock_to_asset_depreciation_journal_entry",
   "connections_tab"
  ],
  "fields": [
@@ -144,7 +142,9 @@
    "in_standard_filter": 1,
    "label": "Asset Category",
    "options": "Asset Category",
-   "read_only": 1
+   "read_only": 0,
+   "read_only_depends_on": "eval:doc.docstatus != 0",
+   "fetch_if_empty": 1
   },
   {
    "default": "Company",
@@ -466,23 +466,6 @@
    "hidden": 1,
    "label": "Booked Fixed Asset",
    "no_copy": 1,
-   "read_only": 1
-  },
-  {
-   "depends_on": "eval:doc.stock_to_asset_conversion",
-   "fieldname": "stock_to_asset_accounting_treatment",
-   "fieldtype": "Select",
-   "label": "Stock Conversion Accounting Treatment",
-   "no_copy": 1,
-   "options": "\nExpense\nImmediate Depreciation\nScheduled Depreciation\nHold Value",
-   "read_only_depends_on": "eval:doc.docstatus != 0 || !doc.stock_to_asset_conversion"
-  },
-  {
-   "fieldname": "stock_to_asset_depreciation_journal_entry",
-   "fieldtype": "Link",
-   "label": "Immediate Depreciation Entry",
-   "no_copy": 1,
-   "options": "Journal Entry",
    "read_only": 1
   },
   {

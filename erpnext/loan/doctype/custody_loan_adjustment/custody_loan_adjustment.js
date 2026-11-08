@@ -34,6 +34,18 @@ frappe.ui.form.on("Custody Loan Adjustment", {
 		if (frm.doc.docstatus === 0 && frm.doc.custody_loan) {
 			frm.add_custom_button(__("Select Serial / Batch"), () => select_open_serial_batches(frm, "qty"));
 		}
+		if (frm.doc.docstatus === 1 && frm.doc.borrower_type === "Customer" &&
+			frm.doc.reason === "Consumed by the borrower" && frappe.model.can_create("Sales Invoice")) {
+			frm.add_custom_button(__("Create Consumption Invoice"), async () => {
+				const { message: invoice } = await frappe.call({
+					method: "erpnext.loan.doctype.custody_loan.custody_loan_set.create_consumption_invoice",
+					args: { adjustment: frm.doc.name },
+					freeze: true,
+				});
+				frappe.model.sync(invoice);
+				frappe.set_route("Form", "Sales Invoice", invoice.name);
+			});
+		}
 		if (frm.doc.docstatus !== 1 || !frm.doc.stock_entry || !frappe.model.can_read("Stock Entry")) return;
 		frm.add_custom_button(__("Open Stock Entry"), () =>
 			frappe.set_route("Form", "Stock Entry", frm.doc.stock_entry)

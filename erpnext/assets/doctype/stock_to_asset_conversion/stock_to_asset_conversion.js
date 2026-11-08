@@ -52,10 +52,3 @@ frappe.ui.form.on("Stock to Asset Conversion Item", {
 		});
 	},
 });
-
-frappe.ui.form.on("Stock to Asset Conversion Asset", {
-	accounting_treatment(frm, cdt, cdn) {
-		const row = locals[cdt][cdn];
-		frappe.model.set_value(cdt, cdn, "calculate_depreciation", row.accounting_treatment === "Scheduled Depreciation");
-	},
-});

@@ -49,13 +49,6 @@ class StocktoAssetConversion(StockController):
 		total_value: DF.Currency
 	# end: auto-generated types
 
-	ACCOUNTING_TREATMENTS = (
-		"Expense",
-		"Immediate Depreciation",
-		"Scheduled Depreciation",
-		"Hold Value",
-	)
-
 	def validate(self):
 		self.set_department()
 		self.validate_company_settings()
@@ -150,8 +143,9 @@ class StocktoAssetConversion(StockController):
 			if not target.is_fixed_asset or target.is_stock_item:
 				frappe.throw(_("Row {0}: Target Item must be a non-stock Fixed Asset Item").format(row.idx))
 			if not target.asset_category:
-				frappe.throw(_("Row {0}: Set an Asset Category on target Item {1}").format(row.idx, target.name))
-			self.validate_demo_category(row, target)
+				frappe.throw(
+					_("Row {0}: Set an Asset Category on target Item {1}").format(row.idx, target.name)
+				)
 			if flt(row.qty) <= 0 or flt(row.qty) % 1:
 				frappe.throw(_("Row {0}: Qty must be a positive whole number").format(row.idx))
 			warehouse_company = frappe.db.get_value("Warehouse", row.warehouse, "company")
@@ -166,8 +160,18 @@ class StocktoAssetConversion(StockController):
 					frappe.throw(_("Row {0}: Select a Material Request Item").format(row.idx))
 				request = frappe.get_cached_doc("Material Request", self.material_request)
 				request_row = frappe.db.get_value(
-					"Material Request Item", row.material_request_item,
-					["parent", "item_code", "item_type", "from_warehouse", "stock_qty", "qty", "fulfilled_qty"], as_dict=True,
+					"Material Request Item",
+					row.material_request_item,
+					[
+						"parent",
+						"item_code",
+						"item_type",
+						"from_warehouse",
+						"stock_qty",
+						"qty",
+						"fulfilled_qty",
+					],
+					as_dict=True,
 				)
 				if (
 					not request_row
@@ -176,20 +180,30 @@ class StocktoAssetConversion(StockController):
 					or request_row.item_type != "Stock Item"
 					or request_row.from_warehouse != row.warehouse
 				):
-					frappe.throw(_("Row {0}: Stock Item is not requested on the linked Material Request").format(row.idx))
+					frappe.throw(
+						_("Row {0}: Stock Item is not requested on the linked Material Request").format(
+							row.idx
+						)
+					)
 				request_qty[row.material_request_item] = (
 					flt(request_row.stock_qty or request_row.qty)
 					- flt(request_row.fulfilled_qty)
 					- self.get_already_converted_qty(row.material_request_item)
 				)
-				converted_request_qty[row.material_request_item] = (
-					converted_request_qty.get(row.material_request_item, 0) + flt(row.stock_qty)
-				)
+				converted_request_qty[row.material_request_item] = converted_request_qty.get(
+					row.material_request_item, 0
+				) + flt(row.stock_qty)
 			elif row.material_request_item:
-				frappe.throw(_("Row {0}: Material Request Item requires a linked Material Request").format(row.idx))
+				frappe.throw(
+					_("Row {0}: Material Request Item requires a linked Material Request").format(row.idx)
+				)
 		for request_item, qty in converted_request_qty.items():
 			if qty > request_qty[request_item]:
-				frappe.throw(_("Converted quantity exceeds the remaining quantity for Material Request Item {0}").format(request_item))
+				frappe.throw(
+					_(
+						"Converted quantity exceeds the remaining quantity for Material Request Item {0}"
+					).format(request_item)
+				)
 
 	def get_already_converted_qty(self, request_item):
 		return flt(
@@ -202,24 +216,22 @@ class StocktoAssetConversion(StockController):
 			)[0][0]
 		)
 
-	def validate_demo_category(self, row, target):
-		"""Demo Assets are told apart by their Asset Category, so a Customer Demo request must produce one."""
+	def validate_demo_category(self, row, asset_category):
+		"""The category chosen for each Demo object must identify demonstration equipment."""
 		if not self.material_request:
 			return
 		request_type = frappe.db.get_value("Material Request", self.material_request, "material_request_type")
 		if request_type == "Customer Demo" and not frappe.get_cached_value(
-			"Asset Category", target.asset_category, "is_demo_category"
+			"Asset Category", asset_category, "is_demo_category"
 		):
-			frappe.throw(
-				_("Row {0}: Target Item {1} must be in an Asset Category marked as a Demo Category for a Customer Demo request").format(
-					row.idx, target.name
-				)
-			)
+			frappe.throw(_("Row {0}: select a Demo Category for {1}.").format(row.idx, row.asset_item_code))
 
 	def validate_bundle(self, row, item):
 		bundle = frappe.get_doc("Serial and Batch Bundle", row.serial_and_batch_bundle)
 		if bundle.item_code != row.item_code or bundle.warehouse != row.warehouse:
-			frappe.throw(_("Row {0}: Bundle Item and Warehouse must match the conversion row").format(row.idx))
+			frappe.throw(
+				_("Row {0}: Bundle Item and Warehouse must match the conversion row").format(row.idx)
+			)
 		if self.pick_list:
 			linked_to_conversion_row = (
 				bundle.voucher_type == self.doctype
@@ -241,14 +253,20 @@ class StocktoAssetConversion(StockController):
 					and pick_list_item.warehouse == row.warehouse
 				)
 			if not (linked_to_conversion_row or linked_to_pick_list_row):
-				frappe.throw(_("Row {0}: Pick List Bundle does not match this Conversion row").format(row.idx))
+				frappe.throw(
+					_("Row {0}: Pick List Bundle does not match this Conversion row").format(row.idx)
+				)
 		else:
 			if not (
 				bundle.voucher_type == self.doctype
 				and bundle.voucher_no == self.name
 				and bundle.voucher_detail_no == row.name
 			):
-				frappe.throw(_("Row {0}: Without a Pick List, the Serial and Batch Bundle must be created for this Conversion row").format(row.idx))
+				frappe.throw(
+					_(
+						"Row {0}: Without a Pick List, the Serial and Batch Bundle must be created for this Conversion row"
+					).format(row.idx)
+				)
 		if bundle.type_of_transaction != "Outward":
 			frappe.throw(_("Row {0}: The Serial and Batch Bundle must be Outward").format(row.idx))
 		if abs(flt(bundle.total_qty)) != flt(row.qty):
@@ -263,7 +281,11 @@ class StocktoAssetConversion(StockController):
 			frappe.throw(_("Pick List must be submitted before conversion"))
 		if pick_list.company != self.company or pick_list.purpose != "Material Transfer":
 			frappe.throw(_("Pick List must be a submitted Material Transfer for this Company"))
-		if pick_list.material_request and self.material_request and pick_list.material_request != self.material_request:
+		if (
+			pick_list.material_request
+			and self.material_request
+			and pick_list.material_request != self.material_request
+		):
 			frappe.throw(_("Pick List must be linked to the selected Material Request"))
 		if pick_list.material_request and not self.material_request:
 			self.material_request = pick_list.material_request
@@ -290,7 +312,9 @@ class StocktoAssetConversion(StockController):
 			locations = [location for location in candidates if location.name not in used_locations]
 			if len(locations) != 1:
 				frappe.throw(
-					_("Row {0}: Pick List must have exactly one matching picked row; split duplicate rows in the same way").format(row.idx)
+					_(
+						"Row {0}: Pick List must have exactly one matching picked row; split duplicate rows in the same way"
+					).format(row.idx)
 				)
 			location = locations[0]
 			if (
@@ -298,7 +322,9 @@ class StocktoAssetConversion(StockController):
 				or location.warehouse != row.warehouse
 				or flt(location.picked_qty) != flt(row.qty)
 			):
-				frappe.throw(_("Row {0}: Picked Item and Warehouse must match this Conversion row").format(row.idx))
+				frappe.throw(
+					_("Row {0}: Picked Item and Warehouse must match this Conversion row").format(row.idx)
+				)
 			used_locations.add(location.name)
 			row.material_request_item = location.material_request_item
 			row.serial_and_batch_bundle = location.serial_and_batch_bundle
@@ -306,7 +332,11 @@ class StocktoAssetConversion(StockController):
 				fieldname = dimension.source_fieldname
 				if row.meta.has_field(fieldname) and not row.get(fieldname) and location.get(fieldname):
 					row.set(fieldname, location.get(fieldname))
-			if row.meta.has_field("storage_location") and not row.storage_location and location.get("storage_location"):
+			if (
+				row.meta.has_field("storage_location")
+				and not row.storage_location
+				and location.get("storage_location")
+			):
 				row.storage_location = location.storage_location
 		if len(used_locations) != len(pick_list.locations):
 			frappe.throw(_("Every selected Pick List row must be included in the Conversion"))
@@ -335,22 +365,25 @@ class StocktoAssetConversion(StockController):
 				# Pick List synchronization sets the exact source row when available.
 				continue
 			else:
-				frappe.throw(_("Row {0}: Select an unambiguous Material Request Item for this Stock Item").format(row.idx))
+				frappe.throw(
+					_("Row {0}: Select an unambiguous Material Request Item for this Stock Item").format(
+						row.idx
+					)
+				)
 
 	def build_asset_preview(self):
-		existing_treatments = {}
+		existing_categories = {}
 		existing_locations = {}
 		existing_assets = {}
 		previous = self.get_doc_before_save()
-		previous_outputs = {
-			(row.source_item_row, row.source_unit_index): row
-			for row in previous.assets
-		} if previous else {}
+		previous_outputs = (
+			{(row.source_item_row, row.source_unit_index): row for row in previous.assets} if previous else {}
+		)
 		for row in self.assets:
 			key = (row.source_item_row, row.source_unit_index)
 			if not all(key):
 				continue
-			treatment = row.accounting_treatment
+			category = row.asset_category
 			location = row.asset_location
 			if row.asset and frappe.db.exists("Asset", row.asset):
 				asset = frappe.get_doc("Asset", row.asset)
@@ -362,15 +395,15 @@ class StocktoAssetConversion(StockController):
 					frappe.throw(_("Asset {0} is not linked to this Conversion unit").format(asset.name))
 				existing_assets[key] = asset.name
 				previous_row = previous_outputs.get(key)
-				if not previous_row or treatment == previous_row.accounting_treatment:
-					treatment = asset.stock_to_asset_accounting_treatment or treatment
+				if not previous_row or category == previous_row.asset_category:
+					category = asset.asset_category or category
 				if not previous_row or location == previous_row.asset_location:
 					location = asset.location or location
-			existing_treatments[key] = normalize_accounting_treatment(treatment)
+			if category:
+				existing_categories[key] = category
 			if location:
 				existing_locations[key] = location
 		self.set("assets", [])
-		threshold = flt(frappe.db.get_value("Company", self.company, "asset_capitalization_threshold"))
 		for row in self.stock_items:
 			source_unit_index = 0
 			warehouse_location = frappe.db.get_value("Warehouse", row.warehouse, "asset_location")
@@ -394,9 +427,9 @@ class StocktoAssetConversion(StockController):
 					asset_location = existing_locations.get(
 						(row.name, source_unit_index), warehouse_location or self.asset_location
 					)
-					treatment = existing_treatments.get(
-						(row.name, source_unit_index), get_default_accounting_treatment(asset_value, threshold)
-					)
+					category = existing_categories.get(
+						(row.name, source_unit_index)
+					) or frappe.get_cached_value("Item", row.asset_item_code, "asset_category")
 					self.append(
 						"assets",
 						{
@@ -409,8 +442,7 @@ class StocktoAssetConversion(StockController):
 							"source_batch_no": entry.batch_no,
 							"asset_value": asset_value,
 							"asset_location": asset_location,
-							"accounting_treatment": treatment,
-							"calculate_depreciation": treatment == "Scheduled Depreciation",
+							"asset_category": category,
 						},
 					)
 
@@ -437,19 +469,12 @@ class StocktoAssetConversion(StockController):
 			asset = frappe.get_doc("Asset", output.asset)
 			if asset.docstatus != 0 or asset.stock_to_asset_conversion != self.name:
 				frappe.throw(_("Asset {0} must remain a Draft linked to this Conversion").format(asset.name))
-			output.accounting_treatment = normalize_accounting_treatment(
-				asset.stock_to_asset_accounting_treatment or output.accounting_treatment
-			)
+			output.asset_category = asset.asset_category
 			output.asset_location = asset.location or output.asset_location
 			output.asset_value = flt(asset.net_purchase_amount)
-			if output.accounting_treatment not in self.ACCOUNTING_TREATMENTS:
-				frappe.throw(_("Select a valid accounting treatment for Asset {0}").format(output.asset_item_code))
-			output.calculate_depreciation = output.accounting_treatment == "Scheduled Depreciation"
 			if not output.asset_location:
 				frappe.throw(_("Select an Asset Location for {0}").format(output.asset_item_code))
-			source_row = next(
-				(row for row in self.stock_items if row.name == output.source_item_row), None
-			)
+			source_row = next((row for row in self.stock_items if row.name == output.source_item_row), None)
 			mapped_location = (
 				frappe.db.get_value("Warehouse", source_row.warehouse, "asset_location")
 				if source_row
@@ -461,35 +486,18 @@ class StocktoAssetConversion(StockController):
 						output.asset_item_code, mapped_location
 					)
 				)
-			if output.accounting_treatment == "Expense":
-				expense_account = frappe.get_cached_value("Company", self.company, "low_value_asset_expense_account")
-				if not expense_account:
-					frappe.throw(_("Set Low Value Asset Expense Account in Company {0}").format(self.company))
-				validate_company_ledger_account(expense_account, self.company)
-			elif output.accounting_treatment in (
-				"Immediate Depreciation",
-				"Scheduled Depreciation",
-				"Hold Value",
-			):
-				fixed_asset_account = get_asset_category_account("fixed_asset_account", item=output.asset_item_code, company=self.company)
-				if not fixed_asset_account:
-					frappe.throw(_("Set a Fixed Asset Account for Item {0}").format(output.asset_item_code))
-			if output.accounting_treatment == "Immediate Depreciation":
-				get_depreciation_accounts(
-					frappe.get_cached_value("Item", output.asset_item_code, "asset_category"), self.company
-				)
-			if output.accounting_treatment == "Scheduled Depreciation":
-				asset_category = frappe.get_cached_doc("Item", output.asset_item_code).asset_category
-				if not asset_category:
-					frappe.throw(_("Set an Asset Category on Item {0}").format(output.asset_item_code))
-				if not frappe.get_cached_doc("Asset Category", asset_category).finance_books:
-					frappe.throw(
-						_("Configure a Finance Book and depreciation method in Asset Category {0} before converting this asset").format(asset_category)
-					)
-				get_depreciation_accounts(asset_category, self.company)
+			category = output.asset_category
+			if not category:
+				frappe.throw(_("Select an Asset Category for {0}.").format(output.asset_item_code))
+			if not frappe.get_cached_doc("Asset Category", category).finance_books:
+				frappe.throw(_("Configure the depreciation plan in Asset Category {0}.").format(category))
+			self.validate_demo_category(output, category)
+			get_depreciation_accounts(category, self.company)
 
 	def lock_material_request_items(self):
-		request_items = sorted({row.material_request_item for row in self.stock_items if row.material_request_item})
+		request_items = sorted(
+			{row.material_request_item for row in self.stock_items if row.material_request_item}
+		)
 		for request_item in request_items:
 			frappe.db.sql(
 				"select name from `tabMaterial Request Item` where name = %s for update", request_item
@@ -515,17 +523,6 @@ class StocktoAssetConversion(StockController):
 		for row in self.assets:
 			if row.asset and frappe.db.get_value("Asset", row.asset, "docstatus") == 1:
 				self.validate_asset_has_no_follow_up_transactions(row.asset)
-				if row.journal_entry and frappe.db.get_value("Journal Entry", row.journal_entry, "docstatus") == 1:
-					asset = frappe.get_doc("Asset", row.asset)
-					if asset.stock_to_asset_conversion != self.name or asset.stock_to_asset_depreciation_journal_entry != row.journal_entry:
-						frappe.throw(_("Immediate Depreciation Entry does not belong to this converted Asset"))
-					# Remove only our own backlink while reversing the journal. Other
-					# submitted documents must still block its cancellation.
-					asset.db_set("stock_to_asset_depreciation_journal_entry", None, update_modified=False)
-					try:
-						frappe.get_doc("Journal Entry", row.journal_entry).cancel()
-					finally:
-						asset.db_set("stock_to_asset_depreciation_journal_entry", row.journal_entry, update_modified=False)
 				asset_serial = frappe.db.get_value("Asset", row.asset, "source_serial_no")
 				asset = frappe.get_doc("Asset", row.asset)
 				asset.flags.stock_conversion_token = _GENERATED_ASSET_TOKEN
@@ -557,7 +554,9 @@ class StocktoAssetConversion(StockController):
 				"""select 1 from `tabAsset Capitalization Asset Item` acai
 				join `tabAsset Capitalization` ac on ac.name=acai.parent
 				where acai.asset=%s and ac.docstatus=1 limit 1""",
-				_("Asset {0} has been used in Asset Capitalization; cancel it before cancelling this conversion"),
+				_(
+					"Asset {0} has been used in Asset Capitalization; cancel it before cancelling this conversion"
+				),
 			),
 			(
 				"select 1 from `tabAsset Value Adjustment` where asset=%s and docstatus=1 limit 1",
@@ -574,7 +573,9 @@ class StocktoAssetConversion(StockController):
 			(
 				"""select 1 from `tabSales Invoice Item` item join `tabSales Invoice` invoice on invoice.name=item.parent
 				where item.asset=%s and invoice.docstatus=1 limit 1""",
-				_("Asset {0} has been used in a submitted Sales Invoice; cancel it before cancelling this conversion"),
+				_(
+					"Asset {0} has been used in a submitted Sales Invoice; cancel it before cancelling this conversion"
+				),
 			),
 		)
 		for index, (query, message) in enumerate(checks):
@@ -585,7 +586,12 @@ class StocktoAssetConversion(StockController):
 	def update_stock_ledger(self):
 		entries = []
 		for row in self.stock_items:
-			entries.append(self.get_sl_entries(row, {"actual_qty": -1 * flt(row.qty), "serial_and_batch_bundle": row.serial_and_batch_bundle}))
+			entries.append(
+				self.get_sl_entries(
+					row,
+					{"actual_qty": -1 * flt(row.qty), "serial_and_batch_bundle": row.serial_and_batch_bundle},
+				)
+			)
 		if self.docstatus == 2:
 			entries.reverse()
 		if entries:
@@ -593,6 +599,7 @@ class StocktoAssetConversion(StockController):
 
 	def make_gl_entries(self):
 		from erpnext.accounts.general_ledger import make_gl_entries, make_reverse_gl_entries
+
 		if self.docstatus == 2:
 			make_reverse_gl_entries(voucher_type=self.doctype, voucher_no=self.name)
 			return
@@ -605,7 +612,6 @@ class StocktoAssetConversion(StockController):
 	def get_gl_entries(self):
 		entries = []
 		perpetual = erpnext.is_perpetual_inventory_enabled(self.company)
-		low_value_account = frappe.db.get_value("Company", self.company, "low_value_asset_expense_account")
 		# the conversion has no Cost Center of its own: book it on the company's default
 		cost_center = erpnext.get_default_cost_center(self.company)
 		inventory_map = self.get_inventory_account_map()
@@ -626,7 +632,9 @@ class StocktoAssetConversion(StockController):
 		for source_row in self.stock_items:
 			outputs = [output for output in self.assets if output.source_item_row == source_row.name]
 			if outputs:
-				assigned_value = sum(flt(output.asset_value, self.precision("total_value")) for output in outputs)
+				assigned_value = sum(
+					flt(output.asset_value, self.precision("total_value")) for output in outputs
+				)
 				outputs[-1].asset_value = flt(
 					flt(outputs[-1].asset_value) + stock_value_by_row[source_row.name] - assigned_value,
 					self.precision("total_value"),
@@ -643,19 +651,46 @@ class StocktoAssetConversion(StockController):
 			stock_value = stock_value_by_row[row.name]
 			if stock_value:
 				inventory = self.get_inventory_account_dict(row, inventory_map)
-				credit_account = inventory["account"] if perpetual else self.get_company_default("default_expense_account")
+				credit_account = (
+					inventory["account"] if perpetual else self.get_company_default("default_expense_account")
+				)
 				if not credit_account:
-					frappe.throw(_("Set an Inventory Account for Warehouse {0}").format(row.warehouse) if perpetual else _("Set a Default Expense Account in Company {0}").format(self.company))
-				entries.append(self.get_gl_dict({"account": credit_account, "credit": stock_value, "against": low_value_account, "cost_center": cost_center}, inventory.get("account_currency"), item=row))
+					frappe.throw(
+						_("Set an Inventory Account for Warehouse {0}").format(row.warehouse)
+						if perpetual
+						else _("Set a Default Expense Account in Company {0}").format(self.company)
+					)
+				entries.append(
+					self.get_gl_dict(
+						{
+							"account": credit_account,
+							"credit": stock_value,
+							"against": "Stock Conversion",
+							"cost_center": cost_center,
+						},
+						inventory.get("account_currency"),
+						item=row,
+					)
+				)
 		for output in self.assets:
 			value = flt(output.asset_value, self.precision("total_value"))
-			if output.accounting_treatment == "Expense":
-				account = low_value_account
-			else:
-				account = get_asset_category_account("fixed_asset_account", item=output.asset_item_code, company=self.company)
+			account = get_asset_category_account(
+				"fixed_asset_account", asset_category=output.asset_category, company=self.company
+			)
 			if not account:
 				frappe.throw(_("Set a Fixed Asset Account for Item {0}").format(output.asset_item_code))
-			entries.append(self.get_gl_dict({"account": account, "debit": value, "against": "Stock Conversion", "remarks": self.name, "cost_center": cost_center}, item=output))
+			entries.append(
+				self.get_gl_dict(
+					{
+						"account": account,
+						"debit": value,
+						"against": "Stock Conversion",
+						"remarks": self.name,
+						"cost_center": cost_center,
+					},
+					item=output,
+				)
+			)
 		return entries
 
 	def get_items_and_warehouses(self):
@@ -682,13 +717,14 @@ class StocktoAssetConversion(StockController):
 				self.name,
 				asset.stock_to_asset_conversion_item,
 				asset.stock_to_asset_conversion_unit,
-			) not in desired_keys
+			)
+			not in desired_keys
 		]
 		if stale_assets:
 			frappe.throw(
-				_("Draft Assets {0} no longer match this Conversion. Delete the obsolete Draft Assets before saving.").format(
-					frappe.bold(", ".join(stale_assets))
-				)
+				_(
+					"Draft Assets {0} no longer match this Conversion. Delete the obsolete Draft Assets before saving."
+				).format(frappe.bold(", ".join(stale_assets)))
 			)
 
 		for output in self.assets:
@@ -710,14 +746,13 @@ class StocktoAssetConversion(StockController):
 				asset.stock_to_asset_conversion = self.name
 				asset.stock_to_asset_conversion_item = output.source_item_row
 				asset.stock_to_asset_conversion_unit = output.source_unit_index
-				asset.stock_to_asset_accounting_treatment = normalize_accounting_treatment(
-					output.accounting_treatment
-				)
 				asset.booked_fixed_asset = 1
 			asset.item_code = output.asset_item_code
 			asset.company = self.company
 			asset.location = output.asset_location
-			asset.stock_to_asset_accounting_treatment = normalize_accounting_treatment(output.accounting_treatment)
+			if asset.asset_category != output.asset_category:
+				asset.set("finance_books", [])
+			asset.asset_category = output.asset_category
 			asset.source_warehouse = source_row.warehouse if source_row else None
 			asset.asset_serial_number = output.asset_serial_number
 			asset.source_serial_no = output.source_serial_no
@@ -726,9 +761,7 @@ class StocktoAssetConversion(StockController):
 			asset.net_purchase_amount = output.asset_value
 			asset.purchase_date = self.posting_date
 			asset.available_for_use_date = self.posting_date
-			asset.calculate_depreciation = (
-				asset.stock_to_asset_accounting_treatment == "Scheduled Depreciation"
-			)
+			asset.calculate_depreciation = 1
 			asset.booked_fixed_asset = 1
 			# Process-local mark (not settable from a form or REST): this save is the Conversion's own.
 			asset.flags.stock_to_asset_conversion_sync = self.name
@@ -754,19 +787,6 @@ class StocktoAssetConversion(StockController):
 				frappe.db.set_value("Serial No", output.source_serial_no, "asset", asset.name)
 			if asset.is_demo_asset:
 				frappe.db.set_value("Asset", asset.name, "demo_loan_status", "Available")
-			if output.accounting_treatment == "Immediate Depreciation":
-				journal_entry = create_immediate_depreciation_entry(asset, self.posting_date)
-				output.db_set("journal_entry", journal_entry.name)
-				frappe.db.set_value(
-					"Asset",
-					asset.name,
-					{
-						"stock_to_asset_depreciation_journal_entry": journal_entry.name,
-						"value_after_depreciation": 0,
-					},
-				)
-				asset.reload()
-				asset.set_status()
 
 	def on_trash(self):
 		if self.docstatus != 0:
@@ -791,60 +811,14 @@ def get_conversion_defaults(company, request=None):
 	return {"asset_location": location, "company": company}
 
 
-def get_accounting_treatment(asset_value, threshold):
-	"""Legacy tuple API used by the original Customer Demo conversion flow."""
-	if flt(threshold) > 0 and flt(asset_value) <= flt(threshold):
-		return "Expense", 0
-	return "Capitalized", 1
-
-
-def get_default_accounting_treatment(asset_value, threshold):
-	if flt(threshold) > 0 and flt(asset_value) <= flt(threshold):
-		return "Expense"
-	return "Scheduled Depreciation"
-
-
-def normalize_accounting_treatment(treatment):
-	# Older submitted Customer Demo conversions stored Capitalized and used the
-	# Asset Category's regular depreciation schedule.
-	if treatment == "Capitalized":
-		return "Scheduled Depreciation"
-	return treatment
-
-
 def get_depreciation_accounts(asset_category, company):
 	from erpnext.assets.doctype.asset.depreciation import get_depreciation_accounts as get_accounts
 
 	accounts = get_accounts(asset_category, company)
 	if not all(accounts):
-		frappe.throw(_("Configure Fixed Asset, Accumulated Depreciation and Depreciation Expense accounts for {0}").format(asset_category))
+		frappe.throw(
+			_(
+				"Configure Fixed Asset, Accumulated Depreciation and Depreciation Expense accounts for {0}"
+			).format(asset_category)
+		)
 	return accounts
-
-
-def validate_company_ledger_account(account, company):
-	account_details = frappe.db.get_value("Account", account, ["company", "is_group"], as_dict=True)
-	if not account_details or account_details.company != company or account_details.is_group:
-		frappe.throw(_("Account {0} must be a ledger account belonging to Company {1}").format(account, company))
-
-
-def create_immediate_depreciation_entry(asset, posting_date):
-	from erpnext.assets.doctype.asset.asset import make_journal_entry
-
-	amount = flt(asset.net_purchase_amount, asset.precision("net_purchase_amount"))
-	if amount <= 0:
-		frappe.throw(_("Asset {0} must have a positive value to depreciate").format(asset.name))
-	journal_entry = make_journal_entry(asset.name)
-	conversion = frappe.get_doc("Stock to Asset Conversion", asset.stock_to_asset_conversion)
-	if conversion.docstatus != 1 or conversion.company != asset.company:
-		frappe.throw(_("Immediate depreciation requires a submitted Stock to Asset Conversion"))
-	journal_entry.mark_as_system_generated()
-	journal_entry.journal_entry_reason = _("Immediate depreciation from approved conversion {0}").format(conversion.name)
-	journal_entry.posting_date = posting_date
-	journal_entry.accounts[0].debit = amount
-	journal_entry.accounts[0].debit_in_account_currency = amount
-	journal_entry.accounts[1].credit = amount
-	journal_entry.accounts[1].credit_in_account_currency = amount
-	journal_entry.flags.ignore_permissions = True
-	journal_entry.insert()
-	journal_entry.submit()
-	return journal_entry

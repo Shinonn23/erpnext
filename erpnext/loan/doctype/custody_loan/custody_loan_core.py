@@ -130,6 +130,11 @@ class CustodyLoan(Document):
 			)
 		if request.company != self.company:
 			frappe.throw(_("Custody Loan and Material Request must use the same Company"))
+		if any(
+			row.get("demo_acquisition_method") in ("Convert Stock", "Ready Asset") and not row.get("asset")
+			for row in request.items
+		):
+			frappe.throw(_("Complete Asset selection or conversion before preparing the loans."))
 		if self.loan_type not in ("Stock", "Asset"):
 			frappe.throw(_("Select Stock or Asset as the Loan Type"))
 		if self.loan_type not in request_loan_types(request):
@@ -343,16 +348,68 @@ class CustodyLoan(Document):
 					self.loan_type
 				)
 			)
-		self.status = "Pending Pick" if self.loan_type == "Stock" else "Active"
+		self.status = "Pending Pick" if self.loan_type == "Stock" else "Pending Delivery"
 
 	def on_submit(self):
-		if self.loan_type == "Stock":
-			pick_list = self.make_pick_list()
-			self.db_set("pick_list", pick_list.name)
-			self.pick_list = pick_list.name
-		elif not self.waits_for_stock_delivery():
-			self.release_assets()
 		self.update_status()
+
+	@frappe.whitelist(methods=["POST"])
+	def prepare_pick_list(self):
+		"""The warehouse starts picking explicitly; preparing a loan does not send anything out."""
+		lock_material_request(self.material_request)
+		lock_custody_loan(self.name)
+		self.reload()
+		self.check_permission("submit")
+		frappe.has_permission("Pick List", "create", throw=True)
+		if self.docstatus != 1 or self.loan_type != "Stock":
+			frappe.throw(_("Prepare picking from a submitted Stock Custody Loan."))
+		return self.make_pick_list().as_dict()
+
+	@frappe.whitelist(methods=["POST"])
+	def confirm_delivery(self):
+		"""Confirm the physical handover of the whole request in one transaction."""
+		lock_material_request(self.material_request)
+		self.reload()
+		self.check_permission("submit")
+		if self.docstatus != 1:
+			frappe.throw(_("Confirm delivery from a submitted Custody Loan."))
+		loans = delivery_loans(self)
+		for loan in loans:
+			lock_custody_loan(loan.name)
+			loan.reload()
+			loan.check_permission("submit")
+			loan.validate_material_request()
+			if loan.loan_type == "Asset" and not loan.asset_movement:
+				loan.validate_items()
+			loan.run_method("before_delivery")
+			if loan.loan_type == "Stock" and (
+				not loan.pick_list or frappe.db.get_value("Pick List", loan.pick_list, "docstatus") != 1
+			):
+				frappe.throw(_("Submit the Loan Pick List before confirming delivery."))
+		savepoint = "custody_loan_confirm_delivery"
+		frappe.db.savepoint(savepoint)
+		try:
+			for loan in loans:
+				if loan.loan_type != "Stock":
+					continue
+				values = loan._make_delivery_note()
+				delivery_note = frappe.get_doc("Delivery Note", values["name"])
+				if delivery_note.docstatus == 0:
+					delivery_note.flags.custody_operation_token = _CUSTODY_OPERATION_TOKEN
+					if delivery_note.meta.has_field("workflow_state"):
+						delivery_note.workflow_state = "Delivery Note Submitted"
+					delivery_note.flags.ignore_permissions = True
+					delivery_note.submit()
+			for loan in loans:
+				loan.reload()
+				if loan.loan_type == "Asset" and not loan.asset_movement:
+					loan.release_assets()
+				loan.update_status()
+		except Exception:
+			frappe.db.rollback(save_point=savepoint)
+			raise
+		self.reload()
+		return {"loans": [loan.name for loan in loans]}
 
 	def waits_for_stock_delivery(self):
 		"""An Asset loan of a set (the request also lends stock) moves its Assets when the stock loan's goods leave: the
@@ -375,12 +432,16 @@ class CustodyLoan(Document):
 
 	def release_assets(self):
 		"""Move the Assets of this Asset loan to the recipient now (the Asset Movement is made and submitted)."""
+		self.validate_items()
+		self.run_method("before_delivery")
 		transaction = self.make_asset_issue()
 		self.db_set("asset_movement", transaction.name)
 		self.asset_movement = transaction.name
 		transaction.submit()
 
 	def make_pick_list(self):
+		if self.pick_list and frappe.db.get_value("Pick List", self.pick_list, "docstatus") in (0, 1):
+			return frappe.get_doc("Pick List", self.pick_list)
 		internal_customer = get_internal_loan_customer(self.company)
 		if not internal_customer:
 			frappe.throw(
@@ -433,40 +494,6 @@ class CustodyLoan(Document):
 		self.check_permission("read")
 		frappe.has_permission("Delivery Note", "create", throw=True)
 		return self._make_delivery_note()
-
-	def deliver_after_pick(self):
-		"""The picked goods go out by themselves (Connect Diagnostics, Siwat, 5 Nov 2026, relayed by the user: the
-		warehouse only picks): the Loan Delivery Note is made and submitted when the Pick List is submitted. A Shipment
-		is optional (Siwat, 5 Nov 2026): a user may make one from the Delivery Note, as for any sale, and nothing here
-		waits for it. A failure leaves the draft for the Stock team."""
-		if self.loan_type != "Stock":
-			return None
-		savepoint = "custody_loan_auto_delivery"
-		frappe.db.savepoint(savepoint)
-		try:
-			values = self._make_delivery_note()
-			delivery_note = frappe.get_doc("Delivery Note", values["name"])
-			if delivery_note.docstatus == 0:
-				if delivery_note.meta.has_field("workflow_state"):
-					delivery_note.workflow_state = "Delivery Note Submitted"
-				delivery_note.flags.ignore_permissions = True
-				delivery_note.submit()
-			return delivery_note
-		except Exception as error:
-			frappe.db.rollback(save_point=savepoint)
-			frappe.clear_last_message()
-			self.add_comment(
-				"Comment",
-				_("The Loan Delivery Note could not be submitted automatically: {0}").format(
-					str(error)[:300]
-				),
-			)
-			frappe.msgprint(
-				_("Open the Custody Loan to create the Loan Delivery Note: {0}").format(str(error)[:300]),
-				indicator="orange",
-				alert=True,
-			)
-			return None
 
 	def _make_delivery_note(self):
 		if self.docstatus != 1 or self.loan_type != "Stock":
@@ -692,8 +719,8 @@ class CustodyLoan(Document):
 		return status
 
 	def get_submitted_status(self):
-		if self.loan_type == "Asset" and not self.asset_movement and self.waits_for_stock_delivery():
-			return "Pending Delivery Note"
+		if self.loan_type == "Asset" and not self.asset_movement:
+			return "Pending Delivery"
 		if self.loan_type == "Stock" and (
 			not self.pick_list or frappe.db.get_value("Pick List", self.pick_list, "docstatus") != 1
 		):
@@ -702,7 +729,7 @@ class CustodyLoan(Document):
 			not self.delivery_note
 			or frappe.db.get_value("Delivery Note", self.delivery_note, "docstatus") != 1
 		):
-			return "Pending Delivery Note"
+			return "Pending Delivery"
 		return_statuses = frappe.get_all(
 			"Custody Loan Return",
 			filters={"custody_loan": self.name, "docstatus": 1},
@@ -1032,14 +1059,7 @@ class CustodyLoanReturn(Document):
 	def inspect_or_receive(self, delivery_note):
 		"""Goods coming back are inspected only when their Item asks for it; otherwise they are received at once
 		(Connect Diagnostics, Siwat, 5 Nov 2026, relayed by the user). Nothing waits for a Shipment: it is optional."""
-		if any(custody_loan_return_row_requires_inspection(row) for row in delivery_note.items):
-			# an app may draft them on the system's behalf (its QI teams pick them up)
-			drafters = frappe.get_hooks("custody_loan_return_inspection_drafter")
-			if drafters:
-				frappe.get_attr(drafters[-1])(delivery_note.name)
-			else:
-				_make_return_inspections(delivery_note)
-		else:
+		if not any(custody_loan_return_row_requires_inspection(row) for row in delivery_note.items):
 			receive_return_delivery_note(delivery_note.name)
 
 	def make_stock_return_delivery_note(self):
@@ -1649,6 +1669,16 @@ class CustodyLoanAdjustment(Document):
 		loan.update_status()
 
 	def before_cancel(self):
+		frappe.db.sql("select name from `tabCustody Loan Adjustment` where name=%s for update", self.name)
+		if frappe.db.exists(
+			"Sales Invoice",
+			{
+				"custody_loan_source_doctype": "Custody Loan Adjustment",
+				"custody_loan_source_name": self.name,
+				"docstatus": ["<", 2],
+			},
+		):
+			frappe.throw(_("Cancel or delete the consumption invoice before cancelling its Loan Adjustment."))
 		cancel_source_transaction(self, "stock_entry")
 
 	def on_cancel(self):
@@ -1768,7 +1798,12 @@ def validate_generated_transaction(doc, method=None):
 		frappe.throw(_("Custody Loan source document does not belong to the linked Loan"))
 	if doc.doctype in ("Stock Entry", "Delivery Note") and loan.loan_type != "Stock":
 		frappe.throw(_("Generated document type does not match the Custody Loan Type"))
-	if doc.doctype in ("Asset Movement", "Sales Invoice") and loan.loan_type != "Asset":
+	consumption_invoice = doc.doctype == "Sales Invoice" and source_doctype == "Custody Loan Adjustment"
+	if (
+		doc.doctype in ("Asset Movement", "Sales Invoice")
+		and loan.loan_type != "Asset"
+		and not consumption_invoice
+	):
 		frappe.throw(_("Generated document type does not match the Custody Loan Type"))
 	for row in (
 		doc.get("items", [])
@@ -1788,7 +1823,10 @@ def validate_generated_transaction(doc, method=None):
 	if doc.doctype == "Delivery Note":
 		validate_custody_loan_delivery_note(doc, loan, source_doctype, source_name)
 	elif doc.doctype == "Sales Invoice":
-		validate_custody_loan_sales_invoice(doc, loan, source_doctype, source_name)
+		if consumption_invoice:
+			validate_consumption_invoice(doc, loan, source_name)
+		else:
+			validate_custody_loan_sales_invoice(doc, loan, source_doctype, source_name)
 
 	doc.is_system_generated = 1
 	doc.is_custody_loan_transaction = 1
@@ -1797,7 +1835,12 @@ def validate_generated_transaction(doc, method=None):
 def validate_generated_transaction_cancellation(doc, method=None):
 	if not doc.get("is_custody_loan_transaction"):
 		return
-	if not doc.flags.get("custody_loan_cancellation"):
+	consumption_invoice = (
+		doc.doctype == "Sales Invoice" and doc.get("custody_loan_source_doctype") == "Custody Loan Adjustment"
+	)
+	if consumption_invoice:
+		doc.check_permission("cancel")
+	if not doc.flags.get("custody_loan_cancellation") and not consumption_invoice:
 		frappe.throw(
 			_("Cancel this generated transaction from its Custody Loan, Loan Return or Loan Adjustment")
 		)
@@ -1867,6 +1910,15 @@ def validate_custody_loan_delivery_note(doc, loan, source_doctype, source_name):
 	):
 		frappe.throw(_("Custody Loan Delivery Note must use the Internal Customer representing its Company"))
 	if source_doctype == "Custody Loan":
+		if doc.docstatus == 1:
+			lock_material_request(loan.material_request)
+			for entry in delivery_loans(loan):
+				lock_custody_loan(entry.name)
+				entry.reload()
+				entry.check_permission("submit")
+				if entry.loan_type == "Asset" and not entry.asset_movement:
+					entry.validate_items()
+				entry.run_method("before_delivery")
 		if source_name != loan.name or doc.is_return:
 			frappe.throw(
 				_("Loan issue Delivery Note must be a non-return Delivery Note linked to the Custody Loan")
@@ -1951,6 +2003,54 @@ def validate_custody_loan_delivery_note(doc, loan, source_doctype, source_name):
 		seen_return_items.add(pair)
 	if seen_return_items != set(return_items):
 		frappe.throw(_("Loan Return Delivery Note must include every returned item exactly once"))
+
+
+def validate_consumption_invoice(doc, loan, adjustment_name):
+	frappe.db.sql("select name from `tabCustody Loan Adjustment` where name=%s for update", adjustment_name)
+	source = frappe.get_doc("Custody Loan Adjustment", adjustment_name)
+	request_type = frappe.db.get_value("Material Request", loan.material_request, "material_request_type")
+	if (
+		source.docstatus != 1
+		or source.custody_loan != loan.name
+		or loan.loan_type != "Stock"
+		or loan.borrower_type != "Customer"
+		or request_type != "Customer Borrow / Loan"
+		or source.reason != "Consumed by the borrower"
+		or doc.customer != loan.borrower
+		or doc.company != loan.company
+		or doc.is_return
+		or doc.update_stock
+	):
+		frappe.throw(_("Consumption invoices must bill the borrower for a submitted Stock Loan Adjustment."))
+	duplicate = frappe.db.exists(
+		"Sales Invoice",
+		{
+			"custody_loan_source_doctype": "Custody Loan Adjustment",
+			"custody_loan_source_name": source.name,
+			"docstatus": ["<", 2],
+			"name": ["!=", doc.name or ""],
+		},
+	)
+	if duplicate:
+		frappe.throw(_("A consumption invoice already exists for this Loan Adjustment."))
+	expected = {}
+	for row in source.items:
+		expected[row.custody_loan_item] = expected.get(row.custody_loan_item, 0) + flt(row.qty)
+	actual = {}
+	for row in doc.items:
+		if (
+			row.get("asset")
+			or row.get("is_fixed_asset")
+			or flt(row.qty) <= 0
+			or flt(row.conversion_factor) != 1
+			or row.uom != frappe.get_cached_value("Item", row.item_code, "stock_uom")
+		):
+			frappe.throw(_("Consumption invoice rows must use the consumed stock quantity and unit."))
+		actual[row.custody_loan_item] = actual.get(row.custody_loan_item, 0) + flt(row.qty)
+	if actual.keys() != expected.keys() or any(
+		flt(actual[name], 9) != flt(qty, 9) for name, qty in expected.items()
+	):
+		frappe.throw(_("Consumption invoice quantities must match the Loan Adjustment."))
 
 
 def validate_custody_loan_sales_invoice(doc, loan, source_doctype, source_name):
@@ -2104,18 +2204,34 @@ def update_custody_loan_status(doc, method=None):
 		frappe.get_doc("Custody Loan", adjustment.custody_loan).update_status()
 
 
+def delivery_loans(loan):
+	"""Every requested type must be prepared before any part of a set can leave."""
+	request = frappe.get_doc("Material Request", loan.material_request)
+	request.check_permission("read")
+	expected = set(request_loan_types(request))
+	names = frappe.get_all(
+		"Custody Loan",
+		filters={"material_request": loan.material_request, "docstatus": 1},
+		pluck="name",
+		order_by="name",
+	)
+	loans = [frappe.get_doc("Custody Loan", name) for name in names]
+	if {entry.loan_type for entry in loans} != expected or len(loans) != len(expected):
+		frappe.throw(_("Prepare and submit every Stock and Asset Loan of this request before delivery."))
+	for entry in loans:
+		entry.check_permission("read")
+	return loans
+
+
 def release_held_assets(stock_loan):
 	"""The goods of a stock loan have left (its Delivery Note is submitted): the Asset loan of the same request, held
 	until now, moves its Assets in the same transaction. If the Asset Movement fails the Delivery Note is not submitted
 	either, so a set never leaves half done."""
 	if stock_loan.loan_type != "Stock":
 		return
-	for name in frappe.get_all(
-		"Custody Loan",
-		filters={"material_request": stock_loan.material_request, "loan_type": "Asset", "docstatus": 1},
-		pluck="name",
-	):
-		asset_loan = frappe.get_doc("Custody Loan", name)
+	for asset_loan in delivery_loans(stock_loan):
+		if asset_loan.loan_type != "Asset":
+			continue
 		if asset_loan.asset_movement:
 			continue
 		asset_loan.release_assets()
@@ -2228,8 +2344,6 @@ def update_custody_loan_pick_list_status(pick_list):
 	loan = frappe.get_doc("Custody Loan", pick_list.custody_loan)
 	if pick_list.docstatus == 1 and not loan.delivery_note:
 		follow_picked_warehouses(pick_list)
-		loan.reload()
-		loan.deliver_after_pick()
 		loan.reload()
 	loan.update_status()
 
@@ -2467,7 +2581,8 @@ def get_loan_item_balances(loan_name, loan_item_name):
 		"""select sum(sii.qty) from `tabSales Invoice Item` sii
 		join `tabSales Invoice` si on si.name=sii.parent
 		where sii.custody_loan_item=%s and si.custody_loan=%s
-		and si.docstatus=1""",
+		and si.docstatus=1
+		and coalesce(si.custody_loan_source_doctype, '') != 'Custody Loan Adjustment'""",
 		(loan_item_name, loan_name),
 	)
 	sold = flt(invoice_rows[0][0] if invoice_rows else 0)

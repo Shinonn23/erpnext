@@ -1,89 +1,13 @@
-import unittest
-from unittest.mock import Mock, patch
-
 import frappe
 from frappe.utils import flt, get_last_day, today
 
-from erpnext.accounts.doctype.account.test_account import create_account
-from erpnext.accounts.doctype.budget.budget import BudgetError
 from erpnext.accounts.general_ledger import is_immutable_ledger_enabled
-from erpnext.accounts.utils import get_fiscal_year
 from erpnext.assets.doctype.asset.test_asset import create_fixed_asset_item
-from erpnext.assets.doctype.stock_to_asset_conversion.stock_to_asset_conversion import (
-	create_immediate_depreciation_entry,
-	get_accounting_treatment,
-	get_default_accounting_treatment,
-	normalize_accounting_treatment,
-)
 from erpnext.stock.doctype.item.test_item import make_item
 from erpnext.stock.doctype.stock_entry.stock_entry_utils import make_stock_entry
 from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse, get_warehouse_account
 from erpnext.stock.utils import get_stock_balance
 from erpnext.tests.utils import ERPNextTestSuite
-
-
-class TestStockToAssetConversion(unittest.TestCase):
-	def test_below_threshold_is_expensed_without_depreciation(self):
-		self.assertEqual(get_accounting_treatment(99.99, 100), ("Expense", 0))
-
-	def test_above_threshold_is_capitalized_and_depreciated(self):
-		# exactly the threshold is expensed (Siwat, 2 Nov 2026); see test_capitalization_threshold.py
-		self.assertEqual(get_accounting_treatment(100, 100), ("Expense", 0))
-		self.assertEqual(get_accounting_treatment(100.01, 100), ("Capitalized", 1))
-
-	def test_threshold_defaults_to_expense_up_to_and_scheduled_above(self):
-		self.assertEqual(get_default_accounting_treatment(99.99, 100), "Expense")
-		self.assertEqual(get_default_accounting_treatment(100, 100), "Expense")
-		self.assertEqual(get_default_accounting_treatment(100.01, 100), "Scheduled Depreciation")
-
-	def test_zero_threshold_defaults_to_scheduled_depreciation(self):
-		self.assertEqual(get_default_accounting_treatment(0.01, 0), "Scheduled Depreciation")
-
-	def test_legacy_capitalized_treatment_maps_to_scheduled_depreciation(self):
-		self.assertEqual(normalize_accounting_treatment("Capitalized"), "Scheduled Depreciation")
-
-	def test_immediate_depreciation_journal_is_generated_from_approved_conversion(self):
-		asset = Mock(net_purchase_amount=120, company="Company", stock_to_asset_conversion="Conversion")
-		asset.name = "Asset"
-		asset.precision.return_value = None
-		journal = Mock(accounts=[frappe._dict(), frappe._dict()], flags=frappe._dict())
-		conversion = frappe._dict(name="Conversion", docstatus=1, company="Company")
-		with (
-			patch("erpnext.assets.doctype.asset.asset.make_journal_entry", return_value=journal) as make_journal,
-			patch("frappe.get_doc", return_value=conversion) as get_doc,
-		):
-			result = create_immediate_depreciation_entry(asset, "2026-10-12")
-		make_journal.assert_called_once_with("Asset")
-		get_doc.assert_called_once_with("Stock to Asset Conversion", "Conversion")
-		self.assertIs(result, journal)
-		journal.mark_as_system_generated.assert_called_once_with()
-		self.assertIn("Conversion", journal.journal_entry_reason)
-		self.assertEqual(journal.posting_date, "2026-10-12")
-		self.assertEqual(journal.accounts[0].debit, 120)
-		self.assertEqual(journal.accounts[0].debit_in_account_currency, 120)
-		self.assertEqual(journal.accounts[1].credit, 120)
-		self.assertEqual(journal.accounts[1].credit_in_account_currency, 120)
-		journal.insert.assert_called_once_with()
-		journal.submit.assert_called_once_with()
-
-	def test_immediate_depreciation_rejects_unapproved_or_other_company_conversion(self):
-		asset = Mock(net_purchase_amount=120, company="Company", stock_to_asset_conversion="Conversion")
-		asset.name = "Asset"
-		asset.precision.return_value = None
-		for docstatus, company in ((0, "Company"), (1, "Other Company")):
-			with self.subTest(docstatus=docstatus, company=company):
-				journal = Mock()
-				with (
-					patch("erpnext.assets.doctype.asset.asset.make_journal_entry", return_value=journal),
-					patch("frappe.get_doc", return_value=frappe._dict(docstatus=docstatus, company=company)),
-					patch("frappe.throw", side_effect=frappe.ValidationError) as throw,
-				):
-					with self.assertRaises(frappe.ValidationError):
-						create_immediate_depreciation_entry(asset, "2026-10-12")
-				journal.insert.assert_not_called()
-				journal.submit.assert_not_called()
-				throw.assert_called_once()
-				self.assertIn("submitted Stock to Asset Conversion", throw.call_args.args[0])
 
 
 class TestStockToAssetConversionIntegration(ERPNextTestSuite):
@@ -100,8 +24,6 @@ class TestStockToAssetConversionIntegration(ERPNextTestSuite):
 		self.posting_date = today()
 		company = frappe.get_doc("Company", self.company)
 		company.enable_perpetual_inventory = 1
-		company.asset_capitalization_threshold = 100
-		company.low_value_asset_expense_account = self.depreciation_account
 		company.stock_adjustment_account = "_Test Account Stock Adjustment - _TC"
 		company.save()
 		self.addCleanup(frappe.clear_cache, doctype="Company")
@@ -205,7 +127,7 @@ class TestStockToAssetConversionIntegration(ERPNextTestSuite):
 				len(entries), entry_count or (3 if voucher_type == "Stock to Asset Conversion" else 2)
 			)
 
-	def assert_conversion_reversed(self, conversion, *, expense_account=None):
+	def assert_conversion_reversed(self, conversion):
 		conversion.reload()
 		self.assertEqual((conversion.docstatus, conversion.status), (2, "Cancelled"))
 		self.assertEqual(get_stock_balance(self.stock_item, self.warehouse), self.received_qty)
@@ -254,24 +176,14 @@ class TestStockToAssetConversionIntegration(ERPNextTestSuite):
 			(stock_bin.actual_qty, stock_bin.valuation_rate, stock_bin.stock_value),
 			(self.received_qty, self.unit_value, self.received_qty * self.unit_value),
 		)
-		debit_account = (
-			(expense_account or self.depreciation_account)
-			if conversion.assets[0].accounting_treatment == "Expense"
-			else self.fixed_asset_account
-		)
 		self.assert_gl(
-			conversion.doctype, conversion.name, {self.inventory_account: 0, debit_account: 0}, cancelled=True
+			conversion.doctype,
+			conversion.name,
+			{self.inventory_account: 0, self.fixed_asset_account: 0},
+			cancelled=True,
 		)
 		for output in conversion.assets:
 			self.assertEqual(frappe.db.get_value("Asset", output.asset, "docstatus"), 2)
-			if output.journal_entry:
-				self.assertEqual(frappe.db.get_value("Journal Entry", output.journal_entry, "docstatus"), 2)
-				self.assert_gl(
-					"Journal Entry",
-					output.journal_entry,
-					{self.depreciation_account: 0, self.accumulated_depreciation_account: 0},
-					cancelled=True,
-				)
 		self.assertFalse(
 			frappe.db.exists(
 				"Asset Movement",
@@ -292,7 +204,7 @@ class TestStockToAssetConversionIntegration(ERPNextTestSuite):
 			)
 		)
 
-	def exercise_accounting_treatment(self, treatment):
+	def exercise_conversion(self):
 		conversion = self.make_conversion().insert()
 		conversion.reload()
 		self.assertEqual((conversion.docstatus, conversion.status), (0, "Draft"))
@@ -307,9 +219,7 @@ class TestStockToAssetConversionIntegration(ERPNextTestSuite):
 			self.assertEqual(asset.stock_to_asset_conversion, conversion.name)
 			self.assertEqual(asset.stock_to_asset_conversion_item, conversion.stock_items[0].name)
 			self.assertEqual(asset.stock_to_asset_conversion_unit, output.source_unit_index)
-			self.assertEqual(asset.stock_to_asset_accounting_treatment, "Scheduled Depreciation")
-			asset.stock_to_asset_accounting_treatment = treatment
-			asset.save()
+			self.assertEqual(asset.calculate_depreciation, 1)
 		conversion.save()
 		conversion.reload()
 		self.assertEqual([row.asset for row in conversion.assets], asset_names)
@@ -354,9 +264,8 @@ class TestStockToAssetConversionIntegration(ERPNextTestSuite):
 			(self.stock_item, self.warehouse, conversion.stock_items[0].name),
 		)
 		self.assertEqual((entry.actual_qty, entry.stock_value_difference, entry.is_cancelled), (-2, -240, 0))
-		debit_account = self.depreciation_account if treatment == "Expense" else self.fixed_asset_account
 		self.assert_gl(
-			conversion.doctype, conversion.name, {self.inventory_account: -240, debit_account: 240}
+			conversion.doctype, conversion.name, {self.inventory_account: -240, self.fixed_asset_account: 240}
 		)
 		movements = frappe.get_all(
 			"Asset Movement",
@@ -384,71 +293,36 @@ class TestStockToAssetConversionIntegration(ERPNextTestSuite):
 			)
 			self.assertEqual(asset.net_purchase_amount, self.unit_value)
 			self.assertEqual(asset.source_warehouse, self.warehouse)
-			self.assertEqual(asset.stock_to_asset_accounting_treatment, treatment)
 			self.assertEqual(
 				asset.value_after_depreciation,
-				0 if treatment in ("Expense", "Immediate Depreciation") else self.unit_value,
+				self.unit_value,
 			)
-			self.assertEqual(asset.calculate_depreciation, int(treatment == "Scheduled Depreciation"))
+			self.assertEqual(asset.calculate_depreciation, 1)
 			self.assertFalse(
 				frappe.db.exists("GL Entry", {"voucher_type": "Asset", "voucher_no": asset.name})
 			)
 			schedules = frappe.get_all(
 				"Asset Depreciation Schedule", filters={"asset": asset.name, "docstatus": 1}, pluck="name"
 			)
-			if treatment == "Scheduled Depreciation":
-				self.assertEqual(len(schedules), 1)
-				schedule = frappe.get_doc("Asset Depreciation Schedule", schedules[0])
-				self.assertEqual(schedule.company, self.company)
-				self.assertEqual(schedule.depreciation_method, "Straight Line")
-				self.assertEqual(
-					flt(sum(row.depreciation_amount for row in schedule.depreciation_schedule), 2),
-					self.unit_value,
-				)
-				self.assertTrue(all(not row.journal_entry for row in schedule.depreciation_schedule))
-			else:
-				self.assertEqual(schedules, [])
-				self.assertEqual(len(asset.finance_books), 0)
-			if treatment == "Immediate Depreciation":
-				journal = frappe.get_doc("Journal Entry", output.journal_entry)
-				self.assertEqual(journal.docstatus, 1)
-				self.assertEqual(asset.stock_to_asset_depreciation_journal_entry, journal.name)
-				self.assertTrue(
-					all(
-						row.reference_type == "Asset" and row.reference_name == asset.name
-						for row in journal.accounts
-					)
-				)
-				self.assert_gl(
-					"Journal Entry",
-					journal.name,
-					{
-						self.depreciation_account: self.unit_value,
-						self.accumulated_depreciation_account: -self.unit_value,
-					},
-				)
-			else:
-				self.assertFalse(output.journal_entry)
+			self.assertEqual(len(schedules), 1)
+			schedule = frappe.get_doc("Asset Depreciation Schedule", schedules[0])
+			self.assertEqual(schedule.company, self.company)
+			self.assertEqual(schedule.depreciation_method, "Straight Line")
+			self.assertEqual(
+				flt(sum(row.depreciation_amount for row in schedule.depreciation_schedule), 2),
+				self.unit_value,
+			)
+			self.assertTrue(all(not row.journal_entry for row in schedule.depreciation_schedule))
 		conversion.cancel()
 		self.assert_conversion_reversed(conversion)
 
-	def test_expense_conversion_full_loop(self):
-		self.exercise_accounting_treatment("Expense")
-
-	def test_hold_value_conversion_full_loop(self):
-		self.exercise_accounting_treatment("Hold Value")
-
 	def test_scheduled_depreciation_conversion_full_loop(self):
-		self.exercise_accounting_treatment("Scheduled Depreciation")
-
-	def test_immediate_depreciation_conversion_full_loop(self):
-		self.exercise_accounting_treatment("Immediate Depreciation")
+		self.exercise_conversion()
 
 	def test_follow_up_movement_blocks_conversion_cancellation(self):
 		conversion = self.make_conversion().insert()
 		for output in conversion.assets:
 			asset = frappe.get_doc("Asset", output.asset)
-			asset.stock_to_asset_accounting_treatment = "Hold Value"
 			asset.save()
 		conversion.submit()
 		target = (
@@ -532,197 +406,30 @@ class TestStockToAssetConversionIntegration(ERPNextTestSuite):
 		item.save()
 		self.assert_invalid_conversion(1, "Set Asset Item Code")
 
-	def test_editable_conversion_preview_updates_existing_draft_asset(self):
+	def test_accountant_selects_each_objects_category_and_native_plan(self):
 		conversion = self.make_conversion(qty=1).insert()
-		conversion.reload()
-		asset_name = conversion.assets[0].asset
-		target_location = (
-			frappe.get_doc(
-				{
-					"doctype": "Location",
-					"location_name": f"Preview location {self.fixture_id}",
-				}
-			)
-			.insert()
-			.name
-		)
-
-		conversion.assets[0].accounting_treatment = "Hold Value"
-		conversion.assets[0].asset_location = target_location
+		original_category = frappe.get_doc("Asset Category", conversion.assets[0].asset_category)
+		category = frappe.copy_doc(original_category)
+		category.asset_category_name = f"One period {self.fixture_id}"
+		category.finance_books[0].total_number_of_depreciations = 1
+		category.finance_books[0].salvage_value_percentage = 0
+		category.insert()
+		conversion.assets[0].asset_category = category.name
 		conversion.save()
-		conversion.reload()
-		asset = frappe.get_doc("Asset", asset_name)
-		self.assertEqual(conversion.assets[0].asset, asset_name)
-		self.assertEqual(asset.docstatus, 0)
-		self.assertEqual(asset.stock_to_asset_accounting_treatment, "Hold Value")
-		self.assertEqual(asset.location, target_location)
-		self.assertEqual(asset.calculate_depreciation, 0)
-		self.assertEqual(asset.value_after_depreciation, self.unit_value)
-		self.assertEqual(conversion.assets[0].accounting_treatment, "Hold Value")
-		self.assertEqual(conversion.assets[0].asset_location, target_location)
-
-		# When the conversion row has not changed, edits on the linked Draft Asset
-		# must survive the next conversion save and appear in its preview.
-		asset.stock_to_asset_accounting_treatment = "Expense"
-		asset.location = self.location
+		asset = frappe.get_doc("Asset", conversion.assets[0].asset)
+		self.assertEqual(asset.asset_category, category.name)
+		self.assertEqual(asset.calculate_depreciation, 1)
+		self.assertEqual(asset.finance_books[0].total_number_of_depreciations, 1)
+		self.assertEqual(asset.finance_books[0].expected_value_after_useful_life, 0)
+		self.assertEqual(
+			frappe.get_cached_value("Item", self.asset_item, "asset_category"), original_category.name
+		)
+		asset.finance_books[0].total_number_of_depreciations = 6
 		asset.save()
 		conversion.save()
-		conversion.reload()
 		asset.reload()
-		self.assertEqual(conversion.assets[0].asset, asset_name)
-		self.assertEqual(conversion.assets[0].accounting_treatment, "Expense")
-		self.assertEqual(conversion.assets[0].asset_location, self.location)
-		self.assertEqual(asset.stock_to_asset_accounting_treatment, "Expense")
-		self.assertEqual(asset.location, self.location)
-		self.assertEqual(asset.value_after_depreciation, 0)
-		self.assertEqual(
-			frappe.get_all(
-				"Asset",
-				filters={
-					"stock_to_asset_conversion": conversion.name,
-				},
-				pluck="name",
-			),
-			[asset_name],
-		)
+		self.assertEqual(asset.finance_books[0].total_number_of_depreciations, 6)
 		self.assertEqual(get_stock_balance(self.stock_item, self.warehouse), self.received_qty)
-		for doctype in ("Stock Ledger Entry", "GL Entry"):
-			self.assertFalse(
-				frappe.db.exists(
-					doctype,
-					{
-						"voucher_type": conversion.doctype,
-						"voucher_no": conversion.name,
-					},
-				)
-			)
-		self.assertFalse(
-			frappe.db.exists(
-				"Asset Movement",
-				{
-					"reference_doctype": conversion.doctype,
-					"reference_name": conversion.name,
-				},
-			)
-		)
-
-	def test_department_budget_rejects_expense_conversion_overrun(self):
-		# Department is a real registered dimension supplied by native bootstrap.
-		# A unique expense account isolates this budget from all other expenses.
-		self.assertTrue(
-			frappe.db.exists(
-				"Accounting Dimension",
-				{
-					"document_type": "Department",
-					"disabled": 0,
-				},
-			)
-		)
-		expense_account = create_account(
-			account_name=f"Conversion budget expense {self.fixture_id}",
-			company=self.company,
-			account_type="Depreciation",
-			parent_account=frappe.db.get_value("Account", self.depreciation_account, "parent_account"),
-		)
-		company = frappe.get_doc("Company", self.company)
-		company.low_value_asset_expense_account = expense_account
-		company.exception_budget_approver_role = None
-		company.save()
-		fiscal_year = get_fiscal_year(self.posting_date, company=self.company)[0]
-		budget = frappe.get_doc(
-			{
-				"doctype": "Budget",
-				"company": self.company,
-				"budget_against": "Department",
-				"department": "_Test Department - _TC",
-				"account": expense_account,
-				"budget_amount": self.unit_value,
-				"from_fiscal_year": fiscal_year,
-				"to_fiscal_year": fiscal_year,
-				"distribution_frequency": "Monthly",
-				"distribute_equally": 1,
-				"applicable_on_booking_actual_expenses": 1,
-				"action_if_annual_budget_exceeded": "Stop",
-				"action_if_accumulated_monthly_budget_exceeded": "Ignore",
-			}
-		).insert()
-		budget.submit()
-		conversion = self.make_conversion().insert()
-		for output in conversion.assets:
-			asset = frappe.get_doc("Asset", output.asset)
-			asset.stock_to_asset_accounting_treatment = "Expense"
-			asset.save()
-		conversion.save()
-		conversion.reload()
-		asset_names = [row.asset for row in conversion.assets]
-		savepoint = f"conversion_budget_{self.fixture_id}"
-		frappe.db.savepoint(savepoint)
-		try:
-			with self.assertRaises(BudgetError):
-				conversion.submit()
-		finally:
-			frappe.db.rollback(save_point=savepoint)
-		conversion.reload()
-		self.assertEqual(conversion.docstatus, 0)
-		self.assertEqual([row.asset for row in conversion.assets], asset_names)
-		self.assertTrue(all(frappe.db.get_value("Asset", name, "docstatus") == 0 for name in asset_names))
-		self.assertEqual(get_stock_balance(self.stock_item, self.warehouse), self.received_qty)
-		for doctype in ("GL Entry", "Stock Ledger Entry"):
-			self.assertFalse(
-				frappe.db.exists(
-					doctype,
-					{
-						"voucher_type": conversion.doctype,
-						"voucher_no": conversion.name,
-					},
-				)
-			)
-		self.assertFalse(
-			frappe.db.exists(
-				"Asset Movement",
-				{
-					"reference_doctype": conversion.doctype,
-					"reference_name": conversion.name,
-				},
-			)
-		)
-
-		within_budget = self.make_conversion(qty=1).insert()
-		asset = frappe.get_doc("Asset", within_budget.assets[0].asset)
-		asset.stock_to_asset_accounting_treatment = "Expense"
-		asset.save()
-		within_budget.submit()
-		within_budget.reload()
-		asset.reload()
-		self.assertEqual((within_budget.docstatus, within_budget.status), (1, "Submitted"))
-		self.assertEqual(asset.docstatus, 1)
-		self.assertEqual(asset.stock_to_asset_conversion, within_budget.name)
-		self.assertEqual(asset.stock_to_asset_accounting_treatment, "Expense")
-		self.assertEqual((asset.net_purchase_amount, asset.value_after_depreciation), (self.unit_value, 0))
-		self.assertEqual(get_stock_balance(self.stock_item, self.warehouse), self.received_qty - 1)
-		self.assert_gl(
-			within_budget.doctype,
-			within_budget.name,
-			{self.inventory_account: -self.unit_value, expense_account: self.unit_value},
-			entry_count=2,
-		)
-		self.assertEqual(
-			set(
-				frappe.get_all(
-					"GL Entry",
-					filters={
-						"voucher_type": within_budget.doctype,
-						"voucher_no": within_budget.name,
-					},
-					pluck="department",
-				)
-			),
-			{"_Test Department - _TC"},
-		)
-		within_budget.cancel()
-		self.assert_conversion_reversed(within_budget, expense_account=expense_account)
-		budget.reload()
-		self.assertEqual(budget.docstatus, 1)
 
 	def test_asset_conversion_pick_list_full_loop(self):
 		pick_list = frappe.get_doc(
@@ -783,8 +490,6 @@ class TestStockToAssetConversionIntegration(ERPNextTestSuite):
 			),
 			set(asset_names),
 		)
-		for output in conversion.assets:
-			output.accounting_treatment = "Hold Value"
 		conversion.save()
 		conversion.submit()
 		conversion.reload()
@@ -817,7 +522,7 @@ class TestStockToAssetConversionIntegration(ERPNextTestSuite):
 		)
 		for asset_name in asset_names:
 			asset = frappe.get_doc("Asset", asset_name)
-			self.assertEqual((asset.docstatus, asset.stock_to_asset_accounting_treatment), (1, "Hold Value"))
+			self.assertEqual((asset.docstatus, asset.calculate_depreciation), (1, 1))
 			self.assertEqual(
 				(asset.net_purchase_amount, asset.value_after_depreciation),
 				(self.unit_value, self.unit_value),

@@ -104,8 +104,9 @@ class TestCustodyLoanReturnFlow(TestCase):
 			self.assertEqual(update_return_status_on_transaction(return_doc), "Pending Receipt")
 
 		delivery_note.docstatus = 1
-		with patch.object(frappe.db, "exists", return_value=True), patch.object(
-			frappe, "get_doc", return_value=delivery_note
+		with (
+			patch.object(frappe.db, "exists", return_value=True),
+			patch.object(frappe, "get_doc", return_value=delivery_note),
 		):
 			self.assertEqual(update_return_status_on_transaction(return_doc), "Received")
 
@@ -135,9 +136,8 @@ class TestCustodyLoanReturnFlow(TestCase):
 		loan = FakeDocument(
 			name="LOAN-1",
 			loan_type="Asset",
-			items=[
-				FakeDocument(issued_qty=1, returned_qty=0, adjusted_qty=0, sold_qty=0, outstanding_qty=1)
-			],
+			asset_movement="MOVE-1",
+			items=[FakeDocument(issued_qty=1, returned_qty=0, adjusted_qty=0, sold_qty=0, outstanding_qty=1)],
 			refresh_balances=lambda: None,
 		)
 		with patch.object(frappe, "get_all", return_value=[]):
@@ -150,16 +150,14 @@ class TestCustodyLoanReturnFlow(TestCase):
 			pick_list="PICK-1",
 			delivery_note="DN-1",
 			asset_movement=None,
-			items=[
-				FakeDocument(issued_qty=1, returned_qty=0, adjusted_qty=0, sold_qty=0, outstanding_qty=1)
-			],
+			items=[FakeDocument(issued_qty=1, returned_qty=0, adjusted_qty=0, sold_qty=0, outstanding_qty=1)],
 			refresh_balances=lambda: None,
 		)
 		with (
 			patch.object(frappe.db, "get_value", side_effect=[1, 0]),
 			patch.object(frappe, "get_all", return_value=[]),
 		):
-			self.assertEqual(CustodyLoan.get_submitted_status(loan), "Pending Delivery Note")
+			self.assertEqual(CustodyLoan.get_submitted_status(loan), "Pending Delivery")
 
 	def test_only_submitted_accepted_inspections_complete_the_check(self):
 		delivery_note = self.make_delivery_note()

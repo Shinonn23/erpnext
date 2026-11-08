@@ -21,9 +21,6 @@ class TestCustodyLoanIntegration(ERPNextTestSuite):
 	ensure_address = request_fixtures.TestCustomerMaterialRequestIntegration.ensure_address
 	make_request = request_fixtures.TestCustomerMaterialRequestIntegration.make_request
 	make_custody_loan = request_fixtures.TestCustomerMaterialRequestIntegration.make_custody_loan
-	complete_stock_loan_issue = (
-		request_fixtures.TestCustomerMaterialRequestIntegration.complete_stock_loan_issue
-	)
 	complete_stock_loan_return = (
 		request_fixtures.TestCustomerMaterialRequestIntegration.complete_stock_loan_return
 	)
@@ -104,6 +101,11 @@ class TestCustodyLoanIntegration(ERPNextTestSuite):
 		delivery_note, _ = self.complete_stock_loan_issue(loan)
 		return loan, delivery_note, serials
 
+	def complete_stock_loan_issue(self, loan):
+		if not loan.pick_list:
+			loan.prepare_pick_list()
+		return request_fixtures.TestCustomerMaterialRequestIntegration.complete_stock_loan_issue(self, loan)
+
 	def asset_loan(self, recipient_type="Customer", recipient=None):
 		asset = self.make_asset(f"Loan Integration Asset {frappe.generate_hash(length=10)}")
 		request = self.make_request(
@@ -115,6 +117,7 @@ class TestCustodyLoanIntegration(ERPNextTestSuite):
 		)
 		loan = self.make_custody_loan(request, "Asset")
 		loan.submit()
+		loan.confirm_delivery()
 		return loan, asset
 
 	def assert_stock(self, item_code, source_qty, loan_qty):
@@ -188,7 +191,7 @@ class TestCustodyLoanIntegration(ERPNextTestSuite):
 		for dt, count in counts.items():
 			self.assertEqual(frappe.db.count(dt), count)
 
-	def test_converted_hold_value_asset_can_be_loaned_returned_and_reversed(self):
+	def test_converted_depreciating_asset_can_be_loaned_returned_and_reversed(self):
 		category = frappe.get_doc(
 			{
 				"doctype": "Asset Category",
@@ -242,8 +245,6 @@ class TestCustodyLoanIntegration(ERPNextTestSuite):
 		).insert()
 		self.assertEqual(len(conversion.assets), 1)
 		asset = frappe.get_doc("Asset", conversion.assets[0].asset)
-		asset.stock_to_asset_accounting_treatment = "Hold Value"
-		asset.save()
 		conversion.save()
 		conversion.submit()
 		conversion.reload()
@@ -252,12 +253,11 @@ class TestCustodyLoanIntegration(ERPNextTestSuite):
 			(
 				asset.docstatus,
 				asset.stock_to_asset_conversion,
-				asset.stock_to_asset_accounting_treatment,
 				asset.value_after_depreciation,
 			),
-			(1, conversion.name, "Hold Value", 100),
+			(1, conversion.name, 100),
 		)
-		self.assertFalse(asset.calculate_depreciation)
+		self.assertTrue(asset.calculate_depreciation)
 		self.assert_stock(stock_item.name, 0, 0)
 		self.assert_sle(
 			conversion.doctype, conversion.name, [(self.source_warehouse, stock_item.name, -1, -100)]
@@ -273,6 +273,7 @@ class TestCustodyLoanIntegration(ERPNextTestSuite):
 		)
 		loan = self.make_custody_loan(request, "Asset")
 		loan.submit()
+		loan.confirm_delivery()
 		asset.reload()
 		self.assertEqual((asset.location, asset.value_after_depreciation), (self.customer_location, 100))
 		# A direct test call emulates the request transaction owner's rollback.
@@ -463,6 +464,7 @@ class TestCustodyLoanIntegration(ERPNextTestSuite):
 			loan = self.make_custody_loan(request, "Asset")
 			loan.check_permission("read")
 			loan.submit()
+			loan.confirm_delivery()
 			loan.reload()
 			self.assertEqual((loan.docstatus, loan.status), (1, "Active"))
 			before = (loan.as_dict(), frappe.db.get_value("Asset", asset.name, "location"))
@@ -621,6 +623,7 @@ class TestCustodyLoanIntegration(ERPNextTestSuite):
 			request.submit()
 		loan = self.make_custody_loan(request, "Asset")
 		loan.submit()
+		loan.confirm_delivery()
 		rows = self.report_rows("overdue_custody_loans", loan)
 		self.assertEqual(len(rows), 1)
 		self.assertEqual(

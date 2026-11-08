@@ -21,12 +21,14 @@ class TestDemoCategoryValidation(TestCase):
 		doc = Mock(spec=module.StocktoAssetConversion)
 		doc.material_request = material_request
 		self.database.get_value.return_value = request_type
-		target = frappe._dict(name="Demo Analyzer", asset_category="Demo Equipment")
+		category_name = "Demo Equipment"
 		with patch.object(frappe, "get_cached_value", return_value=category_is_demo) as category:
-			module.StocktoAssetConversion.validate_demo_category(doc, frappe._dict(idx=1), target)
+			module.StocktoAssetConversion.validate_demo_category(
+				doc, frappe._dict(idx=1, asset_item_code="Demo Analyzer"), category_name
+			)
 		return category
 
-	def test_customer_demo_requires_a_target_item_in_a_demo_category(self):
+	def test_customer_demo_requires_the_selected_object_category_to_be_demo(self):
 		with self.assertRaises(ValueError):
 			self.validate("Customer Demo", 0)
 

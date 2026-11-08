@@ -8,8 +8,7 @@ both; the person presses Return and the system makes the Asset Return and the St
   fixed Asset must come back as the same Asset (a different machine is an exchange, out of scope).
 - A quantity the customer used up is not returned: for a Customer Demo the system writes it off as a demo expense (a
   Custody Loan Adjustment, reason "Consumed during demo", the Company's Stock Adjustment Account); for a Customer
-  Borrow / Loan it writes it off the same way and drafts a Sales Invoice to the borrower at the selling price, which
-  accounts submits (the hand-off rule "Drafted Sales Invoice", for the accounts receivable designations).
+  Borrow / Loan it writes it off the same way; accounts explicitly creates the Sales Invoice from the adjustment.
 - The loan closes when every item is returned or consumed (``CustodyLoan.get_submitted_status``).
 
 The set is the loans issued from one Material Request (``loans_of_set``: the only place that knows it, so a dedicated
@@ -25,6 +24,7 @@ from frappe.utils import cint, flt, getdate, nowdate
 from erpnext.loan.doctype.custody_loan.custody_loan_core import (
 	loan_item_available_to_adjust,
 	loan_item_available_to_receive,
+	set_loan_transaction_source,
 )
 from erpnext.loan.doctype.custody_loan.custody_loan_tracking import (
 	grouped_open_rows,
@@ -60,7 +60,7 @@ def _set_names(loan, material_request):
 	return loans_of_set(loan)
 
 
-DELIVERING = ("Pending Pick", "Pending Delivery Note")
+DELIVERING = ("Pending Pick", "Pending Delivery")
 RETURN_CHECK = ("Pending Quality Inspection", "Pending Receipt")
 DONE = ("Returned", "Closed", "Cancelled")
 
@@ -235,6 +235,8 @@ def return_loan_set(
 	loans = {name: frappe.get_doc("Custody Loan", name) for name in names}
 	items = {row.name: (doc, row) for doc in loans.values() for row in doc.items}
 	plan = _check_plan(loans, items, assets, stock)
+	if not any(plan.values()):
+		frappe.throw(_("Tick what came back or enter a quantity."))
 	made = {"returns": [], "adjustments": [], "invoices": [], "waiting": [], "notes": []}
 	savepoint = "return_loan_set"
 	frappe.db.savepoint(savepoint)
@@ -348,26 +350,15 @@ def _return_stock(loan, lines, made):
 
 
 def _consume_stock(loan, consumed, made):
-	"""Write off what was used up (the lent lots still out, earliest first); a Borrow to a Customer is also invoiced."""
+	"""Write off what was used up; accounts starts borrower billing separately."""
 	request_type = frappe.db.get_value("Material Request", loan.material_request, "material_request_type")
 	demo = request_type == DEMO_REQUEST
-	invoice = None
-	if not demo and loan.borrower_type == "Customer":
-		invoice = _draft_invoice(loan, consumed, made)
 	account = frappe.db.get_value("Company", loan.company, "stock_adjustment_account")
 	if not account:
 		frappe.throw(
 			_("Set the Stock Adjustment Account of {0} to write off what was used up.").format(loan.company)
 		)
-	reason = (
-		_(DEMO_REASON)
-		if demo
-		else (
-			_("Consumed by the borrower, invoiced on {0}").format(invoice)
-			if invoice
-			else _("Consumed by the borrower")
-		)
-	)
+	reason = _(DEMO_REASON) if demo else "Consumed by the borrower"
 	adjustment = frappe.new_doc("Custody Loan Adjustment")
 	adjustment.company = loan.company
 	adjustment.custody_loan = loan.name
@@ -413,65 +404,97 @@ def _consume_stock(loan, consumed, made):
 	adjustment.insert()
 	adjustment.submit()
 	made["adjustments"].append(adjustment.name)
+	if not demo and loan.borrower_type == "Customer":
+		made["notes"].append(
+			_("Accounts must create the consumption invoice from adjustment {0}.").format(adjustment.name)
+		)
 
 
-def _draft_invoice(loan, consumed, made):
-	"""A draft Sales Invoice to the borrower for what was consumed, at the selling price, for accounts to submit. It is
-	not a loan transaction (no stock moves: the write-off above takes the goods out). None when it cannot be drafted;
-	the note says so and the write-off still happens."""
+@frappe.whitelist(methods=["POST"])
+def create_consumption_invoice(adjustment: str):
+	"""Accounts explicitly starts billing for one submitted borrower consumption adjustment."""
+	frappe.has_permission("Sales Invoice", "create", throw=True)
+	frappe.db.sql("select name from `tabCustody Loan Adjustment` where name=%s for update", adjustment)
+	source = frappe.get_doc("Custody Loan Adjustment", adjustment)
+	source.check_permission("read")
+	loan = frappe.get_doc("Custody Loan", source.custody_loan)
+	loan.check_permission("read")
+	request_type = frappe.db.get_value("Material Request", loan.material_request, "material_request_type")
+	if (
+		source.docstatus != 1
+		or loan.loan_type != "Stock"
+		or loan.borrower_type != "Customer"
+		or request_type != "Customer Borrow / Loan"
+		or source.reason != "Consumed by the borrower"
+	):
+		frappe.throw(_("Create a consumption invoice from a submitted borrower consumption adjustment."))
+	existing = frappe.db.get_value(
+		"Sales Invoice",
+		{
+			"custody_loan_source_doctype": source.doctype,
+			"custody_loan_source_name": source.name,
+			"docstatus": ["<", 2],
+		},
+		"name",
+	)
+	if existing:
+		invoice = frappe.get_doc("Sales Invoice", existing)
+		invoice.check_permission("read")
+		return invoice.as_dict()
+	consumed = {}
+	for row in source.items:
+		consumed[row.custody_loan_item] = consumed.get(row.custody_loan_item, 0) + flt(row.qty)
+	return _make_consumption_invoice(loan, consumed, source).as_dict()
+
+
+def _make_consumption_invoice(loan, consumed, source):
 	from erpnext.stock.get_item_details import get_item_details
 
-	savepoint = "return_loan_set_invoice"
-	frappe.db.savepoint(savepoint)
-	try:
-		invoice = frappe.new_doc("Sales Invoice")
-		invoice.company = loan.company
-		invoice.customer = loan.borrower
-		invoice.update_stock = 0
-		invoice.set_missing_values()
-		invoice.customer_address = loan.recipient_address
-		invoice.shipping_address_name = loan.recipient_address
-		invoice.contact_person = loan.recipient_contact
-		invoice.remarks = _("Used up by the borrower on Custody Loan {0}").format(loan.name)
-		for row in loan.items:
-			qty = flt(consumed.get(row.name))
-			if qty <= 0:
-				continue
-			uom = frappe.db.get_value("Item", row.item_code, "stock_uom")
-			details = get_item_details(
-				frappe._dict(
-					doctype="Sales Invoice",
-					item_code=row.item_code,
-					customer=loan.borrower,
-					company=loan.company,
-					qty=qty,
-					uom=uom,
-					conversion_rate=invoice.conversion_rate or 1,
-					currency=invoice.currency,
-					selling_price_list=invoice.selling_price_list,
-					price_list=invoice.selling_price_list,
-					price_list_currency=invoice.price_list_currency,
-					plc_conversion_rate=invoice.plc_conversion_rate or 1,
-					transaction_date=invoice.posting_date,
-				),
-				doc=invoice,
-			)
-			invoice.append(
-				"items",
-				{**details, "item_code": row.item_code, "qty": qty, "uom": uom, "conversion_factor": 1},
-			)
-		invoice.flags.ignore_permissions = True
-		invoice.insert()
-		# the system's draft: accounts receivable finds it in My Tasks ("Drafted Sales Invoice")
-		frappe.db.set_value("Sales Invoice", invoice.name, "owner", "Administrator", update_modified=False)
-		made["invoices"].append(invoice.name)
-		return invoice.name
-	except Exception as error:
-		frappe.db.rollback(save_point=savepoint)
-		frappe.clear_last_message()
-		made["notes"].append(
-			_(
-				"The Sales Invoice for what was used up could not be drafted ({0}): accounts invoices it."
-			).format(str(error)[:200])
+	invoice = frappe.new_doc("Sales Invoice")
+	invoice.company = loan.company
+	invoice.customer = loan.borrower
+	invoice.update_stock = 0
+	invoice.set_missing_values()
+	invoice.customer_address = loan.recipient_address
+	invoice.shipping_address_name = loan.recipient_address
+	invoice.contact_person = loan.recipient_contact
+	invoice.remarks = _("Used up by the borrower on Custody Loan {0}").format(loan.name)
+	set_loan_transaction_source(invoice, loan, source)
+	# Billing still follows its own Sales Invoice workflow; a stock movement's authority cannot approve it.
+	invoice.flags.custody_operation_token = None
+	for row in loan.items:
+		qty = flt(consumed.get(row.name))
+		if qty <= 0:
+			continue
+		uom = frappe.db.get_value("Item", row.item_code, "stock_uom")
+		details = get_item_details(
+			frappe._dict(
+				doctype="Sales Invoice",
+				item_code=row.item_code,
+				customer=loan.borrower,
+				company=loan.company,
+				qty=qty,
+				uom=uom,
+				conversion_rate=invoice.conversion_rate or 1,
+				currency=invoice.currency,
+				selling_price_list=invoice.selling_price_list,
+				price_list=invoice.selling_price_list,
+				price_list_currency=invoice.price_list_currency,
+				plc_conversion_rate=invoice.plc_conversion_rate or 1,
+				transaction_date=invoice.posting_date,
+			),
+			doc=invoice,
 		)
-		return None
+		invoice.append(
+			"items",
+			{
+				**details,
+				"item_code": row.item_code,
+				"custody_loan_item": row.name,
+				"qty": qty,
+				"uom": uom,
+				"conversion_factor": 1,
+			},
+		)
+	invoice.insert()
+	return invoice

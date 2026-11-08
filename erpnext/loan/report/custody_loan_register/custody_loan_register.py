@@ -1,4 +1,5 @@
 import frappe
+from frappe.desk.reportview import get_match_cond
 
 from erpnext.loan.report.requester import (
 	REQUEST_JOIN,
@@ -26,44 +27,91 @@ def execute(filters=None):
 		conditions.append("loan.expected_return_date <= %(to_date)s")
 		values["to_date"] = filters.to_date
 	add_requester_filter(filters, conditions, values)
+	if filters.get("purpose"):
+		conditions.append("request.material_request_type = %(purpose)s")
+		values["purpose"] = filters.purpose
+	match_conditions = get_match_cond("Custody Loan").replace("`tabCustody Loan`", "loan")
 
 	columns = [
-		{"label": "Custody Loan", "fieldname": "loan", "fieldtype": "Link", "options": "Custody Loan", "width": 165},
-		{"label": "Material Request", "fieldname": "material_request", "fieldtype": "Link", "options": "Material Request", "width": 165},
+		{
+			"label": "Custody Loan",
+			"fieldname": "loan",
+			"fieldtype": "Link",
+			"options": "Custody Loan",
+			"width": 165,
+		},
+		{
+			"label": "Material Request",
+			"fieldname": "material_request",
+			"fieldtype": "Link",
+			"options": "Material Request",
+			"width": 165,
+		},
+		{"label": "Purpose", "fieldname": "purpose", "fieldtype": "Data", "width": 165},
 		{"label": "Loan Type", "fieldname": "loan_type", "fieldtype": "Data", "width": 90},
 		{"label": "Borrower Type", "fieldname": "borrower_type", "fieldtype": "Data", "width": 110},
-		{"label": "Borrower", "fieldname": "borrower", "fieldtype": "Dynamic Link", "options": "borrower_type", "width": 170},
+		{
+			"label": "Borrower",
+			"fieldname": "borrower",
+			"fieldtype": "Dynamic Link",
+			"options": "borrower_type",
+			"width": 170,
+		},
 		{"label": "Expected Return", "fieldname": "expected_return_date", "fieldtype": "Date", "width": 115},
 		{"label": "Items", "fieldname": "item_count", "fieldtype": "Int", "width": 65},
+		{"label": "Prepared Qty", "fieldname": "prepared_qty", "fieldtype": "Float", "width": 100},
 		{"label": "Issued Qty", "fieldname": "issued_qty", "fieldtype": "Float", "width": 90},
 		{"label": "Returned Qty", "fieldname": "returned_qty", "fieldtype": "Float", "width": 95},
-		{"label": "Written Off", "fieldname": "adjusted_qty", "fieldtype": "Float", "width": 90},
+		{"label": "Used Up / Written Off", "fieldname": "adjusted_qty", "fieldtype": "Float", "width": 90},
+		{"label": "Sold Qty", "fieldname": "sold_qty", "fieldtype": "Float", "width": 90},
 		{"label": "Outstanding", "fieldname": "outstanding_qty", "fieldtype": "Float", "width": 95},
 		{"label": "Status", "fieldname": "status", "fieldtype": "Data", "width": 130},
-		{"label": "Shipment", "fieldname": "shipment", "fieldtype": "Link", "options": "Shipment", "width": 145},
+		{
+			"label": "Shipment",
+			"fieldname": "shipment",
+			"fieldtype": "Link",
+			"options": "Shipment",
+			"width": 145,
+		},
 		{"label": "Company", "fieldname": "company", "fieldtype": "Link", "options": "Company", "width": 130},
+		{
+			"label": "Currency",
+			"fieldname": "currency",
+			"fieldtype": "Link",
+			"options": "Currency",
+			"width": 80,
+		},
 	]
 	columns = insert_columns_after(columns, "borrower", requester_columns())
 	columns = insert_columns_after(columns, "outstanding_qty", value_columns())
+	for column in columns:
+		if column["fieldname"] in ("loan_value", "outstanding_value"):
+			column["options"] = "currency"
+			column["label"] = (
+				"Issued Value (Recorded)"
+				if column["fieldname"] == "loan_value"
+				else "Outstanding Value (Recorded)"
+			)
 	data = frappe.db.sql(
-		f"""SELECT loan.name AS loan, loan.material_request, loan.loan_type,
+		f"""SELECT loan.name AS loan, loan.material_request, request.material_request_type AS purpose, loan.loan_type,
 			loan.borrower_type, loan.borrower, {REQUESTER_SELECT}, loan.expected_return_date,
-			COUNT(item.name) AS item_count, SUM(item.qty) AS issued_qty,
-			SUM(item.returned_qty) AS returned_qty, SUM(item.adjusted_qty) AS adjusted_qty,
+			COUNT(item.name) AS item_count, SUM(item.qty) AS prepared_qty, SUM(item.issued_qty) AS issued_qty,
+			SUM(item.returned_qty) AS returned_qty, SUM(item.adjusted_qty) AS adjusted_qty, SUM(item.sold_qty) AS sold_qty,
 			SUM(item.outstanding_qty) AS outstanding_qty,
-			SUM(item.qty * {UNIT_VALUE}) AS loan_value,
+			SUM(item.issued_qty * {UNIT_VALUE}) AS loan_value,
 			SUM(item.outstanding_qty * {UNIT_VALUE}) AS outstanding_value, loan.status,
 			COALESCE(
 				(SELECT shipment.name FROM `tabShipment` shipment
 				 WHERE shipment.custody_loan = loan.name AND shipment.docstatus < 2
 				 ORDER BY shipment.modified DESC LIMIT 1),
 				delivery_note.custody_loan_shipment
-			) AS shipment, loan.company
+			) AS shipment, loan.company, company.default_currency AS currency
 		FROM `tabCustody Loan` loan
+		JOIN `tabCompany` company ON company.name = loan.company
 		LEFT JOIN `tabCustody Loan Item` item ON item.parent = loan.name
 		LEFT JOIN `tabDelivery Note` delivery_note ON delivery_note.name = loan.delivery_note
 		{REQUEST_JOIN}
-		WHERE {' AND '.join(conditions)}
+		WHERE {" AND ".join(conditions)} {match_conditions}
 		GROUP BY loan.name
 		ORDER BY loan.expected_return_date, loan.material_request, loan.loan_type, loan.name""",
 		values,
@@ -75,26 +123,33 @@ def execute(filters=None):
 
 
 def summary_by_requester(columns, data):
-	"""One row per requester: how many loans, how much is still out and what it is worth."""
-	keep = {"requested_by", "requested_by_name", "requested_by_user"}
+	"""Separate each requester's customer, purpose, loan type and Company currency."""
+	identity = ("requested_by", "requested_by_name", "requested_by_user")
+	dimensions = ("borrower_type", "borrower", "purpose", "loan_type", "company", "currency")
+	quantities = ("prepared_qty", "issued_qty", "returned_qty", "adjusted_qty", "sold_qty", "outstanding_qty")
+	amounts = ("loan_value", "outstanding_value")
 	totals = {}
 	for row in data:
-		key = row.requested_by or row.requested_by_user
+		key = (row.requested_by or row.requested_by_user, *(row.get(field) for field in dimensions))
 		total = totals.setdefault(
 			key,
 			frappe._dict(
-				{field: row.get(field) for field in keep},
-				loan_count=0, issued_qty=0, returned_qty=0, outstanding_qty=0, loan_value=0, outstanding_value=0,
+				{field: row.get(field) for field in (*identity, *dimensions)},
+				loan_count=0,
+				**{field: 0 for field in (*quantities, *amounts)},
 			),
 		)
 		total.loan_count += 1
-		for field in ("issued_qty", "returned_qty", "outstanding_qty", "loan_value", "outstanding_value"):
+		for field in (*quantities, *amounts):
 			total[field] += row.get(field) or 0
+	keep = {*identity, *dimensions}
 	summary_columns = [column for column in columns if column["fieldname"] in keep]
 	summary_columns.append({"label": "Loans", "fieldname": "loan_count", "fieldtype": "Int", "width": 70})
-	summary_columns += [
-		column
-		for column in columns
-		if column["fieldname"] in ("issued_qty", "returned_qty", "outstanding_qty", "loan_value", "outstanding_value")
-	]
-	return summary_columns, sorted(totals.values(), key=lambda row: -(row.outstanding_value or 0))
+	summary_columns += [column for column in columns if column["fieldname"] in (*quantities, *amounts)]
+	return summary_columns, sorted(
+		totals.values(),
+		key=lambda row: tuple(
+			row.get(field) or ""
+			for field in ("company", "currency", "requested_by_name", "borrower", "purpose", "loan_type")
+		),
+	)

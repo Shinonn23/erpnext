@@ -30,16 +30,15 @@ REQUESTER_SELECT = (
 )
 
 
-# What one unit of a loan row is worth: an Asset's book value, else the stock valuation captured when the goods
-# were issued (per stock unit, times the request's conversion factor), else the value the request was approved at.
+# Values remain those recorded for the loan: later Asset depreciation must not rewrite lending history.
 UNIT_VALUE = """(CASE WHEN COALESCE(item.asset, '') != '' THEN COALESCE(
-		NULLIF((SELECT unit_asset.value_after_depreciation FROM `tabAsset` unit_asset WHERE unit_asset.name = item.asset), 0),
-		(SELECT unit_asset.net_purchase_amount FROM `tabAsset` unit_asset WHERE unit_asset.name = item.asset), 0)
-	WHEN item.valuation_rate > 0 THEN item.valuation_rate * COALESCE(NULLIF(
-		(SELECT unit_request.conversion_factor FROM `tabMaterial Request Item` unit_request
-		WHERE unit_request.name = item.material_request_item), 0), 1)
-	ELSE COALESCE((SELECT unit_request.rate FROM `tabMaterial Request Item` unit_request
-		WHERE unit_request.name = item.material_request_item), 0) END)"""
+        (SELECT unit_request.rate FROM `tabMaterial Request Item` unit_request
+         WHERE unit_request.name = item.material_request_item), 0)
+    WHEN item.valuation_rate > 0 THEN item.valuation_rate * COALESCE(NULLIF(
+        (SELECT unit_request.conversion_factor FROM `tabMaterial Request Item` unit_request
+         WHERE unit_request.name = item.material_request_item), 0), 1)
+    ELSE COALESCE((SELECT unit_request.rate FROM `tabMaterial Request Item` unit_request
+         WHERE unit_request.name = item.material_request_item), 0) END)"""
 
 
 def value_columns():
@@ -65,7 +64,12 @@ def requester_columns():
 			"fieldtype": "Data",
 			"width": 120,
 		},
-		{"label": _("Responsible Employee Name"), "fieldname": "requested_by_name", "fieldtype": "Data", "width": 170},
+		{
+			"label": _("Responsible Employee Name"),
+			"fieldname": "requested_by_name",
+			"fieldtype": "Data",
+			"width": 170,
+		},
 		{
 			"label": _("Requester User"),
 			"fieldname": "requested_by_user",

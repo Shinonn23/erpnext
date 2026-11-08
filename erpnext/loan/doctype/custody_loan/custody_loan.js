@@ -45,19 +45,19 @@ frappe.ui.form.on("Custody Loan", {
 		if (frm.doc.status === "Pending Pick") {
 			frm.set_intro(
 				__(
-					"The warehouse picks the items and submits the Pick List; the Loan Delivery Note is made for you."
+					"Prepare the Pick List and pick the goods. Submit the Pick List, then Confirm Delivery when the whole set is handed over."
 				),
 				"blue"
 			);
-		} else if (frm.doc.status === "Pending Delivery Note") {
+		} else if (frm.doc.status === "Pending Delivery") {
 			frm.set_intro(
-				__("The Pick List is submitted. Create the Loan Delivery Note to send the items out."),
+				__("The loan is prepared. Check the actual equipment and destination, then Confirm Delivery when the whole set is handed over. Stock items must be picked first."),
 				"blue"
 			);
 		} else if (["Active", "Partially Returned"].includes(frm.doc.status)) {
 			frm.set_intro(
 				__(
-					"When the items come back, press Return: the items still out are filled in, then Save and Submit. The system receives them or asks the QI team to inspect them first."
+					"Press Return and enter what came back or was used up. Items requiring inspection wait for their QI team."
 				),
 				"blue"
 			);
@@ -67,25 +67,26 @@ frappe.ui.form.on("Custody Loan", {
 				frappe.set_route("Form", "Pick List", frm.doc.pick_list)
 			);
 		}
-		if (frm.doc.loan_type === "Stock" && frm.doc.pick_list) {
-			if (frm.doc.delivery_note && frappe.model.can_read("Delivery Note")) {
-				frm.add_custom_button(__("Open Loan Delivery Note"), () =>
-					frappe.set_route("Form", "Delivery Note", frm.doc.delivery_note)
-				);
-			} else if (frappe.model.can_create("Delivery Note")) {
-				const loan_name = frm.doc.name;
-				const pick_list = frm.doc.pick_list;
-				frappe.db.get_value("Pick List", pick_list, "docstatus").then(({ message }) => {
-					if (message?.docstatus === 1 && frm.doc.docstatus === 1 && frm.doc.name === loan_name && frm.doc.pick_list === pick_list && !frm.doc.delivery_note) {
-						frm.add_custom_button(
-							__("Create Loan Delivery Note"),
-							() => open_generated_doc(frm, "make_delivery_note"),
-							__("Create"),
-							"Delivery Note"
-						);
-					}
-				});
-			}
+		if (frm.doc.loan_type === "Stock" && !frm.doc.pick_list && frappe.model.can_create("Pick List")) {
+			frm.add_custom_button(__("Prepare Pick List"), () => open_generated_doc(frm, "prepare_pick_list"));
+		}
+		if (frm.doc.status === "Pending Delivery" && frm.doc.loan_type === "Stock" &&
+			!frm.doc.delivery_note && frappe.model.can_create("Delivery Note")) {
+			frm.add_custom_button(__("Prepare Delivery"), () =>
+				open_generated_doc(frm, "make_delivery_note")
+			);
+		}
+		if (frm.doc.status === "Pending Delivery" &&
+			frappe.model.can_submit("Custody Loan")) {
+			frm.add_custom_button(__("Confirm Delivery"), async () => {
+				await frm.call("confirm_delivery");
+				await frm.reload_doc();
+			}).addClass("btn-primary");
+		}
+		if (frm.doc.delivery_note && frappe.model.can_read("Delivery Note")) {
+			frm.add_custom_button(__("Open Loan Delivery Note"), () =>
+				frappe.set_route("Form", "Delivery Note", frm.doc.delivery_note)
+			);
 		}
 		if (frm.doc.sales_invoice && frappe.model.can_read("Sales Invoice")) {
 			frm.add_custom_button(__("Open Asset Sale Invoice"), () =>
@@ -139,7 +140,7 @@ function show_loan_summary(frm) {
 	grid.toggle_display("source_warehouse", stock);
 	grid.toggle_display("asset", !stock);
 	if (frm.doc.docstatus === 0 && !frm.is_new()) {
-		frm.set_intro(__("The system could not submit this loan by itself. Check the Loan Qty and Source Warehouse of each item, then submit."), "blue");
+		frm.set_intro(__("Check the Loan Qty, selected Assets and source of each item, then submit to prepare this loan. Nothing is sent until Confirm Delivery."), "blue");
 	}
 	if (frm.doc.requested_by_name) {
 		frm.dashboard.set_headline(

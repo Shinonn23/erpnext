@@ -118,30 +118,30 @@
    "width": "100px"
   },
   {
-   "depends_on": "eval:parent.material_request_type == 'Asset Transfer' || (in_list(['Customer Demo', 'Customer Borrow / Loan'], parent.material_request_type) && doc.asset)",
+   "depends_on": "eval:parent.material_request_type == 'Asset Transfer'",
    "fieldname": "asset",
    "fieldtype": "Link",
-   "in_list_view": 1,
+   "in_list_view": 0,
    "label": "Asset",
    "mandatory_depends_on": "eval:parent.material_request_type == 'Asset Transfer'",
    "options": "Asset"
   },
   {
-   "depends_on": "eval:parent.material_request_type == 'Asset Transfer' || (in_list(['Customer Demo', 'Customer Borrow / Loan'], parent.material_request_type) && doc.asset)",
+   "depends_on": "eval:parent.material_request_type == 'Asset Transfer'",
    "fieldname": "asset_name",
    "fieldtype": "Data",
    "label": "Asset Name",
    "read_only": 1
   },
   {
-   "depends_on": "eval:parent.material_request_type == 'Asset Transfer' || (in_list(['Customer Demo', 'Customer Borrow / Loan'], parent.material_request_type) && doc.asset)",
+   "depends_on": "eval:parent.material_request_type == 'Asset Transfer'",
    "fieldname": "asset_serial_number",
    "fieldtype": "Data",
    "label": "Asset Serial Number",
    "read_only": 1
   },
   {
-   "depends_on": "eval:parent.material_request_type == 'Asset Transfer' || (in_list(['Customer Demo', 'Customer Borrow / Loan'], parent.material_request_type) && doc.asset)",
+   "depends_on": "eval:parent.material_request_type == 'Asset Transfer'",
    "fieldname": "source_location",
    "fieldtype": "Link",
    "in_list_view": 1,
@@ -150,7 +150,7 @@
    "read_only": 1
   },
   {
-   "depends_on": "eval:parent.material_request_type == 'Asset Transfer' || (in_list(['Customer Demo', 'Customer Borrow / Loan'], parent.material_request_type) && doc.asset)",
+   "depends_on": "eval:parent.material_request_type == 'Asset Transfer'",
    "fieldname": "target_location",
    "fieldtype": "Link",
    "in_list_view": 1,

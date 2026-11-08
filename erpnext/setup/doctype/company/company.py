@@ -54,11 +54,9 @@ class Company(NestedSet):
 		company_description: DF.TextEditor | None
 		company_logo: DF.AttachImage | None
 		company_name: DF.Data
-		asset_capitalization_threshold: DF.Currency
 		cost_center: DF.Link | None
 		customer_demo_return_lookahead_days: DF.Int
 		customer_loan_warehouse: DF.Link | None
-		low_value_asset_expense_account: DF.Link | None
 		country: DF.Link
 		create_chart_of_accounts_based_on: DF.Literal["", "Standard Template", "Existing Company"]
 		credit_limit: DF.Currency
@@ -203,12 +201,6 @@ class Company(NestedSet):
 			warehouse_company = frappe.db.get_value("Warehouse", self.customer_loan_warehouse, "company")
 			if warehouse_company != self.name:
 				frappe.throw(_("Customer Loan Warehouse must belong to Company {0}").format(self.name))
-		if flt(self.asset_capitalization_threshold) > 0 and not self.low_value_asset_expense_account:
-			frappe.throw(_("Low Value Asset Expense Account is required when a threshold is set"))
-		if self.low_value_asset_expense_account:
-			account_company = frappe.db.get_value("Account", self.low_value_asset_expense_account, "company")
-			if account_company != self.name:
-				frappe.throw(_("Low Value Asset Expense Account must belong to Company {0}").format(self.name))
 
 	def cant_change_valuation_method(self):
 		doc_before_save = self.get_doc_before_save()

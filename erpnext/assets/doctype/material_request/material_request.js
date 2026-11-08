@@ -310,24 +310,7 @@ frappe.ui.form.on("Material Request", {
 					return;
 				remove_standard_status_actions();
 				const actions = r.message || {};
-				// The system makes the loans by itself once approved (and decided); the button is for a loan it has not made.
-				// A request may lend some rows as Stock and others as Assets: one Loan Order of each.
-				const loan_types = [
-					actions.stock_custody_loan && "Stock",
-					actions.asset_custody_loan && "Asset",
-				].filter(Boolean);
-				for (const loan_type of loan_types) {
-					// By name, not with the whole document: a document call on a submitted request needs its submit right.
-					frm.add_custom_button(
-						loan_types.length > 1 ? __("{0} Loan Order", [__(loan_type)]) : __("Loan Order"),
-						() =>
-							run_request_method(frm, "make_custody_loan", { loan_type }).then((r) =>
-								open_generated_doc(r.message)
-							),
-						__("Create"),
-						"Custody Loan"
-					);
-				}
+				// Demo / Borrow preparation is one request-level action, so mixed sets cannot be split here.
 				if (actions.asset_movement) {
 					frm.add_custom_button(
 						__("Asset Movement"),
@@ -466,7 +449,6 @@ function configure_material_request_item_columns(frm) {
 		visible_columns.add("qty");
 		if (!is_loan && ["Purchase", "Material Transfer"].includes(purpose)) visible_columns.add("warehouse");
 		if (purpose === "Material Transfer") visible_columns.add("from_warehouse");
-		if (is_loan && frm.doc.docstatus === 1) visible_columns.add("asset");
 	}
 
 	// The header date is copied to every row by ERPNext's standard handler.

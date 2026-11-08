@@ -571,21 +571,27 @@ frappe.ui.form.on("Asset", {
 		}
 	},
 
+	asset_category(frm) {
+		if (frm.doc.docstatus === 0) return frm.trigger("item_code");
+	},
+
 	set_finance_book: function (frm) {
 		let item_code = frm.doc.item_code;
 		let net_purchase_amount = frm.doc.net_purchase_amount;
+		const asset_category = frm.doc.asset_category;
 
 		frappe.call({
 			method: "erpnext.assets.doctype.asset.asset.get_item_details",
 			args: {
 				item_code: item_code,
-				asset_category: frm.doc.asset_category,
+				asset_category,
 				net_purchase_amount: net_purchase_amount,
 			},
 			callback: function (r, rt) {
 				if (
 					r.message &&
 					frm.doc.item_code === item_code &&
+					frm.doc.asset_category === asset_category &&
 					frm.doc.net_purchase_amount === net_purchase_amount
 				) {
 					frm.set_value("finance_books", r.message);

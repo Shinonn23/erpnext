@@ -122,7 +122,10 @@
    "fieldtype": "Table",
    "label": "Generated Assets",
    "options": "Stock to Asset Conversion Asset",
-   "read_only": 1
+   "read_only": 0,
+   "read_only_depends_on": "eval:doc.docstatus != 0",
+   "cannot_add_rows": 1,
+   "cannot_delete_rows": 1
   },
   {
    "fieldname": "totals_section",
