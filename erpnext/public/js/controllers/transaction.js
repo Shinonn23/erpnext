@@ -1202,7 +1202,7 @@ erpnext.TransactionController = class TransactionController extends erpnext.taxe
 		}
 	}
 
-	posting_date() {
+	async posting_date() {
 		var me = this;
 		if (this.frm.doc.posting_date) {
 			this.frm.posting_date = this.frm.doc.posting_date;
@@ -1211,12 +1211,18 @@ erpnext.TransactionController = class TransactionController extends erpnext.taxe
 				(this.frm.doc.doctype == "Sales Invoice" && this.frm.doc.customer) ||
 				(this.frm.doc.doctype == "Purchase Invoice" && this.frm.doc.supplier)
 			) {
+				const order_based = (me.frm.doc.payment_schedule || []).some(
+					(row) => row.due_date_based_on === "Day(s) after order date"
+				);
+				const order_date = order_based ? await me.get_payment_order_date() : null;
 				return frappe.call({
 					method: "erpnext.accounts.party.get_due_date",
 					args: {
 						posting_date: me.frm.doc.posting_date,
 						party_type: me.frm.doc.doctype == "Sales Invoice" ? "Customer" : "Supplier",
 						bill_date: me.frm.doc.bill_date,
+						template_name: me.frm.doc.payment_terms_template,
+						order_date,
 						party:
 							me.frm.doc.doctype == "Sales Invoice" ? me.frm.doc.customer : me.frm.doc.supplier,
 						company: me.frm.doc.company,
@@ -2988,34 +2994,67 @@ erpnext.TransactionController = class TransactionController extends erpnext.taxe
 		}
 	}
 
-	payment_terms_template() {
-		var me = this;
+	async get_payment_order_date(doc = this.frm.doc) {
+		if (["Quotation", "Supplier Quotation", "Sales Order", "Purchase Order"].includes(doc.doctype)) {
+			return doc.transaction_date || null;
+		}
+		const source = {
+			"Sales Invoice": ["Sales Order", "sales_order"],
+			"Purchase Invoice": ["Purchase Order", "purchase_order"],
+		}[doc.doctype];
+		const rows = doc.items || [];
+		if (!source || !rows.length || rows.some((row) => !row[source[1]])) return null;
+		const names = [...new Set(rows.map((row) => row[source[1]]))];
+		const answers = await Promise.all(
+			names.map((name) => frappe.db.get_value(source[0], name, "transaction_date"))
+		);
+		const dates = new Set(answers.map((r) => r.message?.transaction_date || null));
+		return dates.size === 1 && !dates.has(null) ? [...dates][0] : null;
+	}
+
+	async get_payment_term_response(method, args) {
 		const doc = this.frm.doc;
-		if (doc.payment_terms_template && doc.doctype !== "Delivery Note" && !doc.is_return) {
-			var posting_date = doc.posting_date || doc.transaction_date;
-			frappe.call({
-				method: "erpnext.controllers.accounts_controller.get_payment_terms",
-				args: {
-					terms_template: doc.payment_terms_template,
-					posting_date: posting_date,
+		if (["Quotation", "Supplier Quotation", "Sales Order", "Purchase Order"].includes(doc.doctype)) {
+			args.order_date = doc.transaction_date;
+		}
+		let result = await frappe.call({ method, args });
+		const rows = Array.isArray(result.message) ? result.message : [result.message];
+		if (
+			!result.exc &&
+			!args.order_date &&
+			rows.some((row) => row?.due_date_based_on === "Day(s) after order date")
+		) {
+			const order_date = await this.get_payment_order_date(doc);
+			if (order_date) result = await frappe.call({ method, args: { ...args, order_date } });
+		}
+		return result;
+	}
+
+	async payment_terms_template() {
+		const doc = this.frm.doc;
+		const template = doc.payment_terms_template;
+		if (template && doc.doctype !== "Delivery Note" && !doc.is_return) {
+			const r = await this.get_payment_term_response(
+				"erpnext.controllers.accounts_controller.get_payment_terms",
+				{
+					terms_template: template,
+					posting_date: doc.posting_date || doc.transaction_date,
 					grand_total: doc.rounded_total || doc.grand_total,
 					base_grand_total: doc.base_rounded_total || doc.base_grand_total,
 					bill_date: doc.bill_date,
-				},
-				callback: function (r) {
-					if (r.message && !r.exc) {
-						me.frm.set_value("payment_schedule", r.message);
-						const company_currency = me.get_company_currency();
-						me.update_payment_schedule_grid_labels(company_currency);
-					}
-				},
-			});
+				}
+			);
+			if (r.message && !r.exc && this.frm.doc === doc && doc.payment_terms_template === template) {
+				this.frm.set_value("payment_schedule", r.message);
+				this.update_payment_schedule_grid_labels(this.get_company_currency());
+			}
 		}
 	}
 
-	payment_term(doc, cdt, cdn) {
-		const me = this;
-		var row = locals[cdt][cdn];
+	async payment_term(doc, cdt, cdn) {
+		const row = locals[cdt][cdn];
+		const term = row.payment_term;
+		const parent = this.frm.doc;
 		// empty date condition fields
 		[
 			"due_date_based_on",
@@ -3027,29 +3066,24 @@ erpnext.TransactionController = class TransactionController extends erpnext.taxe
 			row[field] = "";
 		});
 
-		if (row.payment_term) {
-			frappe.call({
-				method: "erpnext.controllers.accounts_controller.get_payment_term_details",
-				args: {
-					term: row.payment_term,
-					bill_date: this.frm.doc.bill_date,
-					posting_date: this.frm.doc.posting_date || this.frm.doc.transaction_date,
-					grand_total: this.frm.doc.rounded_total || this.frm.doc.grand_total,
-					base_grand_total: this.frm.doc.base_rounded_total || this.frm.doc.base_grand_total,
-				},
-				callback: function (r) {
-					if (r.message && !r.exc) {
-						const company_currency = me.get_company_currency();
-						for (let d in r.message) {
-							row[d] = r.message[d];
-						}
-						me.update_payment_schedule_grid_labels(company_currency);
-						me.frm.refresh_field("payment_schedule");
-					}
-				},
-			});
+		if (term) {
+			const r = await this.get_payment_term_response(
+				"erpnext.controllers.accounts_controller.get_payment_term_details",
+				{
+					term,
+					bill_date: parent.bill_date,
+					posting_date: parent.posting_date || parent.transaction_date,
+					grand_total: parent.rounded_total || parent.grand_total,
+					base_grand_total: parent.base_rounded_total || parent.base_grand_total,
+				}
+			);
+			if (r.message && !r.exc && this.frm.doc === parent && row.payment_term === term) {
+				for (const field in r.message) row[field] = r.message[field];
+				this.update_payment_schedule_grid_labels(this.get_company_currency());
+				this.frm.refresh_field("payment_schedule");
+			}
 		} else {
-			me.frm.refresh_field("payment_schedule");
+			this.frm.refresh_field("payment_schedule");
 		}
 	}
 

@@ -176,9 +176,10 @@ class TestRegulatoryFields(unittest.TestCase):
 			self.assertNotIn(retired, specs)
 		category = specs[constants.ITEM_CATEGORY_FIELD]
 		self.assertEqual(category["fieldtype"], "Select")
-		self.assertEqual(category["options"].split("\n"), ["", *constants.ITEM_CATEGORIES])
-		self.assertNotIn("default", category)
-		self.assertIn("unclassified and is not sold", category["description"])
+		self.assertEqual(category["options"].split("\n"), list(constants.ITEM_CATEGORIES))
+		self.assertEqual(category["default"], constants.NOT_REGULATED)
+		self.assertEqual(category["reqd"], 1)
+		self.assertIn("needs no regulatory documents", category["description"])
 		self.assertIn("Other", specs["regulatory_other_category"]["depends_on"])
 		self.assertEqual(specs["regulatory_other_category"]["fieldtype"], "Data")
 		self.assertIn("Medical Device", specs["medical_device_category"]["depends_on"])
@@ -189,7 +190,10 @@ class TestRegulatoryFields(unittest.TestCase):
 
 	def test_item_tab_sits_between_quality_and_pricing(self):
 		_, order = ra_specs("Item")
-		self.assertEqual(order[order.index("regulatory_tab") - 1], "quality_inspection_template")
+		self.assertEqual(
+			order[order.index("regulatory_tab") - 2 : order.index("regulatory_tab")],
+			["quality_inspection_template", "registration_requirement"],
+		)
 		self.assertEqual(order[order.index("current_registration_status") + 1], "pricing_tab")
 
 	def test_snapshot_fields_match_declared_names(self):

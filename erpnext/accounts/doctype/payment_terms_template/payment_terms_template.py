@@ -27,6 +27,8 @@ class PaymentTermsTemplate(Document):
 	# end: auto-generated types
 
 	def validate(self):
+		if any(term.due_date_based_on == "Day(s) after order date" for term in self.terms):
+			self.allocate_payment_based_on_payment_terms = 1
 		self.validate_invoice_portion()
 		self.validate_terms()
 

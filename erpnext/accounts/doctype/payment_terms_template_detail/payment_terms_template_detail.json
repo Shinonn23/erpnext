@@ -58,13 +58,14 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Due Date Based On",
-   "options": "Day(s) after invoice date\nDay(s) after the end of the invoice month\nMonth(s) after the end of the invoice month",
-   "reqd": 1
+   "options": "Day(s) after invoice date\nDay(s) after the end of the invoice month\nMonth(s) after the end of the invoice month\nDay(s) after order date",
+   "reqd": 1,
+   "description": "Order terms use the order date; quotations show an estimate using their date until an order is created."
   },
   {
    "columns": 2,
    "default": "0",
-   "depends_on": "eval:in_list(['Day(s) after invoice date', 'Day(s) after the end of the invoice month'], doc.due_date_based_on)",
+   "depends_on": "eval:in_list(['Day(s) after order date', 'Day(s) after invoice date', 'Day(s) after the end of the invoice month'], doc.due_date_based_on)",
    "fetch_from": "payment_term.credit_days",
    "fetch_if_empty": 1,
    "fieldname": "credit_days",

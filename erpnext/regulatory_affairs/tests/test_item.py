@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 import frappe
 
 from erpnext.regulatory_affairs import item as ra_item
+from erpnext.regulatory_affairs import transactions
 from erpnext.regulatory_affairs.constants import ITEM_CATEGORY_FIELD, ITEM_COVERAGE_FIELDS
 
 COVERAGE = dict(
@@ -14,12 +15,44 @@ COVERAGE = dict(
 )
 
 
+class TestNotRegulatedTransactions(unittest.TestCase):
+	def test_not_regulated_sales_and_receipts_do_not_look_up_registration(self):
+		for doctype in (
+			"Sales Order",
+			"Delivery Note",
+			"Sales Invoice",
+			"Purchase Order",
+			"Purchase Receipt",
+		):
+			doc = frappe._dict(doctype=doctype, items=[frappe._dict(idx=1, item_code="PLAIN-1")])
+
+			def get_items(_doctype, *, filters, pluck):
+				if ["Item", ITEM_CATEGORY_FIELD, "!=", "Not Regulated"] in filters:
+					return []
+				return ["PLAIN-1"]
+
+			with (
+				self.subTest(doctype=doctype),
+				patch.object(
+					transactions, "get_settings", return_value=frappe._dict(transactions.POLICY_DEFAULTS)
+				),
+				patch.object(frappe, "get_all", side_effect=get_items),
+				patch.object(transactions, "_lookup_mapping") as lookup,
+				patch.object(frappe, "throw") as throw,
+			):
+				transactions.validate_transaction(doc)
+			lookup.assert_not_called()
+			throw.assert_not_called()
+
+
 def _raise(exc):
 	raise (exc or frappe.ValidationError)
 
 
 def item(category=None, **values):
-	return frappe._dict({ITEM_CATEGORY_FIELD: category, **values})
+	doc = frappe._dict({ITEM_CATEGORY_FIELD: category, **values})
+	doc.get_doc_before_save = lambda: None
+	return doc
 
 
 class TestIsRegulated(unittest.TestCase):
@@ -56,6 +89,7 @@ class TestValidate(unittest.TestCase):
 		for blank in (None, "", "  "):
 			doc = item(blank, **COVERAGE)
 			self.assertEqual(self.run_validate(doc).call_count, 0, repr(blank))
+			self.assertEqual(doc[ITEM_CATEGORY_FIELD], "Not Regulated")
 			for fieldname in ITEM_COVERAGE_FIELDS:
 				self.assertIsNone(doc[fieldname], (blank, fieldname))
 
@@ -64,14 +98,14 @@ class TestValidate(unittest.TestCase):
 		for category in ("Other", None):
 			doc = item(category, item_name="Gloves", **values, **COVERAGE)
 			self.run_validate(doc)
-			self.assertEqual(doc[ITEM_CATEGORY_FIELD], category)
+			self.assertEqual(doc[ITEM_CATEGORY_FIELD], category or "Not Regulated")
 			self.assertEqual(doc.item_name, "Gloves")
 			for fieldname, value in values.items():
 				self.assertEqual(doc[fieldname], value, (category, fieldname))
 
 
 class TestCategoryChange(unittest.TestCase):
-	"""Operator sets or changes the Product Category, Approver clears it, everyone else is refused."""
+	"""Every Item has a category; only Regulatory Affairs changes an existing classification."""
 
 	def check(self, old, new, roles, user="someone@example.com", **flags):
 		doc = MagicMock()
@@ -95,27 +129,28 @@ class TestCategoryChange(unittest.TestCase):
 
 	def test_an_item_editor_cannot_clear_the_category(self):
 		for roles in (["Item Manager"], ["Regulatory Operator"], ["Regulatory Viewer"]):
-			with self.assertRaises(frappe.PermissionError, msg=repr(roles)):
+			with self.assertRaises(frappe.ValidationError, msg=repr(roles)):
 				self.check("Drug", "  ", roles)
 
 	def test_an_operator_sets_and_changes_the_category(self):
 		self.check(None, "Drug", ["Regulatory Operator"])
 		self.check("Drug", "Food", ["Regulatory Operator"])
 
-	def test_an_approver_sets_changes_and_clears_the_category(self):
+	def test_an_approver_sets_and_changes_but_cannot_clear_the_category(self):
 		self.check(None, "Drug", ["Regulatory Approver"])
 		self.check("Drug", "Food", ["Regulatory Approver"])
-		self.check("Drug", "", ["Regulatory Approver"])
-		self.check("Drug", None, ["Regulatory Approver"])
+		for blank in ("", None):
+			with self.assertRaises(frappe.ValidationError):
+				self.check("Drug", blank, ["Regulatory Approver"])
 
 	def test_an_unchanged_category_passes_for_any_editor(self):
 		self.check("Drug", "Drug", ["Item Manager"])
 		self.check("Drug", " Drug ", ["Item Manager"])
-		self.check(None, None, ["Item Manager"])
-		self.check("", None, ["Item Manager"])
+		self.check(None, "Not Regulated", ["Item Manager"])
+		self.check("", "Not Regulated", ["Item Manager"])
 
 	def test_administrator_and_install_runs_pass(self):
-		self.check("Drug", "", ["Item Manager"], user="Administrator")
+		self.check("Drug", "Food", ["Item Manager"], user="Administrator")
 		for flag in ("in_install", "in_patch", "in_migrate"):
 			self.check(None, "Drug", ["Item Manager"], **{flag: True})
 
@@ -129,6 +164,32 @@ class TestCategoryChange(unittest.TestCase):
 				ra_item.validate(doc)
 		check.assert_called_once_with(doc)
 		refresh.assert_not_called()
+
+	def test_new_and_legacy_blank_items_default_without_an_ra_role(self):
+		for previous in (None, frappe._dict(regulatory_product_category="")):
+			doc = item()
+			doc.get_doc_before_save = lambda: previous
+			with (
+				patch.object(frappe, "session", frappe._dict(user="creator@example.test")),
+				patch.object(frappe, "flags", frappe._dict()),
+				patch.object(ra_item.permissions, "is_operator", return_value=False),
+				patch.object(ra_item.coverage, "refresh_item_coverage") as refresh,
+			):
+				ra_item.validate(doc)
+			self.assertEqual(doc.regulatory_product_category, "Not Regulated")
+			refresh.assert_not_called()
+
+	def test_clearing_a_regulated_item_does_not_apply_the_default(self):
+		doc = item("")
+		doc.get_doc_before_save = lambda: frappe._dict(regulatory_product_category="Drug")
+		with (
+			patch.object(frappe, "throw", side_effect=frappe.ValidationError),
+			patch.object(ra_item.coverage, "refresh_item_coverage") as refresh,
+			self.assertRaises(frappe.ValidationError),
+		):
+			ra_item.validate(doc)
+		refresh.assert_not_called()
+		self.assertEqual(doc.regulatory_product_category, "")
 
 
 class TestSetProductCategory(unittest.TestCase):
@@ -195,6 +256,22 @@ class TestSetProductCategory(unittest.TestCase):
 	def test_an_unknown_category_is_refused(self):
 		with self.assertRaises(frappe.ValidationError):
 			self.classify(category="Magic")
+
+	def test_a_blank_classification_is_refused_without_saving(self):
+		for blank in (None, "", "  "):
+			with self.subTest(blank=blank), self.assertRaises(frappe.ValidationError):
+				self.classify(category=blank)
+
+	def test_set_product_category_cannot_clear_the_category(self):
+		doc = MagicMock()
+		with (
+			patch.object(frappe, "has_permission"),
+			patch.object(frappe, "get_doc", return_value=doc),
+			patch.object(frappe, "throw", side_effect=frappe.ValidationError),
+			self.assertRaises(frappe.ValidationError),
+		):
+			ra_item.set_product_category("ITEM-1", "")
+		doc.save.assert_not_called()
 
 	def test_bulk_classification_reports_what_failed(self):
 		def fake(code, category, device):

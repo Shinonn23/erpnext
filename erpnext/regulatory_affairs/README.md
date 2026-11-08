@@ -35,10 +35,12 @@ Type), `activity_type` (Import, Manufacture, Sale, Product Registration, Other),
 
 ### Item classification
 
-Every Item that is sold must be **classified by Regulatory Affairs** (Siwat, 5 Nov 2026). The **Product Category**
-(`regulatory_product_category`, Regulatory tab) is one of the Thai FDA groups (the Item is **regulated** and needs a registration in
-force to be sold) or **Not Regulated** (RA looked at it and it needs none). An Item whose category is still blank is
-**unclassified** and is not sold. For Quotation, Sales Order, Delivery Note and Sales Invoice:
+**Product Category is required and defaults to Not Regulated** (Siwat, 9 Nov 2026). The field
+(`regulatory_product_category`, Regulatory tab) is either a Thai FDA group (the Item is **regulated** and needs a
+registration in force) or **Not Regulated** (sales, purchases and receipts need no regulatory documents).
+New and legacy blank Items take the default when saved; an existing classification cannot be cleared. Only
+Regulatory Affairs may change a classified Item to a different category. For Quotation, Sales Order, Delivery Note
+and Sales Invoice:
 
 * the Item link (`sales_common.js` -> `item_query` filter `regulatory_sale`) offers only Items that are classified and, when
   regulated, covered by a registration in force on the document's date (`transactions.sellable_items_condition`);

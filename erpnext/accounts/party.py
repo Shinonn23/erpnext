@@ -696,7 +696,9 @@ def validate_party_account_type(party_type, row):
 
 
 @frappe.whitelist()
-def get_due_date(posting_date, party_type, party, company=None, bill_date=None, template_name=None):
+def get_due_date(
+	posting_date, party_type, party, company=None, bill_date=None, template_name=None, order_date=None
+):
 	"""Get due date from `Payment Terms Template`"""
 	due_date = None
 	if (bill_date or posting_date) and party:
@@ -705,22 +707,39 @@ def get_due_date(posting_date, party_type, party, company=None, bill_date=None, 
 			template_name = get_payment_terms_template(party, party_type, company)
 
 		if template_name:
-			due_date = get_due_date_from_template(template_name, posting_date, bill_date).strftime("%Y-%m-%d")
+			calculated = get_due_date_from_template(template_name, posting_date, bill_date, order_date)
+			due_date = calculated.strftime("%Y-%m-%d") if calculated else None
 		else:
 			if party_type == "Supplier":
 				supplier_group = frappe.get_cached_value(party_type, party, "supplier_group")
 				template_name = frappe.get_cached_value("Supplier Group", supplier_group, "payment_terms")
 				if template_name:
-					due_date = get_due_date_from_template(template_name, posting_date, bill_date).strftime(
-						"%Y-%m-%d"
+					calculated = get_due_date_from_template(
+						template_name, posting_date, bill_date, order_date
 					)
+					due_date = calculated.strftime("%Y-%m-%d") if calculated else None
 	# If due date is calculated from bill_date, check this condition
-	if getdate(due_date) < getdate(posting_date):
+	if (
+		due_date
+		and getdate(due_date) < getdate(posting_date)
+		and not (order_date and template_name and _has_order_date_terms(template_name))
+	):
 		due_date = posting_date
 	return due_date
 
 
-def get_due_date_from_template(template_name, posting_date, bill_date):
+def _has_order_date_terms(template_name, payment_terms=None):
+	return any(
+		term.due_date_based_on == "Day(s) after order date"
+		for term in (
+			payment_terms
+			if payment_terms is not None
+			else frappe.get_doc("Payment Terms Template", template_name).terms
+		)
+	)
+
+
+def get_due_date_from_template(template_name, posting_date, bill_date, order_date=None, payment_terms=None):
 	"""
 	Inspects all `Payment Term`s from the a `Payment Terms Template` and returns the due
 	date after considering all the `Payment Term`s requirements.
@@ -729,9 +748,20 @@ def get_due_date_from_template(template_name, posting_date, bill_date):
 	"""
 	due_date = getdate(bill_date or posting_date)
 
-	template = frappe.get_doc("Payment Terms Template", template_name)
+	terms = (
+		payment_terms
+		if payment_terms is not None
+		else frappe.get_doc("Payment Terms Template", template_name).terms
+	)
+	order_terms = [term for term in terms if term.due_date_based_on == "Day(s) after order date"]
+	if order_terms and not order_date:
+		return None
+	if order_terms:
+		from erpnext.controllers.accounts_controller import get_due_date as term_due_date
 
-	for term in template.terms:
+		return max(getdate(term_due_date(term, posting_date, bill_date, order_date)) for term in terms)
+
+	for term in terms:
 		if term.due_date_based_on == "Day(s) after invoice date":
 			due_date = max(due_date, add_days(due_date, term.credit_days))
 		elif term.due_date_based_on == "Day(s) after the end of the invoice month":
@@ -741,8 +771,23 @@ def get_due_date_from_template(template_name, posting_date, bill_date):
 	return due_date
 
 
-def validate_due_date(posting_date, due_date, bill_date=None, template_name=None, doctype=None):
-	if getdate(due_date) < getdate(posting_date):
+def validate_due_date(
+	posting_date,
+	due_date,
+	bill_date=None,
+	template_name=None,
+	doctype=None,
+	order_date=None,
+	payment_terms=None,
+):
+	order_due = (
+		get_due_date_from_template(template_name, posting_date, bill_date, order_date, payment_terms)
+		if template_name and order_date and _has_order_date_terms(template_name, payment_terms)
+		else None
+	)
+	if getdate(due_date) < getdate(posting_date) and not (
+		order_due and getdate(due_date) == getdate(order_due)
+	):
 		doctype_date = "Date"
 		if doctype == "Purchase Invoice":
 			doctype_date = "Supplier Invoice Date"
@@ -752,14 +797,21 @@ def validate_due_date(posting_date, due_date, bill_date=None, template_name=None
 
 		frappe.throw(_("Due Date cannot be before {0}").format(doctype_date))
 	else:
-		validate_due_date_with_template(posting_date, due_date, bill_date, template_name, doctype)
+		validate_due_date_with_template(
+			posting_date, due_date, bill_date, template_name, doctype, order_date, payment_terms
+		)
 
 
-def validate_due_date_with_template(posting_date, due_date, bill_date, template_name, doctype=None):
+def validate_due_date_with_template(
+	posting_date, due_date, bill_date, template_name, doctype=None, order_date=None, payment_terms=None
+):
 	if not template_name:
 		return
 
-	default_due_date = format(get_due_date_from_template(template_name, posting_date, bill_date))
+	calculated = get_due_date_from_template(template_name, posting_date, bill_date, order_date, payment_terms)
+	if calculated is None:
+		frappe.throw(_("Order-based payment terms require a linked order with an Order Date."))
+	default_due_date = format(calculated)
 
 	if not default_due_date:
 		return

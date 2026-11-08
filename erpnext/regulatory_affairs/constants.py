@@ -69,8 +69,7 @@ PRODUCT_CATEGORIES = (
 	"Other",
 )
 OTHER_CATEGORY = "Other"
-# An Item RA has looked at and found to need no FDA registration (Siwat, 5 Nov 2026). An Item with no category at all
-# is unclassified and is not sold; a registration can never be of this category.
+# The default Item category: no FDA registration is required. A registration can never be of this category.
 NOT_REGULATED = "Not Regulated"
 ITEM_CATEGORIES = (*PRODUCT_CATEGORIES, NOT_REGULATED)
 # Documents on which every Item row must be classified (and registered when regulated) already when saved.

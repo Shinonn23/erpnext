@@ -1208,13 +1208,15 @@
    "label": "Regulatory"
   },
   {
-   "description": "Set by Regulatory Affairs. A Thai FDA product group needs a registration in force to be sold; Not Regulated needs none. An Item that is still blank is unclassified and is not sold.",
+   "default": "Not Regulated",
+   "description": "Defaults to Not Regulated, which needs no regulatory documents for sales or receiving. Regulatory Affairs selects a Thai FDA product group when registration is required.",
    "fieldname": "regulatory_product_category",
    "fieldtype": "Select",
    "in_standard_filter": 1,
    "label": "Product Category",
-   "options": "\nMedical Device\nFood\nDrug\nCosmetic\nHazardous Substance\nHerbal Product\nOther\nNot Regulated",
-   "permlevel": 1
+   "options": "Medical Device\nFood\nDrug\nCosmetic\nHazardous Substance\nHerbal Product\nOther\nNot Regulated",
+   "permlevel": 1,
+   "reqd": 1
   },
   {
    "depends_on": "eval:doc.regulatory_product_category == 'Other'",
@@ -1275,6 +1277,7 @@
    "label": "Is Deposit Item"
   },
   {
+   "depends_on": "eval:doc.regulatory_product_category && doc.regulatory_product_category != 'Not Regulated'",
    "fieldname": "registration_requirement",
    "fieldtype": "Select",
    "label": "Registration Requirement for Sale",

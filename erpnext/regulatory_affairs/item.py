@@ -1,8 +1,7 @@
 """Item validation hook for the regulatory classification.
 
-An Item with a Product Category (``regulatory_product_category``) is regulated: transactions validate it
-against the registration that covers it and the Item keeps the read-only coverage fields. An Item without
-a Product Category is not checked and carries no coverage.
+Product Category defaults to Not Regulated and is never blank. Other categories are regulated: transactions
+validate the registration that covers the Item and it keeps the read-only coverage fields.
 """
 
 from typing import Any
@@ -31,28 +30,31 @@ def category_of(value: Any) -> str:
 	return (value or "").strip()
 
 
+def required_category(value: Any) -> str:
+	category = category_of(value)
+	if not category:
+		frappe.throw(
+			_("Product Category is required. Choose Not Regulated when registration is not required.")
+		)
+	return category
+
+
 def check_category_change(doc) -> None:
-	"""Only a Regulatory Operator sets or changes the Product Category and only a Regulatory Approver clears it.
+	"""The default is available to every Item creator; only Regulatory Affairs changes a classified Item.
 
 	The field also sits on permission level 1, so a form save by anyone else never changes it; this check
 	closes the server-side paths that skip permission levels (scripts, API calls with ignore_permissions).
 	Install, patch and migrate runs are not a user action and pass.
 	"""
+	before = doc.get_doc_before_save()
+	old = category_of(before.get(ITEM_CATEGORY_FIELD)) if before else ""
+	new = required_category(doc.get(ITEM_CATEGORY_FIELD))
+	if old == new or (not old and new == NOT_REGULATED):
+		return
 	flags = frappe.flags
 	if flags.in_install or flags.in_patch or flags.in_migrate or frappe.session.user == "Administrator":
 		return
-	before = doc.get_doc_before_save()
-	old = category_of(before.get(ITEM_CATEGORY_FIELD)) if before else ""
-	new = category_of(doc.get(ITEM_CATEGORY_FIELD))
-	if old == new:
-		return
-	if not new:
-		if not permissions.is_approver():
-			frappe.throw(
-				permissions.approver_only_message(_("clear the Product Category of an Item")),
-				frappe.PermissionError,
-			)
-	elif not permissions.is_operator():
+	if not permissions.is_operator():
 		frappe.throw(
 			_("Only a Regulatory Operator can set or change the Product Category of an Item."),
 			frappe.PermissionError,
@@ -68,7 +70,7 @@ def classify_item(
 ) -> dict:
 	"""Classify an Item in one step (Regulatory Operator): Product Category, Medical Device Category
 	and, for the category Other, its name. Nobody needs Item write rights: the change goes through this method;
-	`validate` still enforces the role rule (only an Approver clears the category).
+	`validate` still enforces the role rule. A category cannot be cleared.
 
 	The Medical Device Category is kept only for a Medical Device; the Other Category only for Other.
 	"""
@@ -79,7 +81,7 @@ def classify_item(
 		)
 	frappe.has_permission("Item", "read", item_code, throw=True)
 	doc = frappe.get_doc("Item", item_code)
-	category = category_of(category)
+	category = required_category(category)
 	doc.set(ITEM_CATEGORY_FIELD, category)
 	if category == MEDICAL_DEVICE:
 		device = category_of(medical_device_category)
@@ -103,10 +105,10 @@ def classify_item(
 
 @frappe.whitelist()
 def set_product_category(item_code: str, category: str | None = None) -> str:
-	"""Set (Operator) or clear (Approver) only the Product Category of an Item the caller can read."""
+	"""Set only the Product Category of an Item the caller can read; blank categories are refused."""
 	frappe.has_permission("Item", "read", item_code, throw=True)
 	doc = frappe.get_doc("Item", item_code)
-	doc.set(ITEM_CATEGORY_FIELD, category_of(category))
+	doc.set(ITEM_CATEGORY_FIELD, required_category(category))
 	doc.flags.ignore_permissions = True
 	doc.save()
 	return doc.get(ITEM_CATEGORY_FIELD) or ""
@@ -114,6 +116,11 @@ def set_product_category(item_code: str, category: str | None = None) -> str:
 
 def validate(doc, method=None):
 	"""Item `validate` hook: guard the Product Category, then refresh or clear the derived coverage."""
+	before = doc.get_doc_before_save()
+	if not category_of(doc.get(ITEM_CATEGORY_FIELD)) and not (
+		before and category_of(before.get(ITEM_CATEGORY_FIELD))
+	):
+		doc[ITEM_CATEGORY_FIELD] = NOT_REGULATED
 	check_category_change(doc)
 	if is_regulated(doc):
 		coverage.refresh_item_coverage(doc)

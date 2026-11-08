@@ -844,6 +844,12 @@ class AccountsController(TransactionBase):
 		self.validate_payment_schedule_dates()
 		self.set_due_date()
 		self.set_payment_schedule()
+		if any(
+			row.get("due_date_based_on") == "Day(s) after order date"
+			for row in self.get("payment_schedule") or []
+		):
+			self.validate_payment_schedule_dates()
+			self.set_due_date()
 		if not self.get("ignore_default_payment_terms_template"):
 			self.validate_payment_schedule_amount()
 			self.validate_due_date()
@@ -1198,7 +1204,11 @@ class AccountsController(TransactionBase):
 		)
 
 		# skip due date validation for records via Data Import
-		if frappe.flags.in_import and getdate(self.due_date) < getdate(posting_date):
+		order_based = any(
+			row.get("due_date_based_on") == "Day(s) after order date"
+			for row in self.get("payment_schedule") or []
+		)
+		if frappe.flags.in_import and not order_based and getdate(self.due_date) < getdate(posting_date):
 			self.due_date = posting_date
 
 		elif self.doctype in ["Sales Invoice", "Purchase Invoice"]:
@@ -1210,7 +1220,49 @@ class AccountsController(TransactionBase):
 				bill_date=bill_date,
 				template_name=self.payment_terms_template,
 				doctype=self.doctype,
+				order_date=self.get_payment_order_date() if order_based else None,
+				payment_terms=self.get_frozen_payment_terms(),
 			)
+
+	def get_frozen_payment_terms(self):
+		"""Keep a proven submitted contract when its master template changes later."""
+		if not self.get("payment_terms_template"):
+			return None
+		current = self.get("payment_schedule") or []
+		master = frappe.get_cached_doc("Payment Terms Template", self.payment_terms_template).terms
+		contract = _payment_terms_contract(current)
+		if not contract or contract == _payment_terms_contract(master):
+			return None
+		order_type, field = {
+			"Sales Invoice": ("Sales Order", "sales_order"),
+			"Purchase Invoice": ("Purchase Order", "purchase_order"),
+		}.get(self.doctype, (None, None))
+		if not field:
+			return None
+		references = {row.get(field) for row in self.get("items") or []}
+		previous = self.get_doc_before_save()
+		if (
+			previous
+			and previous.docstatus == 1
+			and previous.get("payment_terms_template") == self.payment_terms_template
+			and contract == _payment_terms_contract(previous.get("payment_schedule") or [])
+			and references == {row.get(field) for row in previous.get("items") or []}
+		):
+			return previous.payment_schedule
+		if not references or None in references or "" in references:
+			return None
+		terms = None
+		for name in references:
+			order = frappe.get_doc(order_type, name)
+			order.check_permission("read")
+			if (
+				order.docstatus != 1
+				or order.get("payment_terms_template") != self.payment_terms_template
+				or contract != _payment_terms_contract(order.get("payment_schedule") or [])
+			):
+				return None
+			terms = order.payment_schedule
+		return terms
 
 	def set_price_list_currency(self, buying_or_selling):
 		if self.meta.get_field("posting_date"):
@@ -2908,7 +2960,11 @@ class AccountsController(TransactionBase):
 					self.ignore_default_payment_terms_template = 1
 			elif self.get("payment_terms_template"):
 				data = _get_payment_terms(
-					self.payment_terms_template, posting_date, grand_total, base_grand_total
+					self.payment_terms_template,
+					posting_date,
+					grand_total,
+					base_grand_total,
+					order_date=self.get_payment_order_date(),
 				)
 				for item in data:
 					self.append("payment_schedule", item)
@@ -2950,6 +3006,54 @@ class AccountsController(TransactionBase):
 				po_or_so, doctype, grand_total, base_grand_total, automatically_fetch_payment_terms
 			)
 			self.ignore_default_payment_terms_template = 1
+
+		order_terms = [
+			row
+			for row in self.get("payment_schedule")
+			if row.get("due_date_based_on") == "Day(s) after order date"
+		]
+		if order_terms and self.doctype in (
+			"Quotation",
+			"Supplier Quotation",
+			"Sales Order",
+			"Purchase Order",
+			"Sales Invoice",
+			"Purchase Invoice",
+		):
+			order_date = self.get_payment_order_date()
+			for row in order_terms:
+				due_date = get_due_date(row, posting_date, order_date=order_date)
+				if self.docstatus == 0:
+					row.due_date = due_date
+				elif not row.due_date or getdate(row.due_date) != getdate(due_date):
+					frappe.throw(
+						_("Order-based payment terms must retain the due date calculated from Order Date.")
+					)
+
+	def get_payment_order_date(self):
+		"""Quotes estimate from their date; invoices require a real date shared by all linked orders."""
+		if self.doctype in ("Quotation", "Supplier Quotation", "Sales Order", "Purchase Order"):
+			return self.get("transaction_date")
+		order_type, order_field = {
+			"Sales Invoice": ("Sales Order", "sales_order"),
+			"Purchase Invoice": ("Purchase Order", "purchase_order"),
+		}.get(self.doctype, (None, None))
+		rows = self.get("items") or []
+		if not order_type or not rows or any(not row.get(order_field) for row in rows):
+			return None
+		terms = self.get("payment_schedule") or []
+		if not any(row.get("due_date_based_on") == "Day(s) after order date" for row in terms):
+			if not self.get("payment_terms_template"):
+				return None
+			terms = frappe.get_cached_doc("Payment Terms Template", self.payment_terms_template).terms
+			if not any(row.get("due_date_based_on") == "Day(s) after order date" for row in terms):
+				return None
+		dates = set()
+		for name in {row.get(order_field) for row in rows}:
+			order = frappe.get_doc(order_type, name)
+			order.check_permission("read")
+			dates.add(order.transaction_date)
+		return next(iter(dates)) if len(dates) == 1 and None not in dates else None
 
 	def get_order_details(self):
 		if not self.get("items"):
@@ -3014,7 +3118,9 @@ class AccountsController(TransactionBase):
 
 			if automatically_fetch_payment_terms:
 				if schedule.due_date_based_on:
-					payment_schedule["due_date"] = get_due_date(schedule, posting_date)
+					payment_schedule["due_date"] = get_due_date(
+						schedule, posting_date, order_date=po_or_so.transaction_date
+					)
 					payment_schedule["due_date_based_on"] = schedule.due_date_based_on
 					payment_schedule["credit_days"] = cint(schedule.credit_days)
 					payment_schedule["credit_months"] = cint(schedule.credit_months)
@@ -3949,6 +4055,7 @@ def get_payment_terms(
 	grand_total: float | int | str | None = None,
 	base_grand_total: float | int | str | None = None,
 	bill_date: str | None = None,
+	order_date: str | None = None,
 ):
 	if not terms_template:
 		return
@@ -3957,11 +4064,18 @@ def get_payment_terms(
 	if not frappe.has_permission("Payment Terms Template", "read", doc=terms_template):
 		_refuse()
 
-	return _get_payment_terms(terms_template, posting_date, grand_total, base_grand_total, bill_date)
+	return _get_payment_terms(
+		terms_template, posting_date, grand_total, base_grand_total, bill_date, order_date
+	)
 
 
 def _get_payment_terms(
-	terms_template, posting_date=None, grand_total=None, base_grand_total=None, bill_date=None
+	terms_template,
+	posting_date=None,
+	grand_total=None,
+	base_grand_total=None,
+	bill_date=None,
+	order_date=None,
 ):
 	if not terms_template:
 		return
@@ -3970,7 +4084,9 @@ def _get_payment_terms(
 
 	schedule = []
 	for d in terms_doc.get("terms"):
-		term_details = get_payment_term_details(d, posting_date, grand_total, base_grand_total, bill_date)
+		term_details = get_payment_term_details(
+			d, posting_date, grand_total, base_grand_total, bill_date, order_date
+		)
 		schedule.append(term_details)
 
 	return schedule
@@ -3983,6 +4099,7 @@ def get_payment_term_details(
 	grand_total: float | int | str | None = None,
 	base_grand_total: float | int | str | None = None,
 	bill_date: str | None = None,
+	order_date: str | None = None,
 ):
 	term_details = frappe._dict()
 	if isinstance(term, str):
@@ -4017,20 +4134,44 @@ def get_payment_term_details(
 
 	has_discount = flt(term.get("discount"))
 	date = bill_date or posting_date
-	if date:
-		term_details.due_date = get_due_date(term, date)
-		term_details.discount_date = get_discount_date(term, date) if has_discount else None
+	order_based = term.due_date_based_on == "Day(s) after order date"
+	if (date or order_date) and (not order_based or order_date):
+		term_details.due_date = get_due_date(term, date, order_date=order_date)
+		term_details.discount_date = get_discount_date(term, date) if has_discount and date else None
 
-	if getdate(term_details.due_date) < getdate(posting_date):
+	if not order_based and getdate(term_details.due_date) < getdate(posting_date):
 		term_details.due_date = posting_date
 
 	return term_details
 
 
-def get_due_date(term, posting_date=None, bill_date=None):
+def _payment_terms_contract(terms):
+	if not terms or any(not term.get("due_date_based_on") for term in terms):
+		return None
+	return tuple(
+		(
+			term.get("payment_term") or None,
+			flt(term.get("invoice_portion")),
+			term.get("due_date_based_on"),
+			cint(term.get("credit_days")),
+			cint(term.get("credit_months")),
+			term.get("discount_type") or None,
+			flt(term.get("discount")),
+			term.get("discount_validity_based_on") or None,
+			cint(term.get("discount_validity")),
+		)
+		for term in terms
+	)
+
+
+def get_due_date(term, posting_date=None, bill_date=None, order_date=None):
 	due_date = None
 	date = bill_date or posting_date
-	if term.due_date_based_on == "Day(s) after invoice date":
+	if term.due_date_based_on == "Day(s) after order date":
+		if not order_date:
+			frappe.throw(_("Order-based payment terms require orders with one common Order Date."))
+		due_date = add_days(order_date, cint(term.credit_days))
+	elif term.due_date_based_on == "Day(s) after invoice date":
 		due_date = add_days(date, cint(term.credit_days))
 	elif term.due_date_based_on == "Day(s) after the end of the invoice month":
 		due_date = add_days(get_last_day(date), cint(term.credit_days))

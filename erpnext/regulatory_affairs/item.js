@@ -64,7 +64,7 @@ function add_category_button(frm) {
 		() => {
 			const categories = (frm.fields_dict.regulatory_product_category.df.options || "")
 				.split("\n")
-				.filter((category) => is_approver || category);
+				.filter(Boolean);
 			const dialog = new frappe.ui.Dialog({
 				title: __("Classify Item"),
 				fields: [
@@ -73,11 +73,9 @@ function add_category_button(frm) {
 						fieldtype: "Select",
 						label: __("Product Category"),
 						options: categories,
-						default: frm.doc.regulatory_product_category,
-						reqd: is_approver ? 0 : 1,
-						description: is_approver
-							? __("Leave it blank when the Item needs no FDA registration.")
-							: "",
+						default: frm.doc.regulatory_product_category || "Not Regulated",
+						reqd: 1,
+						description: __("Choose Not Regulated when the Item needs no FDA registration."),
 					},
 					{
 						fieldname: "other_category",

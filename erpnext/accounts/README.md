@@ -12,6 +12,28 @@ Entries are:
 
 All accounting entries are stored in the `General Ledger`
 
+## Payment terms based on Order Date
+
+`Payment Term`, template rows and `Payment Schedule` support **Day(s) after order date** in **Due Date Based On**.
+With **Credit Days = 0**, the term is due on the order date; a name such as T/T Before Delivery is a description,
+while this date basis expresses the calculation. T/T remains a Mode of Payment, not a separate document type.
+Templates containing an order-based term automatically allocate payments by term and require named terms.
+
+Sales and Purchase Orders use their actual `transaction_date`. Quotations estimate the date using their own
+`transaction_date`; mapping the quotation into an order recalculates the schedule from the new order date.
+Invoices require every item to reference orders sharing one actual order date. Missing links or different order
+dates must be resolved rather than silently choosing the first item or the invoice date. Linked orders must be
+readable by the person creating the invoice.
+
+An invoice may therefore carry an order-based payment already overdue before its posting date. The original
+order anchor is retained, including when terms are automatically fetched from the order. Invoice-based options
+keep their existing behavior. An unsaved preview without an order shows no calculated date until a valid order
+anchor is available; final document validation rejects an unresolved anchor. Submitted schedules are checked,
+never silently rewritten. This does not make a payment automatically or block a receipt or delivery.
+If a master template changes later, an existing submitted invoice or a new invoice carrying an exact submitted
+order contract keeps that proven contract. Arbitrary draft term edits do not qualify: the term names, portions,
+date basis, credit and discount settings must match the trusted stored schedule before it is used for validation.
+
 ## Payment Ledger
 Transactions on Receivable and Payable Account types will also be stored in `Payment Ledger`. This is so that payment reconciliation process only requires update on this ledger.
 

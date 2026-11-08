@@ -1,3 +1,4 @@
+import sqlite3
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -14,9 +15,43 @@ class TestEnsureConfiguration(unittest.TestCase):
 			patch.object(install, "ensure_roles", lambda: calls.append("roles")),
 			patch.object(install, "ensure_item_category_permissions", lambda: calls.append("item perms")),
 			patch.object(install, "ensure_settings", lambda: calls.append("settings")),
+			patch.object(install, "ensure_default_item_categories", lambda: calls.append("categories")),
 		):
 			install.ensure_configuration()
-		self.assertEqual(calls, ["module", "roles", "item perms", "settings"])
+		self.assertEqual(calls, ["module", "roles", "item perms", "settings", "categories"])
+
+
+class TestDefaultItemCategories(unittest.TestCase):
+	def test_backfill_only_blank_categories_and_is_idempotent(self):
+		connection = sqlite3.connect(":memory:")
+		self.addCleanup(connection.close)
+		connection.execute("create table tabItem (name text, regulatory_product_category text)")
+		connection.executemany(
+			"insert into tabItem values (?, ?)",
+			[("null", None), ("empty", ""), ("spaces", "   "), ("drug", "Drug"), ("nr", "Not Regulated")],
+		)
+
+		def sql(query, values=(), pluck=False):
+			rows = connection.execute(query.replace("%s", "?"), values).fetchall()
+			return [row[0] for row in rows] if pluck else rows
+
+		with (
+			patch.object(frappe, "db", MagicMock(sql=sql)),
+			patch.object(frappe, "clear_document_cache") as clear,
+		):
+			self.assertEqual(install.ensure_default_item_categories(), 3)
+			self.assertEqual(install.ensure_default_item_categories(), 0)
+			self.assertEqual(
+				{call.args for call in clear.call_args_list},
+				{
+					("Item", "null"),
+					("Item", "empty"),
+					("Item", "spaces"),
+				},
+			)
+		values = dict(connection.execute("select name, regulatory_product_category from tabItem"))
+		self.assertEqual(values["drug"], "Drug")
+		self.assertTrue(all(values[name] == "Not Regulated" for name in ("null", "empty", "spaces", "nr")))
 
 	def test_it_makes_no_custom_field(self):
 		self.assertFalse(hasattr(install, "ensure_custom_fields"))

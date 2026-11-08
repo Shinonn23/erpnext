@@ -9,6 +9,7 @@ from frappe.cache_manager import clear_global_cache
 from erpnext.regulatory_affairs.constants import (
 	MANAGED_ROLES,
 	MODULE,
+	NOT_REGULATED,
 	ROLE_APPROVER,
 	ROLE_OPERATOR,
 	ROLE_VIEWER,
@@ -70,6 +71,26 @@ def ensure_configuration():
 	ensure_roles()
 	ensure_item_category_permissions()
 	ensure_settings()
+	ensure_default_item_categories()
+
+
+def ensure_default_item_categories():
+	"""Fill only legacy blank classifications; explicit regulated categories and review evidence are untouched."""
+	names = frappe.db.sql(
+		"""select name from `tabItem`
+		where trim(ifnull(regulatory_product_category, '')) = ''""",
+		pluck=True,
+	)
+	if not names:
+		return 0
+	frappe.db.sql(
+		"""update `tabItem` set regulatory_product_category = %s
+		where trim(ifnull(regulatory_product_category, '')) = ''""",
+		(NOT_REGULATED,),
+	)
+	for name in names:
+		frappe.clear_document_cache("Item", name)
+	return len(names)
 
 
 def ensure_module_def():
