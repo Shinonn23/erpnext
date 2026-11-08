@@ -464,8 +464,11 @@ def get_party_account(party_type, party=None, company=None, include_advance=Fals
 	finally will return default."""
 
 	def account_perm_check(account):
-		ptype = "select" if frappe.only_has_select_perm("Account") else "read"
-		if frappe.has_permission("Account", ptype, account):
+		# Resolving the party account only names it (no balance), so the right to select it is enough
+		# even where a permission hook withholds read (e.g. a read-only audit reader).
+		if frappe.has_permission("Account", "select", account):
+			return
+		if not frappe.only_has_select_perm("Account") and frappe.has_permission("Account", "read", account):
 			return
 
 		# Using custom message to prevent data leak in case of `apply_strict_permission` is enabled.
