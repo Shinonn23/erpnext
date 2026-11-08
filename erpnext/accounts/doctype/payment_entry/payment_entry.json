@@ -13,10 +13,14 @@
   "naming_series",
   "payment_type",
   "payment_order_status",
+  "has_purchase_tax_invoice",
   "column_break_5",
   "posting_date",
   "company",
   "mode_of_payment",
+  "is_petty_cash",
+  "petty_cash_holder",
+  "petty_cash_holder_name",
   "party_section",
   "party_type",
   "party",
@@ -55,6 +59,10 @@
   "base_received_amount_after_tax",
   "section_break_14",
   "get_outstanding_invoices",
+  "get_invoices_from_sales_billing",
+  "sales_billing",
+  "get_invoices_from_purchase_billing",
+  "purchase_billing",
   "get_outstanding_orders",
   "references",
   "section_break_34",
@@ -109,6 +117,18 @@
   "amended_from",
   "auto_repeat_section",
   "auto_repeat",
+  "tax_invoice",
+  "company_tax_address",
+  "column_break_bqyze",
+  "tax_base_amount",
+  "section_break_owjbn",
+  "tax_invoice_number",
+  "supplier",
+  "column_break_yio5c",
+  "tax_invoice_date",
+  "supplier_name",
+  "tax_invoice_ref_type",
+  "tax_invoice_ref",
   "connect_operations_tab",
   "connect_approval_section",
   "workflow_state",
@@ -879,6 +899,145 @@
   {
    "fieldname": "connect_approval_column",
    "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:doc.payment_type=='Pay'",
+   "fieldname": "has_purchase_tax_invoice",
+   "fieldtype": "Check",
+   "label": "Has Purchase Tax Invoice"
+  },
+  {
+   "fieldname": "tax_invoice",
+   "fieldtype": "Tab Break",
+   "label": "Tax Invoice"
+  },
+  {
+   "fieldname": "company_tax_address",
+   "fieldtype": "Link",
+   "label": "Company Tax Address",
+   "options": "Address"
+  },
+  {
+   "fieldname": "column_break_bqyze",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "tax_base_amount",
+   "fieldtype": "Float",
+   "label": "Tax Base Amount"
+  },
+  {
+   "fieldname": "section_break_owjbn",
+   "fieldtype": "Section Break"
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "tax_invoice_number",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Tax Invoice Number",
+   "no_copy": 1,
+   "read_only_depends_on": "eval:doc.docstatus!=0"
+  },
+  {
+   "allow_on_submit": 1,
+   "depends_on": "eval:doc.party_type=='Employee'",
+   "fieldname": "supplier",
+   "fieldtype": "Link",
+   "label": "Supplier",
+   "no_copy": 1,
+   "options": "Supplier"
+  },
+  {
+   "fieldname": "column_break_yio5c",
+   "fieldtype": "Column Break"
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "tax_invoice_date",
+   "fieldtype": "Date",
+   "label": "Tax Invoice Date",
+   "no_copy": 1,
+   "read_only_depends_on": "eval:doc.docstatus!=0"
+  },
+  {
+   "allow_on_submit": 1,
+   "depends_on": "eval:doc.party_type=='Employee'",
+   "fetch_from": "supplier.supplier_name",
+   "fieldname": "supplier_name",
+   "fieldtype": "Data",
+   "label": "Supplier Name",
+   "no_copy": 1,
+   "translatable": 1
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "tax_invoice_ref_type",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Tax Invoice Type",
+   "no_copy": 1,
+   "options": "DocType",
+   "read_only": 1
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "tax_invoice_ref",
+   "fieldtype": "Dynamic Link",
+   "label": "Tax Invoice Record",
+   "no_copy": 1,
+   "options": "tax_invoice_ref_type",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.docstatus == 0 && doc.payment_type == \"Receive\" && doc.party_type == \"Customer\" && doc.party",
+   "fieldname": "get_invoices_from_sales_billing",
+   "fieldtype": "Button",
+   "label": "Get Invoices from Sales Billing"
+  },
+  {
+   "depends_on": "eval:doc.docstatus == 0 && doc.payment_type == \"Receive\" && doc.party_type == \"Customer\" && doc.party",
+   "fieldname": "sales_billing",
+   "fieldtype": "Link",
+   "label": "Sales Billing",
+   "options": "Sales Billing",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.docstatus == 0 && doc.payment_type == \"Pay\" && doc.party_type == \"Supplier\" && doc.party",
+   "fieldname": "get_invoices_from_purchase_billing",
+   "fieldtype": "Button",
+   "label": "Get Invoices from Purchase Billing"
+  },
+  {
+   "depends_on": "eval:doc.docstatus == 0 && doc.payment_type == \"Pay\" && doc.party_type == \"Supplier\" && doc.party",
+   "fieldname": "purchase_billing",
+   "fieldtype": "Link",
+   "label": "Purchase Billing",
+   "options": "Purchase Billing",
+   "read_only": 1
+  },
+  {
+   "fieldname": "is_petty_cash",
+   "fieldtype": "Check",
+   "label": "Is Petty Cash"
+  },
+  {
+   "depends_on": "eval:doc.is_petty_cash == 1;",
+   "fieldname": "petty_cash_holder",
+   "fieldtype": "Link",
+   "label": "Petty Cash Holder",
+   "link_filters": "[[\"Petty Cash Holder\",\"petty_cash_account\",\"in\",\"eval: [doc.paid_from, doc.paid_to]\"]]",
+   "mandatory_depends_on": "eval:doc.is_petty_cash == 1;",
+   "options": "Petty Cash Holder"
+  },
+  {
+   "depends_on": "eval:doc.is_petty_cash == 1;",
+   "fetch_from": "petty_cash_holder.petty_cash_holder",
+   "fieldname": "petty_cash_holder_name",
+   "fieldtype": "Data",
+   "label": "Petty Cash Holder Name",
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,
@@ -894,7 +1053,7 @@
    "table_fieldname": "payment_entries"
   }
  ],
- "modified": "2026-11-07 23:00:00.000000",
+ "modified": "2026-11-08 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Payment Entry",

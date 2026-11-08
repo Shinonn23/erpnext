@@ -1229,7 +1229,8 @@ class TestConnections(unittest.TestCase):
 class TestWiring(unittest.TestCase):
 	def test_hooks_and_fields(self):
 		from erpnext import hooks
-		from erpnext.regional.thailand.constants import ERP_CUSTOM_FIELDS, ERP_PROPERTY_SETTERS
+		from erpnext.regional.thailand.constants import ERP_PROPERTY_SETTERS
+		from erpnext.regional.thailand.tests.utils import doctype_fields
 
 		self.assertEqual(
 			hooks.extend_doctype_class["Tax Withholding Category"],
@@ -1249,7 +1250,15 @@ class TestWiring(unittest.TestCase):
 				"erpnext.regional.thailand.custom.withholding_cert.cancel_withholding_certificates", cancel
 			)
 			self.assertIn(doctype, hooks.override_doctype_dashboards)
-		fields = {dt: {f["fieldname"] for f in rows} for dt, rows in ERP_CUSTOM_FIELDS.items()}
+		fields = {
+			dt: set(doctype_fields(dt)[0])
+			for dt in (
+				"Tax Withholding Account",
+				"Tax Withholding Category",
+				"Payment Entry Deduction",
+				"Journal Entry Account",
+			)
+		}
 		self.assertIn("customer_withholding_account", fields["Tax Withholding Account"])
 		for doctype in ("Payment Entry Deduction", "Journal Entry Account"):
 			self.assertTrue(
@@ -1261,19 +1270,14 @@ class TestWiring(unittest.TestCase):
 		labels = {(f, p): v for f, p, v, _t in ERP_PROPERTY_SETTERS["Tax Withholding Account"]}
 		self.assertEqual(labels[("account", "label")], "Pay Account (tax we withhold)")
 		self.assertEqual(labels[("account", "reqd")], "0")
-		receive = next(
-			f
-			for f in ERP_CUSTOM_FIELDS["Tax Withholding Account"]
-			if f["fieldname"] == "customer_withholding_account"
-		)
+		receive = doctype_fields("Tax Withholding Account")[0]["customer_withholding_account"]
 		self.assertEqual(
 			(receive["label"], receive["in_list_view"]), ("Receive Account (tax withheld by customers)", 1)
 		)
-		applies_to = next(
-			f for f in ERP_CUSTOM_FIELDS["Tax Withholding Category"] if f["fieldname"] == "thai_applies_to"
-		)
+		category, order = doctype_fields("Tax Withholding Category")
 		self.assertEqual(
-			(applies_to["insert_after"], applies_to["default"]), ("category_name", "Pay and Receive")
+			(order[order.index("thai_applies_to") - 1], category["thai_applies_to"]["default"]),
+			("category_name", "Pay and Receive"),
 		)
 
 	def test_documents_expose_withhold_tax_and_check_their_rows_on_save(self):

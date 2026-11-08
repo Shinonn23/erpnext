@@ -9,6 +9,7 @@
  "engine": "InnoDB",
  "field_order": [
   "item_code",
+  "is_deposit_item",
   "product_bundle",
   "col_break1",
   "item_name",
@@ -1059,13 +1060,20 @@
    "label": "Target Storage Location",
    "options": "Storage Location",
    "search_index": 1
+  },
+  {
+   "fetch_from": "item_code.is_deposit_item",
+   "fieldname": "is_deposit_item",
+   "fieldtype": "Check",
+   "label": "Is Deposit Item",
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,
  "idx": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-10-21 05:30:00.000000",
+ "modified": "2026-11-08 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Purchase Invoice Item",

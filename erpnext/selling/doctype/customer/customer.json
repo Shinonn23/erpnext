@@ -34,6 +34,7 @@
   "contact_and_address_tab",
   "address_contacts",
   "address_html",
+  "branch_html",
   "column_break1",
   "contact_html",
   "primary_address_and_contact_detail",
@@ -61,6 +62,7 @@
   "tax_tab",
   "taxation_section",
   "tax_id",
+  "branch_code",
   "operation_normalized_tax_id",
   "tax_category",
   "column_break_21",
@@ -709,6 +711,19 @@
    "no_copy": 1,
    "read_only": 1,
    "unique": 1
+  },
+  {
+   "default": "00000",
+   "fieldname": "branch_code",
+   "fieldtype": "Data",
+   "label": "Branch Code"
+  },
+  {
+   "depends_on": "eval: !doc.__islocal",
+   "fieldname": "branch_html",
+   "fieldtype": "HTML",
+   "label": "Branches / สาขา",
+   "read_only": 1
   }
  ],
  "icon": "user-round",
@@ -722,7 +737,7 @@
    "link_fieldname": "party"
   }
  ],
- "modified": "2026-11-07 16:00:00.000000",
+ "modified": "2026-11-08 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Selling",
  "name": "Customer",

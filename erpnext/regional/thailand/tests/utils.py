@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 import frappe
 
 
@@ -23,3 +26,12 @@ def before_tests():
 		ensure_company_tax_settings(company["company_name"])
 	# Test companies are created later, together with the test records
 	frappe.db.commit()
+
+
+def doctype_fields(doctype):
+	"""{fieldname: DocField} and the field_order of the DocType JSON of ERPNext that holds the Thailand fields (they are
+	no longer Custom Fields made at install; Siwat, 8 Nov 2026)."""
+	scrubbed = frappe.scrub(doctype)
+	path = next(Path(__file__).parents[3].glob(f"*/doctype/{scrubbed}/{scrubbed}.json"))
+	document = json.loads(path.read_text(encoding="utf-8"))
+	return {row["fieldname"]: row for row in document["fields"]}, document["field_order"]

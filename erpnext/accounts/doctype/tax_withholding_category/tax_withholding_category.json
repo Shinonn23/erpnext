@@ -12,6 +12,9 @@
  "field_order": [
   "category_details_section",
   "category_name",
+  "thai_applies_to",
+  "thai_income_tax_form",
+  "thai_type_of_income",
   "tax_deduction_basis",
   "column_break_2",
   "round_off_tax_amount",
@@ -98,12 +101,33 @@
    "fieldname": "disable_transaction_threshold",
    "fieldtype": "Check",
    "label": "Disable Transaction Threshold"
+  },
+  {
+   "default": "Pay and Receive",
+   "description": "Pay: we withhold this tax from suppliers (PND3 / PND53). Receive: customers withhold it from what they pay us. Withhold Tax offers a type only for the directions it applies to; each direction needs its account for every company in the Accounts table.",
+   "fieldname": "thai_applies_to",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Applies To",
+   "options": "Pay and Receive\nPay\nReceive"
+  },
+  {
+   "fieldname": "thai_income_tax_form",
+   "fieldtype": "Select",
+   "label": "Thai Income Tax Form",
+   "options": "\nPND3\nPND53"
+  },
+  {
+   "fieldname": "thai_type_of_income",
+   "fieldtype": "Link",
+   "label": "Thai Type of Income",
+   "options": "Withholding Tax Type Of Income"
   }
  ],
  "icon": "badge-percent",
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-09-16 11:42:07.000000",
+ "modified": "2026-11-08 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Tax Withholding Category",

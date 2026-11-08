@@ -1,15 +1,8 @@
 import click
-import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 from frappe.custom.doctype.property_setter.property_setter import make_property_setter
 
-from erpnext.regional.thailand.constants import (
-	BILLING_CUSTOM_FIELDS,
-	DEPOSIT_CUSTOM_FIELDS,
-	ERP_CUSTOM_FIELDS,
-	ERP_PROPERTY_SETTERS,
-	HRMS_CUSTOM_FIELDS,
-)
+from erpnext.regional.thailand.constants import ERP_CUSTOM_FIELDS, ERP_PROPERTY_SETTERS
 from erpnext.regional.thailand.utils import import_thai_zip_code_data
 
 
@@ -33,13 +26,10 @@ def after_install():
 
 
 def make_custom_fields():
+	"""The Thailand fields of Frappe core DocTypes (Address, Print Format, Currency). The fields of every other DocType
+	are in the DocType JSON of the forks (Siwat, 8 Nov 2026)."""
 	print("Setup custom fields for erpnext...")
 	create_custom_fields(ERP_CUSTOM_FIELDS, ignore_validate=True)
-	create_custom_fields(BILLING_CUSTOM_FIELDS, ignore_validate=True)
-	create_custom_fields(DEPOSIT_CUSTOM_FIELDS, ignore_validate=True)
-	if "hrms" in frappe.get_installed_apps():
-		print("Setup custom fields for hrms...")
-		create_custom_fields(HRMS_CUSTOM_FIELDS, ignore_validate=True)
 
 
 def make_property_setters():
@@ -51,8 +41,3 @@ def make_property_setters():
 			for property_setter in property_setters:
 				for_doctype = not property_setter[0]
 				make_property_setter(doctype, *property_setter, for_doctype)
-
-
-def after_app_install(app_name):
-	if app_name == "hrms":
-		create_custom_fields(HRMS_CUSTOM_FIELDS, ignore_validate=True)

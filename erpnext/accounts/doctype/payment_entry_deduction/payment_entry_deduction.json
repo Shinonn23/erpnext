@@ -11,6 +11,9 @@
   "column_break_2",
   "is_exchange_gain_loss",
   "description",
+  "thai_withholding_category",
+  "thai_withholding_base",
+  "thai_withholding_offset",
   "dunning"
  ],
  "fields": [
@@ -65,12 +68,37 @@
    "options": "Dunning",
    "print_hide": 1,
    "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.thai_withholding_category",
+   "description": "Tax the customer withheld, added by Withhold Tax. Running Withhold Tax again replaces this row.",
+   "fieldname": "thai_withholding_category",
+   "fieldtype": "Link",
+   "label": "Tax Withholding Category",
+   "options": "Tax Withholding Category",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.thai_withholding_category",
+   "fieldname": "thai_withholding_base",
+   "fieldtype": "Currency",
+   "label": "Withholding Tax Base",
+   "options": "Company:company:default_currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "thai_withholding_offset",
+   "fieldtype": "Currency",
+   "hidden": 1,
+   "label": "Withholding Taken Off Paid Amount",
+   "options": "Company:company:default_currency",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-08-17 11:20:35.482913",
+ "modified": "2026-11-08 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Payment Entry Deduction",

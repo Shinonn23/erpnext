@@ -472,10 +472,6 @@ def after_app_install(app_name=None):
 		from erpnext.crm.frappe_crm_api import remove_allowed_users_on_crm_install
 
 		remove_allowed_users_on_crm_install()
-	elif app_name == "hrms":
-		from erpnext.regional.thailand.install import after_app_install as thailand_after_app_install
-
-		thailand_after_app_install(app_name)
 
 
 def after_app_uninstall(app_name=None):

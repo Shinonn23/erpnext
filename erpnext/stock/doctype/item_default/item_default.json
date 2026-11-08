@@ -32,7 +32,11 @@
   "deferred_accounting_defaults_section",
   "deferred_expense_account",
   "column_break_kwad",
-  "deferred_revenue_account"
+  "deferred_revenue_account",
+  "deposit_defaults",
+  "sales_deposit_account",
+  "column_break_deposit_account",
+  "purchase_deposit_account"
  ],
  "fields": [
   {
@@ -234,11 +238,36 @@
    "label": "Inventory Account Currency",
    "options": "Currency",
    "read_only": 1
+  },
+  {
+   "depends_on": "eval:parent.is_deposit_item",
+   "fieldname": "purchase_deposit_account",
+   "fieldtype": "Link",
+   "label": "Purchase Deposit Account",
+   "link_filters": "[[\"Account\",\"root_type\",\"=\",\"Asset\"]]",
+   "options": "Account"
+  },
+  {
+   "depends_on": "eval:parent.is_deposit_item",
+   "fieldname": "sales_deposit_account",
+   "fieldtype": "Link",
+   "label": "Sales Deposit Account",
+   "link_filters": "[[\"Account\",\"root_type\",\"=\",\"Liability\"]]",
+   "options": "Account"
+  },
+  {
+   "fieldname": "deposit_defaults",
+   "fieldtype": "Section Break",
+   "label": "Deposit Defaults"
+  },
+  {
+   "fieldname": "column_break_deposit_account",
+   "fieldtype": "Column Break"
   }
  ],
  "istable": 1,
  "links": [],
- "modified": "2026-07-28 15:39:44.848087",
+ "modified": "2026-11-08 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Item Default",

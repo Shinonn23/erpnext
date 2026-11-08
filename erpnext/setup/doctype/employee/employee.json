@@ -26,11 +26,18 @@
   "date_of_joining",
   "status",
   "image",
+  "column_break_name_en",
+  "salutation_en",
+  "first_name_en",
+  "middle_name_en",
+  "last_name_en",
+  "full_name_en",
   "erpnext_user",
   "user_id",
   "create_user_permission",
   "column_break_xwnm",
   "signature",
+  "sign_button",
   "column_break_hwyg",
   "create_user_automatically",
   "company_details_section",
@@ -82,6 +89,10 @@
   "column_break6",
   "blood_group",
   "health_details",
+  "social_security_section",
+  "social_security_id",
+  "social_security_column",
+  "social_security_eligible",
   "passport_details_section",
   "passport_number",
   "valid_upto",
@@ -90,6 +101,8 @@
   "place_of_issue",
   "profile_tab",
   "bio",
+  "national_id_section",
+  "national_id_number",
   "educational_qualification",
   "education",
   "previous_work_experience",
@@ -842,6 +855,79 @@
   {
    "fieldname": "column_break_hwyg",
    "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "column_break_name_en",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "salutation_en",
+   "fieldtype": "Link",
+   "label": "Salutation EN",
+   "options": "Salutation"
+  },
+  {
+   "fieldname": "first_name_en",
+   "fieldtype": "Data",
+   "label": "First Name EN"
+  },
+  {
+   "fieldname": "middle_name_en",
+   "fieldtype": "Data",
+   "label": "Middle Name EN"
+  },
+  {
+   "fieldname": "last_name_en",
+   "fieldtype": "Data",
+   "label": "Last Name EN"
+  },
+  {
+   "fieldname": "full_name_en",
+   "fieldtype": "Data",
+   "label": "Full Name EN",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "sign_button",
+   "fieldtype": "Button",
+   "label": "Sign"
+  },
+  {
+   "fieldname": "national_id_section",
+   "fieldtype": "Section Break",
+   "label": "National ID (Thailand)"
+  },
+  {
+   "description": "Opens the password-protected Salary Slip PDF. Only HR and Payroll can read it.",
+   "fieldname": "national_id_number",
+   "fieldtype": "Data",
+   "label": "National ID Number",
+   "no_copy": 1,
+   "permlevel": 1
+  },
+  {
+   "fieldname": "social_security_section",
+   "fieldtype": "Section Break",
+   "label": "Social Security (Thailand)"
+  },
+  {
+   "description": "The ID on the SSO 1-10 form. Leave blank when it is the National ID Number.",
+   "fieldname": "social_security_id",
+   "fieldtype": "Data",
+   "label": "Social Security ID",
+   "no_copy": 1,
+   "permlevel": 1
+  },
+  {
+   "fieldname": "social_security_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Ticked: the salary structure takes the employee's and the employer's social security.",
+   "fieldname": "social_security_eligible",
+   "fieldtype": "Check",
+   "label": "Social Security Eligible"
   }
  ],
  "icon": "user",
@@ -849,7 +935,7 @@
  "image_field": "image",
  "is_tree": 1,
  "links": [],
- "modified": "2026-10-24 16:00:00.000000",
+ "modified": "2026-11-08 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Setup",
  "name": "Employee",

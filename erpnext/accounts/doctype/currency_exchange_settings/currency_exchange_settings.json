@@ -12,6 +12,7 @@
   "api_endpoint",
   "use_http",
   "access_key",
+  "token",
   "url",
   "column_break_3",
   "help",
@@ -100,13 +101,20 @@
    "fieldname": "use_http",
    "fieldtype": "Check",
    "label": "Use HTTP Protocol"
+  },
+  {
+   "depends_on": "eval:doc.service_provider == 'Bank of Thailand';",
+   "fieldname": "token",
+   "fieldtype": "Password",
+   "label": "Token",
+   "mandatory_depends_on": "eval:doc.service_provider == 'Bank of Thailand';"
   }
  ],
  "icon": "refresh-cw",
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-06-15 11:25:55.873110",
+ "modified": "2026-11-08 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Currency Exchange Settings",

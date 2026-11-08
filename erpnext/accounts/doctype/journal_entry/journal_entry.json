@@ -16,6 +16,7 @@
   "bank_transaction_to_reconcile",
   "advance_refund_of",
   "voucher_type",
+  "create_tax_invoice",
   "journal_entry_purpose",
   "journal_entry_reason",
   "column_break1",
@@ -48,6 +49,12 @@
   "user_remark",
   "auto_repeat_section",
   "auto_repeat",
+  "tax_invoice",
+  "company_tax_address",
+  "column_break_3djv9",
+  "for_payment",
+  "section_break_pxm0e",
+  "tax_invoice_details",
   "tax_withholding_tab",
   "section_tax_withholding_entry",
   "tax_withholding_group",
@@ -779,6 +786,45 @@
   {
    "fieldname": "connect_journal_review_column",
    "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:doc.create_tax_invoice==1",
+   "fieldname": "tax_invoice",
+   "fieldtype": "Tab Break",
+   "label": "Tax Invoice"
+  },
+  {
+   "fieldname": "company_tax_address",
+   "fieldtype": "Link",
+   "label": "Company Tax Address",
+   "options": "Address"
+  },
+  {
+   "description": "If checked, system will create Tax Invoice record for tax entry",
+   "fieldname": "create_tax_invoice",
+   "fieldtype": "Check",
+   "label": "Create Tax Invoice"
+  },
+  {
+   "fieldname": "column_break_3djv9",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "for_payment",
+   "fieldtype": "Link",
+   "label": "For Payment",
+   "options": "Payment Entry"
+  },
+  {
+   "fieldname": "section_break_pxm0e",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "tax_invoice_details",
+   "fieldtype": "Table",
+   "label": "Tax Invoice Details",
+   "no_copy": 1,
+   "options": "Journal Entry Tax Invoice Detail"
   }
  ],
  "icon": "notebook-pen",
@@ -793,7 +839,7 @@
    "table_fieldname": "payment_entries"
   }
  ],
- "modified": "2026-11-07 23:00:00.000000",
+ "modified": "2026-11-08 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Journal Entry",

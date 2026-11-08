@@ -132,6 +132,13 @@
   "payment_schedule_section",
   "payment_terms_template",
   "payment_schedule",
+  "section_break_o8q38",
+  "has_deposit",
+  "deposit_invoice",
+  "column_break_euapx",
+  "deposit_amount",
+  "percent_deposit",
+  "deposit_deduction_method",
   "terms_section_break",
   "tc_name",
   "terms",
@@ -1450,6 +1457,46 @@
   {
    "fieldname": "connect_approval_column",
    "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "section_break_o8q38",
+   "fieldtype": "Section Break",
+   "label": "Deposit"
+  },
+  {
+   "allow_on_submit": 1,
+   "description": "If checked, the 1st invoice from this order should be a deposit invoice.",
+   "fieldname": "has_deposit",
+   "fieldtype": "Check",
+   "label": "Deposit on 1st Invoice"
+  },
+  {
+   "fieldname": "deposit_invoice",
+   "fieldtype": "Data",
+   "label": "Deposit Invoice",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_euapx",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "deposit_amount",
+   "fieldtype": "Currency",
+   "label": "Deposit Amount"
+  },
+  {
+   "fieldname": "percent_deposit",
+   "fieldtype": "Percent",
+   "label": "Percent Deposit"
+  },
+  {
+   "description": "Deposit deduction (return of deposit) on following invoice(s).",
+   "fieldname": "deposit_deduction_method",
+   "fieldtype": "Select",
+   "label": "Deposit Deduction Method",
+   "options": "Percent\nFull Amount"
   }
  ],
  "grid_page_length": 50,
@@ -1457,7 +1504,7 @@
  "idx": 105,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-11-07 23:00:00.000000",
+ "modified": "2026-11-08 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Buying",
  "name": "Purchase Order",

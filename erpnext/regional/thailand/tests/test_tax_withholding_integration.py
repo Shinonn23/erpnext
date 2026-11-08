@@ -8,6 +8,7 @@ from frappe.model.base_document import get_controller
 from erpnext.accounts.doctype.tax_withholding_entry.tax_withholding_entry import PaymentTaxWithholding
 from erpnext.regional.thailand.constants import ERP_CUSTOM_FIELDS
 from erpnext.regional.thailand.custom.payment_entry import make_withholding_tax_cert
+from erpnext.regional.thailand.tests.utils import doctype_fields
 
 
 class TestThaiTaxWithholdingIntegration(unittest.TestCase):
@@ -87,11 +88,11 @@ class TestThaiTaxWithholdingIntegration(unittest.TestCase):
 		self.assertEqual(cert.income_tax_form, "PND53")
 
 	def test_setup_uses_core_category_as_the_only_wht_master(self):
-		category_fields = {field["fieldname"] for field in ERP_CUSTOM_FIELDS["Tax Withholding Category"]}
-		self.assertEqual(category_fields, {"thai_applies_to", "thai_income_tax_form", "thai_type_of_income"})
+		category_fields = set(doctype_fields("Tax Withholding Category")[0])
+		self.assertTrue({"thai_applies_to", "thai_income_tax_form", "thai_type_of_income"} <= category_fields)
 		self.assertNotIn("Withholding Tax Type", ERP_CUSTOM_FIELDS)
 		# a deduction Withhold Tax adds names its Tax Withholding Category, not the retired Withholding Tax Type
-		deduction_fields = {field["fieldname"] for field in ERP_CUSTOM_FIELDS["Payment Entry Deduction"]}
+		deduction_fields = set(doctype_fields("Payment Entry Deduction")[0])
 		self.assertIn("thai_withholding_category", deduction_fields)
 		self.assertFalse({"withholding_tax_type", "withholding_tax_base"} & deduction_fields)
 

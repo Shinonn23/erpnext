@@ -14,6 +14,9 @@
   "bank_account",
   "party_type",
   "party",
+  "is_petty_cash_account",
+  "petty_cash_holder",
+  "petty_cash_holder_name",
   "accounting_dimensions_section",
   "cost_center",
   "dimension_col_break",
@@ -32,6 +35,13 @@
   "col_break2",
   "credit_in_account_currency",
   "credit",
+  "overwrite_tax_invoice",
+  "tax_invoice_number",
+  "tax_invoice_date",
+  "column_break_cun7x",
+  "supplier",
+  "customer",
+  "tax_base_amount",
   "reference",
   "reference_type",
   "reference_name",
@@ -43,6 +53,9 @@
   "col_break3",
   "is_advance",
   "user_remark",
+  "thai_withholding_category",
+  "thai_withholding_base",
+  "thai_withholding_offset",
   "against_account"
  ],
  "fields": [
@@ -326,12 +339,101 @@
    "fieldname": "standard_dimensions_section",
    "fieldtype": "Section Break",
    "label": "Standard Dimensions"
+  },
+  {
+   "collapsible": 1,
+   "depends_on": "eval:doc.account_type == 'Tax'",
+   "fieldname": "overwrite_tax_invoice",
+   "fieldtype": "Section Break",
+   "label": "Tax Invoice (this row)"
+  },
+  {
+   "fieldname": "tax_invoice_number",
+   "fieldtype": "Data",
+   "label": "Tax Invoice Number"
+  },
+  {
+   "fieldname": "tax_invoice_date",
+   "fieldtype": "Date",
+   "label": "Tax Invoice Date"
+  },
+  {
+   "fieldname": "column_break_cun7x",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "supplier",
+   "fieldtype": "Link",
+   "label": "Supplier",
+   "options": "Supplier"
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "label": "Customer",
+   "options": "Customer"
+  },
+  {
+   "description": "Leave this value to 0 and system will auto calculate based on tax rate.",
+   "fieldname": "tax_base_amount",
+   "fieldtype": "Float",
+   "label": "Tax Base Amount"
+  },
+  {
+   "fetch_from": "account.is_petty_cash_account",
+   "fieldname": "is_petty_cash_account",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "Is Petty Cash Account",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.is_petty_cash_account == 1;",
+   "fieldname": "petty_cash_holder",
+   "fieldtype": "Link",
+   "label": "Petty Cash Holder",
+   "link_filters": "[[\"Petty Cash Holder\",\"petty_cash_account\",\"=\",\"eval: doc.account\"]]",
+   "mandatory_depends_on": "eval:doc.is_petty_cash_account == 1;",
+   "options": "Petty Cash Holder"
+  },
+  {
+   "depends_on": "eval:doc.is_petty_cash_account == 1;",
+   "fetch_from": "petty_cash_holder.petty_cash_holder",
+   "fieldname": "petty_cash_holder_name",
+   "fieldtype": "Data",
+   "label": "Petty Cash Holder Name",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.thai_withholding_category",
+   "description": "Tax the customer withheld, added by Withhold Tax. Running Withhold Tax again replaces this line.",
+   "fieldname": "thai_withholding_category",
+   "fieldtype": "Link",
+   "label": "Tax Withholding Category",
+   "options": "Tax Withholding Category",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.thai_withholding_category",
+   "fieldname": "thai_withholding_base",
+   "fieldtype": "Currency",
+   "label": "Withholding Tax Base",
+   "options": "Company:company:default_currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "thai_withholding_offset",
+   "fieldtype": "Currency",
+   "hidden": 1,
+   "label": "Withholding Taken Off the Bank Line",
+   "options": "Company:company:default_currency",
+   "read_only": 1
   }
  ],
  "idx": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-10-21 05:30:00.000000",
+ "modified": "2026-11-08 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Journal Entry Account",

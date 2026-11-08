@@ -51,12 +51,7 @@ ROOTS = (
 
 def inventory():
 	"""Return facts and blockers; never change configuration, schema, or documents."""
-	from erpnext.regional.thailand.constants import (
-		BILLING_CUSTOM_FIELDS,
-		DEPOSIT_CUSTOM_FIELDS,
-		ERP_CUSTOM_FIELDS,
-		ERP_PROPERTY_SETTERS,
-	)
+	from erpnext.regional.thailand.constants import ERP_CUSTOM_FIELDS, ERP_PROPERTY_SETTERS
 
 	report = {
 		"site": frappe.local.site,
@@ -93,7 +88,7 @@ def inventory():
 	except Exception as exc:
 		report["blockers"].append(f"Current fiscal period unavailable: {exc}")
 	known_fields = {}
-	for mapping in (ERP_CUSTOM_FIELDS, BILLING_CUSTOM_FIELDS, DEPOSIT_CUSTOM_FIELDS):
+	for mapping in (ERP_CUSTOM_FIELDS,):
 		for doctypes, fields in mapping.items():
 			for doctype in (doctypes,) if isinstance(doctypes, str) else doctypes:
 				for field in fields:

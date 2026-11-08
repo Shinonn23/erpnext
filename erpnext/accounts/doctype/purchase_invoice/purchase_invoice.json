@@ -22,6 +22,7 @@
   "due_date",
   "column_break1",
   "is_paid",
+  "is_deposit_invoice",
   "is_return",
   "return_against",
   "update_outstanding_for_self",
@@ -124,6 +125,16 @@
   "pricing_rules",
   "raw_materials_supplied",
   "supplied_items",
+  "tax_invoice",
+  "section_break_split_tax_invoice",
+  "split_tax_invoice",
+  "splitted_tax_invoices",
+  "section_break_tax_invoice",
+  "tax_invoice_number",
+  "column_break_t0qgt",
+  "tax_invoice_date",
+  "tax_invoice_ref_type",
+  "tax_invoice_ref",
   "payments_tab",
   "payments_section",
   "mode_of_payment",
@@ -218,7 +229,11 @@
   "p2p_exception_reason",
   "connect_approval_section",
   "workflow_state",
-  "connect_approval_column"
+  "connect_approval_column",
+  "deposit_deductions",
+  "use_untied_deposit",
+  "manual_deposit_allocation",
+  "deposits"
  ],
  "fields": [
   {
@@ -1769,6 +1784,114 @@
   {
    "fieldname": "connect_approval_column",
    "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "tax_invoice",
+   "fieldtype": "Tab Break",
+   "label": "Tax Invoice"
+  },
+  {
+   "fieldname": "section_break_split_tax_invoice",
+   "fieldtype": "Section Break",
+   "label": ""
+  },
+  {
+   "fieldname": "split_tax_invoice",
+   "fieldtype": "Check",
+   "label": "Split Tax Invoices",
+   "no_copy": 1
+  },
+  {
+   "depends_on": "eval:doc.split_tax_invoice",
+   "fieldname": "splitted_tax_invoices",
+   "fieldtype": "Table",
+   "label": "Splitted Tax Invoices",
+   "options": "Purchase Invoice Tax Invoice Detail"
+  },
+  {
+   "fieldname": "section_break_tax_invoice",
+   "fieldtype": "Section Break",
+   "label": ""
+  },
+  {
+   "allow_on_submit": 1,
+   "depends_on": "eval:!doc.split_tax_invoice",
+   "fieldname": "tax_invoice_number",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Tax Invoice Number",
+   "no_copy": 1,
+   "read_only_depends_on": "eval:doc.docstatus!=0"
+  },
+  {
+   "depends_on": "eval:!doc.split_tax_invoice",
+   "fieldname": "column_break_t0qgt",
+   "fieldtype": "Column Break"
+  },
+  {
+   "allow_on_submit": 1,
+   "depends_on": "eval:!doc.split_tax_invoice",
+   "fieldname": "tax_invoice_date",
+   "fieldtype": "Date",
+   "label": "Tax Invoice Date",
+   "no_copy": 1,
+   "read_only_depends_on": "eval:doc.docstatus!=0"
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "tax_invoice_ref_type",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Tax Invoice Type",
+   "no_copy": 1,
+   "options": "DocType",
+   "read_only": 1
+  },
+  {
+   "allow_on_submit": 1,
+   "depends_on": "eval:!doc.split_tax_invoice",
+   "fieldname": "tax_invoice_ref",
+   "fieldtype": "Dynamic Link",
+   "label": "Tax Invoice Record",
+   "no_copy": 1,
+   "options": "tax_invoice_ref_type",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.is_deposit_invoice",
+   "fieldname": "is_deposit_invoice",
+   "fieldtype": "Check",
+   "label": "Is Deposit Invoice",
+   "read_only": 0
+  },
+  {
+   "collapsible": 1,
+   "collapsible_depends_on": "deposits",
+   "depends_on": "eval:!doc.is_deposit_invoice && ((doc.deposits || []).length || doc.use_untied_deposit || doc.manual_deposit_allocation)",
+   "fieldname": "deposit_deductions",
+   "fieldtype": "Section Break",
+   "label": "Deposit Deductions"
+  },
+  {
+   "description": "Untied Deposits are deposits that are not linked to any order.",
+   "fieldname": "use_untied_deposit",
+   "fieldtype": "Check",
+   "label": "Include Untied Deposits"
+  },
+  {
+   "description": "Allow user to manually allocate deposit amount to deduct.",
+   "fieldname": "manual_deposit_allocation",
+   "fieldtype": "Check",
+   "label": "Manual Deposit Allocation",
+   "read_only": 0
+  },
+  {
+   "fieldname": "deposits",
+   "fieldtype": "Table",
+   "label": "Deposits",
+   "options": "Purchase Invoice Deposit",
+   "read_only_depends_on": "eval:!doc.manual_deposit_allocation"
   }
  ],
  "grid_page_length": 50,
@@ -1776,7 +1899,7 @@
  "idx": 204,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-11-07 23:00:00.000000",
+ "modified": "2026-11-08 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Purchase Invoice",

@@ -19,6 +19,8 @@
   "against",
   "party_type",
   "party",
+  "petty_cash_holder",
+  "petty_cash_holder_name",
   "transaction_details_section",
   "voucher_type",
   "voucher_no",
@@ -399,13 +401,25 @@
    "fieldtype": "Float",
    "label": "Reporting Currency Exchange Rate",
    "precision": "9"
+  },
+  {
+   "fieldname": "petty_cash_holder",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Petty Cash Holder",
+   "options": "Petty Cash Holder"
+  },
+  {
+   "fieldname": "petty_cash_holder_name",
+   "fieldtype": "Data",
+   "label": "Petty Cash Holder Name"
   }
  ],
  "icon": "book-open",
  "idx": 1,
  "in_create": 1,
  "links": [],
- "modified": "2026-10-21 05:30:00.000000",
+ "modified": "2026-11-08 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "GL Entry",

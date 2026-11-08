@@ -149,7 +149,11 @@
   "column_break_customer_demo_loan",
   "asset_capitalization_threshold",
   "low_value_asset_expense_account",
-  "dashboard_tab"
+  "dashboard_tab",
+  "social_security_section",
+  "social_security_account_no",
+  "social_security_column",
+  "social_security_branch_no"
  ],
  "fields": [
   {
@@ -1099,6 +1103,28 @@
   {
    "fieldname": "accounts_closing_section",
    "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "social_security_section",
+   "fieldtype": "Section Break",
+   "label": "Social Security (Thailand)"
+  },
+  {
+   "description": "เลขที่บัญชีนายจ้าง (10 digits) on the SSO 1-10 form",
+   "fieldname": "social_security_account_no",
+   "fieldtype": "Data",
+   "label": "Social Security Employer Account No"
+  },
+  {
+   "fieldname": "social_security_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "000000",
+   "description": "ลำดับที่สาขา (6 digits, 000000 = head office) on the SSO 1-10 form",
+   "fieldname": "social_security_branch_no",
+   "fieldtype": "Data",
+   "label": "Social Security Branch No"
   }
  ],
  "grid_page_length": 50,
@@ -1107,7 +1133,7 @@
  "image_field": "company_logo",
  "is_tree": 1,
  "links": [],
- "modified": "2026-10-21 05:30:00.000000",
+ "modified": "2026-11-08 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Setup",
  "name": "Company",

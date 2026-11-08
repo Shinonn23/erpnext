@@ -13,8 +13,8 @@ import frappe
 
 from erpnext.regional.doctype.purchase_tax_invoice.purchase_tax_invoice import PurchaseTaxInvoice
 from erpnext.regional.doctype.sales_tax_invoice.sales_tax_invoice import SalesTaxInvoice
-from erpnext.regional.thailand import constants
 from erpnext.regional.thailand.custom import custom_api, dashboard_overrides
+from erpnext.regional.thailand.tests.utils import doctype_fields
 
 DOCTYPE_DIR = Path(custom_api.__file__).parents[2] / "doctype"
 
@@ -155,17 +155,14 @@ class TestDefinitions(unittest.TestCase):
 				self.assertEqual((field["read_only"], field["allow_on_submit"], field["no_copy"]), (1, 1, 1))
 
 	def test_the_voucher_headers_have_the_link_fields(self):
-		for doctype, source in (
-			("Sales Invoice", constants.ERP_CUSTOM_FIELDS),
-			("Purchase Invoice", constants.ERP_CUSTOM_FIELDS),
-			("Payment Entry", constants.ERP_CUSTOM_FIELDS),
-			("Expense Claim", constants.HRMS_CUSTOM_FIELDS),
-		):
-			fields = {f["fieldname"]: f for f in source[doctype]}
+		# the fields are in the DocType JSON (Expense Claim's are in the HRMS fork: hrms tests)
+		for doctype in ("Sales Invoice", "Purchase Invoice", "Payment Entry"):
+			fields, order = doctype_fields(doctype)
 			self.assertEqual(fields["tax_invoice_ref"]["options"], "tax_invoice_ref_type", doctype)
 			self.assertEqual(fields["tax_invoice_ref"]["fieldtype"], "Dynamic Link")
 			self.assertEqual(fields["tax_invoice_ref_type"]["hidden"], 1)
-			self.assertEqual(fields["tax_invoice_ref_type"]["insert_after"] in fields, True, doctype)
+			self.assertIn("tax_invoice_ref_type", order)
+			self.assertIn("tax_invoice_ref", order)
 
 	def test_invoices_and_claims_show_their_tax_invoices_in_connections(self):
 		hooks = importlib.import_module("erpnext.hooks")

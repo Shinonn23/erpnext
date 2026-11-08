@@ -6,7 +6,8 @@
  "engine": "InnoDB",
  "field_order": [
   "company",
-  "account"
+  "account",
+  "customer_withholding_account"
  ],
  "fields": [
   {
@@ -26,11 +27,20 @@
    "label": "Account",
    "options": "Account",
    "reqd": 1
+  },
+  {
+   "columns": 4,
+   "description": "Asset account for the tax our customers withhold from what they pay us (ภาษีเงินได้ถูกหัก ณ ที่จ่าย). Required when Applies To includes Receive; Withhold Tax on a receipt debits it.",
+   "fieldname": "customer_withholding_account",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Receive Account (tax withheld by customers)",
+   "options": "Account"
   }
  ],
  "istable": 1,
  "links": [],
- "modified": "2024-04-30 10:26:48.218294",
+ "modified": "2026-11-08 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Tax Withholding Account",

@@ -29,6 +29,7 @@
   "contact_and_address_tab",
   "address_contacts",
   "address_html",
+  "branch_html",
   "column_break1",
   "contact_html",
   "primary_address_and_contact_detail_section",
@@ -50,6 +51,7 @@
   "tax_tab",
   "taxation_section",
   "tax_id",
+  "branch_code",
   "tax_category",
   "column_break_27",
   "tax_withholding_category",
@@ -566,6 +568,19 @@
   {
    "fieldname": "section_break_pgad",
    "fieldtype": "Section Break"
+  },
+  {
+   "default": "00000",
+   "fieldname": "branch_code",
+   "fieldtype": "Data",
+   "label": "Branch Code"
+  },
+  {
+   "depends_on": "eval: !doc.__islocal",
+   "fieldname": "branch_html",
+   "fieldtype": "HTML",
+   "label": "Branches / สาขา",
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,
@@ -579,7 +594,7 @@
    "link_fieldname": "party"
   }
  ],
- "modified": "2026-09-30 23:24:44.044604",
+ "modified": "2026-11-08 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Buying",
  "name": "Supplier",
