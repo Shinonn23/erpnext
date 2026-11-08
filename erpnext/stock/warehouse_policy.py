@@ -157,8 +157,10 @@ def validate_warehouse_operation(
 		return
 	if operation == "loan" and location.warehouse_type == "Transit":
 		operation = "transfer"
+	# not tied to `outgoing`: a review-only workflow transition of the unchanged draft passes outgoing=False (the role
+	# check is skipped) but the issue out of Lost is still the write-off's own
 	if not cint(policy.get(f"allow_{operation}")) and not (
-		operation == "issue" and outgoing and is_write_off_from_lost(doc, location)
+		operation == "issue" and is_write_off_from_lost(doc, location)
 	):
 		frappe.throw(
 			_(

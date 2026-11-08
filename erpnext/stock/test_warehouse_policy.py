@@ -130,10 +130,19 @@ class TestWarehousePolicy(unittest.TestCase):
 			doctype="Stock Entry", purpose="Material Issue", stock_entry_type="Stock Write-Off"
 		)
 		warehouse_policy.validate_warehouse_operation("WH", "issue", outgoing=True, doc=write_off)
+		# a review-only workflow transition of the unchanged draft skips the role check (outgoing=False) and still
+		# finds the write-off's way out of Lost
+		warehouse_policy.validate_warehouse_operation("WH", "issue", outgoing=False, doc=write_off)
+		with self.assertRaises(frappe.ValidationError):
+			warehouse_policy.validate_warehouse_operation("WH", "issue", outgoing=False, doc=None)
 		for other in (
 			frappe._dict(doctype="Stock Entry", purpose="Material Issue", stock_entry_type="Material Issue"),
-			frappe._dict(doctype="Stock Entry", purpose="Material Transfer", stock_entry_type="Stock Write-Off"),
-			frappe._dict(doctype="Delivery Note", stock_entry_type="Stock Write-Off", purpose="Material Issue"),
+			frappe._dict(
+				doctype="Stock Entry", purpose="Material Transfer", stock_entry_type="Stock Write-Off"
+			),
+			frappe._dict(
+				doctype="Delivery Note", stock_entry_type="Stock Write-Off", purpose="Material Issue"
+			),
 			None,
 		):
 			with self.assertRaises(frappe.ValidationError):
@@ -225,8 +234,12 @@ class TestWarehousePolicy(unittest.TestCase):
 			patch.object(frappe, "get_cached_value", return_value=1),
 			patch.object(frappe, "session", frappe._dict(user="quality")),
 			patch.object(workflow, "get_workflow_name", return_value="Workflow"),
-			patch.object(workflow, "get_workflow", return_value=frappe._dict(workflow_state_field="workflow_state")),
-			patch.object(workflow, "get_transitions", return_value=[frappe._dict(next_state="Pending Stock Review")]),
+			patch.object(
+				workflow, "get_workflow", return_value=frappe._dict(workflow_state_field="workflow_state")
+			),
+			patch.object(
+				workflow, "get_transitions", return_value=[frappe._dict(next_state="Pending Stock Review")]
+			),
 		):
 			warehouse_policy.validate_document_policy(doc)
 			self.policy.allow_transfer = 0
@@ -240,8 +253,12 @@ class TestWarehousePolicy(unittest.TestCase):
 		with (
 			patch.object(frappe, "session", frappe._dict(user="quality")),
 			patch.object(workflow, "get_workflow_name", return_value="Workflow"),
-			patch.object(workflow, "get_workflow", return_value=frappe._dict(workflow_state_field="workflow_state")),
-			patch.object(workflow, "get_transitions", return_value=[frappe._dict(next_state="Pending Stock Review")]),
+			patch.object(
+				workflow, "get_workflow", return_value=frappe._dict(workflow_state_field="workflow_state")
+			),
+			patch.object(
+				workflow, "get_transitions", return_value=[frappe._dict(next_state="Pending Stock Review")]
+			),
 		):
 			self.assertTrue(warehouse_policy._is_unchanged_draft_workflow_transition(doc))
 			previous.get_valid_dict.return_value["set_posting_time"] = 1
@@ -250,7 +267,9 @@ class TestWarehousePolicy(unittest.TestCase):
 			previous.get = lambda field, default=None: (
 				1 if field == "set_posting_time" else previous_get(field, default)
 			)
-			doc.get = lambda field, default=None: 1 if field == "set_posting_time" else current_get(field, default)
+			doc.get = lambda field, default=None: (
+				1 if field == "set_posting_time" else current_get(field, default)
+			)
 			self.assertFalse(warehouse_policy._is_unchanged_draft_workflow_transition(doc))
 
 	def test_draft_review_cannot_bypass_dispatch_role_for_edits_or_submission(self):
@@ -261,8 +280,12 @@ class TestWarehousePolicy(unittest.TestCase):
 			patch.object(frappe, "get_cached_value", return_value=1),
 			patch.object(frappe, "session", frappe._dict(user="quality")),
 			patch.object(workflow, "get_workflow_name", return_value="Workflow"),
-			patch.object(workflow, "get_workflow", return_value=frappe._dict(workflow_state_field="workflow_state")),
-			patch.object(workflow, "get_transitions", return_value=[frappe._dict(next_state="Pending Stock Review")]),
+			patch.object(
+				workflow, "get_workflow", return_value=frappe._dict(workflow_state_field="workflow_state")
+			),
+			patch.object(
+				workflow, "get_transitions", return_value=[frappe._dict(next_state="Pending Stock Review")]
+			),
 		):
 			for changes in (
 				{"row_changes": {"qty": 2}},
@@ -294,7 +317,9 @@ class TestWarehousePolicy(unittest.TestCase):
 			patch.object(frappe, "get_cached_value", return_value=1),
 			patch.object(frappe, "session", frappe._dict(user="quality")),
 			patch.object(workflow, "get_workflow_name", return_value="Workflow"),
-			patch.object(workflow, "get_workflow", return_value=frappe._dict(workflow_state_field="workflow_state")),
+			patch.object(
+				workflow, "get_workflow", return_value=frappe._dict(workflow_state_field="workflow_state")
+			),
 			patch.object(workflow, "get_transitions", return_value=[]) as transitions,
 		):
 			with self.assertRaises(frappe.PermissionError):
@@ -751,7 +776,9 @@ class TestRejectedLoanReturnIntoQuarantine(unittest.TestCase):
 	def test_every_other_loan_leg_stays_a_loan(self):
 		self.assertEqual(self.operation(frappe._dict(docstatus=1, status="Accepted")), "loan")
 		self.assertEqual(self.operation(frappe._dict(docstatus=0, status="Rejected")), "loan")
-		self.assertEqual(self.operation(frappe._dict(docstatus=1, status="Rejected"), quarantine=False), "loan")
+		self.assertEqual(
+			self.operation(frappe._dict(docstatus=1, status="Rejected"), quarantine=False), "loan"
+		)
 		self.assertEqual(self.operation(frappe._dict(docstatus=1, status="Rejected"), outgoing=True), "loan")
 		self.assertEqual(self.operation(None, row=frappe._dict(warehouse="QUARANTINE - CD")), "loan")
 

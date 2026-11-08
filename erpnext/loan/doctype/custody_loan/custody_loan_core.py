@@ -1634,6 +1634,9 @@ class CustodyLoanAdjustment(Document):
 						loan.customer_loan_warehouse, loan_item.item_code
 					),
 					"custody_loan_item": loan_item.name,
+					# the row names its lot: without this the Stock Entry picks the warehouse's batches by itself
+					# and refuses the row ("Serial and Batch Bundle has already created") when they differ
+					"use_serial_batch_fields": 1,
 					"batch_no": row.batch_no,
 					"serial_no": row.serial_no,
 					"expense_account": self.adjustment_account,
@@ -1686,7 +1689,10 @@ def set_loan_parties(doc, loan):
 
 
 def new_stock_entry(company, purpose):
-	stock_entry_type = frappe.db.get_value("Stock Entry Type", {"purpose": purpose}, "name")
+	# the standard type first: other types of the same purpose (Stock Write-Off, a Material Issue) are not a loan move
+	stock_entry_type = frappe.db.get_value(
+		"Stock Entry Type", {"purpose": purpose, "is_standard": 1}, "name"
+	) or frappe.db.get_value("Stock Entry Type", {"purpose": purpose}, "name")
 	if not stock_entry_type:
 		frappe.throw(_("A {0} Stock Entry Type is required").format(purpose))
 	stock_entry = frappe.new_doc("Stock Entry")
