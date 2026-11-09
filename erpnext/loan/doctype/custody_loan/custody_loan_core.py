@@ -7,6 +7,8 @@ from frappe.model.workflow import set_workflow_state_on_action
 from frappe.utils import cint, flt, getdate
 
 from erpnext.loan.doctype.custody_loan.custody_loan_tracking import (
+	conversion_factors,
+	get_balances,
 	grouped_open_rows,
 	is_tracked,
 	sync_tracking_table,
@@ -1057,10 +1059,46 @@ class CustodyLoanReturn(Document):
 			transaction = self.make_stock_return_delivery_note()
 			self.db_set("delivery_note", transaction.name)
 			self.delivery_note = transaction.name
+			self.swap_returned_lots()
 			self.receive_returned_goods(transaction)
 		self.update_status()
 		loan = frappe.get_doc("Custody Loan", self.custody_loan)
 		loan.update_status()
+
+	def swap_returned_lots(self):
+		"""A batch the customer brings back that was not lent was never in the loan warehouse, yet the return Delivery
+		Note takes it out of there. Exchange it for the lent batch of the same Item first (a Repack of the same quantity
+		inside the loan warehouse, earliest lent batch first), so both batches net to zero and the return can be
+		received at once (Connect Diagnostics, Siwat 5 and 9 Nov 2026). A serial number never comes back as another."""
+		swaps = other_lot_swaps(self)
+		if not swaps:
+			return
+		loan = frappe.get_doc("Custody Loan", self.custody_loan)
+		stock_entry = new_stock_entry(self.company, "Repack")
+		set_loan_transaction_source(stock_entry, loan, self)
+		for row, lent_batch, qty in swaps:
+			location = get_default_storage_location(loan.customer_loan_warehouse, row.item_code)
+			common = {
+				"item_code": row.item_code,
+				"qty": qty,
+				"storage_location": location,
+				"custody_loan_item": row.custody_loan_item,
+				"use_serial_batch_fields": 1,
+			}
+			stock_entry.append(
+				"items", {**common, "s_warehouse": loan.customer_loan_warehouse, "batch_no": lent_batch}
+			)
+			stock_entry.append(
+				"items",
+				{
+					**common,
+					"t_warehouse": loan.customer_loan_warehouse,
+					"batch_no": row.batch_no,
+					"is_finished_item": 1,
+				},
+			)
+		stock_entry.insert(ignore_permissions=True)
+		stock_entry.submit()
 
 	def receive_returned_goods(self, delivery_note):
 		"""Goods coming back are received at once, whether or not their Item is inspected: a row that needs an
@@ -1214,6 +1252,7 @@ class CustodyLoanReturn(Document):
 			if fieldname == "delivery_note" and delivery_note and delivery_note.docstatus == 0:
 				continue
 			cancel_source_transaction(self, fieldname)
+		cancel_lot_swaps(self)
 		for inspection in inspections:
 			if inspection.docstatus == 1:
 				# Cancelling the authorized return also reverses only its own inspections.
@@ -1232,6 +1271,59 @@ class CustodyLoanReturn(Document):
 		self.db_set("status", "Cancelled")
 		if frappe.db.exists("Custody Loan", self.custody_loan):
 			frappe.get_doc("Custody Loan", self.custody_loan).update_status()
+
+
+def other_lot_swaps(return_doc):
+	"""[(return row, lent batch, stock qty)] for the rows of a Stock return that come back in a batch the loan did not
+	lend, taken from the lent batches of the same loan item that are still out, earliest batch first."""
+	loan = frappe.get_doc("Custody Loan", return_doc.custody_loan)
+	balances = get_balances(loan, exclude=(return_doc.doctype, return_doc.name))
+	factors = conversion_factors(loan)
+	room = {
+		key: flt(entry.open_qty)
+		for key, entry in balances.items()
+		if entry.issued_qty > 0 and not entry.serial_no and key[1]
+	}
+	swaps = []
+	for row in return_doc.items:
+		if not row.batch_no or row.serial_no:
+			continue
+		entry = balances.get((row.custody_loan_item, row.batch_no, None))
+		if entry and entry.issued_qty > 0:
+			continue
+		left = flt(row.returned_qty) * factors.get(row.custody_loan_item, 1)
+		for key in sorted(room, key=lambda k: k[1]):
+			if left <= 0:
+				break
+			if key[0] != row.custody_loan_item:
+				continue
+			take = min(room[key], left)
+			if take <= 0:
+				continue
+			room[key] -= take
+			left -= take
+			swaps.append((row, key[1], take))
+	return swaps
+
+
+def cancel_lot_swaps(return_doc):
+	"""Cancel the exchange of batches a return made (after its Delivery Note is cancelled)."""
+	for name in frappe.get_all(
+		"Stock Entry",
+		filters={
+			"custody_loan_source_doctype": return_doc.doctype,
+			"custody_loan_source_name": return_doc.name,
+			"docstatus": 1,
+		},
+		pluck="name",
+	):
+		doc = frappe.get_doc("Stock Entry", name)
+		doc.flags.custody_loan_cancellation = True
+		doc.flags.custody_operation_token = _CUSTODY_OPERATION_TOKEN
+		doc.ignore_linked_doctypes = tuple(
+			set(doc.get("ignore_linked_doctypes") or ()) | LOAN_SOURCE_DOCTYPES | {"Material Request"}
+		)
+		doc.cancel()
 
 
 def custody_loan_return_row_requires_inspection(row):
