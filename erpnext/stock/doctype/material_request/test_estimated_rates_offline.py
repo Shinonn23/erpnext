@@ -160,7 +160,9 @@ class TestEstimatedRates(TestCase):
 			self.map_rates(self.order("USD", 35, refs=("OLD",)))
 
 	def test_estimate_header_is_removed_before_native_actual_list_selection(self):
-		order = self.order(buying_price_list="Estimated Buying - THB", price_list_currency="THB")
+		order = self.order(
+			buying_price_list="Estimated Buying - THB", price_list_currency="THB", plc_conversion_rate=1
+		)
 		calls = []
 
 		def native(method):
@@ -168,6 +170,7 @@ class TestEstimatedRates(TestCase):
 			if method == "set_missing_values":
 				self.assertIsNone(order.buying_price_list)
 				self.assertIsNone(order.price_list_currency)
+				self.assertIsNone(order.plc_conversion_rate)
 				order.buying_price_list = "Supplier Actual Buying"
 
 		order.run_method = native
@@ -178,10 +181,55 @@ class TestEstimatedRates(TestCase):
 		)
 
 	def test_an_actual_order_list_is_not_replaced(self):
-		order = self.order(buying_price_list="Supplier Actual Buying")
-		order.run_method = Mock()
-		self.fill(None, order)
-		self.assertEqual(order.buying_price_list, "Supplier Actual Buying")
+		for doctype in ("Purchase Order", "Supplier Quotation"):
+			for price_list in ("Standard Buying", "Supplier Actual Buying"):
+				with self.subTest(doctype=doctype, price_list=price_list):
+					order = self.order(
+						buying_price_list=price_list, price_list_currency="USD", plc_conversion_rate=35
+					)
+					order.doctype = doctype
+					order.run_method = Mock()
+					self.fill(None, order)
+					self.assertEqual(
+						(order.buying_price_list, order.price_list_currency, order.plc_conversion_rate),
+						(price_list, "USD", 35),
+					)
+
+	def test_quotation_uses_native_actual_prices_currency_and_fx_after_clearing_estimate_header(self):
+		quotation = self.order(
+			buying_price_list="Estimated Buying - THB", price_list_currency="THB", plc_conversion_rate=1
+		)
+		quotation.doctype = "Supplier Quotation"
+		quotation.schedule_date = "2026-11-01"
+		calls = []
+
+		def native(method):
+			calls.append((method, quotation.buying_price_list))
+			if method == "set_missing_values":
+				self.assertEqual(
+					(
+						quotation.buying_price_list,
+						quotation.price_list_currency,
+						quotation.plc_conversion_rate,
+					),
+					(None, None, None),
+				)
+				quotation.buying_price_list = "Supplier Actual Buying"
+				quotation.price_list_currency = quotation.currency = "USD"
+				quotation.plc_conversion_rate = quotation.conversion_rate = 35
+				quotation["items"][0].rate = 123
+			else:
+				self.assertEqual(quotation["items"][0].rate, 123)
+
+		quotation.run_method = native
+		self.fill(None, quotation)
+		self.assertEqual(
+			calls, [("set_missing_values", None), ("calculate_taxes_and_totals", "Supplier Actual Buying")]
+		)
+		self.assertEqual((quotation.currency, quotation.price_list_currency), ("USD", "USD"))
+		self.assertEqual((quotation.conversion_rate, quotation.plc_conversion_rate), (35, 35))
+		self.assertEqual(quotation.schedule_date, "2026-11-01")
+		self.assertEqual(self.reads, [("Price List", "Estimated Buying - THB")])
 
 	def test_legacy_fields_are_retained_but_hidden_readonly_and_not_copied(self):
 		path = Path(__file__).parents[1] / "material_request_item/material_request_item.json"

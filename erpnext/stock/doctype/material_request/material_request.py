@@ -565,7 +565,7 @@ def update_completed_and_requested_qty(stock_entry, method):
 def set_missing_values(source, target_doc):
 	if target_doc.doctype == "Purchase Order" and getdate(target_doc.schedule_date) < getdate(nowdate()):
 		target_doc.schedule_date = None
-	if target_doc.doctype == "Purchase Order" and target_doc.get("buying_price_list"):
+	if target_doc.get("buying_price_list"):
 		if frappe.get_cached_value("Price List", target_doc.buying_price_list, "is_estimate"):
 			# The request's catalog must not replace the supplier's actual buying list.
 			target_doc.buying_price_list = None
