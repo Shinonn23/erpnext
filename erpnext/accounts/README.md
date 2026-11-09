@@ -109,3 +109,10 @@ token. The helper rechecks the stored source's cancellation permission and cance
 verifies each generated journal's type, submitted status, company and exact source reference before running
 its full native cancellation. Manually cancelling a Journal Entry and reconciliation callers retain their
 normal permissions; no Journal Entry cancel role or workflow bypass is granted.
+
+Payment Entry source attribution and recorded term discounts are server-owned, including the native
+`advance_voucher_type` and `advance_voucher_no` fields. Draft saves and initial submission clear client-supplied
+values. Submitted updates and cancellations restore attribution from the locked stored child rows and reject
+moving, deleting or duplicating an attributed row or changing its reference, term, allocation or total binding.
+Only the native reconciliation helper can mint a one-use internal capability to change or split that attribution;
+it survives a deferred-save batch until its single save. Stored legacy attribution is preserved without inference.

@@ -58,6 +58,19 @@ from erpnext.setup.doctype.sales_person.sales_person import get_sales_person_sta
 from erpnext.setup.utils import get_exchange_rate
 
 
+_REFERENCE_PROVENANCE_TOKEN = object()
+_REFERENCE_PROVENANCE_DEFAULTS = {
+	"advance_voucher_type": None,
+	"advance_voucher_no": None,
+	"advance_payment_term": None,
+	"advance_payment_term_total_amount": 0,
+	"advance_payment_term_discounted_amount": 0,
+	"advance_payment_term_discount_recorded": 0,
+	"payment_term_discounted_amount": 0,
+	"payment_term_discount_recorded": 0,
+}
+
+
 class InvalidPaymentEntry(ValidationError):
 	pass
 
@@ -178,6 +191,7 @@ class PaymentEntry(AccountsController):
 			self.party_account_currency = self.paid_to_account_currency
 
 	def validate(self):
+		self.validate_reference_provenance()
 		self.setup_party_account_field()
 		self.set_missing_values()
 		self.set_liability_account()
@@ -209,6 +223,48 @@ class PaymentEntry(AccountsController):
 		PaymentTaxWithholding(self).on_validate()
 		self.set_status()
 		self.set_total_in_words()
+
+	def validate_reference_provenance(self):
+		"""Only native reconciliation may mint or move submitted advance attribution."""
+		if self.flags.get("reference_provenance_token") is _REFERENCE_PROVENANCE_TOKEN:
+			self.flags.reference_provenance_token = None
+			return
+		previous = self.get_doc_before_save()
+		stored_rows = (
+			{row.name: row for row in previous.references} if previous and previous.docstatus == 1 else {}
+		)
+		incoming_rows = {row.name: row for row in self.references if row.name}
+		if len(incoming_rows) != sum(bool(row.name) for row in self.references):
+			frappe.throw(_("Payment references must have distinct row names."))
+		binding_fields = (
+			"reference_doctype",
+			"reference_name",
+			"payment_term",
+			"allocated_amount",
+			"total_amount",
+		)
+		for name, stored in stored_rows.items():
+			if not any(stored.get(field) for field in _REFERENCE_PROVENANCE_DEFAULTS):
+				continue
+			row = incoming_rows.get(name)
+			if row is None or any(
+				(row.get(field) or None) != (stored.get(field) or None) for field in binding_fields
+			):
+				frappe.throw(
+					_(
+						"Submitted payment reference attribution can only change through native reconciliation."
+					)
+				)
+		for row in self.references:
+			stored = stored_rows.get(row.name)
+			for field, default in _REFERENCE_PROVENANCE_DEFAULTS.items():
+				row.set(field, stored.get(field) if stored is not None else default)
+
+	def before_update_after_submit(self):
+		self.validate_reference_provenance()
+
+	def before_cancel(self):
+		self.validate_reference_provenance()
 
 	def set_territory_and_sales_person(self):
 		"""A payment from a customer is credited to that customer's Territory and Sales Person.

@@ -758,6 +758,11 @@ def update_reference_in_journal_entry(d, journal_entry, do_not_save=False):
 def update_reference_in_payment_entry(
 	d, payment_entry, do_not_save=False, skip_ref_details_update_for_pe=False, dimensions_dict=None
 ):
+	from erpnext.accounts.doctype.payment_entry.payment_entry import _REFERENCE_PROVENANCE_TOKEN
+
+	# Keep this server-only capability through do_not_save batches until their single save.
+	payment_entry.flags.reference_provenance_token = _REFERENCE_PROVENANCE_TOKEN
+
 	reference_details = {
 		"reference_doctype": d.against_voucher_type,
 		"reference_name": d.against_voucher,

@@ -259,6 +259,11 @@ class TestAllocatedInvoiceSettlement(unittest.TestCase):
 		self.assertEqual([row.advance_payment_term_discounted_amount for row in refs], [53.5, 53.5])
 		self.assertEqual([row.advance_payment_term_total_amount for row in refs], [10700, 10700])
 		self.assertEqual(payment.references[0].payment_term_discounted_amount, 0)
+		self.assertIs(payment.flags.reference_provenance_token, payment_module._REFERENCE_PROVENANCE_TOKEN)
+		payment.get_doc_before_save = lambda: Row(docstatus=1, references=[])
+		PaymentEntry.validate_reference_provenance(payment)
+		self.assertIsNone(payment.flags.reference_provenance_token)
+		self.assertEqual([row.advance_payment_term_discounted_amount for row in refs], [53.5, 53.5])
 
 	def test_split_getter_and_direct_getter_agree_even_for_one_cent(self):
 		doc = self.invoice()
@@ -617,6 +622,149 @@ class TestAllocatedInvoiceSettlement(unittest.TestCase):
 		journal_rows.clear()
 		doc.set_allocated_invoice_payment_schedule(from_references=True)
 		self.assertEqual(sum(row.outstanding for row in doc.payment_schedule), 10700)
+
+	def reference_provenance_payment(self, rows, previous=None):
+		payment = Row(
+			doctype="Payment Entry",
+			docstatus=1,
+			references=rows,
+			flags=Row(),
+			get_doc_before_save=lambda: previous,
+		)
+		payment.validate_reference_provenance = lambda: PaymentEntry.validate_reference_provenance(payment)
+		return payment
+
+	def forged_provenance_reference(self, **values):
+		row = Row(
+			name="REF-1",
+			reference_doctype="Purchase Invoice",
+			reference_name="INV-1",
+			payment_term="Completion",
+			allocated_amount=5350,
+			total_amount=10700,
+			advance_voucher_type="Purchase Order",
+			advance_voucher_no="PO-UNRELATED",
+			advance_payment_term="Deposit",
+			advance_payment_term_total_amount=99999,
+			advance_payment_term_discounted_amount=5000,
+			advance_payment_term_discount_recorded=1,
+			payment_term_discounted_amount=5000,
+			payment_term_discount_recorded=1,
+		)
+		row.update(values)
+		return row
+
+	def test_initial_draft_and_submit_clear_every_client_supplied_provenance_field(self):
+		for action in ("save", "submit"):
+			row = self.forged_provenance_reference()
+			payment = self.reference_provenance_payment([row], Row(docstatus=0, references=[Row(row)]))
+			payment.docstatus = 0 if action == "save" else 1
+			payment._action = action
+			payment.flags.reference_provenance_token = True
+			payment.validate_reference_provenance()
+			for field, default in payment_module._REFERENCE_PROVENANCE_DEFAULTS.items():
+				self.assertEqual(row.get(field), default, (action, field))
+			self.assertEqual(
+				(row.reference_doctype, row.reference_name, row.allocated_amount),
+				("Purchase Invoice", "INV-1", 5350),
+			)
+
+	def test_submitted_cancel_and_update_restore_locked_stored_provenance_not_payload(self):
+		stored = self.forged_provenance_reference(
+			advance_voucher_no="PO-REAL",
+			advance_payment_term_total_amount=10700,
+			advance_payment_term_discounted_amount=107,
+			payment_term_discounted_amount=0,
+		)
+		for method in (PaymentEntry.before_cancel, PaymentEntry.before_update_after_submit):
+			row = self.forged_provenance_reference()
+			payment = self.reference_provenance_payment([row], Row(docstatus=1, references=[stored]))
+			method(payment)
+			for field in payment_module._REFERENCE_PROVENANCE_DEFAULTS:
+				self.assertEqual(row.get(field), stored.get(field), field)
+
+	def test_forged_cancel_payload_cannot_reverse_an_unrelated_order(self):
+		stored = Row(
+			name="REF-1",
+			reference_doctype="Purchase Invoice",
+			reference_name="INV-1",
+			payment_term="Completion",
+			allocated_amount=5350,
+			total_amount=10700,
+		)
+		row = self.forged_provenance_reference()
+		payment = self.reference_provenance_payment([row], Row(docstatus=1, references=[stored]))
+		payment.flags.reference_provenance_token = True
+		payment.update_allocated_invoice_payment_schedules = lambda: {("Purchase Invoice", "INV-1")}
+		PaymentEntry.before_cancel(payment)
+		PaymentEntry.update_payment_schedule(payment, cancel=1)
+		self.assertIsNone(row.advance_voucher_type)
+		self.assertIsNone(row.advance_voucher_no)
+		frappe.db.sql.assert_not_called()
+
+	def test_submitted_provenance_cannot_be_rebound_deleted_or_duplicated(self):
+		stored = self.forged_provenance_reference(advance_voucher_no="PO-REAL")
+		for field in (
+			"reference_doctype",
+			"reference_name",
+			"payment_term",
+			"allocated_amount",
+			"total_amount",
+			"missing",
+			"duplicate",
+		):
+			row = Row(stored)
+			rows = [row]
+			if field == "missing":
+				rows = []
+			elif field == "duplicate":
+				rows.append(Row(row))
+			else:
+				row[field] = "Changed" if field not in ("allocated_amount", "total_amount") else 1
+			payment = self.reference_provenance_payment(rows, Row(docstatus=1, references=[stored]))
+			with patch.object(frappe, "throw", side_effect=frappe.ValidationError):
+				with self.assertRaises(frappe.ValidationError, msg=field):
+					PaymentEntry.before_cancel(payment)
+
+	def test_stored_legacy_attribution_is_preserved_and_new_submitted_rows_cannot_mint_it(self):
+		stored = Row(
+			name="REF-1",
+			reference_doctype="Purchase Invoice",
+			reference_name="INV-1",
+			payment_term="Completion",
+			allocated_amount=5350,
+			total_amount=10700,
+			advance_voucher_type="Purchase Order",
+			advance_voucher_no="PO-LEGACY",
+		)
+		row = Row(stored)
+		new_row = self.forged_provenance_reference(name="NEW-ROW")
+		payment = self.reference_provenance_payment([row, new_row], Row(docstatus=1, references=[stored]))
+		PaymentEntry.before_update_after_submit(payment)
+		self.assertEqual((row.advance_voucher_type, row.advance_voucher_no), ("Purchase Order", "PO-LEGACY"))
+		for field, default in payment_module._REFERENCE_PROVENANCE_DEFAULTS.items():
+			self.assertEqual(new_row.get(field), default, field)
+
+	def test_reconciliation_capability_is_one_use_and_not_a_client_flag(self):
+		stored = self.forged_provenance_reference(advance_voucher_no="PO-REAL")
+		row = Row(stored, allocated_amount=2675, advance_payment_term_discounted_amount=53.5)
+		payment = self.reference_provenance_payment([row], Row(docstatus=1, references=[stored]))
+		payment.flags.reference_provenance_token = payment_module._REFERENCE_PROVENANCE_TOKEN
+		PaymentEntry.before_update_after_submit(payment)
+		self.assertEqual(row.advance_payment_term_discounted_amount, 53.5)
+		self.assertIsNone(payment.flags.reference_provenance_token)
+		with patch.object(frappe, "throw", side_effect=frappe.ValidationError):
+			with self.assertRaises(frappe.ValidationError):
+				PaymentEntry.before_cancel(payment)
+
+	def test_normal_validate_checks_provenance_before_other_payment_logic(self):
+		payment = Row(
+			validate_reference_provenance=Mock(side_effect=RuntimeError("guard")),
+			setup_party_account_field=Mock(),
+		)
+		with self.assertRaisesRegex(RuntimeError, "guard"):
+			PaymentEntry.validate(payment)
+		payment.setup_party_account_field.assert_not_called()
 
 	def generated_fx_cancellation(self):
 		source = Row(
