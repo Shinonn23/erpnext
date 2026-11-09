@@ -1084,18 +1084,25 @@ class CustodyLoanReturn(Document):
 			common = {
 				"item_code": row.item_code,
 				"qty": qty,
-				"storage_location": location,
 				"custody_loan_item": row.custody_loan_item,
 				"use_serial_batch_fields": 1,
 			}
+			# the outgoing row names its source location, the incoming row its target location
 			stock_entry.append(
-				"items", {**common, "s_warehouse": loan.customer_loan_warehouse, "batch_no": lent_batch}
+				"items",
+				{
+					**common,
+					"s_warehouse": loan.customer_loan_warehouse,
+					"storage_location": location,
+					"batch_no": lent_batch,
+				},
 			)
 			stock_entry.append(
 				"items",
 				{
 					**common,
 					"t_warehouse": loan.customer_loan_warehouse,
+					"to_storage_location": location,
 					"batch_no": row.batch_no,
 					"is_finished_item": 1,
 				},
