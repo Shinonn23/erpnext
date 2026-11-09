@@ -86,7 +86,7 @@
    "fieldname": "tax_type",
    "fieldtype": "Link",
    "label": "Tax Type",
-   "options": "Sales Taxes and Charges Template"
+   "options": "Purchase Taxes and Charges Template"
   },
   {
    "fieldname": "column_break_10",
