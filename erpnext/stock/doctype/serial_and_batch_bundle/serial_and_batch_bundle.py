@@ -5,6 +5,9 @@ import collections
 import csv
 import json
 from collections import Counter, defaultdict
+from itertools import batched
+
+from pypika import Criterion
 
 import frappe
 import frappe.query_builder
@@ -3796,14 +3799,20 @@ def get_stock_ledgers_for_serial_nos(kwargs):
 		import re
 
 		escaped_serial_nos = [re.escape(sn) for sn in serial_nos if sn]
-		regex_pattern = r"\n(" + "|".join(escaped_serial_nos) + r")\n"
+		# Bound each compiled expression so bulk receipts do not exceed MariaDB's regex size limit.
+		legacy_serial_match = Criterion.any(
+			Concat_ws("", "\n", stock_ledger_entry.serial_no, "\n").regexp(
+				r"\n(" + "|".join(group) + r")\n"
+			)
+			for group in batched(escaped_serial_nos, 50)
+		)
 
 		query = (
 			query.left_join(serial_batch_entry)
 			.on(stock_ledger_entry.serial_and_batch_bundle == serial_batch_entry.parent)
 			.where(
 				serial_batch_entry.serial_no.isin(serial_nos)
-				| Concat_ws("", "\n", stock_ledger_entry.serial_no, "\n").regexp(regex_pattern)
+				| legacy_serial_match
 			)
 			.distinct()
 		)

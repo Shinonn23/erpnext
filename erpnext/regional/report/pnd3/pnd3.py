@@ -178,11 +178,13 @@ def get_data(filters):
 	locate = CustomFunction("locate", ["char", "string"])
 	reverse = CustomFunction("reverse", ["string"])
 
+	recipient_name = coalesce(nullif(wht_cert.supplier_name, ""), supplier.supplier_name)
+
 	query = (
 		frappe.qb.from_(wht_cert)
 		.join(wht_items)
 		.on(wht_items.parent == wht_cert.name)
-		.join(supplier)
+		.left_join(supplier)
 		.on(supplier.name == wht_cert.supplier)
 		.left_join(address)
 		.on(address.name == wht_cert.supplier_address)
@@ -193,12 +195,13 @@ def get_data(filters):
 			coalesce(nullif(address.branch_code, ""), supplier.branch_code).as_("branch"),
 			ConstantColumn("").as_("title"),
 			substring(
-				supplier.supplier_name,
+				recipient_name,
 				1,
-				char_length(supplier.supplier_name) - locate(" ", reverse(supplier.supplier_name)) + 1,
+				char_length(recipient_name) - locate(" ", reverse(recipient_name)) + 1,
 			).as_("firstname"),
-			substring_index(supplier.supplier_name, " ", -1).as_("lastname"),
-			address.address_line1.as_("address_line1"),
+			substring_index(recipient_name, " ", -1).as_("lastname"),
+			Case().when(nullif(wht_cert.employee, "").notnull(), wht_cert.employee_address)
+			.else_(address.address_line1).as_("address_line1"),
 			address.city.as_("city"),
 			address.county.as_("county"),
 			address.state.as_("state"),

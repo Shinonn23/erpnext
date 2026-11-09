@@ -24,7 +24,8 @@ from erpnext.regional.thailand.custom.withholding import apply_receive_withholdi
 from erpnext.regional.thailand.custom.withholding_cert import (
 	CERT,
 	existing_certificates,
-	withholding_supplier,
+	employee_recipient,
+	withholding_recipient,
 )
 from erpnext.regional.thailand.custom.withholding_cert import (
 	linked_address as _linked_address,
@@ -163,17 +164,19 @@ def make_withholding_tax_cert(filters, doc):
 				", ".join(frappe.utils.get_link_to_form(CERT, name) for name in existing),
 			)
 		)
+	recipient = withholding_recipient(pay)
+	if not recipient:
+		frappe.throw(_("This entry must identify one Supplier or Employee for its Withholding Tax Cert."))
+	party_type, party = recipient
 	cert = frappe.new_doc("Withholding Tax Cert")
-	cert.supplier = withholding_supplier(pay) or ""
-	if not cert.supplier:
-		frappe.throw(_("This entry must identify one Supplier for its Withholding Tax Cert."))
-	if cert.supplier:
-		supplier = frappe.get_doc("Supplier", cert.supplier)
+	if party_type == "Employee":
+		cert.employee = party
+		cert.supplier_name = employee_recipient(party, pay.get("company")).employee_name
+	else:
+		cert.supplier = party
+		supplier = frappe.get_doc("Supplier", party)
 		cert.supplier_name = supplier.supplier_name
-		# the primary address, else the supplier's own address (suppliers often have one address not marked primary)
-		cert.supplier_address = supplier.supplier_primary_address or _linked_address(
-			"Supplier", cert.supplier
-		)
+		cert.supplier_address = supplier.supplier_primary_address or _linked_address("Supplier", party)
 	cert.voucher_type = voucher_type
 	cert.voucher_no = pay.get("name")
 	cert.company = pay.get("company")
@@ -181,11 +184,8 @@ def make_withholding_tax_cert(filters, doc):
 		"Company", cert.company, own=True
 	)
 	cert.income_tax_form = filters.get("income_tax_form") or (
-		cert.supplier
-		and (
-			"PND3"
-			if frappe.db.get_value("Supplier", cert.supplier, "supplier_type") == "Individual"
-			else "PND53"
+		"PND3" if party_type == "Employee" else (
+			"PND3" if frappe.db.get_value("Supplier", party, "supplier_type") == "Individual" else "PND53"
 		)
 	)
 	cert.date = filters.get("date") or pay.get("posting_date")
@@ -225,7 +225,7 @@ def make_withholding_tax_cert(filters, doc):
 		frappe.throw(_("All withholding categories on one certificate must use the same Thai tax form."))
 	if category_forms:
 		category_form = next(iter(category_forms))
-		if cert.income_tax_form and cert.income_tax_form != category_form:
+		if filters.get("income_tax_form") and cert.income_tax_form != category_form:
 			frappe.throw(_("The selected income tax form does not match the withholding category."))
 		cert.income_tax_form = category_form
 	for (income_type, rate), amounts in income_totals.items():
@@ -249,6 +249,14 @@ def get_payment_withholding_base(doc):
 	its net total (company currency) times the share allocated; an unallocated (advance) amount counts as it is, or,
 	when Advance For says Services, without the VAT it holds (the VAT of a service advance is not withheld on)."""
 	payment = frappe.parse_json(doc)
+	if payment.get("party_type") == "Employee":
+		if payment.get("payment_type") != "Pay":
+			frappe.throw(_("Employee Tax Withholding is only supported for Pay payments."))
+		return frappe.utils.flt(
+			frappe.utils.flt(payment.get("received_amount"))
+			* frappe.utils.flt(payment.get("target_exchange_rate") or 1),
+			2,
+		)
 	base = 0
 	for reference in payment.get("references") or []:
 		if reference.get("reference_doctype") not in PAYABLE_DOCTYPES or not reference.get("reference_name"):
@@ -273,6 +281,10 @@ def get_payment_withholding_base(doc):
 def get_payment_entry_tax_withholding_categories(doc):
 	"""Build core withholding-category rows from item-level invoice (and order) defaults."""
 	payment = frappe.parse_json(doc)
+	if payment.get("party_type") == "Employee":
+		frappe.throw(_(
+			"Select a Tax Withholding Category manually for Employee payments; invoice lines are unavailable."
+		))
 	if payment.get("payment_type") not in ("Pay", "Receive"):
 		return []
 

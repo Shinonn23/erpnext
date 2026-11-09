@@ -387,11 +387,11 @@
   },
   {
    "default": "0",
-   "depends_on": "is_free_item",
+   "description": "Select for goods supplied free of charge, then set Rate to 0.",
    "fieldname": "is_free_item",
    "fieldtype": "Check",
    "label": "Is Free Item",
-   "read_only": 1
+   "read_only": 0
   },
   {
    "fieldname": "section_break_29",
