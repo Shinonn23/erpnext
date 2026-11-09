@@ -24,6 +24,7 @@ from erpnext.regional.thailand.custom.withholding import apply_receive_withholdi
 from erpnext.regional.thailand.custom.withholding_cert import (
 	CERT,
 	existing_certificates,
+	withholding_supplier,
 )
 from erpnext.regional.thailand.custom.withholding_cert import (
 	linked_address as _linked_address,
@@ -150,7 +151,8 @@ def make_withholding_tax_cert(filters, doc):
 	voucher_type = (
 		pay.get("doctype") if pay.get("doctype") in ("Payment Entry", "Journal Entry") else "Payment Entry"
 	)
-	frappe.get_doc(voucher_type, pay.get("name")).check_permission("read")
+	pay = frappe.get_doc(voucher_type, pay.get("name"))
+	pay.check_permission("read")
 	frappe.has_permission("Withholding Tax Cert", "create", throw=True)
 	existing = existing_certificates(voucher_type, pay.get("name"))
 	if existing:
@@ -162,13 +164,9 @@ def make_withholding_tax_cert(filters, doc):
 			)
 		)
 	cert = frappe.new_doc("Withholding Tax Cert")
-	if voucher_type == "Journal Entry":
-		party = next(
-			(r for r in pay.get("accounts") or [] if r.get("party_type") == "Supplier" and r.get("party")), {}
-		)
-		cert.supplier = party.get("party") or ""
-	else:
-		cert.supplier = pay.get("party_type") == "Supplier" and pay.get("party") or ""
+	cert.supplier = withholding_supplier(pay) or ""
+	if not cert.supplier:
+		frappe.throw(_("This entry must identify one Supplier for its Withholding Tax Cert."))
 	if cert.supplier:
 		supplier = frappe.get_doc("Supplier", cert.supplier)
 		cert.supplier_name = supplier.supplier_name

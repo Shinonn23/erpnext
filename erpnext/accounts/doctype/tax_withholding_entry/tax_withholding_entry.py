@@ -1224,6 +1224,8 @@ class JournalTaxWithholding(TaxWithholdingController):
 		self.existing_tds_rows = []
 		self.precision = None
 		self.has_multiple_parties = False
+		self.is_direct_payment = False
+		self.direct_vat_account = None
 
 		self.party_field = None
 		self.reverse_field = None
@@ -1245,8 +1247,67 @@ class JournalTaxWithholding(TaxWithholdingController):
 			if row.get("is_tax_withholding_account"):
 				self.existing_tds_rows.append(row)
 
+		if not self.party and self.doc.get("docstatus") != 2 and (
+			(self.doc.get("create_tax_invoice") and self._should_apply_tds()) or self.existing_tds_rows
+		):
+			self._setup_direct_payment()
+
 		if self.party_type:
 			self._setup_direction_fields()
+
+	def _setup_direct_payment(self):
+		from erpnext.regional.thailand.custom.journal_entry import company_tax_accounts
+
+		if any(row.get("party_type") or row.get("party") for row in self.doc.accounts):
+			return
+		settings = company_tax_accounts(self.doc.company)
+		if not settings:
+			return
+
+		details = {row.name: row for row in self.doc.get("tax_invoice_details") or []}
+		vat_rows = [
+			row for row in self.doc.accounts
+			if row.account == settings.purchase_tax_account and flt(row.debit) > flt(row.credit)
+		]
+		if not vat_rows:
+			frappe.throw(_(
+				"Automatic Tax Withholding on a direct payment needs a debit on input VAT account {0}. "
+				"Check the Debit and Credit columns: an expense payment debits the expense and input VAT, "
+				"and credits Bank/Cash."
+			).format(settings.purchase_tax_account))
+		suppliers = set()
+		for row in vat_rows:
+			detail = details.get(row.get("reference_detail_no"))
+			row_suppliers = {supplier for supplier in (row.get("supplier"), detail and detail.supplier) if supplier}
+			if len(row_suppliers) != 1:
+				frappe.throw(_("Select one Supplier on each input VAT row or its linked Tax Invoice detail."))
+			suppliers.update(row_suppliers)
+		if len(suppliers) != 1:
+			frappe.throw(_(
+				"Input VAT rows contain different Suppliers. Use one Supplier per direct payment Journal Entry."
+			))
+
+		credits = [
+			row for row in self.doc.accounts
+			if flt(row.credit) > flt(row.debit) and not row.get("is_tax_withholding_account")
+		]
+		if len(credits) != 1 or frappe.get_cached_value("Account", credits[0].account, "account_type") not in (
+			"Bank", "Cash"
+		):
+			frappe.throw(_(
+				"Automatic Tax Withholding on a direct payment needs one Bank/Cash credit row and no other "
+				"credit rows. Remove any manually entered withholding row first."
+			))
+
+		if self.doc.voucher_type != "Journal Entry":
+			frappe.throw(_("Direct Bank/Cash Tax Withholding requires Entry Type Journal Entry."))
+
+		self.direct_vat_account = settings.purchase_tax_account
+		self.party = suppliers.pop()
+		self.party_type = "Supplier"
+		self.party_row = credits[0]
+		self.party_account = self.party_row.account
+		self.is_direct_payment = True
 
 	def _setup_direction_fields(self):
 		"""
@@ -1287,6 +1348,7 @@ class JournalTaxWithholding(TaxWithholdingController):
 				for d in self.doc.get("accounts")
 				if account_type_map.get(d.account) not in ("Tax", "Chargeable")
 				and d.account != self.party_account
+				and d.account != self.direct_vat_account
 				and not d.get("is_tax_withholding_account")
 			),
 			self.precision,
@@ -1310,10 +1372,12 @@ class JournalTaxWithholding(TaxWithholdingController):
 
 		account_amount_map = self._calculate_account_wise_amount()
 
-		if not account_amount_map:
+		if not account_amount_map and not self.is_direct_payment:
 			return
 
 		self._reset_existing_tds()
+		if self.is_direct_payment:
+			self._cleanup_duplicate_tds_rows(None)
 
 		for account_head, tax_amount in account_amount_map.items():
 			if not tax_amount:
@@ -1405,6 +1469,9 @@ class JournalTaxWithholding(TaxWithholdingController):
 				"accounts",
 				{
 					"account": account_head,
+					"is_petty_cash_account": frappe.get_cached_value(
+						"Account", account_head, "is_petty_cash_account"
+					),
 					"account_currency": account_currency,
 					"exchange_rate": exchange_rate,
 					"cost_center": self.doc.get("cost_center")
@@ -1445,13 +1512,28 @@ class JournalTaxWithholding(TaxWithholdingController):
 		self.doc.set_against_account()
 
 	def _is_tax_withholding_applicable(self):
-		if not self._should_apply_tds():
+		if not self._should_apply_tds() or not self.doc.tax_withholding_category:
+			if self.is_direct_payment:
+				self._reset_existing_tds()
+				self._cleanup_duplicate_tds_rows(None)
+				self._recalculate_totals()
 			self.doc.tax_withholding_entries = []
 			return False
 
-		if not self.doc.tax_withholding_category:
-			self.doc.tax_withholding_entries = []
-			return False
+		if not self.party:
+			frappe.throw(
+				_(
+					"Select Party Type and Party (Supplier or Customer) on an Accounts row to apply Tax Withholding. "
+					"For a direct Bank/Cash payment, tick Create Tax Invoice and select Supplier on the input VAT row."
+				)
+			)
+
+		if self.is_direct_payment:
+			from erpnext.accounts.party import validate_party_frozen_disabled
+
+			validate_party_frozen_disabled(self.doc.company, "Supplier", self.party)
+			if frappe.get_lazy_doc("Supplier", self.party).is_blocked_for("Payments"):
+				frappe.throw(_("{0} is blocked so this transaction cannot proceed").format(self.party))
 
 		return True
 

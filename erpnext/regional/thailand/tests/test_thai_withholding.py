@@ -1125,6 +1125,33 @@ class TestCertificateOnSubmit(unittest.TestCase):
 			("5B0012", "Journal Entry", "ACC-JV-1", "2026-10-20"),
 		)
 
+	def test_a_direct_expense_journal_uses_its_recorded_withholding_supplier(self):
+		doc = frappe._dict(
+			doctype="Journal Entry", name="ACC-JV-2", company=CD, posting_date="2026-10-20",
+			accounts=[frappe._dict(account="Bank - CD", party_type=None, party=None)],
+			tax_withholding_entries=[frappe._dict(
+				party_type="Supplier", party="5B0012", tax_withholding_category="Services",
+				taxable_amount=10000, tax_rate=3, withholding_amount=300,
+			)],
+		)
+		with self.active(), patch.object(withholding_cert, "company_address_of", return_value="CD-Office"):
+			withholding_cert.create_withholding_certificates(doc)
+		self.assertEqual(self.made[0].supplier, "5B0012")
+		self.assertEqual(len(self.made), 1)
+
+	def test_journal_certificate_rejects_ambiguous_supplier_or_customer(self):
+		entry = frappe._dict(party_type="Supplier", party="5B0012", withholding_amount=300)
+		for conflicting in (
+			frappe._dict(party_type="Supplier", party="OTHER"),
+			frappe._dict(party_type="Customer", party="CUSTOMER"),
+		):
+			with self.subTest(conflicting=conflicting):
+				doc = frappe._dict(doctype="Journal Entry", accounts=[conflicting], tax_withholding_entries=[entry])
+				self.assertIsNone(withholding_cert.withholding_supplier(doc))
+		zero = frappe._dict(party_type="Supplier", party="OTHER", withholding_amount=0)
+		doc = frappe._dict(doctype="Journal Entry", accounts=[], tax_withholding_entries=[entry, zero])
+		self.assertEqual(withholding_cert.withholding_supplier(doc), "5B0012")
+
 	def test_cancel_cancels_submitted_certificates_and_deletes_drafts(self):
 		submitted = SimpleNamespace(flags=frappe._dict(), cancel=Mock())
 		with (
@@ -1187,7 +1214,7 @@ class TestCertificateOnSubmit(unittest.TestCase):
 			withholding_cert.get_voucher_certificates("Sales Invoice", "SINV-1")
 
 	def test_the_manual_button_refuses_a_second_certificate(self):
-		source = Mock()
+		source = frappe._dict(name="ACC-PAY-1", check_permission=Mock())
 		with (
 			patch.object(payment_entry, "_", side_effect=lambda text: text),
 			patch.object(frappe, "get_doc", return_value=source),
