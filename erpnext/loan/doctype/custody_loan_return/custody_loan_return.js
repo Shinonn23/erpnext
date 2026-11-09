@@ -2,7 +2,12 @@ frappe.ui.form.on("Custody Loan Return", {
 	setup(frm) {
 		// before_cancel reverses the receipt, its inspections and shipment itself; without this the form asks the
 		// user to cancel them first ("Cancel All Documents") and stops when the user may not cancel them.
-		frm.ignore_doctypes_on_cancel_all = ["Delivery Note", "Asset Movement", "Quality Inspection", "Shipment"];
+		frm.ignore_doctypes_on_cancel_all = [
+			"Delivery Note",
+			"Asset Movement",
+			"Quality Inspection",
+			"Shipment",
+		];
 		frm.set_query("custody_loan", () => ({
 			filters: { docstatus: 1, status: ["in", ["Active", "Partially Returned"]] },
 		}));
@@ -30,25 +35,20 @@ frappe.ui.form.on("Custody Loan Return", {
 			frm,
 			frm.doc.loan_type === "Asset"
 				? __(
-						"Check the asset and the Location it goes back to, then Save. If its Item is inspected the QI team is asked first and the return is submitted when they submit the inspection; otherwise Submit."
+						"Check the asset and the Location it goes back to, then Save and Submit. If its Item is inspected on return the asset is held (Awaiting Inspection) until the QI team has inspected it."
 				  )
 				: __(
-						"Check what is coming back (the batches and serial numbers are filled in), then Save and Submit. The system receives the items, after the QI team inspects those that need it."
+						"Check what is coming back (the batches and serial numbers are filled in), then Save and Submit. The system receives the items at once; those that need an inspection wait in Quarantine for the QI team."
 				  )
 		);
 		if (frm.doc.docstatus === 0 && frm.doc.loan_type === "Stock" && frm.doc.custody_loan) {
-			frm.add_custom_button(__("Select Serial / Batch"), () => select_open_serial_batches(frm, "returned_qty"));
+			frm.add_custom_button(__("Select Serial / Batch"), () =>
+				select_open_serial_batches(frm, "returned_qty")
+			);
 		}
 		if (frm.doc.docstatus !== 1) return;
 		if (frm.doc.loan_type === "Stock") {
-			if (frm.doc.status === "Pending Quality Inspection") {
-				frm.set_intro(
-					__(
-						"The QI team inspects the returned items. They are received when the last Quality Inspection is submitted: accepted ones go back to stock, rejected ones to Quarantine."
-					),
-					"blue"
-				);
-			} else if (frm.doc.status === "Pending Receipt") {
+			if (frm.doc.status === "Pending Receipt") {
 				frm.set_intro(
 					__(
 						"The system could not receive the items by itself (see the comments). Open the receiving Delivery Note, fix what it says and submit it."
@@ -130,11 +130,44 @@ function select_open_serial_batches(frm, qty_field) {
 						in_place_edit: true,
 						data: entries.map((entry) => ({ ...entry, qty: entry.open_qty })),
 						fields: [
-							{ fieldname: "custody_loan_item", fieldtype: "Data", label: __("Loan Item"), read_only: 1, hidden: 1 },
-							{ fieldname: "item_code", fieldtype: "Link", options: "Item", label: __("Item"), read_only: 1, in_list_view: 1 },
-							{ fieldname: "batch_no", fieldtype: "Link", options: "Batch", label: __("Batch No"), read_only: 1, in_list_view: 1 },
-							{ fieldname: "serial_no", fieldtype: "Link", options: "Serial No", label: __("Serial No"), read_only: 1, in_list_view: 1 },
-							{ fieldname: "open_qty", fieldtype: "Float", label: __("Open Qty"), read_only: 1, in_list_view: 1 },
+							{
+								fieldname: "custody_loan_item",
+								fieldtype: "Data",
+								label: __("Loan Item"),
+								read_only: 1,
+								hidden: 1,
+							},
+							{
+								fieldname: "item_code",
+								fieldtype: "Link",
+								options: "Item",
+								label: __("Item"),
+								read_only: 1,
+								in_list_view: 1,
+							},
+							{
+								fieldname: "batch_no",
+								fieldtype: "Link",
+								options: "Batch",
+								label: __("Batch No"),
+								read_only: 1,
+								in_list_view: 1,
+							},
+							{
+								fieldname: "serial_no",
+								fieldtype: "Link",
+								options: "Serial No",
+								label: __("Serial No"),
+								read_only: 1,
+								in_list_view: 1,
+							},
+							{
+								fieldname: "open_qty",
+								fieldtype: "Float",
+								label: __("Open Qty"),
+								read_only: 1,
+								in_list_view: 1,
+							},
 							{ fieldname: "qty", fieldtype: "Float", label: __("Qty"), in_list_view: 1 },
 						],
 					},

@@ -26,7 +26,7 @@ def execute():
 				return_doc = frappe.get_doc("Custody Loan Return", return_name)
 				note = return_doc.delivery_note
 				if note and frappe.db.get_value("Delivery Note", note, "docstatus") == 0:
-					return_doc.inspect_or_receive(frappe.get_doc("Delivery Note", note))
+					return_doc.receive_returned_goods(frappe.get_doc("Delivery Note", note))
 				return_doc.update_status()
 			frappe.get_doc("Custody Loan", name).update_status()
 		except Exception:
