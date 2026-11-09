@@ -116,3 +116,12 @@ values. Submitted updates and cancellations restore attribution from the locked 
 moving, deleting or duplicating an attributed row or changing its reference, term, allocation or total binding.
 Only the native reconciliation helper can mint a one-use internal capability to change or split that attribution;
 it survives a deferred-save batch until its single save. Stored legacy attribution is preserved without inference.
+
+## Additional discounts when mapping transactions
+
+Partial Order-to-Receipt/Delivery/Invoice and Receipt/Delivery-to-Invoice mappings retain a fixed
+additional discount as its effective percentage. Combining sources requires the same discount basis
+and effective percentage; otherwise create separate documents. Sources without a discount may be
+combined regardless of basis. Items without a source reference count as undiscounted, so they cannot
+be combined with a discounted source. Receipt and Delivery references take precedence over upstream
+Orders, and existing referenced sources must be readable by the person mapping the document.

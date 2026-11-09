@@ -26,31 +26,45 @@ def method(path, name, **namespace):
 	return namespace[name]
 
 
+MAPPING_PAIRS = (
+	("Purchase Order", "Purchase Invoice"),
+	("Purchase Receipt", "Purchase Invoice"),
+	("Sales Order", "Sales Invoice"),
+	("Delivery Note", "Sales Invoice"),
+	("Sales Order", "Delivery Note"),
+	("Purchase Order", "Purchase Receipt"),
+)
+
+
 class TestReceiptInvoicePrices(TestCase):
 	def setUp(self):
 		self.enterContext(patch.object(frappe, "get_system_settings", return_value="Banker's Rounding"))
 
-	def test_partial_fixed_discount_maps_as_the_same_effective_percentage(self):
-		apply = method(
+		def throw(message):
+			raise frappe.ValidationError(message)
+
+		self.enterContext(patch.object(frappe, "throw", side_effect=throw))
+
+	def discount_mapper(self):
+		return method(
 			"controllers/accounts_controller.py",
 			"set_discount_amount_after_mapping",
 			flt=flt,
+			frappe=frappe,
+			_=lambda text: text,
 			PURCHASE_TRANSACTION_TYPES={"Purchase Order", "Purchase Receipt", "Purchase Invoice"},
 			SALES_TRANSACTION_TYPES={"Sales Order", "Delivery Note", "Sales Invoice"},
 		)
-		for source_type, target_type in (
-			("Purchase Order", "Purchase Invoice"),
-			("Purchase Receipt", "Purchase Invoice"),
-			("Sales Order", "Sales Invoice"),
-			("Delivery Note", "Sales Invoice"),
-			("Sales Order", "Delivery Note"),
-			("Purchase Order", "Purchase Receipt"),
-		):
+
+	def test_partial_fixed_discount_maps_as_the_same_effective_percentage(self):
+		apply = self.discount_mapper()
+		for source_type, target_type in MAPPING_PAIRS:
 			for basis in ("Net Total", "Grand Total"):
 				with self.subTest(source=source_type, target=target_type, basis=basis):
 					meta = SimpleNamespace(get_field=lambda name: True)
 					source = Doc(
 						doctype=source_type,
+						name="SOURCE",
 						meta=meta,
 						discount_amount=100,
 						apply_discount_on=basis,
@@ -64,6 +78,114 @@ class TestReceiptInvoicePrices(TestCase):
 					target.discount_amount = 20
 					apply(target, source)
 					self.assertEqual(target.discount_amount, 20)
+
+	def source(self, doctype, name, discount=0, percentage=0, basis="Net Total"):
+		return Doc(
+			doctype=doctype,
+			name=name,
+			meta=SimpleNamespace(get_field=lambda name: True),
+			discount_amount=discount,
+			additional_discount_percentage=percentage,
+			apply_discount_on=basis,
+			net_total=1000 - discount,
+			grand_total=1000 - discount,
+			check_permission=Mock(),
+		)
+
+	def map_source(self, target, source):
+		# Native map_docs copies each parent, then appends its linked rows before the postprocessor.
+		for field in ("discount_amount", "additional_discount_percentage", "apply_discount_on"):
+			target[field] = source[field]
+		target["items"].append(Doc({source.doctype.lower().replace(" ", "_"): source.name, "amount": 300}))
+		apply = self.discount_mapper()
+		apply(target, source)
+		# Native totals run before after_mapping invokes the same helper again.
+		target.discount_amount = (
+			sum(row.amount for row in target["items"]) * flt(target.additional_discount_percentage) / 100
+		)
+		apply(target, source)
+
+	def test_combined_sources_require_compatible_effective_discounts_in_both_orders(self):
+		for source_type, target_type in MAPPING_PAIRS:
+			for first_terms, second_terms, compatible in (
+				({}, {"discount": 100}, False),
+				({"percentage": 5, "discount": 50}, {"discount": 100}, False),
+				({"discount": 100}, {"discount": 100, "basis": "Grand Total"}, False),
+				({}, {"basis": "Grand Total"}, True),
+				({"discount": 100}, {"percentage": 10, "discount": 100}, True),
+				({"discount": 100}, {"discount": 100}, True),
+			):
+				for reverse in (False, True):
+					with self.subTest(
+						source=source_type,
+						target=target_type,
+						terms=(first_terms, second_terms),
+						reverse=reverse,
+					):
+						first = self.source(source_type, "FIRST", **first_terms)
+						second = self.source(source_type, "SECOND", **second_terms)
+						if reverse:
+							first, second = second, first
+						target = Doc(doctype=target_type, meta=first.meta, items=[])
+						with patch.object(frappe, "get_doc", return_value=first) as get_doc:
+							self.map_source(target, first)
+							if compatible:
+								self.map_source(target, second)
+								self.assertEqual(target.discount_amount, 60 if first.discount_amount else 0)
+							else:
+								with self.assertRaisesRegex(frappe.ValidationError, "separate documents"):
+									self.map_source(target, second)
+							get_doc.assert_called_with(source_type, first.name)
+							first.check_permission.assert_called_with("read")
+
+	def test_repeated_partial_mapping_of_same_source_stays_proportional(self):
+		for source_type, target_type in MAPPING_PAIRS:
+			with self.subTest(source=source_type, target=target_type):
+				source = self.source(source_type, "SOURCE", discount=100)
+				target = Doc(doctype=target_type, meta=source.meta, items=[])
+				with patch.object(frappe, "get_doc") as get_doc:
+					self.map_source(target, source)
+					self.assertEqual(target.discount_amount, 30)
+					self.map_source(target, source)
+					self.assertEqual(target.discount_amount, 60)
+					get_doc.assert_not_called()
+
+	def test_unlinked_rows_have_no_source_discount(self):
+		for source_type, target_type in MAPPING_PAIRS:
+			for discount in (0, 100):
+				with self.subTest(source=source_type, target=target_type, discount=discount):
+					source = self.source(source_type, "SOURCE", discount=discount)
+					target = Doc(doctype=target_type, meta=source.meta, items=[Doc(amount=300)])
+					if discount:
+						with self.assertRaisesRegex(frappe.ValidationError, "separate documents"):
+							self.map_source(target, source)
+					else:
+						self.map_source(target, source)
+						self.assertEqual(target.discount_amount, 0)
+
+	def test_closest_source_takes_precedence_and_other_sources_require_read_permission(self):
+		for receipt_type, order_type, target_type in (
+			("Purchase Receipt", "Purchase Order", "Purchase Invoice"),
+			("Delivery Note", "Sales Order", "Sales Invoice"),
+		):
+			with self.subTest(target=target_type):
+				source = self.source(order_type, "ORDER", discount=100)
+				receipt = self.source(receipt_type, "RECEIPT", discount=100)
+				row = Doc(
+					{
+						receipt_type.lower().replace(" ", "_"): receipt.name,
+						order_type.lower().replace(" ", "_"): "UPSTREAM",
+						"amount": 300,
+					}
+				)
+				target = Doc(doctype=target_type, meta=source.meta, items=[row])
+				with patch.object(frappe, "get_doc", return_value=receipt) as get_doc:
+					self.map_source(target, source)
+					get_doc.assert_called_with(receipt_type, receipt.name)
+					self.assertEqual(target.discount_amount, 60)
+					receipt.check_permission.side_effect = frappe.PermissionError
+					with self.assertRaises(frappe.PermissionError):
+						self.discount_mapper()(target, source)
 
 	def test_receipt_quantity_checks_remaining_billed_qty_and_forged_links(self):
 		receipt = Doc(parent="PR", item_code="ITEM", uom="Pc", conversion_factor=1, qty=10)
