@@ -55,6 +55,9 @@ if TYPE_CHECKING:
 	from erpnext.stock.doctype.repost_item_valuation.repost_item_valuation import RepostItemValuation
 
 
+_SOURCE_CANCELLATION_TOKEN = object()
+
+
 class FiscalYearError(frappe.ValidationError):
 	pass
 
@@ -556,6 +559,7 @@ def reconcile_against_document(
 				entry.update({"referenced_row": referenced_row.name})
 				doc.make_exchange_gain_loss_journal([entry], dimensions_dict)
 			else:
+				previous_references = {id(row) for row in doc.references}
 				referenced_row = update_reference_in_payment_entry(
 					entry,
 					doc,
@@ -566,7 +570,7 @@ def reconcile_against_document(
 				if referenced_row.get("outstanding_amount") and entry.get("outstanding_amount") is None:
 					referenced_row.outstanding_amount -= flt(entry.allocated_amount)
 
-				reposting_rows.append(referenced_row)
+				reposting_rows.extend(row for row in doc.references if id(row) not in previous_references)
 
 		doc.save(ignore_permissions=True)
 
@@ -766,6 +770,7 @@ def update_reference_in_payment_entry(
 		"exchange_gain_loss": d.difference_amount,
 		"account": d.account,
 		"dimensions": d.dimensions,
+		"payment_term": d.get("payment_term"),
 	}
 
 	advance_payment_doctypes = get_advance_payment_doctypes()
@@ -781,6 +786,19 @@ def update_reference_in_payment_entry(
 		existing_row = payment_entry.get("references", {"name": d["voucher_detail_no"]})[0]
 
 		if d.allocated_amount <= existing_row.allocated_amount:
+			source_discount = (
+				flt(
+					flt(existing_row.get("payment_term_discounted_amount"))
+					* d.allocated_amount
+					/ existing_row.allocated_amount,
+					existing_row.precision("payment_term_discounted_amount"),
+				)
+				if existing_row.allocated_amount
+				else 0
+			)
+			existing_row.payment_term_discounted_amount = (
+				flt(existing_row.get("payment_term_discounted_amount")) - source_discount
+			)
 			existing_row.allocated_amount -= d.allocated_amount
 
 			new_row = payment_entry.append("references")
@@ -789,6 +807,13 @@ def update_reference_in_payment_entry(
 				new_row.set(field, reference_details[field])
 
 			if existing_row.reference_doctype in advance_payment_doctypes:
+				new_row.payment_term = reference_details.get("payment_term") or existing_row.payment_term
+				new_row.advance_payment_term = existing_row.payment_term
+				new_row.advance_payment_term_total_amount = existing_row.total_amount
+				new_row.advance_payment_term_discounted_amount = source_discount
+				new_row.advance_payment_term_discount_recorded = existing_row.get(
+					"payment_term_discount_recorded"
+				)
 				new_row.advance_voucher_type = existing_row.reference_doctype
 				new_row.advance_voucher_no = existing_row.reference_name
 
@@ -800,12 +825,73 @@ def update_reference_in_payment_entry(
 		new_row.update(reference_details)
 		row = new_row
 
+	new_rows = [row]
+	if d.against_voucher_type in ("Sales Invoice", "Purchase Invoice"):
+		invoice = frappe.get_doc(d.against_voucher_type, d.against_voucher)
+		if invoice.set_allocated_invoice_payment_schedule(
+			from_references=True, exclude_payment=payment_entry.name, persist=False
+		):
+			# Include earlier unsaved splits from this same reconciliation batch exactly once.
+			for reference in payment_entry.references:
+				if (
+					reference is not row
+					and reference.reference_doctype == invoice.doctype
+					and reference.reference_name == invoice.name
+				):
+					amount = payment_entry.get_allocated_amount_in_transaction_currency(
+						reference.allocated_amount, invoice.doctype, invoice.name
+					)
+					invoice.allocate_to_payment_schedule(amount, reference.payment_term)
+			amount = payment_entry.get_allocated_amount_in_transaction_currency(
+				row.allocated_amount, invoice.doctype, invoice.name
+			)
+			allocations = invoice.allocate_to_payment_schedule(amount, row.payment_term)
+			if flt(sum(value for _, value in allocations) - amount, invoice.precision("grand_total")):
+				frappe.throw(_("Allocated amount exceeds the outstanding payment terms."))
+			original = row.as_dict()
+			remaining = row.allocated_amount
+			remaining_discount = flt(row.get("advance_payment_term_discounted_amount"))
+			for index, (payment_term, allocated) in enumerate(allocations):
+				target = (
+					row
+					if index == 0
+					else payment_entry.append(
+						"references",
+						{key: value for key, value in original.items() if key not in ("name", "idx")},
+					)
+				)
+				target.payment_term = payment_term
+				target.allocated_amount = (
+					remaining
+					if index == len(allocations) - 1
+					else flt(
+						original.allocated_amount * allocated / amount, target.precision("allocated_amount")
+					)
+				)
+				target.advance_payment_term_discounted_amount = (
+					remaining_discount
+					if index == len(allocations) - 1
+					else flt(
+						flt(original.get("advance_payment_term_discounted_amount"))
+						* target.allocated_amount
+						/ original.allocated_amount,
+						target.precision("advance_payment_term_discounted_amount"),
+					)
+				)
+				remaining_discount -= target.advance_payment_term_discounted_amount
+				remaining -= target.allocated_amount
+				if index:
+					new_rows.append(target)
+
 	# validate does not run on update after submit: stamp the new row from the invoice it settles
 	stamp = get_standard_dimension_values(d.against_voucher_type, d.against_voucher)
-	row.territory = stamp.get("territory") or payment_entry.get("territory")
-	row.sales_person = (
-		stamp.get("sales_person") if stamp.get("territory") else payment_entry.get("sales_person")
-	)
+	for target in new_rows:
+		target.territory = stamp.get("territory") or payment_entry.get("territory")
+		target.sales_person = (
+			stamp.get("sales_person") if stamp.get("territory") else payment_entry.get("sales_person")
+		)
+		if target is not row:
+			target.exchange_gain_loss = 0
 
 	payment_entry.flags.ignore_validate_update_after_submit = True
 	payment_entry.clear_unallocated_reference_document_rows()
@@ -863,28 +949,57 @@ def get_reconciliation_effect_date(against_voucher_type, against_voucher, compan
 
 
 def cancel_exchange_gain_loss_journal(
-	parent_doc: dict | object, referenced_dt: str | None = None, referenced_dn: str | None = None
+	parent_doc: dict | object,
+	referenced_dt: str | None = None,
+	referenced_dn: str | None = None,
+	*,
+	_source_cancellation_token=None,
 ) -> None:
-	"""
-	Cancel Exchange Gain/Loss for Sales/Purchase Invoice, if they have any.
-	"""
-	if parent_doc.doctype in ["Sales Invoice", "Purchase Invoice", "Payment Entry", "Journal Entry"]:
-		gain_loss_journals = get_linked_exchange_gain_loss_journal(
-			referenced_dt=parent_doc.doctype, referenced_dn=parent_doc.name, je_docstatus=1
-		)
-		for doc in gain_loss_journals:
-			gain_loss_je = frappe.get_doc("Journal Entry", doc)
-			if referenced_dt and referenced_dn:
-				references = [(x.reference_type, x.reference_name) for x in gain_loss_je.accounts]
-				if (
-					len(references) == 2
-					and (referenced_dt, referenced_dn) in references
-					and (parent_doc.doctype, parent_doc.name) in references
-				):
-					# only cancel JE generated against parent_doc and referenced_dn
-					gain_loss_je.cancel()
-			else:
-				gain_loss_je.cancel()
+	"""Cancel generated FX journals; verified source cancellation carries its own authority."""
+	if parent_doc.doctype not in ("Sales Invoice", "Purchase Invoice", "Payment Entry", "Journal Entry"):
+		return
+	gain_loss_journals = get_linked_exchange_gain_loss_journal(
+		referenced_dt=parent_doc.doctype, referenced_dn=parent_doc.name, je_docstatus=1
+	)
+	source = None
+	for name in sorted(gain_loss_journals):
+		gain_loss_je = frappe.get_doc("Journal Entry", name, for_update=True)
+		references = [(row.reference_type, row.reference_name) for row in gain_loss_je.accounts]
+		if (
+			referenced_dt
+			and referenced_dn
+			and not (
+				len(references) == 2
+				and (referenced_dt, referenced_dn) in references
+				and (parent_doc.doctype, parent_doc.name) in references
+			)
+		):
+			continue
+		if _source_cancellation_token is _SOURCE_CANCELLATION_TOKEN:
+			if source is None:
+				source = frappe.get_doc(parent_doc.doctype, parent_doc.name, for_update=True)
+				source.check_permission("cancel")
+			if parent_doc.get("_action") != "cancel" or parent_doc.docstatus != 2 or source.docstatus != 2:
+				frappe.throw(
+					_("Generated exchange journals can inherit authority only during source cancellation.")
+				)
+			if not (
+				gain_loss_je.docstatus == 1
+				and gain_loss_je.is_system_generated
+				and gain_loss_je.voucher_type == "Exchange Gain Or Loss"
+				and gain_loss_je.company == source.company
+				and len(references) == 2
+				and (source.doctype, source.name) in references
+			):
+				frappe.throw(_("Exchange journal does not match its cancelled source."))
+		original_permission_flag = gain_loss_je.flags.get("ignore_permissions")
+		try:
+			if source is not None:
+				# The native parent lifecycle authorized this exact generated dependency.
+				gain_loss_je.flags.ignore_permissions = True
+			gain_loss_je.cancel()
+		finally:
+			gain_loss_je.flags.ignore_permissions = original_permission_flag
 
 
 def delete_exchange_gain_loss_journal(
@@ -1051,10 +1166,14 @@ def remove_ref_from_advance_section(ref_doc: object = None, payment_name: str | 
 
 
 def unlink_ref_doc_from_payment_entries(ref_doc: object = None, payment_name: str | None = None):
+	if ref_doc.doctype in ("Sales Invoice", "Purchase Invoice"):
+		frappe.db.get_value(ref_doc.doctype, ref_doc.name, "name", for_update=True)
 	remove_ref_doc_link_from_jv(ref_doc.doctype, ref_doc.name, payment_name)
 	remove_ref_doc_link_from_pe(ref_doc.doctype, ref_doc.name, payment_name)
 	update_accounting_ledgers_after_reference_removal(ref_doc.doctype, ref_doc.name, payment_name)
 	remove_ref_from_advance_section(ref_doc, payment_name)
+	if ref_doc.doctype in ("Sales Invoice", "Purchase Invoice"):
+		ref_doc.set_allocated_invoice_payment_schedule(from_references=True)
 
 
 def remove_ref_doc_link_from_jv(
@@ -1138,16 +1257,45 @@ def remove_ref_doc_link_from_pe(
 	# Update payment request amount
 	update_payment_requests_as_per_pe_references(reference_rows, cancel=True)
 
-	# Update allocated amounts and modified fields in one go
-	(
-		qb.update(per)
-		.set(per.allocated_amount, 0)
-		.set(per.modified, now())
-		.set(per.modified_by, frappe.session.user)
-		.where(per.name.isin(row_names))
-		.where(per.parenttype == "Payment Entry")
-		.run()
-	)
+	# Invoicing transfers the advance reference, not its original order attribution.
+	for row in reference_rows:
+		if row.advance_voucher_type in ("Sales Order", "Purchase Order") and row.advance_voucher_no:
+			payment = frappe.get_doc("Payment Entry", row.parent)
+			payment.make_advance_gl_entries(
+				next(ref for ref in payment.references if ref.name == row.name), cancel=1
+			)
+			frappe.db.set_value(
+				"Payment Entry Reference",
+				row.name,
+				{
+					"reference_doctype": row.advance_voucher_type,
+					"reference_name": row.advance_voucher_no,
+					"payment_term": row.get("advance_payment_term") or row.payment_term,
+					"advance_payment_term": None,
+					"total_amount": row.get("advance_payment_term_total_amount") or row.total_amount,
+					"payment_term_discounted_amount": flt(row.get("advance_payment_term_discounted_amount")),
+					"payment_term_discount_recorded": row.get("advance_payment_term_discount_recorded") or 0,
+					"advance_payment_term_total_amount": 0,
+					"advance_payment_term_discounted_amount": 0,
+					"advance_payment_term_discount_recorded": 0,
+					"advance_voucher_type": None,
+					"advance_voucher_no": None,
+				},
+				update_modified=False,
+			)
+			row_names.discard(row.name)
+
+	# Restored order references keep their allocations; only detached invoice references are cleared.
+	if row_names:
+		(
+			qb.update(per)
+			.set(per.allocated_amount, 0)
+			.set(per.modified, now())
+			.set(per.modified_by, frappe.session.user)
+			.where(per.name.isin(row_names))
+			.where(per.parenttype == "Payment Entry")
+			.run()
+		)
 
 	for pe in linked_pe:
 		try:

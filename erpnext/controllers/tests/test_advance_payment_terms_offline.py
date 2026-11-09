@@ -163,7 +163,10 @@ class TestOrderDatePaymentTerms(unittest.TestCase):
 		row = term(due_date="2026-11-09", paid_amount=0, mode_of_payment=None, description="T/T")
 		source = Document(transaction_date="2026-11-09", payment_terms_template="T/T", payment_schedule=[row])
 		doc = invoice(posting_date="2026-12-01", conversion_rate=1)
-		with patch.object(frappe, "get_cached_doc", return_value=source):
+		with (
+			patch.object(frappe, "get_cached_doc", return_value=source),
+			patch.object(frappe, "get_cached_value", return_value=1),
+		):
 			controller.AccountsController.fetch_payment_terms_from_order(
 				doc, "PO-1", "Purchase Order", 100, 100, True
 			)

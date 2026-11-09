@@ -298,6 +298,7 @@ class JournalEntry(AccountsController):
 		self.update_inter_company_jv()
 		self.update_invoice_discounting()
 		JournalTaxWithholding(self).on_submit()
+		self.update_allocated_invoice_payment_schedules()
 
 	@frappe.whitelist()
 	def get_balance_for_periodic_accounting(self):
@@ -370,6 +371,7 @@ class JournalEntry(AccountsController):
 		return [self.stock_asset_account]
 
 	def on_update_after_submit(self):
+		self.update_allocated_invoice_payment_schedules()
 		# Flag will be set on Reconciliation
 		# Reconciliation tool will anyways repost ledger entries. So, no need to check and do implicit repost.
 		if self.flags.get("ignore_reposting_on_reconciliation"):
@@ -406,6 +408,7 @@ class JournalEntry(AccountsController):
 
 		self.make_gl_entries(1)
 		JournalTaxWithholding(self).on_cancel()
+		self.update_allocated_invoice_payment_schedules()
 		self.unlink_advance_entry_reference()
 		self.unlink_asset_reference()
 		self.unlink_inter_company_jv()

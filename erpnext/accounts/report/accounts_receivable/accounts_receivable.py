@@ -619,8 +619,9 @@ class ReceivablePayableReport:
 			f"""
 			select
 				si.name, si.party_account_currency, si.currency, si.conversion_rate,
-				si.total_advance, ps.due_date, ps.payment_term, ps.payment_amount, ps.base_payment_amount,
-				ps.description, ps.paid_amount, ps.base_paid_amount, ps.discounted_amount
+				si.total_advance, si.payment_terms_template, si.grand_total, si.rounded_total,
+				si.write_off_amount, ps.due_date, ps.payment_term, ps.payment_amount, ps.base_payment_amount,
+				ps.description, ps.paid_amount, ps.base_paid_amount, ps.base_outstanding, ps.discounted_amount
 			from `tab{row.voucher_type}` si, `tabPayment Schedule` ps
 			where
 				si.name = ps.parent and ps.parenttype = '{row.voucher_type}' and
@@ -641,7 +642,22 @@ class ReceivablePayableReport:
 
 		# Advance allocated during invoicing is not considered in payment terms
 		# Deduct that from paid amount pre allocation
-		row.paid -= flt(payment_terms_details[0].total_advance)
+		allocated_terms = frappe.get_cached_value(
+			"Payment Terms Template",
+			payment_terms_details[0].payment_terms_template,
+			"allocate_payment_based_on_payment_terms",
+		)
+		contract_total = (
+			payment_terms_details[0].rounded_total or payment_terms_details[0].grand_total
+		) - flt(payment_terms_details[0].write_off_amount)
+		allocated_terms = allocated_terms and not flt(
+			sum(flt(term.payment_amount) for term in payment_terms_details) - contract_total,
+			get_currency_precision(),
+		)
+		for term in payment_terms_details:
+			term.allocated_terms = allocated_terms
+		if not allocated_terms:
+			row.paid -= flt(payment_terms_details[0].total_advance)
 
 		company_currency = frappe.get_value("Company", self.filters.get("company"), "default_currency")
 
@@ -671,6 +687,13 @@ class ReceivablePayableReport:
 			invoiced = d.payment_amount
 			paid_amount = d.paid_amount
 
+		discounted_amount = d.discounted_amount
+		if d.get("allocated_terms") and not in_party_currency:
+			discounted_amount = flt(
+				d.base_payment_amount - d.base_paid_amount - d.base_outstanding,
+				get_currency_precision(),
+			)
+
 		row.payment_terms.append(
 			term.update(
 				{
@@ -678,15 +701,17 @@ class ReceivablePayableReport:
 					"invoiced": invoiced,
 					"invoice_grand_total": row.invoiced,
 					"payment_term": d.description or d.payment_term,
-					"paid": paid_amount + d.discounted_amount,
+					"paid": paid_amount + discounted_amount,
 					"credit_note": 0.0,
-					"outstanding": invoiced - paid_amount - d.discounted_amount,
+					"outstanding": d.base_outstanding
+					if d.get("allocated_terms") and not in_party_currency
+					else invoiced - paid_amount - discounted_amount,
 				}
 			)
 		)
 
 		if paid_amount:
-			row["paid"] -= paid_amount + d.discounted_amount
+			row["paid"] -= paid_amount + discounted_amount
 
 	def allocate_closing_to_term(self, row, term, key):
 		if row[key]:

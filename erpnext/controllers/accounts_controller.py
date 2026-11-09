@@ -387,6 +387,10 @@ class AccountsController(TransactionBase):
 				self.set_advances()
 
 			self.set_advance_gain_or_loss()
+			if self.docstatus == 0 or self.get("_action") == "submit":
+				self.set_allocated_invoice_payment_schedule()
+			elif self.docstatus == 1:
+				self.set_allocated_invoice_payment_schedule(from_references=True)
 
 			self.validate_deferred_income_expense_account()
 			self.set_inter_company_account()
@@ -2296,6 +2300,7 @@ class AccountsController(TransactionBase):
 			remove_from_bank_transaction,
 		)
 		from erpnext.accounts.utils import (
+			_SOURCE_CANCELLATION_TOKEN,
 			cancel_common_party_journal,
 			cancel_exchange_gain_loss_journal,
 			unlink_ref_doc_from_payment_entries,
@@ -2307,7 +2312,7 @@ class AccountsController(TransactionBase):
 			self.cancel_system_generated_credit_debit_notes()
 
 			# Cancel Exchange Gain/Loss Journal before unlinking
-			cancel_exchange_gain_loss_journal(self)
+			cancel_exchange_gain_loss_journal(self, _source_cancellation_token=_SOURCE_CANCELLATION_TOKEN)
 			cancel_common_party_journal(self)
 
 			if frappe.get_single_value("Accounts Settings", "unlink_payment_on_cancellation_of_invoice"):
@@ -2906,6 +2911,205 @@ class AccountsController(TransactionBase):
 		for item in duplicate_list:
 			self.remove(item)
 
+	def check_if_latest(self):
+		if self.doctype in ("Payment Entry", "Journal Entry"):
+			# Lock invoices before Frappe locks the payment parent and writes its children.
+			self.lock_allocated_invoice_payment_schedules()
+		return super().check_if_latest()
+
+	def get_payment_schedule_invoice_references(self):
+		field = "references" if self.doctype == "Payment Entry" else "accounts"
+		type_field, name_field = (
+			("reference_doctype", "reference_name")
+			if field == "references"
+			else ("reference_type", "reference_name")
+		)
+		rows = list(self.get(field) or [])
+		if previous := self.get_doc_before_save():
+			rows += list(previous.get(field) or [])
+		elif self.get("name") and not self.get("__islocal"):
+			rows += frappe.db.get_values(
+				"Payment Entry Reference" if field == "references" else "Journal Entry Account",
+				filters={"parent": self.name},
+				fieldname=[type_field, name_field],
+				as_dict=True,
+			)
+		return sorted(
+			{
+				(row.get(type_field), row.get(name_field))
+				for row in rows
+				if row.get(type_field) in ("Sales Invoice", "Purchase Invoice") and row.get(name_field)
+			}
+		)
+
+	def lock_allocated_invoice_payment_schedules(self):
+		for doctype, name in self.get_payment_schedule_invoice_references():
+			frappe.db.get_value(doctype, name, "name", for_update=True)
+
+	def update_allocated_invoice_payment_schedules(self):
+		updated = set()
+		for doctype, name in self.get_payment_schedule_invoice_references():
+			invoice = frappe.get_doc(doctype, name, for_update=True)
+			if invoice.set_allocated_invoice_payment_schedule(from_references=True):
+				updated.add((doctype, name))
+		return updated
+
+	def has_allocated_invoice_payment_terms(self):
+		if self.doctype not in ("Sales Invoice", "Purchase Invoice") or self.get("is_return"):
+			return False
+		if self.docstatus == 1 and self.get("_action") != "submit" and self.get("payment_schedule"):
+			grand_total = flt(self.get("rounded_total") or self.get("grand_total")) - flt(
+				self.get("write_off_amount")
+			)
+			if flt(
+				sum(flt(row.payment_amount) for row in self.payment_schedule) - grand_total,
+				self.precision("grand_total"),
+			):
+				return False
+		return bool(
+			self.get("payment_terms_template")
+			and frappe.get_cached_value(
+				"Payment Terms Template",
+				self.payment_terms_template,
+				"allocate_payment_based_on_payment_terms",
+			)
+		)
+
+	def allocate_to_payment_schedule(self, amount, payment_term=None):
+		"""Prefer the source term, then allocate the remainder in schedule order."""
+		allocations = []
+		for row in sorted(self.payment_schedule, key=lambda row: row.payment_term != payment_term):
+			allocated = flt(
+				min(max(flt(row.outstanding), 0), max(amount, 0)), row.precision("payment_amount")
+			)
+			if not allocated:
+				continue
+			row.paid_amount = flt(flt(row.paid_amount) + allocated, row.precision("paid_amount"))
+			row.outstanding = flt(row.outstanding - allocated, row.precision("outstanding"))
+			amount = flt(amount - allocated, row.precision("payment_amount"))
+			allocations.append((row.payment_term, allocated))
+		return allocations
+
+	def set_allocated_invoice_payment_schedule(
+		self, from_references=False, exclude_payment=None, persist=True
+	):
+		if not AccountsController.has_allocated_invoice_payment_terms(self) or not self.get(
+			"payment_schedule"
+		):
+			return False
+		if from_references:
+			frappe.db.get_value(self.doctype, self.name, "name", for_update=True)
+		grand_total = flt(self.get("rounded_total") or self.grand_total) - flt(self.get("write_off_amount"))
+		# Posted net schedules need an explicit repair, never an implicit reinterpretation.
+		if from_references and flt(
+			sum(flt(row.payment_amount) for row in self.payment_schedule) - grand_total,
+			self.precision("grand_total"),
+		):
+			return False
+		for row in self.payment_schedule:
+			row.paid_amount = 0
+			if from_references:
+				row.discounted_amount = 0
+			row.outstanding = flt(
+				row.payment_amount - flt(row.discounted_amount), row.precision("outstanding")
+			)
+		if from_references:
+			filters = {"reference_doctype": self.doctype, "reference_name": self.name, "docstatus": 1}
+			if exclude_payment:
+				filters["parent"] = ["!=", exclude_payment]
+			references = frappe.db.get_values(
+				"Payment Entry Reference",
+				filters=filters,
+				fieldname=["parent", "allocated_amount", "payment_term"],
+				order_by="creation, idx",
+				as_dict=True,
+				for_update=True,
+			)
+			for reference in references:
+				payment = frappe.get_doc("Payment Entry", reference.parent, for_update=True)
+				amount = payment.get_allocated_amount_in_transaction_currency(
+					reference.allocated_amount, self.doctype, self.name
+				)
+				allocations = self.allocate_to_payment_schedule(amount, reference.payment_term)
+				if (
+					amount > 0
+					and flt(
+						amount - sum(allocated for _, allocated in allocations), self.precision("grand_total")
+					)
+					> 0
+				):
+					frappe.throw(_("Allocated amount exceeds the outstanding payment terms."))
+				for payment_term, allocated in allocations:
+					row = next(row for row in self.payment_schedule if row.payment_term == payment_term)
+					if row.discount_date and getdate(payment.posting_date) <= getdate(row.discount_date):
+						discount = (
+							grand_total * flt(row.discount) / 100
+							if row.discount_type == "Percentage"
+							else flt(row.discount)
+						)
+						discount = flt(
+							min(max(discount - row.discounted_amount, 0), allocated),
+							row.precision("discounted_amount"),
+						)
+						row.paid_amount -= discount
+						row.discounted_amount += discount
+			journal_rows = frappe.db.get_values(
+				"Journal Entry Account",
+				filters={"reference_type": self.doctype, "reference_name": self.name, "docstatus": 1},
+				fieldname=["debit_in_account_currency", "credit_in_account_currency"],
+				as_dict=True,
+				for_update=True,
+			)
+			for entry in journal_rows:
+				amount = (
+					flt(entry.credit_in_account_currency) - flt(entry.debit_in_account_currency)
+					if self.doctype == "Sales Invoice"
+					else flt(entry.debit_in_account_currency) - flt(entry.credit_in_account_currency)
+				)
+				if self.party_account_currency == self.company_currency:
+					amount /= self.conversion_rate
+				self.allocate_to_payment_schedule(amount)
+		else:
+			for advance in self.get("advances") or []:
+				amount = flt(advance.allocated_amount)
+				payment_term = None
+				if advance.reference_type == "Payment Entry":
+					payment = frappe.get_doc("Payment Entry", advance.reference_name)
+					if (
+						self.party_account_currency == self.company_currency
+						and self.currency != self.company_currency
+					):
+						amount /= self.conversion_rate
+					for reference in payment.references:
+						if reference.name == advance.reference_row:
+							payment_term = reference.payment_term
+				elif self.party_account_currency == self.company_currency:
+					amount /= self.conversion_rate
+				self.allocate_to_payment_schedule(amount, payment_term)
+		for row in self.payment_schedule:
+			row.base_paid_amount = flt(
+				row.base_payment_amount * row.paid_amount / row.payment_amount if row.payment_amount else 0,
+				row.precision("base_paid_amount"),
+			)
+			row.base_outstanding = flt(
+				row.base_payment_amount * row.outstanding / row.payment_amount if row.payment_amount else 0,
+				row.precision("base_outstanding"),
+			)
+			if from_references and persist:
+				frappe.db.set_value(
+					"Payment Schedule",
+					row.name,
+					{
+						"paid_amount": row.paid_amount,
+						"base_paid_amount": row.base_paid_amount,
+						"outstanding": row.outstanding,
+						"base_outstanding": row.base_outstanding,
+						"discounted_amount": row.discounted_amount,
+					},
+					update_modified=False,
+				)
+		return True
+
 	def set_payment_schedule(self):
 		if (self.doctype == "Sales Invoice" and self.is_pos) or self.get("is_opening") == "Yes":
 			self.payment_terms_template = ""
@@ -2935,7 +3139,7 @@ class AccountsController(TransactionBase):
 				base_grand_total = base_grand_total - flt(self.base_write_off_amount)
 				grand_total = grand_total - flt(self.write_off_amount)
 
-		if self.get("total_advance"):
+		if self.get("total_advance") and not AccountsController.has_allocated_invoice_payment_terms(self):
 			if party_account_currency == self.company_currency:
 				base_grand_total -= self.get("total_advance")
 				grand_total = flt(
@@ -3006,6 +3210,25 @@ class AccountsController(TransactionBase):
 				po_or_so, doctype, grand_total, base_grand_total, automatically_fetch_payment_terms
 			)
 			self.ignore_default_payment_terms_template = 1
+
+		if (
+			AccountsController.has_allocated_invoice_payment_terms(self)
+			and self.payment_schedule
+			and (self.docstatus == 0 or self.get("_action") == "submit")
+		):
+			last = self.payment_schedule[-1]
+			last.payment_amount = flt(
+				last.payment_amount
+				+ grand_total
+				- sum(flt(row.payment_amount) for row in self.payment_schedule),
+				last.precision("payment_amount"),
+			)
+			last.base_payment_amount = flt(
+				last.base_payment_amount
+				+ base_grand_total
+				- sum(flt(row.base_payment_amount) for row in self.payment_schedule),
+				last.precision("base_payment_amount"),
+			)
 
 		order_terms = [
 			row
@@ -3113,7 +3336,9 @@ class AccountsController(TransactionBase):
 				"invoice_portion": schedule.invoice_portion,
 				"mode_of_payment": schedule.mode_of_payment,
 				"description": schedule.description,
-				"paid_amount": schedule.paid_amount,
+				"paid_amount": 0
+				if AccountsController.has_allocated_invoice_payment_terms(self)
+				else schedule.paid_amount,
 			}
 
 			if automatically_fetch_payment_terms:
@@ -3214,7 +3439,7 @@ class AccountsController(TransactionBase):
 				base_grand_total = base_grand_total - flt(self.base_write_off_amount)
 				grand_total = grand_total - flt(self.write_off_amount)
 
-			if self.get("total_advance"):
+			if self.get("total_advance") and not AccountsController.has_allocated_invoice_payment_terms(self):
 				if party_account_currency == self.company_currency:
 					base_grand_total -= self.get("total_advance")
 					grand_total = flt(
@@ -3226,17 +3451,11 @@ class AccountsController(TransactionBase):
 						grand_total * self.get("conversion_rate"), self.precision("base_grand_total")
 					)
 
+			allocated_terms = AccountsController.has_allocated_invoice_payment_terms(self)
+			tolerance = 0 if allocated_terms else 0.1
 			if (
-				abs(
-					flt(total, self.precision("grand_total"))
-					- flt(grand_total, self.precision("grand_total"))
-				)
-				> 0.1
-				or abs(
-					flt(base_total, self.precision("base_grand_total"))
-					- flt(base_grand_total, self.precision("base_grand_total"))
-				)
-				> 0.1
+				abs(flt(total - grand_total, self.precision("grand_total"))) > tolerance
+				or abs(flt(base_total - base_grand_total, self.precision("base_grand_total"))) > tolerance
 			):
 				frappe.throw(
 					_("Total Payment Amount in Payment Schedule must be equal to Grand / Rounded Total")

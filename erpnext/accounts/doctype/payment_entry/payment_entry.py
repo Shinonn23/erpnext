@@ -254,6 +254,7 @@ class PaymentEntry(AccountsController):
 		validate_docs_for_deferred_accounting([self.name], [])
 
 	def on_update_after_submit(self):
+		self.update_allocated_invoice_payment_schedules()
 		# Flag will be set on Reconciliation
 		# Reconciliation tool will anyways repost ledger entries. So, no need to check and do implicit repost.
 		if self.flags.get("ignore_reposting_on_reconciliation"):
@@ -847,10 +848,33 @@ class PaymentEntry(AccountsController):
 						)
 
 	def update_payment_schedule(self, cancel=0):
+		updated = self.update_allocated_invoice_payment_schedules()
 		invoice_payment_amount_map = {}
 		invoice_paid_amount_map = {}
 
-		for ref in self.get("references"):
+		references = list(self.get("references"))
+		if cancel:
+			for ref in self.references:
+				if ref.get("advance_payment_term") and ref.advance_voucher_type in (
+					"Sales Order",
+					"Purchase Order",
+				):
+					restored = frappe._dict(ref.as_dict())
+					restored.reference_doctype = ref.advance_voucher_type
+					restored.reference_name = ref.advance_voucher_no
+					restored.payment_term = ref.advance_payment_term
+					restored.total_amount = ref.get("advance_payment_term_total_amount") or ref.total_amount
+					restored.payment_term_discounted_amount = ref.get(
+						"advance_payment_term_discounted_amount"
+					)
+					restored.payment_term_discount_recorded = ref.get(
+						"advance_payment_term_discount_recorded"
+					)
+					references.append(restored)
+		for ref in references:
+			if ref.reference_doctype in ("Sales Invoice", "Purchase Invoice") and ref.reference_name:
+				if (ref.reference_doctype, ref.reference_name) in updated:
+					continue
 			if not ref.payment_term or not ref.reference_name:
 				continue
 
@@ -879,8 +903,12 @@ class PaymentEntry(AccountsController):
 						continue
 
 					if term.discount_type == "Percentage":
-						invoice_paid_amount_map[invoice_key]["discounted_amt"] = ref.total_amount * (
-							term.discount / 100
+						invoice_paid_amount_map[invoice_key]["discounted_amt"] = (
+							self.get_allocated_amount_in_transaction_currency(
+								ref.total_amount, ref.reference_doctype, ref.reference_name
+							)
+							* term.discount
+							/ 100
 						)
 					else:
 						invoice_paid_amount_map[invoice_key]["discounted_amt"] = term.discount
@@ -895,6 +923,32 @@ class PaymentEntry(AccountsController):
 
 			outstanding = flt(invoice_paid_amount_map.get(key, {}).get("outstanding"))
 			discounted_amt = flt(invoice_paid_amount_map.get(key, {}).get("discounted_amt"))
+
+			term_references = [
+				ref
+				for ref in references
+				if (ref.payment_term, ref.reference_name, ref.reference_doctype) == key
+			]
+			if cancel and all(ref.get("payment_term_discount_recorded") for ref in term_references):
+				discounted_amt = sum(flt(ref.payment_term_discounted_amount) for ref in term_references)
+			elif not cancel:
+				remaining_discount = discounted_amt
+				remaining_allocation = sum(flt(ref.allocated_amount) for ref in term_references)
+				for ref in term_references:
+					discount = (
+						flt(
+							remaining_discount * ref.allocated_amount / remaining_allocation,
+							ref.precision("payment_term_discounted_amount"),
+						)
+						if remaining_allocation
+						else 0
+					)
+					ref.db_set(
+						{"payment_term_discounted_amount": discount, "payment_term_discount_recorded": 1},
+						update_modified=False,
+					)
+					remaining_discount -= discount
+					remaining_allocation -= ref.allocated_amount
 
 			conversion_rate = frappe.db.get_value(key[2], {"name": key[1]}, "conversion_rate")
 			base_paid_amount_precision = get_field_precision(
@@ -918,7 +972,7 @@ class PaymentEntry(AccountsController):
 						base_paid_amount = `base_paid_amount` - %s,
 						discounted_amount = `discounted_amount` - %s,
 						outstanding = `outstanding` + %s,
-						base_outstanding = `base_outstanding` - %s
+						base_outstanding = `base_outstanding` + %s
 					WHERE parent = %s and payment_term = %s""",
 					(
 						allocated_amount - discounted_amt,
@@ -972,7 +1026,7 @@ class PaymentEntry(AccountsController):
 		* PE in INR (accounting done in base currency)
 		"""
 		ref_currency, ref_exchange_rate = frappe.db.get_value(
-			reference_doctype, reference_docname, ["currency", "conversion_rate"]
+			reference_doctype, reference_docname, ["currency", "conversion_rate"], for_update=True
 		)
 		is_single_currency = self.paid_from_account_currency == self.paid_to_account_currency
 		# PE in different currency
@@ -2576,8 +2630,9 @@ def get_split_invoice_rows(invoice: dict, payment_term_template: str, exc_rates:
 	payment_schedule = frappe.get_all(
 		"Payment Schedule", filters={"parent": invoice.voucher_no}, fields=["*"], order_by="due_date"
 	)
+	precision = get_field_precision(frappe.get_meta("Payment Schedule").get_field("outstanding"))
 	for payment_term in payment_schedule:
-		if payment_term.outstanding <= 0.1:
+		if flt(payment_term.outstanding, precision) <= 0:
 			continue
 
 		doc_details = exc_rates.get(payment_term.parent, None)
@@ -3557,9 +3612,7 @@ def get_reference_as_per_payment_terms(
 	)
 
 	for payment_term in payment_schedule:
-		payment_term_outstanding = flt(
-			payment_term.payment_amount - payment_term.paid_amount, payment_term.precision("payment_amount")
-		)
+		payment_term_outstanding = flt(payment_term.outstanding, payment_term.precision("payment_amount"))
 		if not is_multi_currency_acc:
 			# If accounting is done in company currency for multi-currency transaction
 			payment_term_outstanding = flt(
@@ -3567,7 +3620,7 @@ def get_reference_as_per_payment_terms(
 				payment_term.precision("payment_amount"),
 			)
 
-		if payment_term_outstanding:
+		if payment_term_outstanding > 0:
 			references.append(
 				{
 					"reference_doctype": dt,

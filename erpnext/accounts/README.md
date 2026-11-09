@@ -71,3 +71,41 @@ An invoice for ₹100 partially reconciled against a credit of ₹70 using a Jou
 |            |                    |        |
 | JE-01      | CR-NOTE-01         | +70    |
 | JE-01      | SINV-01            | -70    |
+
+## Allocated invoice schedules and advances
+
+For an invoice whose Payment Terms Template allocates by term, the schedule retains the full invoice contract
+(after write-off), in invoice and base currencies. An allocated advance settles the source term first and then
+remaining terms in schedule order, bounded by each invoice's scaled contract. An order's paid amount alone is
+never inherited as invoice payment. Automatic advance fetching and manually allocated advances use the same
+settlement rule; saving again does not credit them again. The last term retains the same precision residual on draft
+validation and initial submission.
+
+Payment Entry reconciliation splits the invoice reference by the amounts actually settled per term. The hidden
+`advance_payment_term` records the original order term alongside `advance_voucher_type` and
+`advance_voucher_no`, so unreconciliation or invoice cancellation can restore the original order attribution.
+Submitted Payment Entry and Journal Entry references are the source of invoice term settlement, including
+cancellation, submitted updates and reconciliation changes. Invoice locks are acquired before the payment
+parent lock; rebuilding uses current locking reads, so a previous transaction snapshot cannot erase a
+concurrent settlement. Old and new invoice references are refreshed when a submitted payment changes. Discounts remain separate from paid amounts; reporting converts both into its selected
+currency. Both payment-reference getters offer positive remaining term balances.
+
+Templates without term allocation retain their existing net-of-advance schedule behavior. Already posted net
+schedules are not automatically converted or backfilled. The new Payment Entry Reference fields need normal
+schema synchronization before this lifecycle is used; no data repair or migration is performed by these helpers.
+
+New order payments record the discount actually applied to each reference. Reconciliation carries that exact
+source discount and the original source total through partial transfers and invoice-term splits. Cancelling the
+payment reverses the recorded source amounts, and unlinking restores them to the original order reference.
+Older references without recorded discounts keep the existing native discount calculation; no historical
+allocation or discount is invented or backfilled. Base settlement follows each stored base contract amount,
+so an entirely settled term closes in both currencies even when multiplying by the exchange rate independently
+would leave a rounding cent. Base outstanding is proportional to the stored contract; the base discount is
+the residual after base paid and base outstanding, so reports preserve the same identity after rounding.
+
+Cancelling an authorized source invoice or payment also cancels its verified, system-generated Exchange Gain
+Or Loss journals. Authority is passed only by the native cancellation lifecycle through an internal identity
+token. The helper rechecks the stored source's cancellation permission and cancelled status, and locks and
+verifies each generated journal's type, submitted status, company and exact source reference before running
+its full native cancellation. Manually cancelling a Journal Entry and reconciliation callers retain their
+normal permissions; no Journal Entry cancel role or workflow bypass is granted.

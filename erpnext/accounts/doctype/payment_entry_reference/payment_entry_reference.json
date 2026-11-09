@@ -25,6 +25,12 @@
   "payment_request_outstanding",
   "advance_voucher_type",
   "advance_voucher_no",
+  "advance_payment_term",
+  "advance_payment_term_total_amount",
+  "advance_payment_term_discount_recorded",
+  "advance_payment_term_discounted_amount",
+  "payment_term_discount_recorded",
+  "payment_term_discounted_amount",
   "territory",
   "sales_person"
  ],
@@ -194,6 +200,55 @@
    "options": "Sales Person",
    "print_hide": 1,
    "read_only": 1
+  },
+  {
+   "fieldname": "advance_payment_term",
+   "fieldtype": "Link",
+   "label": "Advance Payment Term",
+   "options": "Payment Term",
+   "read_only": 1,
+   "hidden": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "payment_term_discounted_amount",
+   "label": "Payment Term Discounted Amount",
+   "fieldtype": "Currency",
+   "hidden": 1,
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "payment_term_discount_recorded",
+   "label": "Payment Term Discount Recorded",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "advance_payment_term_discounted_amount",
+   "label": "Advance Payment Term Discounted Amount",
+   "fieldtype": "Currency",
+   "hidden": 1,
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "advance_payment_term_discount_recorded",
+   "label": "Advance Payment Term Discount Recorded",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "advance_payment_term_total_amount",
+   "label": "Advance Payment Term Total Amount",
+   "fieldtype": "Currency",
+   "hidden": 1,
+   "read_only": 1,
+   "no_copy": 1
   }
  ],
  "index_web_pages_for_search": 1,
