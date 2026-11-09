@@ -36,5 +36,6 @@ import "./utils/demo.js";
 import "./financial_statements.js";
 import "./sales_trends_filters.js";
 import "./purchase_trends_filters.js";
+import "./thailand/tax_popups.js";
 
 // import { sum } from 'frappe/public/utils/util.js'

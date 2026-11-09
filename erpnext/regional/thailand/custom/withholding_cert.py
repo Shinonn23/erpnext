@@ -42,15 +42,21 @@ def default_form(supplier_type):
 def withholding_supplier(voucher):
 	"""The supplier a Payment Entry (a payment to it) or a Journal Entry (its supplier line) withheld from."""
 	if voucher.get("doctype") == "Journal Entry":
-		row = next(
-			(
-				row
-				for row in voucher.get("accounts") or []
-				if row.get("party_type") == "Supplier" and row.get("party")
-			),
-			None,
-		)
-		return row.get("party") if row else None
+		parties = {
+			(row.get("party_type"), row.get("party"))
+			for row in voucher.get("accounts") or []
+			if row.get("party_type") and row.get("party")
+		}
+		entries = {
+			(row.get("party_type"), row.get("party"))
+			for row in voucher.get("tax_withholding_entries") or []
+			if flt(row.get("withholding_amount")) and row.get("party_type") and row.get("party")
+		}
+		identities = parties | entries
+		if len(identities) == 1:
+			party_type, party = identities.pop()
+			return party if party_type == "Supplier" else None
+		return None
 	if voucher.get("party_type") == "Supplier" and voucher.get("payment_type") == "Pay":
 		return voucher.get("party")
 	return None

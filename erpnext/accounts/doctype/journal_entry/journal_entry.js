@@ -76,6 +76,7 @@ frappe.ui.form.on("Journal Entry", {
 		}
 
 		erpnext.toggle_naming_series();
+		erpnext.accounts.ledger_preview.show_accounting_ledger_preview(frm);
 
 		if (frm.doc.docstatus > 0) {
 			frm.add_custom_button(

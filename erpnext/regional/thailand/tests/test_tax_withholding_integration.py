@@ -24,13 +24,14 @@ class TestThaiTaxWithholdingIntegration(unittest.TestCase):
 
 	def test_core_withholding_entry_builds_thai_certificate_line(self):
 		cert = MagicMock()
-		payment_source = MagicMock()
 		supplier = MagicMock(supplier_name="Supplier Co", supplier_primary_address="Supplier Address")
 		category = {
 			"thai_type_of_income": "5",
 			"thai_income_tax_form": "PND53",
 		}
 		payment_entry = {
+			"doctype": "Payment Entry",
+			"payment_type": "Pay",
 			"party_type": "Supplier",
 			"party": "SUP-001",
 			"company": "Example Co",
@@ -44,6 +45,10 @@ class TestThaiTaxWithholdingIntegration(unittest.TestCase):
 				}
 			],
 		}
+
+		payment_source = frappe._dict(payment_entry)
+		payment_source.check_permission = MagicMock()
+		payload = {**payment_entry, "party": "FORGED-SUPPLIER", "tax_withholding_entries": []}
 
 		with (
 			patch("erpnext.regional.thailand.custom.payment_entry.frappe.new_doc", return_value=cert),
@@ -69,9 +74,10 @@ class TestThaiTaxWithholdingIntegration(unittest.TestCase):
 		):
 			result = make_withholding_tax_cert(
 				json.dumps({"date": "2026-10-05", "company_address": "Company Address"}),
-				json.dumps(payment_entry),
+				json.dumps(payload),
 			)
 
+		self.assertEqual(cert.supplier, "SUP-001")
 		self.assertIs(result, cert)
 		payment_source.check_permission.assert_called_once_with("read")
 		destination_permission.assert_called_once_with("Withholding Tax Cert", "create", throw=True)

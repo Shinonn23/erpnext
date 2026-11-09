@@ -38,7 +38,7 @@ erpnext.regional.thailand.tax_popups.get_withholding_choices = async function (c
 // Ask for the supplier tax invoice, then save again. `values` are the defaults; `apply(values)` writes them.
 erpnext.regional.thailand.tax_popups.ask_tax_invoice = function (
 	frm,
-	{ vat_amount, party, ask_supplier, defaults, apply }
+	{ vat_amount, party, ask_supplier, defaults, apply, on_complete = () => frm.save() }
 ) {
 	const dialog = new frappe.ui.Dialog({
 		title: __("Purchase Tax Invoice"),
@@ -81,10 +81,134 @@ erpnext.regional.thailand.tax_popups.ask_tax_invoice = function (
 		primary_action_label: __("Save"),
 		primary_action(values) {
 			dialog.hide();
-			Promise.resolve(apply(values)).then(() => frm.save());
+			Promise.resolve(apply(values)).then(on_complete);
 		},
 	});
 	dialog.show();
+};
+
+// Return true while the existing input-VAT dialog collects a missing supplier, number or date.
+erpnext.regional.thailand.tax_popups.ask_journal_tax_invoice = async function (frm, on_complete) {
+	const popups = erpnext.regional.thailand.tax_popups;
+	const accounts = await popups.get_tax_accounts(frm.doc.company);
+	const details = Object.fromEntries(
+		(frm.doc.tax_invoice_details || []).map((row) => [row.name, row])
+	);
+	const party = (frm.doc.accounts || []).find((row) => row.party_type === "Supplier" && row.party);
+	for (const row of frm.doc.accounts || []) {
+		if (!accounts.purchase_tax_account || row.account !== accounts.purchase_tax_account) continue;
+		if (!flt(row.debit_in_account_currency) && !flt(row.credit_in_account_currency)) continue;
+		const invoice = details[row.reference_detail_no] || row;
+		const supplier = invoice.supplier || row.supplier || (party && party.party);
+		await frm.set_value("create_tax_invoice", 1);
+		if (supplier && invoice.tax_invoice_number && invoice.tax_invoice_date) continue;
+		popups.ask_tax_invoice(frm, {
+			vat_amount: flt(row.debit) - flt(row.credit),
+			ask_supplier: true,
+			defaults: {
+				supplier,
+				tax_invoice_number: invoice.tax_invoice_number,
+				tax_invoice_date: invoice.tax_invoice_date || frm.doc.posting_date,
+			},
+			apply: async (values) => {
+				await frappe.model.set_value(row.doctype, row.name, values);
+				if (invoice !== row) {
+					await frappe.model.set_value(invoice.doctype, invoice.name, values);
+				}
+			},
+			on_complete,
+		});
+		return true;
+	}
+	return false;
+};
+
+// Resolve manually entered WHT before handing the same rows to the native automatic calculator.
+erpnext.regional.thailand.tax_popups.ask_journal_withholding_mode = async function (frm) {
+	const doc = frm.doc;
+	if (
+		!doc.apply_tds || !doc.tax_withholding_category || doc.docstatus !== 0 ||
+		(doc.workflow_state && doc.workflow_state !== "Journal Entry Draft") ||
+		doc.voucher_type !== "Journal Entry" ||
+		(doc.accounts || []).some((row) => row.party_type || row.party)
+	) return false;
+	const choices = await erpnext.regional.thailand.tax_popups.get_withholding_choices(
+		doc.company, doc.posting_date
+	);
+	const category = choices.find((choice) => choice.name === doc.tax_withholding_category);
+	if (!category || !category.account) return false;
+	const rows = doc.accounts || [];
+	const manual = rows.filter(
+		(row) => row.account === category.account && !row.is_tax_withholding_account
+	);
+	const banks = rows.filter((row) => ["Bank", "Cash"].includes(row.account_type));
+	if (!manual.length || banks.length !== 1) return false;
+	if (rows.some((row) => row.is_tax_withholding_account)) {
+		frappe.throw(__(
+			"This journal already has automatic withholding rows. Remove the additional manual withholding row, or turn off Consider for Tax Withholding and save before entering manual withholding."
+		));
+	}
+	const bank = banks[0];
+	const amount = (row, side) => flt(
+		flt(row[`${side}_in_account_currency`], precision(`${side}_in_account_currency`, row)) *
+		flt(row.exchange_rate), precision(side, row)
+	);
+	const net = rows.reduce(
+		(total, row) => row === bank ? total : total + amount(row, "debit") - amount(row, "credit"),
+		0
+	);
+	const dialog = new frappe.ui.Dialog({
+		title: __("Withholding Calculation"),
+		fields: [
+			{
+				fieldtype: "Select", fieldname: "mode", label: __("Calculation"), reqd: 1,
+				options: [
+					{ value: "Automatic", label: __("Automatic — recalculate withholding and bank payment") },
+					{ value: "Manual", label: __("Manual — keep the amounts entered") },
+				],
+				default: "Automatic",
+			},
+			{
+				fieldtype: "HTML", fieldname: "explanation",
+				options: `<p>${__(
+					"Automatic replaces the entered withholding using the selected Tax Withholding Category and adjusts the bank payment. Manual keeps your ledger amounts and turns off Consider for Tax Withholding; withholding records and the certificate must be prepared separately."
+				)}</p>`,
+			},
+		],
+		primary_action_label: __("Apply and Save"),
+		async primary_action(values) {
+			if (values.mode === "Manual") {
+				await frm.set_value("apply_tds", 0);
+			} else {
+				if (
+					net <= 0 || flt(bank.exchange_rate) <= 0 || amount(bank, "debit") ||
+					amount(bank, "credit") < 0 ||
+					manual.some((row) => amount(row, "debit") || amount(row, "credit") < 0)
+				) {
+					frappe.throw(__(
+						"Automatic withholding needs credit withholding rows and a credit Bank/Cash payment. Check the Debit and Credit columns."
+					));
+				}
+				for (const row of manual) {
+					if (!amount(row, "credit")) {
+						frappe.model.clear_doc(row.doctype, row.name);
+					} else {
+						await frappe.model.set_value(row.doctype, row.name, "is_tax_withholding_account", 1);
+					}
+				}
+				await frappe.model.set_value(bank.doctype, bank.name, {
+					debit_in_account_currency: 0,
+					credit_in_account_currency: flt(net / bank.exchange_rate,
+						precision("credit_in_account_currency", bank)),
+				});
+				frm.refresh_field("accounts");
+			}
+			dialog.hide();
+			return frm.save();
+		},
+	});
+	dialog.show();
+	return true;
 };
 
 // Ask which withholding category applies; `on_pick(choice)` gets {name, rate, type_of_income, label}.
@@ -199,7 +323,7 @@ erpnext.regional.thailand.tax_popups.create_withholding_tax_cert = async functio
 //   Withholding with the type of income popup; on a Payment Entry, or the types of the paid invoices' items).
 
 // "Receive", "Pay" or null: what Withhold Tax does on this entry
-erpnext.regional.thailand.tax_popups.withholding_direction = function (frm) {
+erpnext.regional.thailand.tax_popups.withholding_direction = async function (frm) {
 	const doc = frm.doc;
 	if (doc.doctype === "Payment Entry") {
 		if (doc.payment_type === "Receive" && doc.party_type === "Customer") return "Receive";
@@ -212,6 +336,11 @@ erpnext.regional.thailand.tax_popups.withholding_direction = function (frm) {
 		row.party_type === "Customer" && row.party && !row.thai_withholding_category && credit(row) > 0;
 	if (rows.some(customer)) return "Receive";
 	if (rows.some((row) => row.party_type === "Supplier" && row.party)) return "Pay";
+	const accounts = await erpnext.regional.thailand.tax_popups.get_tax_accounts(doc.company);
+	if (
+		rows.some((row) => row.account === accounts.purchase_tax_account && credit(row) < 0) &&
+		rows.some((row) => ["Bank", "Cash"].includes(row.account_type) && credit(row) > 0)
+	) return "Pay";
 	return null;
 };
 
@@ -232,17 +361,17 @@ erpnext.regional.thailand.tax_popups.not_withholding = function () {
 	);
 };
 
-erpnext.regional.thailand.tax_popups.withhold_manual = function (frm) {
+erpnext.regional.thailand.tax_popups.withhold_manual = async function (frm) {
 	const popups = erpnext.regional.thailand.tax_popups;
-	const direction = popups.withholding_direction(frm);
+	const direction = await popups.withholding_direction(frm);
 	if (direction === "Receive") return popups.ask_receive_withholding(frm);
 	if (direction === "Pay") return popups.withhold_pay(frm);
 	popups.not_withholding();
 };
 
-erpnext.regional.thailand.tax_popups.withhold_from_items = function (frm) {
+erpnext.regional.thailand.tax_popups.withhold_from_items = async function (frm) {
 	const popups = erpnext.regional.thailand.tax_popups;
-	const direction = popups.withholding_direction(frm);
+	const direction = await popups.withholding_direction(frm);
 	if (direction === "Receive") return popups.apply_receive_withholding(frm, { based_on: "Line Items" });
 	if (direction === "Pay" && frm.doc.doctype === "Payment Entry") return popups.load_pay_categories(frm);
 	if (direction === "Pay") {
