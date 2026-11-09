@@ -6,6 +6,7 @@
 
 
 import json
+import math
 
 import frappe
 import frappe.defaults
@@ -564,54 +565,82 @@ def update_completed_and_requested_qty(stock_entry, method):
 def set_missing_values(source, target_doc):
 	if target_doc.doctype == "Purchase Order" and getdate(target_doc.schedule_date) < getdate(nowdate()):
 		target_doc.schedule_date = None
+	if target_doc.doctype == "Purchase Order" and target_doc.get("buying_price_list"):
+		if frappe.get_cached_value("Price List", target_doc.buying_price_list, "is_estimate"):
+			# The request's catalog must not replace the supplier's actual buying list.
+			target_doc.buying_price_list = None
+			target_doc.price_list_currency = None
+			target_doc.plc_conversion_rate = None
 	target_doc.run_method("set_missing_values")
 	if target_doc.doctype == "Purchase Order":
 		apply_estimated_rates(target_doc)
 	target_doc.run_method("calculate_taxes_and_totals")
 
 
-def apply_estimated_rates(purchase_order):
-	"""Start a Purchase Order row from the Material Request row's estimated price in the Purchase Order's currency.
-
-	The mapper copies `rate` by field name, but a Material Request rate is always in the company currency, so a USD order
-	would start at the Baht amount. The row's `estimate_rate` (in `estimate_currency`) is used instead; another currency
-	goes through the company currency at the order's exchange rate. A row without an estimate keeps what was mapped."""
+def material_request_rate_in_order_currency(source, purchase_order, *, catalog_request=False):
+	"""Convert a saved request price; resolve and retain the order's buying FX when it is missing."""
 	company_currency = frappe.get_cached_value("Company", purchase_order.company, "default_currency")
 	currency = purchase_order.get("currency") or company_currency
-	order_rate = flt(purchase_order.get("conversion_rate"))
+	rate = None
+	base_rate = flt(source.get("rate"))
+	if not catalog_request and flt(source.get("estimate_rate")) > 0:
+		estimate_currency = source.get("estimate_currency") or company_currency
+		if estimate_currency == currency:
+			rate = flt(source.get("estimate_rate"))
+		base_rate = (
+			flt(source.get("estimate_rate")) * (flt(source.get("estimate_exchange_rate")) or 1)
+			if estimate_currency != company_currency
+			else flt(source.get("estimate_rate"))
+		)
+	if rate is None:
+		if not math.isfinite(base_rate) or base_rate <= 0:
+			if catalog_request:
+				frappe.throw(_("The approved Material Request has no valid estimated Rate."))
+			return None
+		if currency == company_currency:
+			rate = base_rate
+		else:
+			order_rate = flt(purchase_order.get("conversion_rate"))
+			if order_rate <= 0:
+				from erpnext.setup.utils import get_exchange_rate
+
+				order_rate = flt(
+					get_exchange_rate(
+						currency, company_currency, purchase_order.get("transaction_date"), "for_buying"
+					)
+				)
+			if not math.isfinite(order_rate) or order_rate <= 0:
+				frappe.throw(_("A valid buying exchange rate is required to map the Material Request."))
+			purchase_order.conversion_rate = order_rate
+			rate = base_rate / order_rate
+	if not math.isfinite(rate) or rate <= 0:
+		frappe.throw(_("The approved Material Request has no valid estimated Rate."))
+	return rate
+
+
+def apply_estimated_rates(purchase_order):
+	"""Map the approved company-currency Rate, retaining legacy foreign estimates for historical requests."""
 	for row in purchase_order.get("items") or []:
 		if not row.get("material_request_item"):
 			continue
 		source = frappe.db.get_value(
 			"Material Request Item",
 			row.material_request_item,
-			["estimate_rate", "estimate_currency", "estimate_exchange_rate", "rate"],
+			["parent", "estimate_rate", "estimate_currency", "estimate_exchange_rate", "rate"],
 			as_dict=True,
 		)
-		if not source or flt(source.estimate_rate) <= 0:
+		if not source:
 			continue
-		estimate_currency = source.estimate_currency or company_currency
-		if estimate_currency == currency:
-			rate = flt(source.estimate_rate)
-		else:
-			base_rate = (
-				flt(source.estimate_rate) * (flt(source.estimate_exchange_rate) or 1)
-				if estimate_currency != company_currency
-				else flt(source.estimate_rate)
-			)
-			if currency == company_currency:
-				rate = base_rate
-			else:
-				if order_rate <= 0:
-					from erpnext.setup.utils import get_exchange_rate
-
-					order_rate = flt(
-						get_exchange_rate(
-							currency, company_currency, purchase_order.get("transaction_date"), "for_buying"
-						)
-					)
-				rate = base_rate / order_rate if order_rate > 0 else 0
-		if rate > 0:
+		source_list = (
+			frappe.get_cached_value("Material Request", source.parent, "buying_price_list")
+			if source.get("parent")
+			else None
+		)
+		catalog_request = bool(
+			source_list and frappe.get_cached_value("Price List", source_list, "is_estimate")
+		)
+		rate = material_request_rate_in_order_currency(source, purchase_order, catalog_request=catalog_request)
+		if rate is not None:
 			row.rate = rate
 			row.price_list_rate = rate
 			row.discount_percentage = 0

@@ -281,7 +281,8 @@
    "fieldtype": "Currency",
    "label": "Rate",
    "options": "Company:company:default_currency",
-   "print_hide": 1
+   "print_hide": 1,
+   "in_list_view": 1
   },
   {
    "fieldname": "amount",
@@ -289,49 +290,64 @@
    "label": "Amount",
    "options": "Company:company:default_currency",
    "print_hide": 1,
-   "read_only": 1
+   "read_only": 1,
+   "in_list_view": 1
   },
   {
    "fieldname": "estimate_section",
    "fieldtype": "Section Break",
    "label": "Estimated Price",
    "collapsible": 1,
-   "collapsible_depends_on": "eval:doc.estimate_rate"
+   "collapsible_depends_on": "eval:doc.estimate_rate",
+   "hidden": 1
   },
   {
    "fieldname": "estimate_supplier",
    "fieldtype": "Link",
-   "in_list_view": 1,
+   "in_list_view": 0,
    "label": "Estimate Supplier",
    "options": "Supplier",
-   "print_hide": 1
+   "print_hide": 1,
+   "hidden": 1,
+   "read_only": 1,
+   "no_copy": 1
   },
   {
    "fieldname": "estimate_currency",
    "fieldtype": "Link",
-   "in_list_view": 1,
+   "in_list_view": 0,
    "label": "Estimate Currency",
    "options": "Currency",
-   "print_hide": 1
+   "print_hide": 1,
+   "hidden": 1,
+   "read_only": 1,
+   "no_copy": 1
   },
   {
    "fieldname": "estimate_rate",
    "fieldtype": "Currency",
-   "in_list_view": 1,
+   "in_list_view": 0,
    "label": "Estimated Rate",
    "options": "estimate_currency",
-   "print_hide": 1
+   "print_hide": 1,
+   "hidden": 1,
+   "read_only": 1,
+   "no_copy": 1
   },
   {
    "fieldname": "estimate_column",
-   "fieldtype": "Column Break"
+   "fieldtype": "Column Break",
+   "hidden": 1
   },
   {
    "fieldname": "estimate_exchange_rate",
    "fieldtype": "Float",
    "label": "Estimate Exchange Rate",
    "precision": "9",
-   "print_hide": 1
+   "print_hide": 1,
+   "hidden": 1,
+   "read_only": 1,
+   "no_copy": 1
   },
   {
    "fieldname": "estimate_source",
@@ -339,14 +355,18 @@
    "label": "Estimate Source",
    "options": "\nEstimated Buying\nLast Purchase\nValuation\nPurchasing",
    "print_hide": 1,
-   "read_only": 1
+   "read_only": 1,
+   "hidden": 1,
+   "no_copy": 1
   },
   {
    "fieldname": "estimate_price_date",
    "fieldtype": "Date",
    "label": "Estimate Price Date",
    "print_hide": 1,
-   "read_only": 1
+   "read_only": 1,
+   "hidden": 1,
+   "no_copy": 1
   },
   {
    "fieldname": "stock_qty",
