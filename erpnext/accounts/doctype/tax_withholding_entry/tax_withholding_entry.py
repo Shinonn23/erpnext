@@ -1535,6 +1535,16 @@ class JournalTaxWithholding(TaxWithholdingController):
 			if frappe.get_lazy_doc("Supplier", self.party).is_blocked_for("Payments"):
 				frappe.throw(_("{0} is blocked so this transaction cannot proceed").format(self.party))
 
+			if self.doc.override_tax_withholding_entries:
+				for entry in self.doc.tax_withholding_entries:
+					if flt(entry.withholding_amount) and (
+						entry.party_type != "Supplier" or entry.party != self.party
+					):
+						frappe.throw(_(
+							"Tax Withholding Entries must use Supplier {0} from the input VAT rows. "
+							"Correct the entries or disable Edit Tax Withholding Entries to recalculate."
+						).format(self.party))
+
 		return True
 
 	def _get_linked_payments(self):

@@ -316,6 +316,56 @@ class TestDirectJournalWithholding(unittest.TestCase):
 		self.assert_amounts(300, 10400)
 		self.assertEqual(self.doc.tax_withholding_entries[0].party, "SUP-2")
 
+	def test_override_rejects_supplier_change_before_calculation(self):
+		self.save()
+		self.doc.override_tax_withholding_entries = 1
+		self.doc.accounts[1].supplier = "SUP-2"
+		with patch.object(JournalTaxWithholding, "calculate") as calculate:
+			with self.assertRaises(frappe.ValidationError):
+				self.save()
+			calculate.assert_not_called()
+		self.assertEqual(self.doc.tax_withholding_entries[0].party, "SUP-1")
+		self.assert_amounts(300, 10400)
+
+	def test_override_validates_every_nonzero_entry_identity(self):
+		self.save()
+		self.doc.override_tax_withholding_entries = 1
+		for party_type, party in [("Customer", "SUP-1"), (None, "SUP-1"), ("Supplier", None),
+			("Supplier", "SUP-2")]:
+			for amount in [300, -300]:
+				with self.subTest(party_type=party_type, party=party, amount=amount):
+					entry = self.doc.append("tax_withholding_entries", dict(
+						self.doc.tax_withholding_entries[0], party_type=party_type, party=party,
+						withholding_amount=amount, withholding_name="OTHER-JE",
+					))
+					with self.assertRaises(frappe.ValidationError):
+						self.save()
+					self.doc.tax_withholding_entries.remove(entry)
+
+	def test_override_preserves_matching_manual_amount_and_ignores_zero_identity(self):
+		self.save()
+		self.doc.override_tax_withholding_entries = 1
+		entry = self.doc.tax_withholding_entries[0]
+		entry.withholding_amount = 250
+		self.doc.append("tax_withholding_entries", dict(
+			entry, party_type="Customer", party="OTHER", withholding_amount=0,
+		))
+		self.save()
+		self.assert_amounts(250, 10450)
+		self.assertIs(self.doc.tax_withholding_entries[0], entry)
+		self.assertEqual(entry.party_type, "Supplier")
+		self.assertEqual(entry.party, "SUP-1")
+		self.assertEqual(entry.withholding_amount, 250)
+
+	def test_disabled_withholding_clears_override_entries_with_stale_identity(self):
+		self.save()
+		self.doc.override_tax_withholding_entries = 1
+		self.doc.accounts[1].supplier = "SUP-2"
+		self.doc.apply_tds = 0
+		self.save()
+		self.assert_amounts(0, 10700)
+		self.assertEqual(self.doc.tax_withholding_entries, [])
+
 	def test_settlement_currency_conversion(self):
 		self.doc.accounts[2].exchange_rate = 2
 		self.doc.accounts[2].credit_in_account_currency = 5350
