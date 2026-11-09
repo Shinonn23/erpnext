@@ -254,6 +254,7 @@ _thailand_doc_events = {
 	},
 	"Journal Entry": {
 		"on_update": "erpnext.regional.thailand.custom.custom_api.prepare_journal_entry_tax_invoice_detail",
+		"before_cancel": "erpnext.regional.thailand.custom.custom_api.cancel_related_tax_invoice",
 		"on_submit": [
 			"erpnext.regional.thailand.custom.journal_entry.reconcile_undue_tax",
 			"erpnext.regional.thailand.custom.withholding_cert.create_withholding_certificates",

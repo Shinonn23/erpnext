@@ -21,6 +21,9 @@ Supplier payment holds and
 frozen/disabled checks still apply. Approval, tax invoice creation, withholding certificates and cancellation use the
 existing document lifecycle; saving a Draft does not post accounting entries or transfer money.
 
+Cancelling a submitted Journal Entry cancels its linked VAT tax invoices and automatic withholding certificates
+and reverses its accounting entries. The cancelled tax invoices retain their source voucher references.
+
 Saved Drafts expose **Preview → Accounting Ledger**, using the native ledger-preview permission checks and rollback.
 Save changes before previewing: the preview reads the stored document. Submitted entries use **View → Ledger**.
 
