@@ -92,3 +92,9 @@ class TestLandedCostClaims(unittest.TestCase):
 	def test_the_same_invoice_twice_is_refused(self):
 		with self.assertRaises(frappe.ValidationError):
 			self.validate(make_voucher([("PI-1", 50.0), ("PI-1", 50.0)], 100.0, unclaimed={"PI-1": 100.0}))
+
+	def test_empty_rows_are_skipped(self):
+		self.validate(make_voucher([(None, 0.0), ("", 0.0)], 500.0))
+		self.validate(
+			make_voucher([(None, 0.0), ("PI-1", 100.0), ("", 0.0)], 100.0, unclaimed={"PI-1": 100.0})
+		)

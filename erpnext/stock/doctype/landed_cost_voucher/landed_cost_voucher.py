@@ -387,7 +387,10 @@ class LandedCostVoucher(Document):
 		"""A vendor invoice can be claimed by several vouchers: submit adds this voucher's amount to what the
 		invoice already carries and cancel takes only that amount away (it never overwrites or resets)."""
 		for vendor_invoice, amount in self.get_claims_by_vendor_invoice().items():
-			current = frappe.db.get_value("Purchase Invoice", vendor_invoice, "claimed_landed_cost_amount")
+			# the row is locked so two vouchers submitted together add both claims
+			current = frappe.db.get_value(
+				"Purchase Invoice", vendor_invoice, "claimed_landed_cost_amount", for_update=True
+			)
 			frappe.db.set_value(
 				"Purchase Invoice",
 				vendor_invoice,
@@ -408,11 +411,14 @@ class LandedCostVoucher(Document):
 		"""The cost booked on the vouchers must not exceed what the vendor invoices still hold: the same
 		invoice is claimed once per voucher, within its unclaimed amount, and the charges added to the stock
 		value (Taxes and Charges) are covered by the invoices listed."""
-		if not self.get("vendor_invoices"):
+		# an empty row is dropped by the form; through the API or an import it is skipped here, as in the claims
+		if not any(row.vendor_invoice for row in self.get("vendor_invoices") or []):
 			return
 
 		seen = set()
 		for row in self.vendor_invoices:
+			if not row.vendor_invoice:
+				continue
 			if row.vendor_invoice in seen:
 				frappe.throw(
 					_("Row #{0}: Vendor Invoice {1} is already listed in this Landed Cost Voucher").format(
