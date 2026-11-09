@@ -19,9 +19,7 @@ frappe.ui.form.on("Delivery Note", {
 	custody_loan_refresh(frm) {
 		if (!frm.doc.is_custody_loan_transaction) return;
 		frm.set_intro(
-			__(
-				"Loan / Demo stock movement. Manage delivery, returns and consumption from the Custody Loan."
-			),
+			__("Loan / Demo stock movement. Manage delivery, returns and consumption from the Custody Loan."),
 			"blue"
 		);
 		if (frm.doc.custody_loan) {
@@ -29,31 +27,8 @@ frappe.ui.form.on("Delivery Note", {
 				frappe.set_route("Form", "Custody Loan", frm.doc.custody_loan);
 			});
 		}
-		if (
-			frm.doc.docstatus !== 0 ||
-			!frm.doc.is_return ||
-			frm.doc.custody_loan_source_doctype !== "Custody Loan Return" ||
-			!frm.has_perm("write")
-		) {
-			return;
-		}
-		frm.add_custom_button(__("Inspect Loan Return Items"), () => {
-			frappe.call({
-				method: "erpnext.loan.doctype.custody_loan.custody_loan_core.make_custody_loan_return_quality_inspections",
-				args: { delivery_note_name: frm.doc.name },
-			}).then((r) => {
-				const names = r.message || [];
-				frm.reload_doc();
-				if (names.length) {
-					frappe.msgprint({
-						title: __("Loan Return Quality Inspections"),
-						message: names
-							.map((name) => frappe.utils.get_form_link("Quality Inspection", name, true))
-							.join("<br>"),
-					});
-				}
-			});
-		}, undefined, "Quality Inspection");
+		// Goods of a Loan Return are received first and inspected after (Siwat, 9 Nov 2026): the Quality Inspection(s)
+		// button of a submitted return and the QI team's Inspect task make the inspections.
 	},
 	setup: function (frm) {
 		(frm.custom_make_buttons = {

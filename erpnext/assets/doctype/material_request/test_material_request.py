@@ -30,16 +30,27 @@ def prepare_request_prices(request):
 	"""Seed prices explicitly for successful demo/loan fixtures without changing Buying Settings."""
 	if frappe.session.user != "Administrator":
 		raise RuntimeError("Prepare price masters before switching to the requester profile")
-	price_list = frappe.get_doc({
-		"doctype": "Price List", "price_list_name": "MR fixture buying " + frappe.generate_hash(length=10),
-		"enabled": 1, "buying": 1, "selling": 0,
-		"currency": frappe.get_cached_value("Company", request.company, "default_currency"),
-	}).insert()
+	price_list = frappe.get_doc(
+		{
+			"doctype": "Price List",
+			"price_list_name": "MR fixture buying " + frappe.generate_hash(length=10),
+			"enabled": 1,
+			"buying": 1,
+			"selling": 0,
+			"currency": frappe.get_cached_value("Company", request.company, "default_currency"),
+		}
+	).insert()
 	for item_code, uom in {(row.item_code, row.uom) for row in request.items}:
-		frappe.get_doc({
-			"doctype": "Item Price", "item_code": item_code, "price_list": price_list.name,
-			"uom": uom, "price_list_rate": 100, "valid_from": request.transaction_date,
-		}).insert()
+		frappe.get_doc(
+			{
+				"doctype": "Item Price",
+				"item_code": item_code,
+				"price_list": price_list.name,
+				"uom": uom,
+				"price_list_rate": 100,
+				"valid_from": request.transaction_date,
+			}
+		).insert()
 	request.buying_price_list = price_list.name
 
 
@@ -72,7 +83,9 @@ class TestMaterialRequestActions(unittest.TestCase):
 		request = CustomerMaterialRequest.__new__(CustomerMaterialRequest)
 
 		with (
-			patch("erpnext.assets.doctype.material_request.material_request.MaterialRequest.before_cancel") as native,
+			patch(
+				"erpnext.assets.doctype.material_request.material_request.MaterialRequest.before_cancel"
+			) as native,
 			patch.object(CustomerMaterialRequest, "cancel_linked_custody_loans") as cancel_loans,
 			patch.object(CustomerMaterialRequest, "cancel_linked_asset_movements") as cancel_movements,
 		):
@@ -109,7 +122,9 @@ class TestMaterialRequestActions(unittest.TestCase):
 		self.assertEqual(movement.ignore_linked_doctypes, ("Material Request",))
 
 	def test_material_request_purpose_options_are_limited_to_supported_types(self):
-		doctype_path = Path(__file__).resolve().parents[3] / "stock/doctype/material_request/material_request.json"
+		doctype_path = (
+			Path(__file__).resolve().parents[3] / "stock/doctype/material_request/material_request.json"
+		)
 		with doctype_path.open() as source:
 			fields = json.load(source)["fields"]
 		purpose = next(field for field in fields if field["fieldname"] == "material_request_type")
@@ -121,10 +136,14 @@ class TestMaterialRequestActions(unittest.TestCase):
 		)
 
 	def test_custom_asset_statuses_do_not_include_in_transit(self):
-		doctype_path = Path(__file__).resolve().parents[3] / "stock/doctype/material_request/material_request.json"
+		doctype_path = (
+			Path(__file__).resolve().parents[3] / "stock/doctype/material_request/material_request.json"
+		)
 		with doctype_path.open() as source:
 			fields = json.load(source)["fields"]
-		asset_transfer_status = next(field for field in fields if field["fieldname"] == "asset_transfer_status")
+		asset_transfer_status = next(
+			field for field in fields if field["fieldname"] == "asset_transfer_status"
+		)
 
 		self.assertNotIn("In Transit", asset_transfer_status["options"].splitlines())
 		doctype_root = Path(__file__).resolve().parents[3]
@@ -151,15 +170,22 @@ class TestMaterialRequestActions(unittest.TestCase):
 		self.assertNotIn("shipment_destination_location", item_fields)
 
 	def test_purpose_specific_fields_are_scoped_to_their_request_type(self):
-		doctype_path = Path(__file__).resolve().parents[3] / "stock/doctype/material_request/material_request.json"
+		doctype_path = (
+			Path(__file__).resolve().parents[3] / "stock/doctype/material_request/material_request.json"
+		)
 		with doctype_path.open() as source:
 			doctype = json.load(source)
 		fields = {field["fieldname"]: field for field in doctype["fields"]}
-		item_doctype_path = Path(__file__).resolve().parents[3] / "stock/doctype/material_request_item/material_request_item.json"
+		item_doctype_path = (
+			Path(__file__).resolve().parents[3]
+			/ "stock/doctype/material_request_item/material_request_item.json"
+		)
 		with item_doctype_path.open() as source:
 			item_fields = {field["fieldname"]: field for field in json.load(source)["fields"]}
 
-		self.assertEqual(fields["customer"]["depends_on"], "eval:doc.material_request_type == 'Customer Demo'")
+		self.assertEqual(
+			fields["customer"]["depends_on"], "eval:doc.material_request_type == 'Customer Demo'"
+		)
 		self.assertEqual(
 			fields["recipient_address"]["depends_on"],
 			"eval:in_list(['Customer Demo', 'Customer Borrow / Loan'], doc.material_request_type)",
@@ -182,12 +208,19 @@ class TestMaterialRequestActions(unittest.TestCase):
 		self.assertIn("borrow_item_type", fields["items"]["depends_on"])
 		self.assertIn("borrow_item_type == 'Stock Item'", fields["customer_loan_warehouse"]["depends_on"])
 		self.assertIn("borrow_item_type == 'Asset'", fields["loan_recipient_location"]["depends_on"])
-		self.assertEqual(fields["asset_source_location"]["depends_on"], "eval:doc.material_request_type == 'Asset Transfer'")
+		self.assertEqual(
+			fields["asset_source_location"]["depends_on"],
+			"eval:doc.material_request_type == 'Asset Transfer'",
+		)
 		self.assertIn("Customer Demo", item_fields["asset"]["depends_on"])
 		self.assertIn("borrow_item_type == 'Asset'", item_fields["asset"]["depends_on"])
-		self.assertEqual(item_fields["from_warehouse"]["depends_on"], 'eval:parent.material_request_type == "Material Transfer"')
 		self.assertEqual(
-			item_fields["source_location"]["depends_on"], "eval:parent.material_request_type == 'Asset Transfer'"
+			item_fields["from_warehouse"]["depends_on"],
+			'eval:parent.material_request_type == "Material Transfer"',
+		)
+		self.assertEqual(
+			item_fields["source_location"]["depends_on"],
+			"eval:parent.material_request_type == 'Asset Transfer'",
 		)
 		self.assertEqual(item_fields["warehouse"]["label"], "Target Warehouse")
 		self.assertNotIn("demo_items", fields)
@@ -237,7 +270,9 @@ class TestMaterialRequestActions(unittest.TestCase):
 		self.assertEqual(validated_purposes, ["Purchase"])
 		self.assertEqual(request.material_request_type, "Manufacture")
 
-	def request(self, material_request_type, *, items=None, borrow_item_type=None, status="Pending", docstatus=1):
+	def request(
+		self, material_request_type, *, items=None, borrow_item_type=None, status="Pending", docstatus=1
+	):
 		return SimpleNamespace(
 			reload=Mock(),
 			check_permission=Mock(),
@@ -283,8 +318,8 @@ class TestMaterialRequestActions(unittest.TestCase):
 		)
 		with (
 			patch(
-			"erpnext.loan.doctype.custody_loan.custody_loan_core.get_custody_loan_actions",
-			return_value=frappe._dict(stock_loan=False, asset_loan=True),
+				"erpnext.loan.doctype.custody_loan.custody_loan_core.get_custody_loan_actions",
+				return_value=frappe._dict(stock_loan=False, asset_loan=True),
 			),
 		):
 			actions = CustomerMaterialRequest.get_post_submit_actions(request)
@@ -349,8 +384,13 @@ class TestMaterialRequestActions(unittest.TestCase):
 			items=[
 				self.item("MR-TRANSIT", "Fixed Asset", 1, asset="ASSET-TRANSIT"),
 				self.item(
-					"MR-OPEN", "Fixed Asset", 1, asset="ASSET-OPEN", item_code="ITEM-OPEN",
-					source_location="Office", target_location="Warehouse",
+					"MR-OPEN",
+					"Fixed Asset",
+					1,
+					asset="ASSET-OPEN",
+					item_code="ITEM-OPEN",
+					source_location="Office",
+					target_location="Warehouse",
 				),
 			],
 		)
@@ -373,7 +413,7 @@ class TestMaterialRequestActions(unittest.TestCase):
 						asset_serial_number="SN-OPEN",
 						is_demo_asset=1,
 						demo_loan_status="Available",
-					)
+					),
 				],
 			),
 		):
@@ -397,6 +437,7 @@ class TestMaterialRequestActions(unittest.TestCase):
 			with self.assertRaises(ValueError):
 				CustomerMaterialRequest.make_asset_movement(request)
 
+
 class TestCustomerMaterialRequestIntegration(ERPNextTestSuite):
 	company = "_Test Company"
 	source_warehouse = "_Test Warehouse - _TC"
@@ -404,10 +445,10 @@ class TestCustomerMaterialRequestIntegration(ERPNextTestSuite):
 	def setUp(self):
 		super().setUp()
 		ensure_company_tax_settings(self.company)
+		frappe.db.set_value("Company", self.company, "capital_work_in_progress_account", "CWIP Account - _TC")
 		frappe.db.set_value(
-			"Company", self.company, "capital_work_in_progress_account", "CWIP Account - _TC"
+			"Company", self.company, "stock_adjustment_account", "_Test Account Stock Adjustment - _TC"
 		)
-		frappe.db.set_value("Company", self.company, "stock_adjustment_account", "_Test Account Stock Adjustment - _TC")
 		create_internal_customer(
 			customer_name=f"Custody Loan Internal Customer {test_id()}",
 			represents_company=self.company,
@@ -417,10 +458,13 @@ class TestCustomerMaterialRequestIntegration(ERPNextTestSuite):
 			"_Test Custody Loan Transit Warehouse", properties={"warehouse_type": "Transit"}
 		)
 		for name in (self.source_warehouse, self.loan_warehouse, self.transit_warehouse):
-			storage_location = frappe.get_doc({
-				"doctype": "Storage Location", "warehouse": name,
-				"location_code": f"Loan test shelf {test_id()}",
-			}).insert()
+			storage_location = frappe.get_doc(
+				{
+					"doctype": "Storage Location",
+					"warehouse": name,
+					"location_code": f"Loan test shelf {test_id()}",
+				}
+			).insert()
 			warehouse = frappe.get_doc("Warehouse", name)
 			warehouse.default_storage_location = storage_location.name
 			warehouse.account = "Stock In Hand - _TC"
@@ -431,13 +475,17 @@ class TestCustomerMaterialRequestIntegration(ERPNextTestSuite):
 		self.customer_location = self.ensure_location("Customer Location")
 		self.target_location = self.ensure_location("Test Location 2")
 		self.customer_address = self.ensure_address("_Test Customer", "Customer")
-		self.customer_contact = frappe.get_doc(
-			{
-				"doctype": "Contact",
-				"first_name": f"Customer Contact {test_id()}",
-				"links": [{"link_doctype": "Customer", "link_name": "_Test Customer"}],
-			}
-		).insert().name
+		self.customer_contact = (
+			frappe.get_doc(
+				{
+					"doctype": "Contact",
+					"first_name": f"Customer Contact {test_id()}",
+					"links": [{"link_doctype": "Customer", "link_name": "_Test Customer"}],
+				}
+			)
+			.insert()
+			.name
+		)
 		self.company_address = self.ensure_address(self.company, "Company")
 		frappe.db.set_value("Warehouse", self.source_warehouse, "asset_location", self.source_location)
 
@@ -591,7 +639,7 @@ class TestCustomerMaterialRequestIntegration(ERPNextTestSuite):
 						"conversion_factor": 1,
 						"schedule_date": request.schedule_date,
 						"target_location": values.get("target_location"),
-					}
+					},
 				)
 				continue
 			item = frappe.get_cached_doc("Item", values["item_code"])
@@ -606,7 +654,7 @@ class TestCustomerMaterialRequestIntegration(ERPNextTestSuite):
 					"conversion_factor": 1,
 					"schedule_date": request.schedule_date,
 					"warehouse": self.loan_warehouse if item.is_stock_item else None,
-				}
+				},
 			)
 		if request_type in {"Purchase", "Customer Demo", "Customer Borrow / Loan"}:
 			prepare_request_prices(request)
@@ -615,9 +663,7 @@ class TestCustomerMaterialRequestIntegration(ERPNextTestSuite):
 			apply_workflow(request.as_dict(), "Request Approval")
 			request.reload()
 			approval_transitions = [
-				transition
-				for transition in get_transitions(request)
-				if transition.next_state == "Submitted"
+				transition for transition in get_transitions(request) if transition.next_state == "Submitted"
 			]
 			if len(approval_transitions) != 1:
 				frappe.throw(
@@ -651,43 +697,17 @@ class TestCustomerMaterialRequestIntegration(ERPNextTestSuite):
 		else:
 			delivery_note.submit()
 		loan.reload()
-		return frappe.get_doc("Delivery Note", delivery_note.name), shipment if loan.requires_shipment else None
+		return frappe.get_doc(
+			"Delivery Note", delivery_note.name
+		), shipment if loan.requires_shipment else None
 
 	def complete_stock_loan_return(self, return_doc):
-		from erpnext.loan.doctype.custody_loan.custody_loan_core import (
-			make_custody_loan_return_quality_inspections,
-		)
-
+		# received first, inspected after (Siwat, 9 Nov 2026): the system receives the return at once; a shipment
+		# or an unsubmitted draft is submitted here, and no inspection is asked before it
 		return_doc.reload()
 		delivery_note = frappe.get_doc("Delivery Note", return_doc.delivery_note)
-		self.assertEqual(delivery_note.docstatus, 0)
-		self.assertEqual(
-			frappe.db.count(
-				"Stock Ledger Entry",
-				{"voucher_type": "Delivery Note", "voucher_no": delivery_note.name},
-			),
-			0,
-			"A draft Loan Receive must not post stock",
-		)
-
-		inspection_names = make_custody_loan_return_quality_inspections(delivery_note.name)
-		self.assertEqual(len(inspection_names), len(delivery_note.items))
-		for inspection_name in inspection_names:
-			inspection = frappe.get_doc("Quality Inspection", inspection_name)
-			inspection.status = "Accepted"
-			inspection.remarks = "Returned item inspected and accepted"
-			inspection.save()
-			inspection.submit()
-
-		delivery_note.reload()
-		self.assertEqual(
-			len({row.quality_inspection for row in delivery_note.items}),
-			len(delivery_note.items),
-			"Every returned Delivery Note row must keep its own inspection link",
-		)
-		return_doc.reload()
-		self.assertEqual(return_doc.status, "Pending Receipt")
-		delivery_note.submit()
+		if delivery_note.docstatus == 0:
+			delivery_note.submit()
 		return_doc.reload()
 		self.assertEqual(return_doc.status, "Received")
 		self.assertGreater(
@@ -739,7 +759,9 @@ class TestCustomerMaterialRequestIntegration(ERPNextTestSuite):
 		loan.submit()
 		movement = frappe.get_doc("Asset Movement", loan.asset_movement)
 		self.assertEqual(movement.docstatus, 1)
-		self.assertEqual(frappe.db.get_value("Asset", demo_assets[0].name, "location"), self.customer_location)
+		self.assertEqual(
+			frappe.db.get_value("Asset", demo_assets[0].name, "location"), self.customer_location
+		)
 		self.assertEqual(
 			frappe.db.get_value("Asset", demo_assets[0].name, "demo_loan_status"), "With Customer"
 		)
@@ -826,8 +848,7 @@ class TestCustomerMaterialRequestIntegration(ERPNextTestSuite):
 		self.confirm_shipment_delivery(stock_shipment)
 		stock_return.reload()
 		stock_loan.reload()
-		self.assertEqual(stock_return.status, "Pending Quality Inspection")
-		self.assertIn(stock_loan.status, ("Pending Quality Inspection", "Pending Receipt"))
+		self.assertIn(stock_return.status, ("Pending Receipt", "Received"))
 		self.complete_stock_loan_return(stock_return)
 		stock_loan.reload()
 		self.assertEqual(stock_return.status, "Received")
@@ -858,7 +879,7 @@ class TestCustomerMaterialRequestIntegration(ERPNextTestSuite):
 		return_doc.items[0].returned_qty = 1
 		return_doc.submit()
 		return_doc.reload()
-		self.assertEqual(return_doc.status, "Pending Quality Inspection")
+		self.assertIn(return_doc.status, ("Pending Receipt", "Received"))
 		self.complete_stock_loan_return(return_doc)
 		stock_loan.reload()
 		request.reload()
@@ -867,7 +888,7 @@ class TestCustomerMaterialRequestIntegration(ERPNextTestSuite):
 		self.assertEqual(request.items[0].status, "Partially Returned")
 		self.assertEqual(request.items[0].outstanding_qty, 1)
 
-	def test_stock_return_inspections_link_to_duplicate_item_rows_individually(self):
+	def test_stock_return_keeps_duplicate_item_rows_individually(self):
 		settings = [frappe.get_single(doctype) for doctype in ("Buying Settings", "Selling Settings")]
 		previous = [doc.allow_multiple_items for doc in settings]
 		try:
@@ -889,7 +910,6 @@ class TestCustomerMaterialRequestIntegration(ERPNextTestSuite):
 
 			delivery_note = frappe.get_doc("Delivery Note", return_doc.delivery_note)
 			self.assertEqual(len(delivery_note.items), 2)
-			self.assertEqual(len({row.quality_inspection for row in delivery_note.items}), 2)
 		finally:
 			for doc, value in zip(settings, previous, strict=True):
 				doc.allow_multiple_items = value

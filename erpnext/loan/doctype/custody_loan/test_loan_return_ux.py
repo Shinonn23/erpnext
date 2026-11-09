@@ -81,29 +81,6 @@ class TestQuarantineWarehouse(Patched):
 				core.require_quarantine_warehouse(doc)
 		lookup.assert_called_with("CD", "STORES - CD")
 
-	def test_the_receipt_of_a_rejected_row_does_not_silently_wait_without_quarantine(self):
-		note = Row(
-			docstatus=0,
-			company="CD",
-			name="DN-1",
-			items=[
-				Row(name="R1", idx=1, item_code="DEVICE", warehouse="STORES - CD", quality_inspection="QI-1")
-			],
-		)
-		with (
-			patch.object(frappe, "get_doc", return_value=note),
-			patch.object(core, "custody_loan_return_row_requires_inspection", return_value=True),
-			patch.object(
-				frappe,
-				"db",
-				MagicMock(get_value=MagicMock(return_value=SimpleNamespace(docstatus=1, status="Rejected"))),
-			),
-			patch.object(core, "is_quarantine_warehouse", return_value=False),
-			patch.object(core, "quarantine_warehouse_for", return_value=None),
-		):
-			with self.assertRaisesRegex(frappe.ValidationError, "no Quarantine warehouse"):
-				core.receive_inspected_return("DN-1")
-
 
 class FakeWarehouses:
 	"""A Warehouse table for the quarantine lookup: {name: {...}}."""
@@ -211,53 +188,56 @@ class TestQuarantinePerWarehouse(Patched):
 			self.assertFalse(core.is_quarantine_warehouse("LAB CWT - CD", "CD"))
 			self.assertFalse(core.is_quarantine_warehouse("QUARANTINE - LAB CWT - CD", "OTHER"))
 
-	def test_a_rejected_return_row_is_received_into_the_quarantine_of_its_warehouse(self):
-		note = Row(
-			docstatus=0,
-			company="CD",
-			name="DN-1",
-			flags=SimpleNamespace(),
-			items=[
-				Row(name="R1", idx=1, item_code="D", warehouse="LAB CWT - CD", quality_inspection="QI-1"),
-				Row(name="R2", idx=2, item_code="E", warehouse="LAB GS - CD", quality_inspection="QI-2"),
-			],
-			save=lambda: None,
-		)
+	def test_an_inspected_row_is_received_into_the_quarantine_of_its_warehouse_at_its_staging_location(self):
 		db = FakeWarehouses(warehouses())
-		plain_get_value = db.get_value
-
-		def get_value(doctype, name, fields=None, as_dict=False):
-			if doctype == "Quality Inspection":
-				return SimpleNamespace(docstatus=1, status="Rejected")
-			return plain_get_value(doctype, name, fields, as_dict)
-
-		db.get_value = get_value
 		first, second = db.patched()
+		rows = [
+			Row(item_code="D", warehouse="LAB CWT - CD", storage_location="LAB CWT-LOC"),
+			Row(item_code="E", warehouse="LAB GS - CD", storage_location=None),
+		]
 		with (
 			first,
 			second,
-			patch.object(frappe, "get_doc", return_value=note),
-			patch.object(core, "custody_loan_return_row_requires_inspection", return_value=True),
-			patch.object(core, "receive_return_delivery_note") as receive,
+			patch.object(core, "get_default_storage_location", side_effect=lambda wh, item: f"STAGING-{wh}"),
 		):
-			core.receive_inspected_return("DN-1")
+			core.receive_row_into_quarantine(rows[0], "CD")
+			core.receive_row_into_quarantine(rows[1], "CD")
 		self.assertEqual(
-			[row.warehouse for row in note.items], ["QUARANTINE - LAB CWT - CD", "QUARANTINE - CD"]
+			[(row.warehouse, row.storage_location) for row in rows],
+			[
+				("QUARANTINE - LAB CWT - CD", "STAGING-QUARANTINE - LAB CWT - CD"),
+				("QUARANTINE - CD", "STAGING-QUARANTINE - CD"),
+			],
 		)
-		receive.assert_called_once_with("DN-1")
+
+	def test_a_row_already_in_quarantine_or_without_a_quarantine_is_left_alone(self):
+		db = FakeWarehouses(warehouses())
+		first, second = db.patched()
+		row = Row(item_code="D", warehouse="QUARANTINE - CD", storage_location="X")
+		with first, second:
+			self.assertEqual(core.receive_row_into_quarantine(row, "CD"), "QUARANTINE - CD")
+		self.assertEqual((row.warehouse, row.storage_location), ("QUARANTINE - CD", "X"))
+		other = Row(item_code="D", warehouse="LAB CWT - CD")
+		with (
+			first,
+			second,
+			patch.object(core, "quarantine_warehouse_for", return_value=None),
+		):
+			self.assertIsNone(core.receive_row_into_quarantine(other, "CD"))
+		self.assertEqual(other.warehouse, "LAB CWT - CD")
 
 
 class TestNoShipmentCoupling(Patched):
 	"""A Shipment is optional (Siwat, 5 Nov 2026): nothing in a loan waits for one."""
 
-	def test_the_return_is_inspected_or_received_on_submit_whatever_a_shipment_does(self):
+	def test_the_return_is_received_at_once_whatever_a_shipment_does_and_whatever_its_items_need(self):
 		doc = core.CustodyLoanReturn.__new__(core.CustodyLoanReturn)
 		note = Row(name="DN-1", items=[Row(item_code="PLAIN")])
 		with (
 			patch.object(core, "receive_return_delivery_note") as receive,
-			patch.object(core, "custody_loan_return_row_requires_inspection", return_value=False),
+			patch.object(core, "custody_loan_return_row_requires_inspection", return_value=True),
 		):
-			doc.inspect_or_receive(note)
+			doc.receive_returned_goods(note)
 		receive.assert_called_once_with("DN-1")
 
 	def test_the_shipment_gates_are_gone(self):

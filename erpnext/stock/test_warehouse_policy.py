@@ -94,11 +94,11 @@ class TestWarehousePolicy(unittest.TestCase):
 		with self.assertRaises(frappe.PermissionError) as raised:
 			warehouse_policy.validate_warehouse_operation("WH", "transfer", outgoing=True)
 		self.assertIn("requires the Stock Manager role", str(raised.exception))
-		self.assertIn("Move out of quarantine", str(raised.exception))
+		self.assertIn("own Material Transfer", str(raised.exception))
 		self.warehouse.warehouse_type = "Frozen"
 		with self.assertRaises(frappe.PermissionError) as raised:
 			warehouse_policy.validate_warehouse_operation("WH", "transfer", outgoing=True)
-		self.assertNotIn("Move out of quarantine", str(raised.exception))
+		self.assertNotIn("own Material Transfer", str(raised.exception))
 
 	def test_an_app_waiver_lifts_the_outgoing_role_only_for_the_document_it_owns(self):
 		self.policy.outgoing_role = "Stock Manager"
@@ -118,6 +118,23 @@ class TestWarehousePolicy(unittest.TestCase):
 			self.policy.allow_transfer = 0
 			with self.assertRaises(frappe.ValidationError):
 				warehouse_policy.validate_warehouse_operation("WH", "transfer", outgoing=True, doc=owned)
+
+	def test_the_receipt_into_quarantine_of_a_return_before_its_inspection_is_a_receipt(self):
+		# Connect Diagnostics, 9 Nov 2026: received first, inspected after
+		doc = Mock(
+			doctype="Delivery Note", is_return=1, company="CD", is_internal_customer=0, is_internal_supplier=0
+		)
+		row = Mock(warehouse="QUARANTINE - CD", item_code="X", quality_inspection=None)
+		row.get = lambda key, default=None: getattr(row, key, default)
+		doc.get = lambda key, default=None: getattr(doc, key, default)
+		with (
+			patch(
+				"erpnext.loan.doctype.custody_loan.custody_loan_core.is_quarantine_warehouse",
+				return_value=True,
+			),
+			patch.object(frappe, "get_cached_value", return_value=1),
+		):
+			self.assertEqual(warehouse_policy.movement_operation(doc, False, row=row), "receipt")
 
 	def test_stock_write_off_leaves_a_lost_warehouse_and_nothing_else_does(self):
 		# Connect Diagnostics, 7 Nov 2026: accounting writes off what a Lost warehouse holds

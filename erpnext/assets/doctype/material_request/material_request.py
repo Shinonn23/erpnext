@@ -28,6 +28,14 @@ ASSET_STATUSES_NOT_AVAILABLE = (
 )
 
 
+def held_for_inspection_condition(asset):
+	"""SQL that keeps out an Asset held for the inspection of its return (Connect Diagnostics, Siwat, 9 Nov 2026). The
+	field ``awaiting_inspection`` is made by that app, so a site without it holds no Asset."""
+	if not frappe.get_meta("Asset").has_field("awaiting_inspection"):
+		return "1=1"
+	return f"ifnull({asset}.awaiting_inspection, 0) = 0"
+
+
 def active_asset_request_condition(asset):
 	from erpnext.loan.doctype.custody_loan.custody_loan_core import asset_allocation_returned_condition
 
@@ -1006,6 +1014,7 @@ def get_available_assets(item_code, company, demo_only=False, location=None, exc
 		where {' and '.join(filters)}
 		and exists (select 1 from `tabItem` item where item.name=a.item_code and item.is_fixed_asset=1)
 		and ifnull(a.demo_loan_status, 'Available') = 'Available'
+		and {held_for_inspection_condition('a')}
 		and not {active_asset_request_condition('a.name')}
 		order by name""",
 		values,
@@ -1063,6 +1072,10 @@ def get_asset_request_details(
 		unavailable.update({"In Maintenance", "Out of Order"})
 	if asset.status in unavailable or not asset.location:
 		frappe.throw(_("This Asset is not available for the selected acquisition method."))
+	from erpnext.loan.doctype.custody_loan.custody_loan_core import asset_awaiting_inspection
+
+	if not waiting and material_request_type != "Asset Transfer" and asset_awaiting_inspection(asset.name):
+		frappe.throw(_("Asset {0} is waiting for the inspection of its return.").format(asset.name))
 	if not waiting and (
 		asset.demo_loan_status == "With Customer"
 		or (material_request_type != "Asset Transfer" and asset.custodian)
@@ -1129,6 +1142,9 @@ def asset_query(doctype, txt, searchfield, start, page_len, filters, as_dict=Fal
 		"tabAsset.status not in ('Draft', 'Cancelled', 'Sold', 'Scrapped', 'Capitalized', 'In Maintenance', 'Out of Order', 'Work In Progress')",
 		"tabItem.is_fixed_asset=1",
 		"ifnull(tabAsset.demo_loan_status, 'Available')='Available'",
+		held_for_inspection_condition("tabAsset")
+		if filters.material_request_type != "Asset Transfer"
+		else "1=1",
 		f"not {active_asset_request_condition('tabAsset.name')}",
 	]
 	if filters.material_request_type == "Customer Borrow / Loan":

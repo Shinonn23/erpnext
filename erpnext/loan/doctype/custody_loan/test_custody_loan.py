@@ -1,12 +1,11 @@
 from types import SimpleNamespace
 from unittest import TestCase
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import frappe
 
 from erpnext.loan.doctype.custody_loan.custody_loan_core import (
 	CustodyLoan,
-	custody_loan_return_inspections_are_accepted,
 	update_return_status_on_transaction,
 	validate_custody_loan_return_receipt,
 )
@@ -32,6 +31,7 @@ class TestCustodyLoanReturnFlow(TestCase):
 					idx=1,
 					name="DN-ROW-1",
 					custody_loan_item="LOAN-ROW-1",
+					batch_no=None,
 					quality_inspection="QI-1",
 				)
 			],
@@ -43,86 +43,30 @@ class TestCustodyLoanReturnFlow(TestCase):
 		return FakeDocument(
 			docstatus=1,
 			loan_type="Stock",
-			items=[FakeDocument(custody_loan_item="LOAN-ROW-1")],
+			items=[FakeDocument(custody_loan_item="LOAN-ROW-1", batch_no=None)],
 		)
 
-	def test_stock_return_requires_an_accepted_quality_inspection_for_each_row(self):
-		delivery_note = self.make_delivery_note()
-		return_doc = self.make_return()
-		quality_inspection = FakeDocument(
-			name="QI-1",
-			child_row_reference="DN-ROW-1",
-			docstatus=1,
-			status="Accepted",
-		)
-
-		with (
-			patch(
-				"erpnext.loan.doctype.custody_loan.custody_loan_core.validate_custody_loan_return_quality_inspection"
-			) as validate_qi,
-			patch.object(frappe, "get_doc", side_effect=[return_doc, quality_inspection]),
-		):
-			validate_custody_loan_return_receipt(delivery_note)
-
-		validate_qi.assert_called_once_with(quality_inspection, delivery_note.name)
-
-	def test_stock_return_blocks_receipt_without_quality_inspection(self):
+	def test_stock_return_is_received_without_any_quality_inspection(self):
+		# received first, inspected after (Siwat, 9 Nov 2026): the receipt asks for no inspection
 		delivery_note = self.make_delivery_note()
 		delivery_note.items[0].quality_inspection = None
-
-		with (
-			patch.object(frappe, "get_doc", return_value=self.make_return()),
-			self.assertRaises(frappe.ValidationError),
-		):
+		with patch.object(frappe, "get_doc", return_value=self.make_return()):
 			validate_custody_loan_return_receipt(delivery_note)
 
-	def test_return_status_distinguishes_inspection_receipt_and_completion(self):
-		delivery_note = self.make_delivery_note()
-		return_doc = FakeDocument(
-			docstatus=1,
-			loan_type="Stock",
-			delivery_note=delivery_note.name,
-		)
-		with (
-			patch.object(frappe.db, "exists", return_value=True),
-			patch.object(frappe, "get_doc", return_value=delivery_note),
-			patch(
-				"erpnext.loan.doctype.custody_loan.custody_loan_core.custody_loan_return_inspections_are_accepted",
-				return_value=False,
-			),
-		):
-			self.assertEqual(update_return_status_on_transaction(return_doc), "Pending Quality Inspection")
-
-		with (
-			patch.object(frappe.db, "exists", return_value=True),
-			patch.object(frappe, "get_doc", return_value=delivery_note),
-			patch(
-				"erpnext.loan.doctype.custody_loan.custody_loan_core.custody_loan_return_inspections_are_accepted",
-				return_value=True,
-			),
-		):
-			self.assertEqual(update_return_status_on_transaction(return_doc), "Pending Receipt")
-
-		delivery_note.docstatus = 1
-		with (
-			patch.object(frappe.db, "exists", return_value=True),
-			patch.object(frappe, "get_doc", return_value=delivery_note),
-		):
-			self.assertEqual(update_return_status_on_transaction(return_doc), "Received")
-
-	def test_a_return_never_waits_for_a_shipment(self):
-		# Siwat, 5 Nov 2026: a Shipment is optional; a draft return note waits only for its inspections
+	def test_return_status_is_pending_receipt_or_received_and_never_waits_for_an_inspection(self):
 		delivery_note = self.make_delivery_note(custody_loan_shipment="SHIP-1")
 		return_doc = FakeDocument(docstatus=1, loan_type="Stock", delivery_note=delivery_note.name)
 		with (
-			patch.object(frappe.db, "exists", return_value=True),
+			patch.object(frappe, "db", Mock(exists=Mock(return_value=True))),
 			patch.object(frappe, "get_doc", return_value=delivery_note),
-			patch(
-				"erpnext.loan.doctype.custody_loan.custody_loan_core.custody_loan_return_inspections_are_accepted",
-				return_value=False,
-			),
 		):
-			self.assertEqual(update_return_status_on_transaction(return_doc), "Pending Quality Inspection")
+			self.assertEqual(update_return_status_on_transaction(return_doc), "Pending Receipt")
+		delivery_note.docstatus = 1
+		with (
+			patch.object(frappe, "db", Mock(exists=Mock(return_value=True))),
+			patch.object(frappe, "get_doc", return_value=delivery_note),
+		):
+			self.assertEqual(update_return_status_on_transaction(return_doc), "Received")
 
 	def test_asset_return_uses_pending_receipt_until_asset_movement_is_submitted(self):
 		return_doc = FakeDocument(docstatus=1, loan_type="Asset", asset_movement=None)
@@ -158,19 +102,3 @@ class TestCustodyLoanReturnFlow(TestCase):
 			patch.object(frappe, "get_all", return_value=[]),
 		):
 			self.assertEqual(CustodyLoan.get_submitted_status(loan), "Pending Delivery")
-
-	def test_only_submitted_accepted_inspections_complete_the_check(self):
-		delivery_note = self.make_delivery_note()
-		with patch.object(
-			frappe.db,
-			"get_value",
-			return_value=frappe._dict(docstatus=1, status="Accepted"),
-		):
-			self.assertTrue(custody_loan_return_inspections_are_accepted(delivery_note))
-
-		with patch.object(
-			frappe.db,
-			"get_value",
-			return_value=frappe._dict(docstatus=0, status="Accepted"),
-		):
-			self.assertFalse(custody_loan_return_inspections_are_accepted(delivery_note))

@@ -68,6 +68,7 @@
   "rm_supp_cost",
   "warehouse_section",
   "warehouse",
+  "putaway_warehouse",
   "add_serial_batch_bundle",
   "serial_and_batch_bundle",
   "use_serial_batch_fields",
@@ -451,6 +452,17 @@
    "print_hide": 1
   },
   {
+   "depends_on": "eval:doc.putaway_warehouse",
+   "description": "The warehouse this row is meant for. It is held in Quarantine until the QI team has inspected it.",
+   "fieldname": "putaway_warehouse",
+   "fieldtype": "Link",
+   "label": "Receive for Warehouse",
+   "no_copy": 1,
+   "options": "Warehouse",
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
    "fieldname": "rejected_warehouse",
    "fieldtype": "Link",
    "ignore_user_permissions": 1,
@@ -458,13 +470,14 @@
    "options": "Warehouse"
   },
   {
-   "depends_on": "eval:!doc.__islocal",
+   "depends_on": "eval:doc.docstatus==1",
    "fieldname": "quality_inspection",
    "fieldtype": "Link",
    "label": "Quality Inspection",
    "no_copy": 1,
    "options": "Quality Inspection",
-   "print_hide": 1
+   "print_hide": 1,
+   "read_only": 1
   },
   {
    "fieldname": "batch_no",
@@ -1073,7 +1086,7 @@
  "idx": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-11-08 12:00:00.000000",
+ "modified": "2026-11-09 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Purchase Invoice Item",
