@@ -7,6 +7,7 @@ import frappe
 from frappe import _, qb
 from frappe.desk.form.linked_with import get_child_tables_of_doctypes
 from frappe.model.document import Document
+from frappe.utils import getdate
 from frappe.utils.background_jobs import create_job_id, is_job_enqueued
 from frappe.utils.data import comma_and
 from frappe.utils.scheduler import is_scheduler_inactive
@@ -52,8 +53,36 @@ class RepostAccountingLedger(Document):
 	def validate_repost_preconditions(self):
 		"""The checks a repost queued days ago could have outlived, re-run before it touches
 		the ledger. Vouchers cancelled since are skipped one by one while reposting."""
+		self.validate_voucher_access()
 		self.validate_for_closed_fiscal_year()
 		self.validate_for_deferred_accounting()
+
+	def validate_voucher_access(self):
+		"""Preview and queued rebuilds retain the caller's source-document and company scopes."""
+		validate_docs_for_voucher_types([row.voucher_type for row in self.vouchers])
+		companies = set()
+		for row in self.vouchers:
+			voucher = frappe.get_doc(row.voucher_type, row.voucher_no)
+			voucher.check_permission("read")
+			if not voucher.company or (self.company and voucher.company != self.company):
+				frappe.throw(_("Every reposted voucher must belong to the selected Company."))
+			if voucher.company not in companies:
+				frappe.get_doc("Company", voucher.company).check_permission("read")
+				companies.add(voucher.company)
+
+	def check_worker_permission(self):
+		try:
+			self.check_permission("write")
+		except frappe.PermissionError:
+			# AccountsController creates a single-source repost on submitted-document
+			# updates without granting the editor access to the manual repost tool.
+			# Its in-memory ignore_permissions flag does not survive the queue.
+			if self.docstatus != 1 or self.owner != frappe.session.user or len(self.vouchers) != 1:
+				raise
+			row = self.vouchers[0]
+			voucher = frappe.get_doc(row.voucher_type, row.voucher_no)
+			voucher.check_permission("read")
+			voucher.check_permission("write")
 
 	def validate_for_deferred_accounting(self):
 		sales_docs = [x.voucher_no for x in self.vouchers if x.voucher_type == "Sales Invoice"]
@@ -61,31 +90,22 @@ class RepostAccountingLedger(Document):
 		validate_docs_for_deferred_accounting(sales_docs, purchase_docs)
 
 	def validate_for_closed_fiscal_year(self):
-		if self.vouchers:
-			latest_pcv = (
-				frappe.db.get_all(
+		closing_dates = {}
+		for row in self.vouchers:
+			voucher = frappe.get_doc(row.voucher_type, row.voucher_no)
+			if voucher.docstatus == 2:
+				continue
+			if voucher.company not in closing_dates:
+				closing_dates[voucher.company] = frappe.db.get_all(
 					"Period Closing Voucher",
-					filters={"company": self.company, "docstatus": 1},
+					filters={"company": voucher.company, "docstatus": 1},
 					order_by="period_end_date desc",
 					pluck="period_end_date",
 					limit=1,
 				)
-				or None
-			)
-			if not latest_pcv:
-				return
-
-			for vtype in self._allowed_types:
-				if names := [x.voucher_no for x in self.vouchers if x.voucher_type == vtype]:
-					latest_voucher = frappe.db.get_all(
-						vtype,
-						filters={"name": ["in", names]},
-						pluck="posting_date",
-						order_by="posting_date desc",
-						limit=1,
-					)[0]
-					if latest_voucher and latest_pcv[0] >= latest_voucher:
-						frappe.throw(_("Cannot Resubmit Ledger entries for vouchers in Closed fiscal year."))
+			closing = closing_dates[voucher.company]
+			if closing and getdate(voucher.posting_date) <= getdate(closing[0]):
+				frappe.throw(_("Cannot Resubmit Ledger entries for vouchers in Closed fiscal year."))
 
 	def validate_vouchers(self):
 		if not self.vouchers:
@@ -110,6 +130,7 @@ class RepostAccountingLedger(Document):
 			frappe.throw(_("Duplicate vouchers found. Remove the duplicate vouchers to continue to repost."))
 
 	def validate_vouchers_are_submitted(self):
+		self.validate_voucher_access()
 		voucher_type_wise_map = {}
 		for d in self.vouchers:
 			voucher_type_wise_map.setdefault(d.voucher_type, [])
@@ -152,6 +173,7 @@ class RepostAccountingLedger(Document):
 			).append(gle.update({"old": True}))
 
 	def generate_preview_data(self):
+		self.validate_voucher_access()
 		frappe.flags.through_repost_accounting_ledger = True
 		self.gl_entries = []
 		self.get_existing_ledger_entries()
@@ -212,6 +234,8 @@ class RepostAccountingLedger(Document):
 
 	@frappe.whitelist()
 	def start_repost(self):
+		self.reload()
+		self.check_permission("write")
 		if self.docstatus != 1:
 			frappe.throw(_("Reposting can be started only for submitted document."))
 
@@ -224,7 +248,7 @@ class RepostAccountingLedger(Document):
 		# died leaves the status behind and the document has to stay restartable
 		self._raise_error_if_reposting_in_progress()
 
-		self.check_permission("write")
+		self.validate_repost_preconditions()
 
 		# workers pick up enqueued jobs whether or not the scheduler runs, so this is a warning
 		if is_scheduler_inactive():
@@ -298,6 +322,7 @@ def repost(repost_doc_name: str, commit: bool = True):
 	locked_docs = {}
 
 	try:
+		repost_doc.check_worker_permission()
 		repost_doc.validate_repost_preconditions()
 
 		# a retry leaves the vouchers it is done with alone: they are not locked, not loaded

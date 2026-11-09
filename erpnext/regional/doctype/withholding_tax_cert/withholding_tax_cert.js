@@ -3,6 +3,7 @@
 
 frappe.ui.form.on("Withholding Tax Cert", {
 	refresh(frm) {
+		frm.set_df_property("income_tax_form", "options", frm.doc.employee ? "PND3" : "\nPND3\nPND53");
 		frm.set_query("employee", () => ({ filters: { company: frm.doc.company } }));
 		frm.set_query("supplier_address", function () {
 			return {
@@ -29,6 +30,10 @@ frappe.ui.form.on("Withholding Tax Cert", {
 				},
 			};
 		});
+	},
+	employee(frm) {
+		if (frm.doc.employee) frm.set_value("income_tax_form", "PND3");
+		frm.set_df_property("income_tax_form", "options", frm.doc.employee ? "PND3" : "\nPND3\nPND53");
 	},
 	is_agent(frm) {
 		if (!frm.doc.is_agent) {

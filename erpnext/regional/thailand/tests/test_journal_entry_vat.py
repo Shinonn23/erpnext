@@ -304,11 +304,13 @@ class TestVatClosing(_Stubs, unittest.TestCase):
 			_vat_journal(_line("2135-00", debit=70), _line("1111-00", credit=70))
 		)
 
-	def test_only_an_accounts_manager_submits_it(self):
-		with patch.object(journal_entry.frappe, "get_roles", return_value=["Accounts User"]):
+	def test_accounting_staff_submit_it_and_other_roles_cannot(self):
+		with patch.object(journal_entry.frappe, "get_roles", return_value=["Sales User"]):
 			with self.assertRaises(frappe.ValidationError) as refused:
 				journal_entry.validate_vat_closing_submitter(_closing(*PAYABLE))
-		self.assertIn("Only an Accounts Manager submits a VAT Closing entry", str(refused.exception))
+		self.assertIn("Only accounting staff may submit a VAT Closing entry", str(refused.exception))
+		with patch.object(journal_entry.frappe, "get_roles", return_value=["Accounts User"]):
+			journal_entry.validate_vat_closing_submitter(_closing(*PAYABLE))
 		with patch.object(
 			journal_entry.frappe, "get_roles", return_value=["Accounts User", "Accounts Manager"]
 		):
@@ -483,7 +485,7 @@ class TestJournalEntrySubmit(_Stubs, unittest.TestCase):
 			journal.before_submit()
 		erpnext_before_submit.assert_called_once()
 
-	def test_submitting_a_vat_closing_entry_needs_an_accounts_manager(self):
+	def test_accounting_operator_can_submit_a_valid_vat_closing_entry(self):
 		journal = JournalEntry.__new__(JournalEntry)
 		journal.__dict__.update(_closing(*[frappe._dict(line) for line in PAYABLE]))
 		for line in journal.accounts:
@@ -492,7 +494,6 @@ class TestJournalEntrySubmit(_Stubs, unittest.TestCase):
 			patch.object(ERPNextJournalEntry, "before_submit"),
 			patch.object(journal_entry.frappe, "get_value", return_value=0),
 			patch.object(journal_entry.frappe, "get_roles", return_value=["Accounts User"]),
-			self.assertRaises(frappe.ValidationError),
 		):
 			journal.before_submit()
 

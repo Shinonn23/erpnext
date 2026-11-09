@@ -5,7 +5,11 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
-from erpnext.regional.thailand.custom.withholding_cert import employee_recipient, withholding_recipient
+from erpnext.regional.thailand.custom.withholding_cert import (
+	employee_income_tax_form,
+	employee_recipient,
+	withholding_recipient,
+)
 
 
 class WithholdingTaxCert(Document):
@@ -14,6 +18,7 @@ class WithholdingTaxCert(Document):
 			frappe.throw(_("Select either Supplier or Employee for the certificate."))
 		if not self.get("employee"):
 			return
+		self.income_tax_form = employee_income_tax_form(self.get("income_tax_form"))
 		self.supplier_name = employee_recipient(self.employee, self.company).employee_name
 		if self.get("supplier_address"):
 			frappe.throw(_("Use Employee Address for an Employee certificate."))

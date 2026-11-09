@@ -3720,6 +3720,24 @@ class AccountsController(TransactionBase):
 		if source_doc.get("additional_discount_percentage"):
 			return
 
+		if (source_doc.doctype, self.doctype) in {
+			("Purchase Order", "Purchase Receipt"),
+			("Purchase Order", "Purchase Invoice"),
+			("Purchase Receipt", "Purchase Invoice"),
+			("Sales Order", "Delivery Note"),
+			("Sales Order", "Sales Invoice"),
+			("Delivery Note", "Sales Invoice"),
+		}:
+			# Preserve the effective discount when only part of the source is mapped or billed.
+			basis = "net_total" if source_doc.apply_discount_on == "Net Total" else "grand_total"
+			total = flt(source_doc.get(basis)) + flt(source_doc.discount_amount)
+			if total:
+				percentage = 100 * flt(source_doc.discount_amount) / total
+				if self.get("additional_discount_percentage") != percentage:
+					self.additional_discount_percentage = percentage
+					self.discount_amount = 0
+			return
+
 		item_doctype = self.meta.get_field("items").options
 		doctype_table = frappe.qb.DocType(self.doctype)
 		item_table = frappe.qb.DocType(item_doctype)

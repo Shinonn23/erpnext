@@ -57,7 +57,6 @@ from erpnext.controllers.accounts_controller import (
 from erpnext.setup.doctype.sales_person.sales_person import get_sales_person_stamp
 from erpnext.setup.utils import get_exchange_rate
 
-
 _REFERENCE_PROVENANCE_TOKEN = object()
 _REFERENCE_PROVENANCE_DEFAULTS = {
 	"advance_voucher_type": None,
@@ -1150,7 +1149,7 @@ class PaymentEntry(AccountsController):
 			self.received_amount = self.paid_amount
 
 	def set_amounts_after_tax(self):
-		applicable_tax = 0
+		paid_applicable_tax = received_applicable_tax = 0
 		base_applicable_tax = 0
 		for tax in self.get("taxes"):
 			if tax.included_in_paid_amount:
@@ -1159,23 +1158,30 @@ class PaymentEntry(AccountsController):
 			amount = -1 * tax.tax_amount if tax.add_deduct_tax == "Deduct" else tax.tax_amount
 			base_amount = -1 * tax.base_tax_amount if tax.add_deduct_tax == "Deduct" else tax.base_tax_amount
 
-			applicable_tax += amount
+			paid_applicable_tax += flt(
+				amount / (self.source_exchange_rate or 1), self.precision("paid_amount")
+			)
+			received_applicable_tax += flt(
+				amount / (self.target_exchange_rate or 1), self.precision("received_amount")
+			)
 			base_applicable_tax += base_amount
 
 		self.paid_amount_after_tax = flt(
-			flt(self.paid_amount) + flt(applicable_tax), self.precision("paid_amount_after_tax")
+			flt(self.paid_amount) + flt(paid_applicable_tax),
+			self.precision("paid_amount_after_tax"),
 		)
 		self.base_paid_amount_after_tax = flt(
-			flt(self.paid_amount_after_tax) * flt(self.source_exchange_rate),
+			flt(self.base_paid_amount) + flt(base_applicable_tax),
 			self.precision("base_paid_amount_after_tax"),
 		)
 
 		self.received_amount_after_tax = flt(
-			flt(self.received_amount) + flt(applicable_tax), self.precision("paid_amount_after_tax")
+			flt(self.received_amount) + flt(received_applicable_tax),
+			self.precision("received_amount_after_tax"),
 		)
 		self.base_received_amount_after_tax = flt(
-			flt(self.received_amount_after_tax) * flt(self.target_exchange_rate),
-			self.precision("base_paid_amount_after_tax"),
+			flt(self.base_received_amount) + flt(base_applicable_tax),
+			self.precision("base_received_amount_after_tax"),
 		)
 
 	def set_amounts_in_company_currency(self):
@@ -1826,12 +1832,16 @@ class PaymentEntry(AccountsController):
 			)
 
 			if not d.included_in_paid_amount:
-				if get_account_currency(payment_account) != self.company_currency:
+				payment_account_currency = get_account_currency(payment_account)
+				payment_tax_amount = base_tax_amount
+				if payment_account_currency != self.company_currency:
 					if self.payment_type == "Receive":
 						exchange_rate = self.target_exchange_rate
-					elif self.payment_type in ["Pay", "Internal Transfer"]:
+						amount_field = "received_amount"
+					else:
 						exchange_rate = self.source_exchange_rate
-					base_tax_amount = flt((tax_amount / exchange_rate), self.precision("paid_amount"))
+						amount_field = "paid_amount"
+					payment_tax_amount = flt(tax_amount / exchange_rate, self.precision(amount_field))
 
 				gl_entries.append(
 					self.get_gl_dict(
@@ -1839,15 +1849,13 @@ class PaymentEntry(AccountsController):
 							"account": payment_account,
 							"against": against,
 							rev_dr_or_cr: tax_amount,
-							rev_dr_or_cr + "_in_account_currency": base_tax_amount
-							if account_currency == self.company_currency
-							else d.tax_amount,
+							rev_dr_or_cr + "_in_account_currency": payment_tax_amount,
 							rev_dr_or_cr + "_in_transaction_currency": base_tax_amount
 							/ self.transaction_exchange_rate,
 							"cost_center": self.cost_center,
 							"post_net_value": True,
 						},
-						account_currency,
+						payment_account_currency,
 						item=d,
 					)
 				)
@@ -2454,7 +2462,7 @@ def validate_inclusive_tax(tax, doc):
 			[cint(t.included_in_paid_amount for t in doc.get("taxes")[: cint(tax.row_id) - 1])]
 		):
 			# all rows about the referred tax should be inclusive
-			_on_previous_row_error("1 - %d" % (cint(tax.row_id),))
+			_on_previous_row_error(f"1 - {cint(tax.row_id)}")
 		elif tax.get("category") == "Valuation":
 			frappe.throw(_("Valuation type charges can not be marked as Inclusive"))
 

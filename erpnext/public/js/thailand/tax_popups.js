@@ -216,7 +216,9 @@ erpnext.regional.thailand.tax_popups.ask_withholding_category = async function (
 	frm,
 	{ date, current, on_pick, on_cancel }
 ) {
-	const choices = await erpnext.regional.thailand.tax_popups.get_withholding_choices(frm.doc.company, date);
+	const choices = (await erpnext.regional.thailand.tax_popups.get_withholding_choices(frm.doc.company, date))
+		.filter((choice) => frm.doc.party_type !== "Employee" ||
+			!choice.income_tax_form || choice.income_tax_form === "PND3");
 	if (!choices.length) {
 		frappe.msgprint(
 			__("No Tax Withholding Category has a rate and an account for {0}.", [frm.doc.company])
@@ -233,7 +235,7 @@ erpnext.regional.thailand.tax_popups.ask_withholding_category = async function (
 				label: __("Type of Income Withheld"),
 				reqd: 1,
 				options: choices.map((c) => ({ value: c.name, label: c.label })),
-				default: current || choices[0].name,
+				default: choices.some((choice) => choice.name === current) ? current : choices[0].name,
 				description: __("The rate and the PND3/PND53 line follow the type of income."),
 			},
 		],
@@ -272,15 +274,10 @@ erpnext.regional.thailand.tax_popups.add_withholding_tax_cert_fallback = functio
 // "Create Withholding Tax Cert" from a Payment Entry or a Journal Entry that withheld: date (the payment's posting
 // date by default), PND3 for an individual supplier / PND53 for a company, and the company address.
 erpnext.regional.thailand.tax_popups.create_withholding_tax_cert = async function (frm, supplier) {
+	const employee = frm.doc.doctype === "Payment Entry" && frm.doc.party_type === "Employee";
 	let income_tax_form = "";
-	if (frm.doc.doctype === "Payment Entry" && frm.doc.party_type === "Employee") {
+	if (employee) {
 		income_tax_form = "PND3";
-		if (frm.doc.tax_withholding_category) {
-			const { message } = await frappe.db.get_value(
-				"Tax Withholding Category", frm.doc.tax_withholding_category, "thai_income_tax_form"
-			);
-			income_tax_form = (message && message.thai_income_tax_form) || income_tax_form;
-		}
 	} else if (supplier) {
 		const { message } = await frappe.db.get_value("Supplier", supplier, "supplier_type");
 		income_tax_form = message && message.supplier_type == "Individual" ? "PND3" : "PND53";
@@ -298,7 +295,7 @@ erpnext.regional.thailand.tax_popups.create_withholding_tax_cert = async functio
 				fieldtype: "Select",
 				label: __("Income Tax Form"),
 				fieldname: "income_tax_form",
-				options: "PND3\nPND53",
+				options: employee ? "PND3" : "PND3\nPND53",
 				default: income_tax_form,
 			},
 			{

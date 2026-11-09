@@ -711,7 +711,8 @@ class TaxWithholdingController:
 		category_withholding_map = self._get_category_withholding_map()
 		existing_taxes = {row.account_head: row for row in self.doc.taxes if row.is_tax_withholding_account}
 		precision = self.doc.precision("tax_amount", "taxes")
-		conversion_rate = self.get_conversion_rate()
+		# Payment taxes are in company currency; invoice taxes are in invoice currency.
+		conversion_rate = 1 if self.doc.doctype == "Payment Entry" else self.get_conversion_rate()
 		add_deduct_tax = "Deduct"
 
 		if self.party_type == "Customer":

@@ -1,5 +1,5 @@
 """Withholding Tax Cert (หนังสือรับรองการหักภาษี ณ ที่จ่าย, 50 ทวิ) of a Payment Entry or Journal Entry that withheld
-from a supplier or a payment recipient Employee outside payroll.
+from a supplier or a payment recipient Employee outside payroll (PND3 only).
 
 Submitting the entry makes its certificates: one per income tax form (PND3 / PND53), with what the manual "Create
 Withholding Tax Cert" popup used to default — the posting date, the form of the category (else PND3 for an
@@ -37,6 +37,13 @@ def linked_address(link_doctype, link_name, own=False):
 def default_form(supplier_type):
 	"""The form a supplier is filed on when its category names none: PND3 for an individual, else PND53."""
 	return "PND3" if supplier_type == "Individual" else "PND53"
+
+
+def employee_income_tax_form(form=None):
+	"""Employee service withholding is filed as an individual on PND3."""
+	if form and form != "PND3":
+		frappe.throw(_("Employee service withholding requires PND3. Select a PND3 Tax Withholding Category."))
+	return "PND3"
 
 
 def withholding_recipient(voucher):
@@ -143,6 +150,8 @@ def company_address_of(voucher):
 
 def new_certificate(voucher, supplier, form, lines, party_type="Supplier"):
 	"""A Withholding Tax Cert of the entry for one income tax form (not saved)."""
+	if party_type == "Employee":
+		form = employee_income_tax_form(form)
 	cert = frappe.new_doc(CERT)
 	cert.company = voucher.get("company")
 	cert.company_address = company_address_of(voucher)

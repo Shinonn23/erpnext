@@ -24,6 +24,7 @@
   "is_paid",
   "is_deposit_invoice",
   "is_return",
+  "note_issuer",
   "return_against",
   "update_outstanding_for_self",
   "update_billed_amount_in_purchase_order",
@@ -34,7 +35,6 @@
   "bill_no",
   "column_break_15",
   "bill_date",
-  "supplier_tax_document_verified",
   "accounting_dimensions_section",
   "cost_center",
   "dimension_col_break",
@@ -224,7 +224,6 @@
   "remarks",
   "connections_tab",
   "connect_operations_tab",
-  "connect_invoice_review_section",
   "p2p_exception_required",
   "p2p_exception_reason",
   "connect_approval_section",
@@ -303,6 +302,16 @@
    "label": "Is Return (Debit Note)",
    "no_copy": 1,
    "print_hide": 1
+  },
+  {
+   "fieldname": "note_issuer",
+   "label": "Note Issuer",
+   "fieldtype": "Select",
+   "options": "Company\nCounterparty",
+   "default": "Company",
+   "depends_on": "eval:doc.is_return",
+   "mandatory_depends_on": "eval:doc.is_return",
+   "description": "Company-issued credit/debit notes require approval before submission. Counterparty-issued notes can be submitted directly."
   },
   {
    "default": "0",
@@ -1739,15 +1748,9 @@
   },
   {
    "default": "0",
-   "fieldname": "supplier_tax_document_verified",
-   "fieldtype": "Check",
-   "label": "Supplier Tax Documents Verified (VAT/WHT)"
-  },
-  {
-   "default": "0",
    "fieldname": "p2p_exception_required",
    "fieldtype": "Check",
-   "label": "P2P Exception Approval Required",
+   "label": "Purchase Reference Mismatch",
    "read_only": 1,
    "depends_on": "eval:doc.p2p_exception_required"
   },
@@ -1755,17 +1758,13 @@
    "depends_on": "eval:doc.p2p_exception_required || doc.p2p_exception_reason",
    "fieldname": "p2p_exception_reason",
    "fieldtype": "Small Text",
-   "label": "P2P Exception Reason"
+   "label": "Purchase Reference Difference",
+   "read_only": 1
   },
   {
    "fieldname": "connect_operations_tab",
    "fieldtype": "Tab Break",
    "label": "Operations and Approval"
-  },
-  {
-   "fieldname": "connect_invoice_review_section",
-   "fieldtype": "Section Break",
-   "label": "Supplier Document Review"
   },
   {
    "fieldname": "connect_approval_section",

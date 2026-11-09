@@ -129,3 +129,11 @@ def update_purchase_billing_outstanding_amount(doc, method=None):
 
 # the name this function had while it was not hooked to anything
 update_sales_billing_outstanding_amount = update_purchase_billing_outstanding_amount
+
+
+@frappe.whitelist()
+def make_payment_entry(source_name: str):
+	"""Open the billing's current invoices in one unsaved Payment Entry."""
+	from erpnext.regional.doctype.billing_payment import make_billing_payment
+
+	return make_billing_payment("Purchase Billing", source_name)

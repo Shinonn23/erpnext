@@ -30,7 +30,6 @@
   "column_break_vtnr",
   "journals_section",
   "enable_accounting_approval_workflow",
-  "journal_entry_controller_review_threshold",
   "merge_similar_account_heads",
   "deferred_accounting_settings_section",
   "book_deferred_entries_based_on",
@@ -801,13 +800,6 @@
    "fieldtype": "Check",
    "label": "Enable Accounting Approval Workflow",
    "read_only": 1
-  },
-  {
-   "default": "100000",
-   "description": "Amounts are compared in the Journal Entry company currency.",
-   "fieldname": "journal_entry_controller_review_threshold",
-   "fieldtype": "Currency",
-   "label": "Journal Entry Controller Review Threshold"
   }
  ],
  "grid_page_length": 50,
