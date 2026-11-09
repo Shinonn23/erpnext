@@ -238,7 +238,7 @@ class TestNoShipmentCoupling(Patched):
 			patch.object(core, "custody_loan_return_row_requires_inspection", return_value=True),
 		):
 			doc.receive_returned_goods(note)
-		receive.assert_called_once_with("DN-1")
+		receive.assert_called_once_with("DN-1", prepare=None)
 
 	def test_the_shipment_gates_are_gone(self):
 		for name in (
