@@ -1059,8 +1059,8 @@ class CustodyLoanReturn(Document):
 			transaction = self.make_stock_return_delivery_note()
 			self.db_set("delivery_note", transaction.name)
 			self.delivery_note = transaction.name
-			self.swap_returned_lots()
-			self.receive_returned_goods(transaction)
+			# the lot swap and the receipt stand or fall together: a failed receipt undoes the swap
+			self.receive_returned_goods(transaction, prepare=self.swap_returned_lots)
 		self.update_status()
 		loan = frappe.get_doc("Custody Loan", self.custody_loan)
 		loan.update_status()
@@ -1074,9 +1074,12 @@ class CustodyLoanReturn(Document):
 		if not swaps:
 			return
 		loan = frappe.get_doc("Custody Loan", self.custody_loan)
-		stock_entry = new_stock_entry(self.company, "Repack")
-		set_loan_transaction_source(stock_entry, loan, self)
+		# One Repack for each exchanged pair: a Repack averages the outgoing value over all its finished rows, so
+		# a single entry for several Items would move value between them. One lent batch in, one returned batch
+		# out, of one Item, keeps the value of each Item exact.
 		for row, lent_batch, qty in swaps:
+			stock_entry = new_stock_entry(self.company, "Repack")
+			set_loan_transaction_source(stock_entry, loan, self)
 			location = get_default_storage_location(loan.customer_loan_warehouse, row.item_code)
 			common = {
 				"item_code": row.item_code,
@@ -1097,15 +1100,15 @@ class CustodyLoanReturn(Document):
 					"is_finished_item": 1,
 				},
 			)
-		stock_entry.insert(ignore_permissions=True)
-		stock_entry.submit()
+			stock_entry.insert(ignore_permissions=True)
+			stock_entry.submit()
 
-	def receive_returned_goods(self, delivery_note):
+	def receive_returned_goods(self, delivery_note, prepare=None):
 		"""Goods coming back are received at once, whether or not their Item is inspected: a row that needs an
 		inspection was put into the Quarantine warehouse of the warehouse it was lent from
 		(``make_stock_return_delivery_note``) and the QI team inspects it there after the receipt (Connect
 		Diagnostics, Siwat, 9 Nov 2026). Nothing waits for a Shipment: it is optional."""
-		receive_return_delivery_note(delivery_note.name)
+		receive_return_delivery_note(delivery_note.name, prepare=prepare)
 
 	def make_stock_return_delivery_note(self):
 		loan = frappe.get_doc("Custody Loan", self.custody_loan)
@@ -1552,14 +1555,17 @@ def quarantine_warehouse_for(company, near=None):
 	return shared[0].name if shared else None
 
 
-def receive_return_delivery_note(delivery_note_name):
-	"""Submit a loan return Delivery Note for the system; a failure leaves the draft and says why."""
+def receive_return_delivery_note(delivery_note_name, prepare=None):
+	"""Submit a loan return Delivery Note for the system; a failure leaves the draft and says why (a comment on the
+	return and an Error Log). ``prepare`` (the lot swap) runs inside the same savepoint, so a failed receipt undoes it."""
 	delivery_note = frappe.get_doc("Delivery Note", delivery_note_name)
 	if delivery_note.docstatus != 0:
 		return
 	savepoint = "custody_loan_auto_receipt"
 	frappe.db.savepoint(savepoint)
 	try:
+		if prepare:
+			prepare()
 		# the state is left as it is: Frappe sets the submitted state; a sales return's approval steps do not apply
 		# to a loan coming back
 		delivery_note.flags.ignore_permissions = True
@@ -1568,6 +1574,10 @@ def receive_return_delivery_note(delivery_note_name):
 		frappe.db.rollback(save_point=savepoint)
 		frappe.clear_last_message()
 		source = delivery_note.get("custody_loan_source_name")
+		frappe.log_error(
+			title=_("Loan return {0} could not be received").format(source or delivery_note_name)[:140],
+			message=frappe.get_traceback(),
+		)
 		if source and frappe.db.exists("Custody Loan Return", source):
 			frappe.get_doc("Custody Loan Return", source).add_comment(
 				"Comment",
