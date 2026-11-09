@@ -413,10 +413,11 @@ def set_price_list(party_details, party, party_type, given_price_list, pos=None,
 	if len(permitted_price_lists) == 1:
 		price_list = get_usable_price_list(permitted_price_lists, party.doctype)
 	elif pos and party_type == "Customer":
-		customer_price_list = frappe.get_value("Customer", party.name, "default_price_list")
+		# the customer's own or Customer Group default wins over the POS Profile's
+		party_price_list = get_default_price_list(party)
 
-		if is_price_list_enabled(customer_price_list):
-			price_list = customer_price_list
+		if party_price_list:
+			price_list = party_price_list
 		else:
 			pos_price_list = frappe.get_value("POS Profile", pos, "selling_price_list")
 			price_list = pos_price_list or given_price_list
