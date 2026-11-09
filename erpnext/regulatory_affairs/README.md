@@ -39,8 +39,9 @@ Type), `activity_type` (Import, Manufacture, Sale, Product Registration, Other),
 (`regulatory_product_category`, Regulatory tab) is either a Thai FDA group (the Item is **regulated** and needs a
 registration in force) or **Not Regulated** (sales, purchases and receipts need no regulatory documents).
 New and legacy blank Items take the default when saved; an existing classification cannot be cleared. Only
-Regulatory Affairs may change a classified Item to a different category. For Quotation, Sales Order, Delivery Note
-and Sales Invoice:
+Regulatory Affairs may change a classified Item to a different category. Purchasing or an Item Manager assesses
+**Registration Requirement for Sale** in Item Details; its visibility does not depend on enabling Quality Inspection.
+For Quotation, Sales Order, Delivery Note and Sales Invoice:
 
 * the Item link (`sales_common.js` -> `item_query` filter `regulatory_sale`) offers only Items that are classified and, when
   regulated, covered by a registration in force on the document's date (`transactions.sellable_items_condition`);

@@ -1,4 +1,6 @@
+import json
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import frappe
@@ -13,6 +15,29 @@ COVERAGE = dict(
 	current_registration_expiry="2027-01-01",
 	current_registration_status="Active",
 )
+
+
+class TestAssessmentVisibility(unittest.TestCase):
+	def test_registration_assessment_has_no_qi_dependent_container(self):
+		path = Path(__file__).resolve().parents[2] / "stock/doctype/item/item.json"
+		metadata = json.loads(path.read_text())
+		fields = {field["fieldname"]: field for field in metadata["fields"]}
+		tab = section = None
+		for name in metadata["field_order"]:
+			field = fields[name]
+			if field["fieldtype"] == "Tab Break":
+				tab, section = field, None
+			elif field["fieldtype"] == "Section Break":
+				section = field
+			if name == "registration_requirement":
+				for container in (tab, section):
+					if container:
+						self.assertFalse(container.get("depends_on"))
+						self.assertFalse(container.get("hidden"))
+				self.assertIn("regulatory_product_category", field["depends_on"])
+				break
+		else:
+			self.fail("Registration assessment field is missing")
 
 
 class TestNotRegulatedTransactions(unittest.TestCase):
