@@ -543,6 +543,44 @@ class TestWarehousePolicy(unittest.TestCase):
 			with self.assertRaises(frappe.ValidationError):
 				warehouse_policy.is_loan_movement(doc)
 
+	def test_return_lot_swap_repack_is_a_loan_movement_and_nothing_else_is(self):
+		def make(**extra):
+			doc = frappe._dict(
+				doctype="Stock Entry",
+				purpose="Repack",
+				custody_loan="Loan",
+				custody_loan_source_doctype="Custody Loan Return",
+				custody_loan_source_name="Return",
+				items=[
+					frappe._dict(item_code="I", qty=2, s_warehouse="Loan WH", t_warehouse=None),
+					frappe._dict(item_code="I", qty=2, s_warehouse=None, t_warehouse="Loan WH"),
+				],
+			)
+			doc.update(extra)
+			return doc
+
+		loan = frappe._dict(name="Loan", customer_loan_warehouse="Loan WH")
+		core = SimpleNamespace(validate_generated_transaction=Mock())
+		state = frappe._dict(docstatus=1, custody_loan="Loan")
+		with (
+			patch.dict(sys.modules, {"erpnext.loan.doctype.custody_loan.custody_loan_core": core}),
+			patch.object(frappe, "get_doc", return_value=loan),
+			patch.object(frappe, "db", SimpleNamespace(get_value=lambda *args, **kw: state)),
+		):
+			self.assertTrue(warehouse_policy.is_loan_movement(make()))
+			state.docstatus = 0
+			with self.assertRaises(frappe.ValidationError):
+				warehouse_policy.is_loan_movement(make())
+			state.docstatus = 1
+			other = make()
+			other["items"][1].t_warehouse = "Other WH"
+			with self.assertRaises(frappe.ValidationError):
+				warehouse_policy.is_loan_movement(other)
+			unequal = make()
+			unequal["items"][1].qty = 3
+			with self.assertRaises(frappe.ValidationError):
+				warehouse_policy.is_loan_movement(unequal)
+
 	def test_landed_cost_reversal_still_checks_the_warehouse(self):
 		doc = frappe._dict(doctype="Purchase Receipt", docstatus=1, items=[])
 		entry = frappe._dict(

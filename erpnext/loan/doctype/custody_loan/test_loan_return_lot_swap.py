@@ -66,7 +66,7 @@ class TestSwapIsValueExactPerItem(unittest.TestCase):
 			patch.object(core.frappe, "get_doc", return_value=frappe._dict(customer_loan_warehouse="LOAN")),
 			patch.object(core, "new_stock_entry", side_effect=new_entry),
 			patch.object(core, "set_loan_transaction_source"),
-			patch.object(core, "get_default_storage_location", return_value=None),
+			patch.object(core, "get_default_storage_location", return_value="LOAN / STAGING"),
 		):
 			doc.swap_returned_lots()
 		return entries
@@ -83,6 +83,11 @@ class TestSwapIsValueExactPerItem(unittest.TestCase):
 			self.assertEqual((source["batch_no"], finished["batch_no"]), (old, new))
 			self.assertEqual((source["qty"], finished["qty"]), (qty, qty))
 			self.assertEqual(sum(1 for row in entry.rows if row.get("is_finished_item")), 1)
+			# srv1110e ST-LN-13: the incoming row names its location as the target, never as a source
+			self.assertEqual(source.get("storage_location"), "LOAN / STAGING")
+			self.assertNotIn("to_storage_location", source)
+			self.assertEqual(finished.get("to_storage_location"), "LOAN / STAGING")
+			self.assertNotIn("storage_location", finished)
 			entry.submit.assert_called_once()
 
 

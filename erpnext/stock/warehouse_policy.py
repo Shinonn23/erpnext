@@ -261,6 +261,8 @@ def is_loan_movement(doc):
 	from erpnext.loan.doctype.custody_loan.custody_loan_core import validate_generated_transaction
 
 	validate_generated_transaction(doc)
+	if doc.doctype == "Stock Entry" and is_return_lot_swap(doc):
+		return True
 	if doc.doctype == "Stock Entry":
 		if (
 			doc.get("custody_loan_source_doctype") != "Custody Loan Adjustment"
@@ -287,6 +289,32 @@ def is_loan_movement(doc):
 				)
 			)
 	return True
+
+
+def is_return_lot_swap(doc):
+	"""Whether ``doc`` is the Repack a Custody Loan Return makes to exchange the lent batch for the batch the customer
+	brought back (Siwat, 5 and 9 Nov 2026): one Item, one batch out and one batch in, the same quantity, both inside
+	the customer's loan warehouse, linked to a submitted return of that loan. Any other Repack stays refused."""
+	if doc.get("purpose") != "Repack" or doc.get("custody_loan_source_doctype") != "Custody Loan Return":
+		return False
+	loan = frappe.get_doc("Custody Loan", doc.custody_loan)
+	source = frappe.db.get_value(
+		"Custody Loan Return", doc.custody_loan_source_name, ["docstatus", "custody_loan"], as_dict=True
+	)
+	if not source or source.docstatus != 1 or source.custody_loan != loan.name:
+		return False
+	rows = list(doc.get("items") or [])
+	outgoing = [row for row in rows if row.get("s_warehouse") and not row.get("t_warehouse")]
+	incoming = [row for row in rows if row.get("t_warehouse") and not row.get("s_warehouse")]
+	if len(rows) != 2 or len(outgoing) != 1 or len(incoming) != 1:
+		return False
+	out, into = outgoing[0], incoming[0]
+	return (
+		out.s_warehouse == loan.customer_loan_warehouse
+		and into.t_warehouse == loan.customer_loan_warehouse
+		and out.item_code == into.item_code
+		and flt(out.qty) == flt(into.qty)
+	)
 
 
 def movement_operation(doc, outgoing, loan=False, row=None):
