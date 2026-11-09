@@ -273,7 +273,15 @@ erpnext.regional.thailand.tax_popups.add_withholding_tax_cert_fallback = functio
 // date by default), PND3 for an individual supplier / PND53 for a company, and the company address.
 erpnext.regional.thailand.tax_popups.create_withholding_tax_cert = async function (frm, supplier) {
 	let income_tax_form = "";
-	if (supplier) {
+	if (frm.doc.doctype === "Payment Entry" && frm.doc.party_type === "Employee") {
+		income_tax_form = "PND3";
+		if (frm.doc.tax_withholding_category) {
+			const { message } = await frappe.db.get_value(
+				"Tax Withholding Category", frm.doc.tax_withholding_category, "thai_income_tax_form"
+			);
+			income_tax_form = (message && message.thai_income_tax_form) || income_tax_form;
+		}
+	} else if (supplier) {
 		const { message } = await frappe.db.get_value("Supplier", supplier, "supplier_type");
 		income_tax_form = message && message.supplier_type == "Individual" ? "PND3" : "PND53";
 	}
@@ -327,7 +335,7 @@ erpnext.regional.thailand.tax_popups.withholding_direction = async function (frm
 	const doc = frm.doc;
 	if (doc.doctype === "Payment Entry") {
 		if (doc.payment_type === "Receive" && doc.party_type === "Customer") return "Receive";
-		if (doc.payment_type === "Pay" && doc.party_type === "Supplier") return "Pay";
+		if (doc.payment_type === "Pay" && ["Supplier", "Employee"].includes(doc.party_type)) return "Pay";
 		return null;
 	}
 	const rows = doc.accounts || [];
@@ -349,13 +357,15 @@ erpnext.regional.thailand.tax_popups.add_withhold_tax_buttons = function (frm) {
 	const popups = erpnext.regional.thailand.tax_popups;
 	const group = __("Withhold Tax");
 	frm.add_custom_button(__("Enter type and amount"), () => popups.withhold_manual(frm), group);
-	frm.add_custom_button(__("From invoice lines"), () => popups.withhold_from_items(frm), group);
+	if (frm.doc.party_type !== "Employee") {
+		frm.add_custom_button(__("From invoice lines"), () => popups.withhold_from_items(frm), group);
+	}
 };
 
 erpnext.regional.thailand.tax_popups.not_withholding = function () {
 	frappe.msgprint(
 		__(
-			"Withhold Tax works on a receipt from a Customer or a payment to a Supplier (on a Journal Entry: a line that credits a Customer, or a Supplier line)."
+			"Withhold Tax works on a receipt from a Customer or a payment to a Supplier or Employee (on a Journal Entry: a line that credits a Customer, or a Supplier line)."
 		),
 		__("Withhold Tax")
 	);
@@ -373,6 +383,12 @@ erpnext.regional.thailand.tax_popups.withhold_from_items = async function (frm) 
 	const popups = erpnext.regional.thailand.tax_popups;
 	const direction = await popups.withholding_direction(frm);
 	if (direction === "Receive") return popups.apply_receive_withholding(frm, { based_on: "Line Items" });
+	if (direction === "Pay" && frm.doc.party_type === "Employee") {
+		frappe.msgprint(__(
+			"For Employee service payments, use Withhold Tax → Enter type and amount and select a Tax Withholding Category. Employee payments do not use invoice-line withholding."
+		));
+		return;
+	}
 	if (direction === "Pay" && frm.doc.doctype === "Payment Entry") return popups.load_pay_categories(frm);
 	if (direction === "Pay") {
 		frappe.msgprint(

@@ -793,7 +793,7 @@
   },
   {
    "default": "0",
-   "depends_on": "eval:doc.party_type == 'Supplier'",
+   "depends_on": "eval:doc.party_type == 'Supplier' || (doc.party_type == 'Employee' && doc.payment_type == 'Pay')",
    "fieldname": "apply_tds",
    "fieldtype": "Check",
    "label": "Consider for Tax Withholding"
@@ -835,6 +835,7 @@
   },
   {
    "default": "0",
+   "depends_on": "eval:doc.party_type != 'Employee'",
    "fieldname": "override_tax_withholding_entries",
    "fieldtype": "Check",
    "label": "Edit Tax Withholding Entries"

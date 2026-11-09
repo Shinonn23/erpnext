@@ -61,7 +61,7 @@ frappe.ui.form.on("Payment Entry", {
 
 	thai_ask_withholding: function (frm) {
 		// Ask what is withheld; the base is the paid invoices before VAT (the core handler has cleared the table)
-		if (frm.doc.payment_type != "Pay" || frm.doc.party_type != "Supplier") return;
+		if (frm.doc.payment_type != "Pay" || !["Supplier", "Employee"].includes(frm.doc.party_type)) return;
 		erpnext.regional.thailand.tax_popups.ask_withholding_category(frm, {
 			date: frm.doc.posting_date,
 			current: frm.doc.tax_withholding_category,

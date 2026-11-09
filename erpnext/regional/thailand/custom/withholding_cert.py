@@ -1,5 +1,5 @@
 """Withholding Tax Cert (หนังสือรับรองการหักภาษี ณ ที่จ่าย, 50 ทวิ) of a Payment Entry or Journal Entry that withheld
-from a supplier.
+from a supplier or a payment recipient Employee outside payroll.
 
 Submitting the entry makes its certificates: one per income tax form (PND3 / PND53), with what the manual "Create
 Withholding Tax Cert" popup used to default — the posting date, the form of the category (else PND3 for an
@@ -37,6 +37,33 @@ def linked_address(link_doctype, link_name, own=False):
 def default_form(supplier_type):
 	"""The form a supplier is filed on when its category names none: PND3 for an individual, else PND53."""
 	return "PND3" if supplier_type == "Individual" else "PND53"
+
+
+def withholding_recipient(voucher):
+	"""One recipient of a supplier payment/journal or an outside-payroll Employee payment."""
+	if voucher.get("doctype") == "Payment Entry" and voucher.get("payment_type") == "Pay":
+		party_type, party = voucher.get("party_type"), voucher.get("party")
+		if party_type not in ("Supplier", "Employee") or not party:
+			return None
+		if party_type == "Employee" and any(
+			(row.get("party_type"), row.get("party")) != (party_type, party)
+			for row in voucher.get("tax_withholding_entries") or []
+			if flt(row.get("withholding_amount"))
+		):
+			return None
+		return party_type, party
+	if voucher.get("doctype") == "Journal Entry":
+		supplier = withholding_supplier(voucher)
+		return ("Supplier", supplier) if supplier else None
+	return None
+
+
+def employee_recipient(employee, company):
+	"""Only public recipient identity, never HR national ID or home addresses."""
+	details = frappe.db.get_value("Employee", employee, ["employee_name", "company"], as_dict=True)
+	if not details or details.company != company:
+		frappe.throw(_("The Employee must belong to the certificate Company."))
+	return details
 
 
 def withholding_supplier(voucher):
@@ -114,18 +141,24 @@ def company_address_of(voucher):
 	)
 
 
-def new_certificate(voucher, supplier, form, lines):
+def new_certificate(voucher, supplier, form, lines, party_type="Supplier"):
 	"""A Withholding Tax Cert of the entry for one income tax form (not saved)."""
-	details = (
-		frappe.db.get_value("Supplier", supplier, ["supplier_name", "supplier_primary_address"], as_dict=True)
-		or frappe._dict()
-	)
 	cert = frappe.new_doc(CERT)
 	cert.company = voucher.get("company")
 	cert.company_address = company_address_of(voucher)
-	cert.supplier = supplier
-	cert.supplier_name = details.supplier_name
-	cert.supplier_address = details.supplier_primary_address or linked_address("Supplier", supplier)
+	if party_type == "Employee":
+		cert.employee = supplier
+		cert.supplier_name = employee_recipient(supplier, cert.company).employee_name
+	else:
+		details = (
+			frappe.db.get_value(
+				"Supplier", supplier, ["supplier_name", "supplier_primary_address"], as_dict=True
+			)
+			or frappe._dict()
+		)
+		cert.supplier = supplier
+		cert.supplier_name = details.supplier_name
+		cert.supplier_address = details.supplier_primary_address or linked_address("Supplier", supplier)
 	cert.income_tax_form = form
 	cert.tax_payer = "Withholding"
 	cert.date = voucher.get("posting_date")
@@ -152,11 +185,14 @@ def missing_details(cert, lines):
 		_(label)
 		for fieldname, label in (
 			("company_address", "Company Address"),
-			("supplier_address", "Supplier Address"),
+			("employee_address", "Employee Address")
+			if cert.get("employee") else ("supplier_address", "Supplier Address"),
 			("date", "Date"),
 		)
 		if not cert.get(fieldname)
 	]
+	if cert.get("employee") and not cert.get("supplier_tax_id"):
+		missing.append(_("Recipient Tax ID"))
 	for (income_type, _rate), line in lines.items():
 		if not income_type:
 			missing.append(
@@ -180,21 +216,25 @@ def existing_certificates(voucher_type, voucher_no):
 def create_withholding_certificates(doc, method=None):
 	"""On submit of a Payment Entry / Journal Entry that withheld from a supplier: its certificates, one per income
 	tax form it does not have yet. Submitted when complete, else a draft and a message; never stops the submit."""
-	supplier = withholding_supplier(doc)
+	recipient = withholding_recipient(doc)
 	entries = [
 		entry for entry in doc.get("tax_withholding_entries") or [] if flt(entry.get("withholding_amount"))
 	]
-	if not supplier or not entries:
+	if not recipient or not entries:
 		return []
+	party_type, supplier = recipient
 	have = {form for form, _docstatus in existing_certificates(doc.doctype, doc.name).values()}
-	supplier_type = frappe.db.get_value("Supplier", supplier, "supplier_type")
+	supplier_type = (
+		"Individual"
+		if party_type == "Employee" else frappe.db.get_value("Supplier", supplier, "supplier_type")
+	)
 	made = []
 	for form, lines in certificate_groups(entries, supplier_type).items():
 		if form in have:
 			continue
 		frappe.db.savepoint(SAVEPOINT)
 		try:
-			cert = new_certificate(doc, supplier, form, lines)
+			cert = new_certificate(doc, supplier, form, lines, party_type=party_type)
 			missing = missing_details(cert, lines)
 			cert.flags.ignore_permissions = True
 			if missing:

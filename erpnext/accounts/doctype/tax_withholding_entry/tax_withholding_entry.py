@@ -1144,7 +1144,34 @@ class PaymentTaxWithholding(TaxWithholdingController):
 		self.party_type = doc.party_type
 		self.party = doc.party
 
+	def _is_tax_withholding_applicable(self):
+		if self.party_type == "Employee" and self.doc.apply_tds:
+			if self.doc.payment_type != "Pay":
+				frappe.throw(_("Employee Tax Withholding is only supported for Pay payments."))
+			if self.doc.get("override_tax_withholding_entries"):
+				frappe.throw(_(
+					"Employee service withholding is calculated from the selected category; "
+					"turn off Edit Tax Withholding Entries."
+				))
+			if not self.doc.tax_withholding_category:
+				frappe.throw(_("Select a Tax Withholding Category for the Employee payment."))
+			if self.doc.references:
+				frappe.throw(_(
+					"Employee service Tax Withholding requires a direct payment without advance, "
+					"expense or payroll references."
+				))
+			if frappe.get_cached_value("Account", self.doc.paid_from, "account_type") not in ("Bank", "Cash"):
+				frappe.throw(_(
+					"Select a Bank/Cash account in Account Paid From for Employee service payments."
+				))
+			employee = frappe.get_cached_value("Employee", self.party, ["status", "company"], as_dict=True)
+			if not employee or employee.status != "Active" or employee.company != self.doc.company:
+				frappe.throw(_("Select an Active Employee belonging to the payment Company."))
+		return super()._is_tax_withholding_applicable()
+
 	def _get_category_names(self):
+		if self.party_type == "Employee":
+			return [self.doc.tax_withholding_category] if self.doc.tax_withholding_category else []
 		if categories := self.doc.get("tax_withholding_categories"):
 			return list({row.tax_withholding_category for row in categories if row.tax_withholding_category})
 
@@ -1154,6 +1181,14 @@ class PaymentTaxWithholding(TaxWithholdingController):
 		return [self.doc.tax_withholding_category]
 
 	def _update_taxable_amounts(self):
+		if self.party_type == "Employee":
+			category = self.category_details.get(self.doc.tax_withholding_category)
+			if category:
+				category["taxable_amount"] = flt(
+					flt(self.doc.received_amount) * flt(self.get_conversion_rate()), self.precision
+				)
+			return
+
 		taxable_amount_in_party_currency = self.doc.unallocated_amount
 		taxable_amount_in_party_currency += sum(
 			flt(d.allocated_amount)

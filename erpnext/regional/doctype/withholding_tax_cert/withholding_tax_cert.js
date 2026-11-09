@@ -3,6 +3,7 @@
 
 frappe.ui.form.on("Withholding Tax Cert", {
 	refresh(frm) {
+		frm.set_query("employee", () => ({ filters: { company: frm.doc.company } }));
 		frm.set_query("supplier_address", function () {
 			return {
 				query: "frappe.contacts.doctype.address.address.address_query",

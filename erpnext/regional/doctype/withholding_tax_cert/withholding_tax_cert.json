@@ -13,9 +13,11 @@
   "company_address",
   "column_break_3",
   "supplier",
+  "employee",
   "supplier_name",
   "supplier_tax_id",
   "supplier_address",
+  "employee_address",
   "column_break_is_agent",
   "is_agent",
   "withholding_agent_for",
@@ -61,28 +63,29 @@
    "fieldtype": "Column Break"
   },
   {
-   "allow_on_submit": 1,
    "fieldname": "supplier",
    "fieldtype": "Link",
    "in_standard_filter": 1,
    "label": "Supplier",
    "options": "Supplier",
-   "reqd": 1
+   "mandatory_depends_on": "eval:!doc.employee",
+   "depends_on": "eval:!doc.employee"
   },
   {
    "allow_on_submit": 1,
    "fetch_from": "supplier.supplier_name",
    "fieldname": "supplier_name",
    "fieldtype": "Data",
-   "label": "Supplier Name"
+   "label": "Recipient Name"
   },
   {
    "allow_on_submit": 1,
    "fetch_from": "supplier.tax_id",
    "fieldname": "supplier_tax_id",
    "fieldtype": "Data",
-   "label": "Supplier Tax ID",
-   "read_only": 1
+   "label": "Recipient Tax ID",
+   "read_only_depends_on": "eval:!doc.employee",
+   "mandatory_depends_on": "eval:doc.employee"
   },
   {
    "allow_on_submit": 1,
@@ -92,7 +95,8 @@
    "fieldtype": "Link",
    "label": "Supplier Address",
    "options": "Address",
-   "reqd": 1
+   "mandatory_depends_on": "eval:!doc.employee",
+   "depends_on": "eval:!doc.employee"
   },
   {
    "fieldname": "column_break_is_agent",
@@ -196,6 +200,23 @@
    "options": "Withholding Tax Cert",
    "print_hide": 1,
    "read_only": 1
+  },
+  {
+   "fieldname": "employee",
+   "fieldtype": "Link",
+   "label": "Employee",
+   "options": "Employee",
+   "depends_on": "eval:!doc.supplier",
+   "mandatory_depends_on": "eval:!doc.supplier",
+   "description": "For payments outside payroll. No private HR tax ID or home address is fetched."
+  },
+  {
+   "fieldname": "employee_address",
+   "fieldtype": "Small Text",
+   "label": "Employee Address",
+   "depends_on": "eval:doc.employee",
+   "mandatory_depends_on": "eval:doc.employee",
+   "description": "Enter the recipient address supplied for this certificate."
   }
  ],
  "index_web_pages_for_search": 1,

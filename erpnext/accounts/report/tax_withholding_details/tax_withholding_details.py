@@ -9,7 +9,7 @@ from erpnext.accounts.report.utils import validate_mandatory_date_range
 
 
 class TaxWithholdingDetailsReport:
-	party_types = ("Customer", "Supplier")
+	party_types = ("Customer", "Supplier", "Employee")
 	document_types = ("Purchase Invoice", "Sales Invoice", "Payment Entry", "Journal Entry")
 
 	def __init__(self, filters=None):
@@ -129,6 +129,8 @@ class TaxWithholdingDetailsReport:
 					doctype.customer_name.as_("party_name"),
 				]
 			)
+		elif party_type == "Employee":
+			fields.append(doctype.employee_name.as_("party_name"))
 		else:
 			return None
 

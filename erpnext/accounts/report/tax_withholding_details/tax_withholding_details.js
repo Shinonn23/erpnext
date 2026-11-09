@@ -14,7 +14,7 @@ frappe.query_reports["Tax Withholding Details"] = {
 			fieldname: "party_type",
 			label: __("Party Type"),
 			fieldtype: "Select",
-			options: ["", "Supplier", "Customer"],
+			options: ["", "Supplier", "Customer", "Employee"],
 			default: "",
 			on_change: function () {
 				frappe.query_report.set_filter_value("party", "");
@@ -33,6 +33,9 @@ frappe.query_reports["Tax Withholding Details"] = {
 				return party_type;
 			},
 			get_query: function () {
+				if (frappe.query_report.get_filter_value("party_type") === "Employee") {
+					return {};
+				}
 				return {
 					filters: {
 						tax_withholding_category: ["!=", ""],
