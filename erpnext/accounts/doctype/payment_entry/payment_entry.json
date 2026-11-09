@@ -811,7 +811,7 @@
    "fieldname": "tax_withholding_categories",
    "fieldtype": "Table",
    "label": "Tax Withholding Categories",
-   "mandatory_depends_on": "eval:doc.apply_tds",
+   "mandatory_depends_on": "eval:doc.apply_tds && doc.party_type != 'Employee'",
    "options": "Payment Entry Tax Withholding Category"
   },
   {
