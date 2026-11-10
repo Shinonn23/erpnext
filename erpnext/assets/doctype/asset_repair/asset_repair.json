@@ -30,6 +30,8 @@
   "actions_performed",
   "equipment_parts_section",
   "equipment_parts",
+  "equipment_repair_cost",
+  "equipment_status_before",
   "accounting_details",
   "invoices",
   "section_break_muyc",
@@ -75,6 +77,7 @@
    "reqd": 1
   },
   {
+   "allow_on_submit": 1,
    "depends_on": "eval:doc.repair_status==\"Completed\"",
    "fieldname": "completion_date",
    "fieldtype": "Datetime",
@@ -83,6 +86,7 @@
    "no_copy": 1
   },
   {
+   "allow_on_submit": 1,
    "default": "Pending",
    "fieldname": "repair_status",
    "fieldtype": "Select",
@@ -106,6 +110,7 @@
    "fieldtype": "Column Break"
   },
   {
+   "allow_on_submit": 1,
    "fieldname": "actions_performed",
    "fieldtype": "Long Text",
    "label": "Actions performed"
@@ -118,12 +123,29 @@
    "label": "Parts Used"
   },
   {
+   "allow_on_submit": 1,
    "fieldname": "equipment_parts",
    "fieldtype": "Table",
    "label": "Parts",
    "options": "Service Equipment Repair Part"
   },
   {
+   "allow_on_submit": 1,
+   "description": "Noted for the service record only: it posts nothing.",
+   "fieldname": "equipment_repair_cost",
+   "fieldtype": "Currency",
+   "label": "Repair Cost (record)"
+  },
+  {
+   "fieldname": "equipment_status_before",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Equipment Status Before",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "allow_on_submit": 1,
    "fieldname": "downtime",
    "fieldtype": "Data",
    "in_list_view": 1,
@@ -132,11 +154,11 @@
   },
   {
    "default": "0",
-   "description": "For Service Equipment: the cost noted for the record; it posts nothing.",
+   "depends_on": "eval:!doc.service_equipment",
    "fieldname": "repair_cost",
    "fieldtype": "Currency",
    "label": "Repair Cost",
-   "read_only_depends_on": "eval:!doc.service_equipment"
+   "read_only": 1
   },
   {
    "fieldname": "amended_from",
@@ -245,6 +267,7 @@
    "label": "Consumed Stock Items"
   },
   {
+   "depends_on": "eval:!doc.service_equipment",
    "fieldname": "total_repair_cost",
    "fieldtype": "Currency",
    "label": "Total Repair Cost",
@@ -307,7 +330,7 @@
    "fieldtype": "Column Break"
   },
   {
-   "depends_on": "eval: doc.consumed_items_cost",
+   "depends_on": "eval:doc.consumed_items_cost && !doc.service_equipment",
    "fieldname": "consumed_items_cost",
    "fieldtype": "Currency",
    "label": "Consumed Items Cost"
@@ -401,6 +424,7 @@
    "report": 1,
    "role": "Maintenance User",
    "share": 1,
+   "submit": 1,
    "write": 1
   }
  ],

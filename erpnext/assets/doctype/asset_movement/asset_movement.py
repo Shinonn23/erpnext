@@ -355,8 +355,11 @@ class AssetMovement(Document):
 					"address": row.service_previous_address,
 					"placed_on": row.service_previous_placed_on,
 					"last_movement": row.service_previous_movement,
-					"status": row.service_previous_status,
 				}
+				# the status goes back only while it is still the one this movement set (a repair may have changed it)
+				current = frappe.db.get_value("Service Equipment", row.service_equipment, "status")
+				if status and current == status:
+					values["status"] = row.service_previous_status
 				subject = _("Movement cancelled, back to its previous place")
 			else:
 				values = {

@@ -145,11 +145,16 @@ class TestEquipmentMovement(Offline):
 			service_previous_placed_on="2026-11-01",
 			service_previous_status="Received",
 		)
+		self.db.get_value.side_effect = lambda *args, **kwargs: "Installed"  # still what Install set
 		doc.on_cancel()
 		values = self.db.set_value.call_args.args[2]
 		self.assertEqual(
 			(values["location"], values["last_movement"], values["status"]), ("Store", "AM-0", "Received")
 		)
+		# a repair changed the status since: the cancel restores the place only
+		self.db.get_value.side_effect = lambda *args, **kwargs: "Under Repair"
+		doc.on_cancel()
+		self.assertNotIn("status", self.db.set_value.call_args.args[2])
 
 	def test_the_handover_type_is_required_and_the_evidence_optional(self):
 		doc = movement(assets=[row(service_previous_movement="AM-0")], service_movement_type=None)
@@ -246,24 +251,55 @@ class TestEquipmentRepair(Offline):
 		doc.is_new = lambda: False
 		return doc
 
-	def test_the_repair_is_a_record_without_cost_center_or_stock(self):
+	def test_a_draft_repair_writes_nothing_and_has_no_cost_center_or_stock(self):
 		self.db.get_value.side_effect = lambda doctype, name, field: {"company": "CD", "status": "Installed"}[
 			field
 		]
 		doc = self.repair()
+		doc.validate()
+		self.assertEqual((doc.company, doc.cost_center, doc.total_repair_cost), ("CD", None, 0))
+		self.db.set_value.assert_not_called()
+
+	def test_retired_or_returned_equipment_is_not_repaired(self):
+		for status in ("Retired", "Returned to Supplier"):
+			self.db.get_value.side_effect = lambda doctype, name, field, status=status: {
+				"company": "CD",
+				"status": status,
+			}[field]
+			with self.subTest(status=status), self.assertRaises(frappe.ValidationError):
+				self.repair().validate()
+
+	def test_submit_opens_the_repair_and_completion_restores_the_status_before(self):
+		state = {"status": "Installed"}
+		self.db.get_value.side_effect = lambda doctype, name, field: state[field]
+		self.db.set_value.side_effect = lambda doctype, name, field, value: state.update({field: value})
+		doc = self.repair(docstatus=1)
 		with (
 			patch.object(AssetRepair, "decrease_stock_quantity") as stock,
 			patch.object(AssetRepair, "make_gl_entries") as gl,
 		):
-			doc.validate()
-			self.assertEqual((doc.company, doc.cost_center, doc.total_repair_cost), ("CD", None, 1500))
-			self.db.set_value.assert_called_with("Service Equipment", "EQ-1", "status", "Under Repair")
-			doc.repair_status, doc.completion_date, doc.docstatus = "Completed", "2026-11-02 08:00:00", 1
-			self.db.get_value.side_effect = lambda doctype, name, field: "Under Repair"
+			doc.before_submit()
 			doc.on_submit()
+			self.assertEqual(state["status"], "Under Repair")
+			doc.repair_status = "Completed"
+			doc.on_update_after_submit()
 			stock.assert_not_called()
 			gl.assert_not_called()
-		self.db.set_value.assert_called_with("Service Equipment", "EQ-1", "status", "Installed")
+		self.assertEqual(state["status"], "Installed")
+		# a status set since the repair (e.g. by a movement) is left alone by the cancel
+		state["status"] = "Out of Order"
+		doc.on_cancel()
+		self.assertEqual(state["status"], "Out of Order")
+
+	def test_a_cancelled_open_repair_restores_the_status_before(self):
+		state = {"status": "In Service"}
+		self.db.get_value.side_effect = lambda doctype, name, field: state[field]
+		self.db.set_value.side_effect = lambda doctype, name, field, value: state.update({field: value})
+		doc = self.repair(docstatus=1)
+		doc.before_submit()
+		doc.on_submit()
+		doc.on_cancel()
+		self.assertEqual(state["status"], "In Service")
 
 	def test_the_parts_table_is_a_record_only(self):
 		parts = fields(
@@ -292,7 +328,7 @@ class TestEquipmentMaintenance(Offline):
 		doc = asset_maintenance.AssetMaintenance.__new__(asset_maintenance.AssetMaintenance)
 		doc.__dict__.update(asset_name=None, service_equipment="EQ-1")
 		doc.autoname()
-		self.assertEqual(doc.name, "EQ-1")
+		self.assertEqual(doc.name, "EQ-1-SE", "never the name of an Asset's plan")
 		tasks = [
 			frappe._dict(
 				maintenance_type="Preventive Maintenance",
@@ -352,6 +388,14 @@ class TestServiceRoles(TestCase):
 			own = frappe._dict(doctype="Asset Repair", service_equipment="EQ-1", is_new=lambda: False)
 			self.assertTrue(equipment.has_permission(own, "read", "tech"))
 
+	def test_accounting_does_not_act_on_an_equipment_repair(self):
+		with patch.object(frappe, "get_roles", return_value=["Accounts User", "Accounts Manager"]):
+			self.assertIn("= ''", equipment.permission_query("acc", "Asset Repair"))
+			repair = frappe._dict(doctype="Asset Repair", service_equipment="EQ-1", is_new=lambda: False)
+			self.assertFalse(equipment.has_permission(repair, "submit", "acc"))
+			company = frappe._dict(doctype="Asset Repair", service_equipment=None, is_new=lambda: False)
+			self.assertTrue(equipment.has_permission(company, "submit", "acc"))
+
 	def test_another_right_on_the_doctype_is_not_narrowed(self):
 		with (
 			patch.object(frappe, "get_roles", return_value=["Maintenance User", "Stock Manager"]),
@@ -364,7 +408,7 @@ class TestServiceRoles(TestCase):
 		for path, submit in (
 			(("assets", "doctype", "asset_movement", "asset_movement.json"), 1),
 			(("assets", "doctype", "asset_maintenance_log", "asset_maintenance_log.json"), 1),
-			(("assets", "doctype", "asset_repair", "asset_repair.json"), 0),
+			(("assets", "doctype", "asset_repair", "asset_repair.json"), 1),
 		):
 			roles = {p["role"]: p for p in load(*path)["permissions"]}
 			self.assertEqual(roles["Maintenance User"].get("submit", 0), submit, path[-1])

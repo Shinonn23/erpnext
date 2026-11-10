@@ -34,8 +34,9 @@ class AssetMaintenance(Document):
 	# end: auto-generated types
 
 	def autoname(self):
-		# One maintenance plan for each Asset or Service Equipment, named after it.
-		self.name = self.asset_name or self.service_equipment
+		# One maintenance plan for each Asset or Service Equipment, named after it; an equipment plan ends in "-SE" so
+		# it never takes the name of an Asset's plan.
+		self.name = self.asset_name or f"{self.service_equipment}-SE"
 
 	def validate(self):
 		if self.service_equipment:

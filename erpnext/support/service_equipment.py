@@ -207,13 +207,27 @@ def is_equipment_document(doc):
 	return bool(doc.get("service_equipment"))
 
 
+# Who acts on an equipment repair: the service team (and System Manager). Accounting keeps the company's repairs
+# (it submits and cancels them) but has nothing to do on a repair that has no financial side.
+SERVICE_ONLY = {"Asset Repair": "ifnull(`tabAsset Repair`.service_equipment, '') = ''"}
+
+
+def serves_equipment(user=None):
+	user = user or frappe.session.user
+	return user == "Administrator" or bool(set(frappe.get_roles(user)) & (SERVICE_ROLES | {"System Manager"}))
+
+
 def permission_query(user=None, doctype=None):
+	if doctype in SERVICE_ONLY and not serves_equipment(user):
+		return SERVICE_ONLY[doctype]
 	if doctype not in EQUIPMENT_CONDITIONS or not equipment_only(doctype, user):
 		return ""
 	return EQUIPMENT_CONDITIONS[doctype]
 
 
 def has_permission(doc, ptype="read", user=None, **kwargs):
+	if doc.doctype in SERVICE_ONLY and doc.get("service_equipment") and not serves_equipment(user):
+		return False
 	if doc.doctype not in EQUIPMENT_CONDITIONS or not equipment_only(doc.doctype, user, ptype):
 		return True
 	if (
