@@ -1386,6 +1386,7 @@
    "mandatory_depends_on": "eval:!!doc.p2p_exception_type"
   },
   {
+   "allow_on_submit": 1,
    "depends_on": "eval:!!doc.p2p_exception_type || doc.p2p_exception_document",
    "description": "Optional: attach a supporting document if you have one.",
    "fieldname": "p2p_exception_document",
