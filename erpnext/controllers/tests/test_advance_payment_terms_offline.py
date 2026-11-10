@@ -83,6 +83,21 @@ class TestOrderDatePaymentTerms(unittest.TestCase):
 		)
 		self.assertEqual(getdate(preview.due_date), getdate("2026-12-31"))
 
+	def test_term_type_is_copied_and_legacy_terms_remain_regular(self):
+		for term_type in (None, "Regular", "Advance", "Deposit Invoice"):
+			with self.subTest(payment_term_type=term_type):
+				preview = controller.get_payment_term_details(
+					term(payment_term_type=term_type), "2026-12-01", 100, 100
+				)
+				self.assertEqual(preview.payment_term_type, term_type or "Regular")
+
+	def test_payment_term_type_is_part_of_the_frozen_contract(self):
+		legacy = [term()]
+		regular = [term(payment_term_type="Regular")]
+		deposit = [term(payment_term_type="Deposit Invoice")]
+		self.assertEqual(controller._payment_terms_contract(legacy), controller._payment_terms_contract(regular))
+		self.assertNotEqual(controller._payment_terms_contract(regular), controller._payment_terms_contract(deposit))
+
 	def test_template_api_forwards_the_order_anchor(self):
 		with (
 			patch.object(frappe, "has_permission", return_value=True),
@@ -160,7 +175,10 @@ class TestOrderDatePaymentTerms(unittest.TestCase):
 		self.assertEqual(row.due_date, "2026-11-01")
 
 	def test_invoice_fetch_keeps_the_source_order_anchor(self):
-		row = term(due_date="2026-11-09", paid_amount=0, mode_of_payment=None, description="T/T")
+		row = term(
+			due_date="2026-11-09", paid_amount=0, mode_of_payment=None, description="T/T",
+			payment_term_type="Advance",
+		)
 		source = Document(transaction_date="2026-11-09", payment_terms_template="T/T", payment_schedule=[row])
 		doc = invoice(posting_date="2026-12-01", conversion_rate=1)
 		with (
@@ -171,6 +189,7 @@ class TestOrderDatePaymentTerms(unittest.TestCase):
 				doc, "PO-1", "Purchase Order", 100, 100, True
 			)
 		self.assertEqual(getdate(doc.payment_schedule[0].due_date), getdate("2026-11-09"))
+		self.assertEqual(doc.payment_schedule[0].payment_term_type, "Advance")
 
 	def test_schema_options_and_credit_days_support_the_order_basis(self):
 		root = Path(controller.__file__).parents[1] / "accounts" / "doctype"
@@ -184,6 +203,19 @@ class TestOrderDatePaymentTerms(unittest.TestCase):
 					"" if name == "payment_schedule" else INVOICE_BASE,
 				)
 				self.assertIn(ORDER_BASE, fields["credit_days"]["depends_on"])
+
+	def test_term_type_schema_is_native_and_child_values_are_read_only(self):
+		root = Path(controller.__file__).parents[1] / "accounts" / "doctype"
+		for name in ("payment_term", "payment_terms_template_detail", "payment_schedule"):
+			with self.subTest(doctype=name):
+				meta = json.loads((root / name / f"{name}.json").read_text())
+				field = next(field for field in meta["fields"] if field["fieldname"] == "payment_term_type")
+				self.assertEqual(field["options"].splitlines(), ["Regular", "Advance", "Deposit Invoice"])
+				if name == "payment_term":
+					self.assertEqual(field["default"], "Regular")
+				else:
+					self.assertEqual(field["read_only"], 1)
+					self.assertEqual(field["fetch_from"], "payment_term.payment_term_type")
 
 	def test_invoice_validation_updates_header_after_reanchoring_the_schedule(self):
 		for ignore_default in (False, True):
@@ -231,6 +263,16 @@ class TestOrderDatePaymentTerms(unittest.TestCase):
 				self.assertEqual(getdate(doc.due_date), getdate("2026-11-10"))
 				if not ignore_default:
 					self.assertEqual(getdate(validate.call_args.kwargs["due_date"]), getdate("2026-11-10"))
+
+	def test_header_due_date_accepts_mixed_generated_and_stored_dates(self):
+		for dates in (
+			["2026-11-09", getdate("2026-12-01"), None],
+			[getdate("2026-11-09"), "2026-12-01", ""],
+		):
+			with self.subTest(dates=dates):
+				doc = invoice(payment_schedule=[term(due_date=date) for date in dates])
+				controller.AccountsController.set_due_date(doc)
+				self.assertEqual(doc.due_date, getdate("2026-12-01"))
 
 	def test_invoice_from_approved_old_order_can_keep_its_frozen_invoice_basis(self):
 		old_terms = [term(due_date_based_on=INVOICE_BASE)]

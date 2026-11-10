@@ -1,8 +1,4 @@
 frappe.ui.form.on("Purchase Order", {
-	refresh: function (frm) {
-		erpnext.regional.thailand.deposit_utils.add_create_deposit_button(frm);
-	},
-
 	deposit_amount: function (frm) {
 		let { total, deposit_amount } = frm.doc;
 		if (total && deposit_amount != null)
