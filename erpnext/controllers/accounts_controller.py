@@ -3332,6 +3332,7 @@ class AccountsController(TransactionBase):
 		for schedule in po_or_so.payment_schedule:
 			payment_schedule = {
 				"payment_term": schedule.payment_term,
+				"payment_term_type": schedule.get("payment_term_type") or "Regular",
 				"due_date": schedule.due_date,
 				"invoice_portion": schedule.invoice_portion,
 				"mode_of_payment": schedule.mode_of_payment,
@@ -3380,7 +3381,7 @@ class AccountsController(TransactionBase):
 			self.append("payment_schedule", payment_schedule)
 
 	def set_due_date(self):
-		due_dates = [d.due_date for d in self.get("payment_schedule") if d.due_date]
+		due_dates = [getdate(d.due_date) for d in self.get("payment_schedule") if d.due_date]
 		if due_dates:
 			self.due_date = max(due_dates)
 
@@ -4381,6 +4382,7 @@ def get_payment_term_details(
 		term_details.payment_term = term.payment_term
 
 	fields_to_copy = [
+		"payment_term_type",
 		"description",
 		"invoice_portion",
 		"discount_type",
@@ -4395,6 +4397,8 @@ def get_payment_term_details(
 
 	for field in fields_to_copy:
 		term_details[field] = term.get(field)
+
+	term_details.payment_term_type = term.get("payment_term_type") or "Regular"
 
 	term_details.payment_amount = flt(term.invoice_portion) * flt(grand_total) / 100
 	term_details.base_payment_amount = flt(term.invoice_portion) * flt(base_grand_total) / 100
@@ -4420,6 +4424,7 @@ def _payment_terms_contract(terms):
 	return tuple(
 		(
 			term.get("payment_term") or None,
+			term.get("payment_term_type") or "Regular",
 			flt(term.get("invoice_portion")),
 			term.get("due_date_based_on"),
 			cint(term.get("credit_days")),
