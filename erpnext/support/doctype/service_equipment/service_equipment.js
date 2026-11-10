@@ -27,11 +27,66 @@ frappe.ui.form.on("Service Equipment", {
 			["Asset Maintenance", { service_equipment: frm.doc.name, company: frm.doc.company }],
 			["Asset Repair", { service_equipment: frm.doc.name, company: frm.doc.company }],
 			["Issue", { service_equipment: frm.doc.name, customer: frm.doc.customer }],
+			[
+				"Warranty Claim",
+				{
+					service_equipment: frm.doc.name,
+					customer: frm.doc.customer,
+					company: frm.doc.company,
+					// the claim's Serial No links a Stock Serial No: the equipment's own, when it has one
+					serial_no: frm.doc.serial_no_link,
+				},
+			],
 		];
 		for (const [doctype, values] of plain) {
 			if (frappe.model.can_create(doctype)) {
 				frm.add_custom_button(__(doctype), () => make(doctype, values), __("Create"));
 			}
+		}
+		// A schedule lists its equipment as item rows: the first row is this equipment.
+		if (frappe.model.can_create("Maintenance Schedule")) {
+			frm.add_custom_button(
+				__("Maintenance Schedule"),
+				() =>
+					frappe.new_doc(
+						"Maintenance Schedule",
+						{
+							customer: frm.doc.customer,
+							company: frm.doc.company,
+							service_employee: frm.doc.technician,
+						},
+						(schedule) => {
+							const row = frappe.model.add_child(
+								schedule,
+								"Maintenance Schedule Item",
+								"items"
+							);
+							row.service_equipment = frm.doc.name;
+						}
+					),
+				__("Create")
+			);
+		}
+		// A visit lists its equipment as Purposes rows: the first row is this equipment (with its Item, if any).
+		if (frappe.model.can_create("Maintenance Visit")) {
+			frm.add_custom_button(
+				__("Maintenance Visit"),
+				() =>
+					frappe.new_doc(
+						"Maintenance Visit",
+						{ customer: frm.doc.customer, company: frm.doc.company },
+						(visit) => {
+							const row = frappe.model.add_child(
+								visit,
+								"Maintenance Visit Purpose",
+								"purposes"
+							);
+							row.service_equipment = frm.doc.name;
+							if (frm.doc.item) row.item_code = frm.doc.item;
+						}
+					),
+				__("Create")
+			);
 		}
 	},
 });

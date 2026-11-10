@@ -116,6 +116,63 @@ def log_document_activity(doc, method=None):
 		add_activity(name, subject, doc)
 
 
+def install_from_note(note, method=None):
+	"""A submitted Installation Note installs its equipment rows at its customer: one Install Asset Movement."""
+	names = [row.service_equipment for row in note.get("items") or [] if row.get("service_equipment")]
+	if not names:
+		return
+	movement = frappe.get_doc(
+		{
+			"doctype": "Asset Movement",
+			"company": note.company,
+			"purpose": "Transfer",
+			"transaction_date": f"{note.inst_date} {note.get('inst_time') or '00:00:00'}"
+			if note.get("inst_date")
+			else now_datetime(),
+			"reference_doctype": "Installation Note",
+			"reference_name": note.name,
+			"service_movement_type": "Install",
+			"service_target_customer": note.customer,
+			"service_target_address": note.get("customer_address"),
+			"service_reason": _("Installed by {0}").format(note.name),
+			"assets": [{"service_equipment": name} for name in dict.fromkeys(names)],
+		}
+	)
+	movement.flags.ignore_permissions = True
+	movement.insert()
+	movement.submit()
+
+
+def note_movements(note):
+	return frappe.get_all(
+		"Asset Movement",
+		filters={"reference_doctype": "Installation Note", "reference_name": note.name, "docstatus": 1},
+		pluck="name",
+	)
+
+
+def check_note_cancel(note, method=None):
+	"""The Install movement of a note can be undone only while it is the equipment's latest movement."""
+	for movement in note_movements(note):
+		for name in frappe.get_all(
+			"Asset Movement Item", filters={"parent": movement}, pluck="service_equipment"
+		):
+			if name and frappe.db.get_value("Service Equipment", name, "last_movement") != movement:
+				frappe.throw(
+					_(
+						"Service Equipment {0} has moved since this note installed it. Cancel its later Asset Movements "
+						"first, then cancel the note."
+					).format(name)
+				)
+
+
+def uninstall_from_note(note, method=None):
+	for movement in note_movements(note):
+		doc = frappe.get_doc("Asset Movement", movement)
+		doc.flags.ignore_permissions = True
+		doc.cancel()
+
+
 # Who sees what: a holder of Maintenance User / Maintenance Manager who has no other right on a shared Asset DocType
 # works on the equipment records only, never on the company's Assets.
 EQUIPMENT_CONDITIONS = {

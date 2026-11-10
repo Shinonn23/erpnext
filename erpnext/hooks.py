@@ -617,8 +617,15 @@ doc_events = {
 		"after_insert": "erpnext.support.service_equipment.log_document_activity",
 	},
 	"Installation Note": {
-		"on_submit": "erpnext.support.service_equipment.log_document_activity",
-		"on_cancel": "erpnext.support.service_equipment.log_document_activity",
+		"on_submit": [
+			"erpnext.support.service_equipment.install_from_note",
+			"erpnext.support.service_equipment.log_document_activity",
+		],
+		"before_cancel": "erpnext.support.service_equipment.check_note_cancel",
+		"on_cancel": [
+			"erpnext.support.service_equipment.uninstall_from_note",
+			"erpnext.support.service_equipment.log_document_activity",
+		],
 	},
 	"Item": {
 		"on_update": "erpnext.stock.doctype.item.item_search.reindex_item",

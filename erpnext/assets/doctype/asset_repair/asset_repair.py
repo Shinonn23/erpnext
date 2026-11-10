@@ -35,6 +35,9 @@ class AssetRepair(AccountsController):
 		from erpnext.assets.doctype.asset_repair_purchase_invoice.asset_repair_purchase_invoice import (
 			AssetRepairPurchaseInvoice,
 		)
+		from erpnext.support.doctype.service_equipment_repair_part.service_equipment_repair_part import (
+			ServiceEquipmentRepairPart,
+		)
 
 		actions_performed: DF.LongText | None
 		amended_from: DF.Link | None
@@ -49,6 +52,7 @@ class AssetRepair(AccountsController):
 		description: DF.LongText | None
 		equipment_name: DF.Data | None
 		downtime: DF.Data | None
+		equipment_parts: DF.Table[ServiceEquipmentRepairPart]
 		failure_date: DF.Datetime
 		increase_in_asset_life: DF.Int
 		invoices: DF.Table[AssetRepairPurchaseInvoice]
@@ -213,7 +217,14 @@ class AssetRepair(AccountsController):
 
 	# Service Equipment: the repair is a service record. Parts and invoices are noted only; no stock is consumed, no
 	# cost is capitalized, no GL Entry is made and no depreciation is rescheduled.
-	EQUIPMENT_FINANCIAL_FIELDS = ("asset", "capitalize_repair_cost", "increase_in_asset_life", "invoices")
+	# The parts used on equipment are rows of `equipment_parts` (a record only), never consumed stock items.
+	EQUIPMENT_FINANCIAL_FIELDS = (
+		"asset",
+		"capitalize_repair_cost",
+		"increase_in_asset_life",
+		"invoices",
+		"stock_items",
+	)
 
 	def validate_equipment_repair(self):
 		from erpnext.support.service_equipment import refuse_financial

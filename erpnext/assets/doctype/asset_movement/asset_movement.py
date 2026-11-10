@@ -255,7 +255,9 @@ class AssetMovement(Document):
 	def validate_equipment_movement(self):
 		if any(row.get("asset") for row in self.assets):
 			frappe.throw(_("Move Assets and Service Equipment in separate Asset Movements."))
-		if self.reference_name or self.get("custody_loan") or self.get("is_custody_loan_transaction"):
+		# An Installation Note may make the Install movement of its equipment; no request or loan is fulfilled.
+		referenced = self.reference_name and self.reference_doctype != "Installation Note"
+		if referenced or self.get("custody_loan") or self.get("is_custody_loan_transaction"):
 			frappe.throw(_("A Service Equipment movement cannot fulfil a request or a custody loan."))
 		if self.purpose == "Reassignment":
 			frappe.throw(_("Use Transfer, Receipt or Issue to move Service Equipment."))

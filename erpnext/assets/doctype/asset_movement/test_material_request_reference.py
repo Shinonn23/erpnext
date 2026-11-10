@@ -12,7 +12,10 @@ class TestAssetMovementRequestReference(unittest.TestCase):
 		for target, replacement in (
 			("frappe.db", Mock()),
 			("erpnext.assets.doctype.asset_movement.asset_movement._", lambda message: message),
-			("erpnext.patches.v16_0.migrate_asset_movement_customer_use_reference._", lambda message: message),
+			(
+				"erpnext.patches.v16_0.migrate_asset_movement_customer_use_reference._",
+				lambda message: message,
+			),
 		):
 			patcher = patch(target, replacement)
 			patcher.start()
@@ -162,17 +165,30 @@ class TestAssetMovementRequestReference(unittest.TestCase):
 		movement.expected_return_date = "2026-10-10"
 		movement.assets = [frappe._dict(asset="ASSET-001", request_item="CUR-ITEM-001")]
 		request_item = frappe._dict(
-			name="CUR-ITEM-001", parent="CUR-001", item_code="ITEM-001",
-			item_type="Fixed Asset", qty=1, fulfilled_qty=1, outstanding_qty=1,
+			name="CUR-ITEM-001",
+			parent="CUR-001",
+			item_code="ITEM-001",
+			item_type="Fixed Asset",
+			qty=1,
+			fulfilled_qty=1,
+			outstanding_qty=1,
 		)
 		request = Mock(
-			name="CUR-001", docstatus=1, customer=movement.customer, company=movement.company,
-			contact_person=None, material_request_type="Customer Borrow / Loan", items=[request_item],
+			name="CUR-001",
+			docstatus=1,
+			customer=movement.customer,
+			company=movement.company,
+			contact_person=None,
+			material_request_type="Customer Borrow / Loan",
+			items=[request_item],
 		)
 		# Mock's name argument names the mock rather than setting the document's name.
 		request.name = "CUR-001"
 		with (
-			patch("frappe.get_doc", side_effect=lambda doctype, name: request if doctype == "Material Request" else request_item),
+			patch(
+				"frappe.get_doc",
+				side_effect=lambda doctype, name: request if doctype == "Material Request" else request_item,
+			),
 			patch("frappe.db.get_value", return_value="ITEM-001"),
 			patch("frappe.db.sql") as sql,
 			patch(
@@ -182,12 +198,21 @@ class TestAssetMovementRequestReference(unittest.TestCase):
 			patch("frappe.throw", side_effect=ValueError),
 		):
 			for reference_doctype, reference_name in (
-				("Purchase Receipt", "CUR-001"), ("Material Request", "CUR-002"),
+				("Purchase Receipt", "CUR-001"),
+				("Material Request", "CUR-002"),
 			):
-				sql.return_value = [frappe._dict(purpose="Transfer", reference_doctype=reference_doctype, reference_name=reference_name)]
+				sql.return_value = [
+					frappe._dict(
+						purpose="Transfer", reference_doctype=reference_doctype, reference_name=reference_name
+					)
+				]
 				with self.assertRaises(ValueError):
 					movement.validate_material_request()
-			sql.return_value = [frappe._dict(purpose="Transfer", reference_doctype="Material Request", reference_name="CUR-001")]
+			sql.return_value = [
+				frappe._dict(
+					purpose="Transfer", reference_doctype="Material Request", reference_name="CUR-001"
+				)
+			]
 			with self.assertRaises(ValueError):
 				movement.validate_material_request()
 

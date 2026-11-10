@@ -23,11 +23,13 @@ equipment never takes a financial path. The helpers are `erpnext/support/service
 |---|---|---|
 | Asset Movement (+ Item) | each row names `asset` or `service_equipment`; a movement holds one kind only | Asset status / company asset rules, Material Request and custody loan, demo status, Asset location write; the handover fields (type, sender, receiver, reason, condition, optional evidence, destination customer and address) apply. Submit writes the place and status on the equipment; only its latest movement can be cancelled, and cancel restores the place before it |
 | Asset Maintenance (+ Task, Log) | `asset_name` or `service_equipment` (named after it) | Asset status; the tasks, periodicity, next due date, ToDo and logs are ERPNext's. The plan sets the equipment's next PM / calibration. A submitted Maintenance Visit row with type PM or Calibration and result Done completes the open log of that type due soonest |
-| Asset Repair | `asset` or `service_equipment` | stock consumption, capitalization, purchase invoices, GL Entries, depreciation, cost center; the equipment is Under Repair while the repair is Pending and Installed again once it is completed or cancelled |
+| Asset Repair | `asset` or `service_equipment` | the parts used are rows of Parts Used (`Service Equipment Repair Part`: item, serial no, qty, note; a record only); consumed stock items, stock consumption, capitalization, purchase invoices, GL Entries, depreciation, cost center; the equipment is Under Repair while the repair is Pending and Installed again once it is completed or cancelled |
 | Asset Activity | `asset` or `service_equipment` | none: movements, repairs, maintenance logs, visits, Issues, Warranty Claims and Installation Notes add a line |
 
 Issue, Warranty Claim, Maintenance Visit (+ Purpose), Maintenance Schedule (+ Item) and Installation Note Item carry a
-standard `service_equipment` Link.
+standard `service_equipment` Link. A submitted Installation Note whose rows name equipment makes and submits one Install
+Asset Movement to the note's customer and address; cancelling the note cancels it, refused while a later movement of
+the equipment exists.
 
 A holder of Maintenance User / Maintenance Manager who has no other right on a shared DocType sees and saves only
 its equipment records (`permission_query_conditions` and `has_permission` in `hooks.py`). Nobody in accounts has a
