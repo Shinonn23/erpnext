@@ -14,6 +14,10 @@
   "company",
   "asset",
   "asset_name",
+  "service_equipment",
+  "equipment_name",
+  "issue",
+  "maintenance_visit",
   "column_break_2",
   "repair_status",
   "failure_date",
@@ -113,10 +117,11 @@
   },
   {
    "default": "0",
+   "description": "For Service Equipment: the cost noted for the record; it posts nothing.",
    "fieldname": "repair_cost",
    "fieldtype": "Currency",
    "label": "Repair Cost",
-   "read_only": 1
+   "read_only_depends_on": "eval:!doc.service_equipment"
   },
   {
    "fieldname": "amended_from",
@@ -129,13 +134,14 @@
   },
   {
    "columns": 1,
+   "depends_on": "eval:!doc.service_equipment",
    "fieldname": "asset",
    "fieldtype": "Link",
    "in_list_view": 1,
    "label": "Asset",
    "link_filters": "[[\"Asset\",\"status\",\"not in\",[\"Work In Progress\",\"Capitalized\",\"Sold\",\"Scrapped\",\"Cancelled\"]]]",
-   "options": "Asset",
-   "reqd": 1
+   "mandatory_depends_on": "eval:!doc.service_equipment",
+   "options": "Asset"
   },
   {
    "fetch_from": "asset.asset_name",
@@ -144,13 +150,44 @@
    "label": "Asset Name"
   },
   {
+   "depends_on": "eval:!doc.asset",
+   "fieldname": "service_equipment",
+   "fieldtype": "Link",
+   "label": "Service Equipment",
+   "mandatory_depends_on": "eval:!doc.asset",
+   "options": "Service Equipment"
+  },
+  {
+   "depends_on": "eval:doc.service_equipment",
+   "fetch_from": "service_equipment.equipment_name",
+   "fieldname": "equipment_name",
+   "fieldtype": "Data",
+   "label": "Equipment Name",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.service_equipment",
+   "fieldname": "issue",
+   "fieldtype": "Link",
+   "label": "Issue",
+   "options": "Issue"
+  },
+  {
+   "depends_on": "eval:doc.service_equipment",
+   "fieldname": "maintenance_visit",
+   "fieldtype": "Link",
+   "label": "Maintenance Visit",
+   "options": "Maintenance Visit"
+  },
+  {
    "default": "0",
-   "depends_on": "eval:!doc.__islocal",
+   "depends_on": "eval:!doc.__islocal && !doc.service_equipment",
    "fieldname": "capitalize_repair_cost",
    "fieldtype": "Check",
    "label": "Capitalize Repair Cost"
   },
   {
+   "depends_on": "eval:!doc.service_equipment",
    "fieldname": "accounting_details",
    "fieldtype": "Section Break",
    "hide_border": 1
@@ -213,6 +250,7 @@
    "options": "Company"
   },
   {
+   "depends_on": "eval:!doc.service_equipment",
    "fieldname": "invoices",
    "fieldtype": "Table",
    "label": "Repair Purchase Invoices",
@@ -285,7 +323,7 @@
    "link_fieldname": "asset_repair"
   }
  ],
- "modified": "2026-10-21 05:30:00.000000",
+ "modified": "2026-11-10 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Assets",
  "name": "Asset Repair",
@@ -322,6 +360,32 @@
    "role": "Quality Manager",
    "share": 1,
    "submit": 1,
+   "write": 1
+  },
+  {
+   "amend": 1,
+   "cancel": 1,
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Maintenance Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Maintenance User",
+   "share": 1,
    "write": 1
   }
  ],

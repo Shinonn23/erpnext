@@ -1,0 +1,55 @@
+{
+ "actions": [],
+ "creation": "2026-11-10 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "supplier"
+ ],
+ "fields": [
+  {
+   "description": "The Owner Supplier a new Service Equipment starts with.",
+   "fieldname": "supplier",
+   "fieldtype": "Link",
+   "label": "Default Owner Supplier",
+   "options": "Supplier"
+  }
+ ],
+ "icon": "settings",
+ "index_web_pages_for_search": 0,
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-11-10 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Support",
+ "name": "Service Equipment Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "Maintenance Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "Maintenance User"
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

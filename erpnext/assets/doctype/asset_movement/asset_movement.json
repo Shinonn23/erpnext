@@ -15,6 +15,18 @@
   "transaction_date",
   "section_break_10",
   "assets",
+  "service_equipment_section",
+  "service_movement_type",
+  "service_sender",
+  "service_receiver",
+  "service_handover_column",
+  "service_reason",
+  "service_condition",
+  "service_evidence",
+  "service_destination_section",
+  "service_target_customer",
+  "service_destination_column",
+  "service_target_address",
   "reference",
   "reference_doctype",
   "column_break_9",
@@ -253,6 +265,71 @@
    "reqd": 1
   },
   {
+   "depends_on": "eval:(doc.assets || []).some((row) => row.service_equipment)",
+   "fieldname": "service_equipment_section",
+   "fieldtype": "Section Break",
+   "label": "Equipment Handover"
+  },
+  {
+   "fieldname": "service_movement_type",
+   "fieldtype": "Select",
+   "label": "Handover Type",
+   "mandatory_depends_on": "eval:(doc.assets || []).some((row) => row.service_equipment)",
+   "options": "\nReceive from Supplier\nInstall\nTransfer\nSend for Repair\nReturn from Repair\nReturn to Supplier\nRetire"
+  },
+  {
+   "fieldname": "service_sender",
+   "fieldtype": "Data",
+   "label": "Sender"
+  },
+  {
+   "fieldname": "service_receiver",
+   "fieldtype": "Data",
+   "label": "Receiver"
+  },
+  {
+   "fieldname": "service_handover_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "service_reason",
+   "fieldtype": "Small Text",
+   "label": "Reason"
+  },
+  {
+   "fieldname": "service_condition",
+   "fieldtype": "Small Text",
+   "label": "Equipment Condition"
+  },
+  {
+   "description": "Optional: a photo or signed handover note.",
+   "fieldname": "service_evidence",
+   "fieldtype": "Attach",
+   "label": "Handover Evidence"
+  },
+  {
+   "depends_on": "eval:(doc.assets || []).some((row) => row.service_equipment)",
+   "fieldname": "service_destination_section",
+   "fieldtype": "Section Break",
+   "label": "Equipment Destination"
+  },
+  {
+   "fieldname": "service_target_customer",
+   "fieldtype": "Link",
+   "label": "Destination Customer",
+   "options": "Customer"
+  },
+  {
+   "fieldname": "service_destination_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "service_target_address",
+   "fieldtype": "Link",
+   "label": "Destination Address",
+   "options": "Address"
+  },
+  {
    "fieldname": "column_break_9",
    "fieldtype": "Column Break"
   },
@@ -274,7 +351,7 @@
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-11-07 23:00:00.000000",
+ "modified": "2026-11-10 12:00:00.000000",
  "modified_by": "arirat.ba@connectdiagnostics.com",
  "module": "Assets",
  "name": "Asset Movement",
@@ -322,6 +399,33 @@
    "read": 1,
    "report": 1,
    "role": "Stock Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "amend": 1,
+   "cancel": 1,
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Maintenance Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Maintenance User",
    "share": 1,
    "submit": 1,
    "write": 1

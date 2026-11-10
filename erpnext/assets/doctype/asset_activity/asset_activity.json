@@ -7,6 +7,7 @@
  "engine": "InnoDB",
  "field_order": [
   "asset",
+  "service_equipment",
   "column_break_vkdy",
   "date",
   "column_break_kkxv",
@@ -24,8 +25,16 @@
    "options": "Asset",
    "print_width": "165",
    "read_only": 1,
-   "reqd": 1,
    "width": "165"
+  },
+  {
+   "fieldname": "service_equipment",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Service Equipment",
+   "options": "Service Equipment",
+   "read_only": 1
   },
   {
    "fieldname": "column_break_vkdy",
@@ -76,7 +85,7 @@
  "in_create": 1,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2024-03-27 13:06:32.933603",
+ "modified": "2026-11-10 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Assets",
  "name": "Asset Activity",
@@ -104,6 +113,24 @@
    "read": 1,
    "report": 1,
    "role": "Quality Manager",
+   "share": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Maintenance Manager",
+   "share": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Maintenance User",
    "share": 1
   }
  ],

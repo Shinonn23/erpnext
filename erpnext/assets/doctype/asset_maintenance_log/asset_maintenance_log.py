@@ -34,8 +34,10 @@ class AssetMaintenanceLog(Document):
 		item_name: DF.ReadOnly | None
 		maintenance_status: DF.Literal["Planned", "Completed", "Cancelled", "Overdue"]
 		maintenance_type: DF.ReadOnly | None
+		maintenance_visit: DF.Link | None
 		naming_series: DF.Literal["ACC-AML-.YYYY.-"]
 		periodicity: DF.Data | None
+		service_equipment: DF.Link | None
 		task: DF.Link | None
 		task_assignee_email: DF.Data | None
 		task_name: DF.Data | None
@@ -58,6 +60,16 @@ class AssetMaintenanceLog(Document):
 		if self.maintenance_status not in ["Completed", "Cancelled"]:
 			frappe.throw(_("Maintenance Status has to be Cancelled or Completed to Submit"))
 		self.update_maintenance_task()
+		if self.service_equipment:
+			from erpnext.support.service_equipment import add_activity
+
+			add_activity(
+				self.service_equipment,
+				_("{0} {1}: {2}").format(
+					_(self.maintenance_type or ""), _(self.maintenance_status), self.task_name
+				),
+				self,
+			)
 
 	def update_maintenance_task(self):
 		asset_maintenance_doc = frappe.get_doc("Asset Maintenance Task", self.task)
@@ -75,6 +87,36 @@ class AssetMaintenanceLog(Document):
 			asset_maintenance_doc.save()
 		asset_maintenance_doc = frappe.get_doc("Asset Maintenance", self.asset_maintenance)
 		asset_maintenance_doc.save()
+
+
+def complete_from_visit(visit, method=None):
+	"""A submitted Maintenance Visit completes the open log of each equipment row it did (PM or Calibration, Done):
+	the log of that type due soonest is submitted as Completed on the visit date."""
+	kinds = {"PM": "Preventive Maintenance", "Calibration": "Calibration"}
+	for row in visit.get("purposes") or []:
+		kind = kinds.get(row.get("service_type"))
+		if not row.get("service_equipment") or not kind or row.get("service_result") != "Done":
+			continue
+		name = frappe.db.get_value(
+			"Asset Maintenance Log",
+			{
+				"service_equipment": row.service_equipment,
+				"maintenance_type": kind,
+				"docstatus": 0,
+				"maintenance_status": ("in", ["Planned", "Overdue"]),
+			},
+			"name",
+			order_by="due_date asc",
+		)
+		if not name:
+			continue
+		log = frappe.get_doc("Asset Maintenance Log", name)
+		log.maintenance_status = "Completed"
+		log.completion_date = visit.mntc_date
+		log.maintenance_visit = visit.name
+		log.actions_performed = row.get("work_done") or log.actions_performed
+		log.flags.ignore_permissions = True
+		log.submit()
 
 
 def update_asset_maintenance_log_status():

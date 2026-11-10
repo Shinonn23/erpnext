@@ -577,6 +577,21 @@ period_closing_doctypes = [
 
 sqlite_search = ["erpnext.stock.doctype.item.item_search.ItemSearch"]
 
+# Service Equipment shares the Asset support DocTypes: a holder of Maintenance User / Maintenance Manager with no other
+# right on them works on the equipment records only (erpnext/support/service_equipment.py).
+_service_equipment_shared = {
+	"Asset Movement": "asset_movement_query",
+	"Asset Maintenance": "asset_maintenance_query",
+	"Asset Maintenance Log": "asset_maintenance_log_query",
+	"Asset Repair": "asset_repair_query",
+	"Asset Activity": "asset_activity_query",
+}
+permission_query_conditions = {
+	doctype: "erpnext.support.service_equipment." + method
+	for doctype, method in _service_equipment_shared.items()
+}
+has_permission = dict.fromkeys(_service_equipment_shared, "erpnext.support.service_equipment.has_permission")
+
 doc_events = {
 	"*": {
 		"validate": [
@@ -587,6 +602,23 @@ doc_events = {
 	},
 	tuple(period_closing_doctypes): {
 		"validate": "erpnext.accounts.doctype.accounting_period.accounting_period.validate_accounting_period_on_doc_save",
+	},
+	("Asset Maintenance", "Asset Maintenance Log", "Asset Repair"): {
+		"validate": "erpnext.support.service_equipment.refuse_company_asset",
+	},
+	"Maintenance Visit": {
+		"on_submit": [
+			"erpnext.assets.doctype.asset_maintenance_log.asset_maintenance_log.complete_from_visit",
+			"erpnext.support.service_equipment.log_document_activity",
+		],
+		"on_cancel": "erpnext.support.service_equipment.log_document_activity",
+	},
+	("Issue", "Warranty Claim"): {
+		"after_insert": "erpnext.support.service_equipment.log_document_activity",
+	},
+	"Installation Note": {
+		"on_submit": "erpnext.support.service_equipment.log_document_activity",
+		"on_cancel": "erpnext.support.service_equipment.log_document_activity",
 	},
 	"Item": {
 		"on_update": "erpnext.stock.doctype.item.item_search.reindex_item",
@@ -616,7 +648,10 @@ doc_events = {
 		],
 	},
 	"Asset Movement": {
-		"validate": "erpnext.loan.doctype.custody_loan.custody_loan_core.validate_generated_transaction",
+		"validate": [
+			"erpnext.loan.doctype.custody_loan.custody_loan_core.validate_generated_transaction",
+			"erpnext.support.service_equipment.refuse_company_asset",
+		],
 		"before_cancel": "erpnext.loan.doctype.custody_loan.custody_loan_core.validate_generated_transaction_cancellation",
 		"on_submit": "erpnext.loan.doctype.custody_loan.custody_loan_core.update_custody_loan_status",
 		"on_cancel": "erpnext.loan.doctype.custody_loan.custody_loan_core.update_custody_loan_status",

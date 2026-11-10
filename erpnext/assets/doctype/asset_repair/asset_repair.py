@@ -38,7 +38,7 @@ class AssetRepair(AccountsController):
 
 		actions_performed: DF.LongText | None
 		amended_from: DF.Link | None
-		asset: DF.Link
+		asset: DF.Link | None
 		asset_name: DF.ReadOnly | None
 		capitalize_repair_cost: DF.Check
 		company: DF.Link | None
@@ -47,19 +47,28 @@ class AssetRepair(AccountsController):
 		cost_center: DF.Link | None
 		department: DF.Link | None
 		description: DF.LongText | None
+		equipment_name: DF.Data | None
 		downtime: DF.Data | None
 		failure_date: DF.Datetime
 		increase_in_asset_life: DF.Int
 		invoices: DF.Table[AssetRepairPurchaseInvoice]
+		issue: DF.Link | None
 		naming_series: DF.Literal["ACC-ASR-.YYYY.-"]
+		maintenance_visit: DF.Link | None
 		project: DF.Link | None
 		repair_cost: DF.Currency
 		repair_status: DF.Literal["Pending", "Completed", "Cancelled"]
+		service_equipment: DF.Link | None
 		stock_items: DF.Table[AssetRepairConsumedItem]
 		total_repair_cost: DF.Currency
 	# end: auto-generated types
 
 	def validate(self):
+		if self.service_equipment:
+			self.validate_equipment_repair()
+			return
+		if not self.asset:
+			frappe.throw(_("Choose the Asset or the Service Equipment to repair."))
 		self.set_department()
 		self.asset_doc = frappe.get_lazy_doc("Asset", self.asset)
 		self.validate_asset()
@@ -202,7 +211,45 @@ class AssetRepair(AccountsController):
 	def calculate_total_repair_cost(self):
 		self.total_repair_cost = flt(self.repair_cost) + flt(self.consumed_items_cost)
 
+	# Service Equipment: the repair is a service record. Parts and invoices are noted only; no stock is consumed, no
+	# cost is capitalized, no GL Entry is made and no depreciation is rescheduled.
+	EQUIPMENT_FINANCIAL_FIELDS = ("asset", "capitalize_repair_cost", "increase_in_asset_life", "invoices")
+
+	def validate_equipment_repair(self):
+		from erpnext.support.service_equipment import refuse_financial
+
+		refuse_financial(self, self.EQUIPMENT_FINANCIAL_FIELDS)
+		self.company = self.company or frappe.db.get_value(
+			"Service Equipment", self.service_equipment, "company"
+		)
+		self.cost_center = None
+		self.validate_dates()
+		self.calculate_consumed_items_cost()
+		self.total_repair_cost = flt(self.repair_cost) + flt(self.consumed_items_cost)
+		self.check_repair_status()
+		self.set_downtime()
+		self.update_equipment_status()
+
+	def update_equipment_status(self, cancel=False):
+		"""Under Repair while the repair is open; Installed again once it is completed or cancelled."""
+		from erpnext.support.service_equipment import add_activity
+
+		status = frappe.db.get_value("Service Equipment", self.service_equipment, "status")
+		open_repair = self.repair_status == "Pending" and not cancel
+		if open_repair and status != "Under Repair":
+			frappe.db.set_value("Service Equipment", self.service_equipment, "status", "Under Repair")
+			if not self.is_new():
+				add_activity(self.service_equipment, _("Under repair"), self)
+		elif not open_repair and status == "Under Repair" and (self.docstatus == 1 or cancel):
+			frappe.db.set_value("Service Equipment", self.service_equipment, "status", "Installed")
+
 	def on_submit(self):
+		if self.service_equipment:
+			from erpnext.support.service_equipment import add_activity
+
+			self.update_equipment_status()
+			add_activity(self.service_equipment, _("Repair {0}").format(_(self.repair_status)), self)
+			return
 		self.decrease_stock_quantity()
 
 		if self.get("capitalize_repair_cost"):
@@ -223,6 +270,12 @@ class AssetRepair(AccountsController):
 				doc.cancel()
 
 	def on_cancel(self):
+		if self.service_equipment:
+			from erpnext.support.service_equipment import add_activity
+
+			self.update_equipment_status(cancel=True)
+			add_activity(self.service_equipment, _("Repair cancelled"), self)
+			return
 		self.asset_doc = frappe.get_doc("Asset", self.asset)
 		if self.get("capitalize_repair_cost"):
 			self.update_asset_value()
@@ -236,6 +289,8 @@ class AssetRepair(AccountsController):
 		self.cancel_sabb()
 
 	def after_delete(self):
+		if self.service_equipment:
+			return
 		frappe.get_lazy_doc("Asset", self.asset).set_status()
 
 	def check_repair_status(self):

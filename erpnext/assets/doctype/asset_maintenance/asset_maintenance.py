@@ -22,16 +22,28 @@ class AssetMaintenance(Document):
 
 		asset_category: DF.ReadOnly | None
 		asset_maintenance_tasks: DF.Table[AssetMaintenanceTask]
-		asset_name: DF.Link
+		asset_name: DF.Link | None
 		company: DF.Link
+		equipment_name: DF.Data | None
 		item_code: DF.ReadOnly | None
 		item_name: DF.ReadOnly | None
 		maintenance_manager: DF.Data | None
 		maintenance_manager_name: DF.ReadOnly | None
 		maintenance_team: DF.Link
+		service_equipment: DF.Link | None
 	# end: auto-generated types
 
+	def autoname(self):
+		# One maintenance plan for each Asset or Service Equipment, named after it.
+		self.name = self.asset_name or self.service_equipment
+
 	def validate(self):
+		if self.service_equipment:
+			if self.asset_name:
+				throw(_("Choose either an Asset or a Service Equipment, not both."))
+			self.company = frappe.db.get_value("Service Equipment", self.service_equipment, "company")
+		elif not self.asset_name:
+			throw(_("Choose the Asset or the Service Equipment to maintain."))
 		for task in self.get("asset_maintenance_tasks"):
 			if task.end_date and (getdate(task.start_date) >= getdate(task.end_date)):
 				throw(_("Start date should be less than end date for task {0}").format(task.maintenance_task))
@@ -44,8 +56,12 @@ class AssetMaintenance(Document):
 		for task in self.get("asset_maintenance_tasks"):
 			assign_tasks(self.name, task.assign_to, task.maintenance_task, task.next_due_date)
 		self.sync_maintenance_tasks()
+		if self.service_equipment:
+			sync_equipment_dates(self)
 
 	def after_delete(self):
+		if self.service_equipment:
+			return
 		asset = frappe.get_doc("Asset", self.asset_name)
 		if asset.status == "In Maintenance":
 			asset.set_status()
@@ -66,6 +82,21 @@ class AssetMaintenance(Document):
 			for asset_maintenance_log in asset_maintenance_logs:
 				maintenance_log = frappe.get_doc("Asset Maintenance Log", asset_maintenance_log.name)
 				maintenance_log.db_set("maintenance_status", "Cancelled")
+
+
+# The next PM and the next calibration of a Service Equipment are the soonest due tasks of its plan.
+EQUIPMENT_DATES = {"Preventive Maintenance": "next_pm", "Calibration": "next_calibration"}
+
+
+def sync_equipment_dates(maintenance):
+	values = dict.fromkeys(EQUIPMENT_DATES.values())
+	for task in maintenance.get("asset_maintenance_tasks"):
+		fieldname = EQUIPMENT_DATES.get(task.maintenance_type)
+		if not fieldname or not task.next_due_date or task.maintenance_status == "Cancelled":
+			continue
+		if not values[fieldname] or getdate(task.next_due_date) < getdate(values[fieldname]):
+			values[fieldname] = task.next_due_date
+	frappe.db.set_value("Service Equipment", maintenance.service_equipment, values)
 
 
 def assign_tasks(asset_maintenance_name, assign_to_member, maintenance_task, next_due_date):
@@ -138,6 +169,9 @@ def update_maintenance_log(asset_maintenance, item_code, item_name, task):
 				"doctype": "Asset Maintenance Log",
 				"asset_maintenance": asset_maintenance,
 				"asset_name": asset_maintenance,
+				"service_equipment": frappe.db.get_value(
+					"Asset Maintenance", asset_maintenance, "service_equipment"
+				),
 				"item_code": item_code,
 				"item_name": item_name,
 				"task": task.name,
