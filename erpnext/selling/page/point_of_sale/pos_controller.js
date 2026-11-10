@@ -447,12 +447,15 @@ erpnext.PointOfSale.Controller = class {
 				},
 
 				submit_invoice: () => {
-					this.frm.savesubmit().then((r) => {
+					this.frm.savesubmit().then(async (r) => {
+						// A workflow may finish the invoice after the save call returned: show the
+						// document as it is stored now (status Paid), not the copy of the save response.
+						await this.reload_submitted_invoice(r.doc || this.frm.doc);
 						this.toggle_components(false);
 						this.toggle_submitted_invoice_summary(true);
 						frappe.show_alert({
 							indicator: "green",
-							message: __("POS invoice {0} created successfully", [r.doc.name]),
+							message: __("POS invoice {0} created successfully", [this.frm.doc.name]),
 						});
 					});
 				},
@@ -550,6 +553,17 @@ erpnext.PointOfSale.Controller = class {
 
 		// do not show item details or payment if recent order is toggled off
 		!show ? this.item_details.toggle_component(false) || this.payment.toggle_component(false) : "";
+	}
+
+	async reload_submitted_invoice(saved) {
+		try {
+			const doc = await frappe.db.get_doc(saved.doctype, saved.name);
+			if (!doc) return;
+			frappe.model.sync(doc);
+			this.frm.doc = frappe.get_doc(doc.doctype, doc.name) || doc;
+		} catch (e) {
+			// keep the document of the save response when the reload is not possible
+		}
 	}
 
 	toggle_submitted_invoice_summary(show) {

@@ -3205,7 +3205,9 @@ def update_multi_mode_option(doc, pos_profile):
 		payment.account = payment_mode.default_account
 		payment.type = payment_mode.type
 
-	mop_refetched = bool(doc.payments) and not doc.is_created_using_pos
+	# A POS Invoice has no is_created_using_pos field: it is always made in the POS.
+	created_using_pos = doc.doctype == "POS Invoice" or bool(doc.get("is_created_using_pos"))
+	mop_refetched = bool(doc.payments) and not created_using_pos
 
 	doc.set("payments", [])
 	invalid_modes = []
