@@ -225,9 +225,7 @@ class Issue(Document):
 				"comment_type": "Info",
 				"reference_doctype": "Issue",
 				"reference_name": replicated_issue.name,
-				"content": " - Split the Issue from <a href='/app/Form/Issue/{}'>{}</a>".format(
-					self.name, frappe.bold(self.name)
-				),
+				"content": f" - Split the Issue from <a href='/app/Form/Issue/{self.name}'>{frappe.bold(self.name)}</a>",
 			}
 		).insert(ignore_permissions=True)
 
@@ -497,7 +495,7 @@ def calculate_initial_frt(issue_creation_date, days_in_between, support_hours):
 
 
 def is_before_working_hours(date, support_hours):
-	start_time, end_time = get_working_hours(date, support_hours)
+	start_time, _end_time = get_working_hours(date, support_hours)
 	time = get_time_in_seconds(date)
 	if time < start_time:
 		return True

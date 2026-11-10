@@ -1,0 +1,387 @@
+{
+ "actions": [],
+ "autoname": "field:equipment_id",
+ "creation": "2026-11-10 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "identity_section",
+  "equipment_id",
+  "equipment_name",
+  "item",
+  "brand",
+  "model",
+  "identity_column",
+  "serial_no",
+  "serial_no_link",
+  "owner_supplier",
+  "company",
+  "status",
+  "received_date",
+  "place_section",
+  "location",
+  "custodian",
+  "place_column",
+  "customer",
+  "address",
+  "placed_on",
+  "last_movement",
+  "service_tab",
+  "responsibility_section",
+  "technician",
+  "responsibility_column",
+  "maintenance_team",
+  "coverage_section",
+  "contract_reference",
+  "warranty_end",
+  "coverage_column",
+  "coverage_end",
+  "warranty_source",
+  "plan_section",
+  "next_pm",
+  "plan_column",
+  "next_calibration",
+  "source_section",
+  "source_key",
+  "source_column",
+  "source_note",
+  "source_hash",
+  "legacy_asset"
+ ],
+ "fields": [
+  {
+   "fieldname": "identity_section",
+   "fieldtype": "Section Break",
+   "label": "Identity"
+  },
+  {
+   "fieldname": "equipment_id",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Equipment ID",
+   "no_copy": 1,
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "bold": 1,
+   "fieldname": "equipment_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Equipment Name"
+  },
+  {
+   "fieldname": "item",
+   "fieldtype": "Link",
+   "label": "Item",
+   "options": "Item"
+  },
+  {
+   "fieldname": "brand",
+   "fieldtype": "Data",
+   "label": "Manufacturer / Brand"
+  },
+  {
+   "fieldname": "model",
+   "fieldtype": "Data",
+   "label": "Model"
+  },
+  {
+   "fieldname": "identity_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "serial_no",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Serial Number",
+   "no_copy": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "serial_no_link",
+   "fieldtype": "Link",
+   "label": "Stock Serial No",
+   "no_copy": 1,
+   "options": "Serial No"
+  },
+  {
+   "fieldname": "owner_supplier",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Owner Supplier",
+   "options": "Supplier",
+   "reqd": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Responsible Company",
+   "options": "Company",
+   "remember_last_selected_value": 1,
+   "reqd": 1
+  },
+  {
+   "default": "Received",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Received\nInstalled\nIn Service\nUnder Repair\nOut of Order\nReturned to Supplier\nRetired",
+   "reqd": 1
+  },
+  {
+   "fieldname": "received_date",
+   "fieldtype": "Date",
+   "label": "Received Date"
+  },
+  {
+   "description": "Written by a submitted Asset Movement of the equipment.",
+   "fieldname": "place_section",
+   "fieldtype": "Section Break",
+   "label": "Current Place"
+  },
+  {
+   "fieldname": "location",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Location",
+   "options": "Location",
+   "read_only": 1
+  },
+  {
+   "fieldname": "custodian",
+   "fieldtype": "Link",
+   "label": "Custodian",
+   "options": "Employee",
+   "read_only": 1
+  },
+  {
+   "fieldname": "place_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Customer",
+   "options": "Customer",
+   "read_only": 1
+  },
+  {
+   "fieldname": "address",
+   "fieldtype": "Link",
+   "label": "Address",
+   "options": "Address",
+   "read_only": 1
+  },
+  {
+   "fieldname": "placed_on",
+   "fieldtype": "Datetime",
+   "label": "Placed On",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_movement",
+   "fieldtype": "Link",
+   "label": "Last Movement",
+   "no_copy": 1,
+   "options": "Asset Movement",
+   "read_only": 1
+  },
+  {
+   "fieldname": "service_tab",
+   "fieldtype": "Tab Break",
+   "label": "Service & Contract"
+  },
+  {
+   "fieldname": "responsibility_section",
+   "fieldtype": "Section Break",
+   "label": "Service Responsibility"
+  },
+  {
+   "fieldname": "technician",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Responsible Technician",
+   "options": "Employee"
+  },
+  {
+   "fieldname": "responsibility_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "maintenance_team",
+   "fieldtype": "Link",
+   "label": "Maintenance Team",
+   "options": "Asset Maintenance Team"
+  },
+  {
+   "fieldname": "coverage_section",
+   "fieldtype": "Section Break",
+   "label": "Warranty & Contract"
+  },
+  {
+   "fieldname": "contract_reference",
+   "fieldtype": "Data",
+   "label": "Contract Reference"
+  },
+  {
+   "fieldname": "warranty_end",
+   "fieldtype": "Date",
+   "label": "Warranty End"
+  },
+  {
+   "fieldname": "coverage_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "coverage_end",
+   "fieldtype": "Date",
+   "label": "Service Contract End"
+  },
+  {
+   "fieldname": "warranty_source",
+   "fieldtype": "Data",
+   "label": "Source Warranty Text"
+  },
+  {
+   "description": "The next dates follow the Asset Maintenance of the equipment.",
+   "fieldname": "plan_section",
+   "fieldtype": "Section Break",
+   "label": "Preventive Maintenance & Calibration"
+  },
+  {
+   "fieldname": "next_pm",
+   "fieldtype": "Date",
+   "label": "Next PM",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "plan_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "next_calibration",
+   "fieldtype": "Date",
+   "label": "Next Calibration",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "source_section",
+   "fieldtype": "Section Break",
+   "label": "Source Record"
+  },
+  {
+   "fieldname": "source_key",
+   "fieldtype": "Data",
+   "label": "Source Row Key",
+   "no_copy": 1,
+   "read_only": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "source_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "source_note",
+   "fieldtype": "Small Text",
+   "label": "Source Note"
+  },
+  {
+   "fieldname": "source_hash",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Source Content Hash",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "legacy_asset",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Legacy Asset",
+   "no_copy": 1,
+   "read_only": 1
+  }
+ ],
+ "icon": "tool",
+ "index_web_pages_for_search": 0,
+ "links": [
+  {
+   "group": "Movement",
+   "is_child_table": 1,
+   "link_doctype": "Asset Movement Item",
+   "link_fieldname": "service_equipment",
+   "parent_doctype": "Asset Movement",
+   "table_fieldname": "assets"
+  }
+ ],
+ "modified": "2026-11-10 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Support",
+ "name": "Service Equipment",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "import": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Maintenance Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Maintenance User",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Support Team",
+   "share": 1
+  }
+ ],
+ "search_fields": "equipment_name,serial_no,customer",
+ "show_title_field_in_link": 1,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "equipment_name",
+ "track_changes": 1
+}

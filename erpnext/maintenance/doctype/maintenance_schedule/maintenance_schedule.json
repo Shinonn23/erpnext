@@ -11,6 +11,8 @@
   "customer_details",
   "naming_series",
   "customer",
+  "service_equipment",
+  "service_employee",
   "column_break0",
   "status",
   "transaction_date",
@@ -60,6 +62,21 @@
    "options": "Customer",
    "print_hide": 1,
    "search_index": 1
+  },
+  {
+   "description": "The first equipment of the item rows; the schedule lists every equipment there.",
+   "fieldname": "service_equipment",
+   "fieldtype": "Link",
+   "label": "First Equipment",
+   "no_copy": 1,
+   "options": "Service Equipment",
+   "read_only": 1
+  },
+  {
+   "fieldname": "service_employee",
+   "fieldtype": "Link",
+   "label": "Service Technician",
+   "options": "Employee"
   },
   {
    "fieldname": "column_break0",
@@ -240,7 +257,7 @@
    "link_fieldname": "maintenance_schedule"
   }
  ],
- "modified": "2026-10-05 17:12:54.560318",
+ "modified": "2026-11-10 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Maintenance",
  "name": "Maintenance Schedule",

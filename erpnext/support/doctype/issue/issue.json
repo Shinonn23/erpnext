@@ -15,6 +15,10 @@
   "naming_series",
   "subject",
   "customer",
+  "service_equipment",
+  "service_equipment_status",
+  "service_equipment_warranty_end",
+  "service_equipment_coverage_end",
   "raised_by",
   "cb00",
   "status",
@@ -106,6 +110,36 @@
    "options": "Customer",
    "print_hide": 1,
    "search_index": 1
+  },
+  {
+   "fieldname": "service_equipment",
+   "fieldtype": "Link",
+   "label": "Service Equipment",
+   "options": "Service Equipment"
+  },
+  {
+   "depends_on": "eval:doc.service_equipment",
+   "fetch_from": "service_equipment.status",
+   "fieldname": "service_equipment_status",
+   "fieldtype": "Data",
+   "label": "Equipment Status",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.service_equipment",
+   "fetch_from": "service_equipment.warranty_end",
+   "fieldname": "service_equipment_warranty_end",
+   "fieldtype": "Date",
+   "label": "Equipment Warranty End",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.service_equipment",
+   "fetch_from": "service_equipment.coverage_end",
+   "fieldname": "service_equipment_coverage_end",
+   "fieldtype": "Date",
+   "label": "Equipment Service Contract End",
+   "read_only": 1
   },
   {
    "bold": 1,
@@ -489,7 +523,7 @@
  "icon": "ticket",
  "idx": 7,
  "links": [],
- "modified": "2026-11-07 22:00:00.000000",
+ "modified": "2026-11-10 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Support",
  "name": "Issue",

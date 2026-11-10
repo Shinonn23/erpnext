@@ -12,6 +12,7 @@
   "asset_maintenance",
   "naming_series",
   "asset_name",
+  "service_equipment",
   "column_break_2",
   "item_code",
   "item_name",
@@ -31,6 +32,7 @@
   "description",
   "column_break_9",
   "actions_performed",
+  "maintenance_visit",
   "amended_from"
  ],
  "fields": [
@@ -52,6 +54,15 @@
    "fieldname": "asset_name",
    "fieldtype": "Read Only",
    "label": "Asset Name"
+  },
+  {
+   "fetch_from": "asset_maintenance.service_equipment",
+   "fieldname": "service_equipment",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Service Equipment",
+   "options": "Service Equipment",
+   "read_only": 1
   },
   {
    "fieldname": "column_break_2",
@@ -156,6 +167,15 @@
    "label": "Actions performed"
   },
   {
+   "depends_on": "eval:doc.service_equipment",
+   "fieldname": "maintenance_visit",
+   "fieldtype": "Link",
+   "label": "Maintenance Visit",
+   "no_copy": 1,
+   "options": "Maintenance Visit",
+   "read_only": 1
+  },
+  {
    "fieldname": "amended_from",
    "fieldtype": "Link",
    "label": "Amended From",
@@ -183,7 +203,7 @@
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2024-09-24 15:12:37.497853",
+ "modified": "2026-11-10 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Assets",
  "name": "Asset Maintenance Log",
@@ -201,6 +221,33 @@
    "read": 1,
    "report": 1,
    "role": "Manufacturing User",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "amend": 1,
+   "cancel": 1,
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Maintenance Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Maintenance User",
    "share": 1,
    "submit": 1,
    "write": 1

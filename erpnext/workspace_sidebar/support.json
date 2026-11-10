@@ -82,9 +82,8 @@
    "indent": 0,
    "keep_closed": 0,
    "label": "Service Equipment",
-   "link_to": "Asset",
+   "link_to": "Service Equipment",
    "link_type": "DocType",
-   "route_options": "{\"service_nonfinancial\": 1}",
    "type": "Link"
   },
   {
@@ -92,10 +91,52 @@
    "collapsible": 1,
    "indent": 0,
    "keep_closed": 0,
-   "label": "Custody Movements",
+   "label": "Equipment Movements",
    "link_to": "Asset Movement",
    "link_type": "DocType",
-   "route_options": "{\"service_movement_type\": [\"is\", \"set\"]}",
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Equipment Maintenance",
+   "link_to": "Asset Maintenance",
+   "link_type": "DocType",
+   "route_options": "{\"service_equipment\": [\"is\", \"set\"]}",
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Maintenance Logs",
+   "link_to": "Asset Maintenance Log",
+   "link_type": "DocType",
+   "route_options": "{\"service_equipment\": [\"is\", \"set\"]}",
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Equipment Repairs",
+   "link_to": "Asset Repair",
+   "link_type": "DocType",
+   "route_options": "{\"service_equipment\": [\"is\", \"set\"]}",
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Maintenance Teams",
+   "link_to": "Asset Maintenance Team",
+   "link_type": "DocType",
    "type": "Link"
   },
   {
@@ -180,6 +221,39 @@
    "keep_closed": 0,
    "label": "Equipment Register",
    "link_to": "Service Equipment Register",
+   "link_type": "Report",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Location History",
+   "link_to": "Service Equipment Location History",
+   "link_type": "Report",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Maintenance Due",
+   "link_to": "Service Equipment Maintenance Due",
+   "link_type": "Report",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Repair History",
+   "link_to": "Service Equipment Repair History",
    "link_type": "Report",
    "show_arrow": 0,
    "type": "Link"
@@ -307,7 +381,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-10-18 22:00:00.000000",
+ "modified": "2026-11-10 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Support",
  "name": "Support",

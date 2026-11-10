@@ -15,8 +15,9 @@ class AssetActivity(Document):
 	if TYPE_CHECKING:
 		from frappe.types import DF
 
-		asset: DF.Link
+		asset: DF.Link | None
 		date: DF.Datetime
+		service_equipment: DF.Link | None
 		subject: DF.SmallText
 		user: DF.Link
 	# end: auto-generated types
