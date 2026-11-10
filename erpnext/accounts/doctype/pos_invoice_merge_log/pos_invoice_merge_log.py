@@ -737,18 +737,23 @@ def pos_invoice_consolidation(pos_invoices):
 
 
 
+def _blank_to_none(value):
+	"""An empty string and None both mean "not set" (a POS row saved by the client has "", the Sales Invoice row None)."""
+	return value or None
+
+
 def _inventory_signature(rows):
 	return Counter(
 		(
 			row.item_code,
-			row.get("warehouse"),
+			_blank_to_none(row.get("warehouse")),
 			flt(row.get("stock_qty") or flt(row.get("qty")) * flt(row.get("conversion_factor") or 1), 9),
-			row.get("serial_and_batch_bundle"),
+			_blank_to_none(row.get("serial_and_batch_bundle")),
 			tuple(sorted((row.get("serial_no") or "").split())),
-			row.get("batch_no"),
-			row.get("storage_location"),
-			row.get("target_warehouse"),
-			row.get("to_storage_location"),
+			_blank_to_none(row.get("batch_no")),
+			_blank_to_none(row.get("storage_location")),
+			_blank_to_none(row.get("target_warehouse")),
+			_blank_to_none(row.get("to_storage_location")),
 		)
 		for row in rows
 	)

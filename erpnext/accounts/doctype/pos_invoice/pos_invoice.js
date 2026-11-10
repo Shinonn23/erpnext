@@ -135,7 +135,10 @@ erpnext.selling.POSInvoiceController = class POSInvoiceController extends erpnex
 					}
 					this.frm.script_manager.trigger("update_stock");
 					this.calculate_taxes_and_totals();
-					this.frm.doc.taxes_and_charges && this.frm.script_manager.trigger("taxes_and_charges");
+					// a return keeps the taxes of the invoice it returns
+					if (this.frm.doc.taxes_and_charges && !this.frm.doc.is_return) {
+						this.frm.script_manager.trigger("taxes_and_charges");
+					}
 					frappe.model.set_default_values(this.frm.doc);
 					this.set_dynamic_labels();
 				}
