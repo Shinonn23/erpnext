@@ -55,6 +55,14 @@ class StockEntryDetail(Document):
 		qty: DF.Float
 		quality_inspection: DF.Link | None
 		reference_purchase_receipt: DF.Link | None
+		regulatory_coverage_date: DF.Date | None
+		regulatory_identifier: DF.Data | None
+		regulatory_manufacturer: DF.Link | None
+		regulatory_manufacturer_country: DF.Link | None
+		regulatory_newcode: DF.Data | None
+		regulatory_registration: DF.Link | None
+		regulatory_registration_expiry: DF.Date | None
+		regulatory_registration_status: DF.Data | None
 		retain_sample: DF.Check
 		s_warehouse: DF.Link | None
 		sample_quantity: DF.Int
