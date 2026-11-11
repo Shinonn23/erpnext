@@ -62,6 +62,7 @@ class TestAssetLayout(TestCase):
 			data = json.load(handle)
 		fields = {field["fieldname"]: field for field in data["fields"]}
 		self.assertEqual(fields["is_demo_category"]["fieldtype"], "Check")
+		self.assertTrue(fields["is_demo_category"]["hidden"])
 		self.assertIn("is_demo_category", data["field_order"])
 		self.assertEqual(set(data["field_order"]), set(fields))
 
@@ -94,9 +95,9 @@ class TestAssetLayout(TestCase):
 			asset_module.Asset.set_missing_values(asset)
 		self.assertEqual(asset.is_demo_asset, 1)
 
-	def test_demo_status_only_shows_for_demo_assets(self):
+	def test_demo_status_is_visible_for_all_assets(self):
 		_data, fields = self.layout()
-		self.assertEqual(fields["demo_loan_status"]["depends_on"], "eval:doc.is_demo_asset")
+		self.assertFalse(fields["demo_loan_status"].get("depends_on"))
 
 	def test_owner_can_filter_the_asset_list(self):
 		_data, fields = self.layout()

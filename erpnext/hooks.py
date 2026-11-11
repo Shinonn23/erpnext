@@ -50,7 +50,7 @@ develop_version = "15.x.x-develop"
 
 app_include_js = [
 	"erpnext.bundle.js",
-	"/assets/erpnext/js/storage_location.js",
+	"/assets/erpnext/js/storage_location.js?v=20261111-2",
 	"/assets/erpnext/js/regulatory_notify.js",
 	"/assets/erpnext/js/item_uom.js",
 	"/assets/erpnext/js/thailand/address.js",

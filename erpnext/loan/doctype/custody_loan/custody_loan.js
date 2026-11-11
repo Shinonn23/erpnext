@@ -78,9 +78,11 @@ frappe.ui.form.on("Custody Loan", {
 		}
 		if (frm.doc.status === "Pending Delivery" &&
 			frappe.model.can_submit("Custody Loan")) {
-			frm.add_custom_button(__("Confirm Delivery"), async () => {
-				await frm.call("confirm_delivery");
-				await frm.reload_doc();
+			frm.add_custom_button(__("Confirm Delivery"), () => {
+				frappe.confirm(__("Confirm that the full loan has been physically handed over?"), async () => {
+					await frm.call("confirm_delivery");
+					await frm.reload_doc();
+				});
 			}).addClass("btn-primary");
 		}
 		if (frm.doc.delivery_note && frappe.model.can_read("Delivery Note")) {

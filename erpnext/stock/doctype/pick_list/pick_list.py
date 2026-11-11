@@ -522,36 +522,7 @@ class PickList(TransactionBase):
 		existing = frappe.db.get_value("Stock to Asset Conversion", {"pick_list": self.name, "docstatus": ["<", 2]}, "name")
 		if existing:
 			return frappe.get_doc("Stock to Asset Conversion", existing).as_dict()
-		conversion = frappe.new_doc("Stock to Asset Conversion")
-		conversion.company = self.company
-		conversion.material_request = request.name if request else None
-		conversion.pick_list = self.name
-		for location in self.locations:
-			if request:
-				request_item = frappe.db.get_value(
-					"Material Request Item", location.material_request_item,
-					["parent", "item_code", "item_type", "from_warehouse", "qty", "stock_qty", "fulfilled_qty"], as_dict=True,
-				)
-				if (
-					not request_item or request_item.parent != request.name
-					or request_item.item_type != "Stock Item" or request_item.item_code != location.item_code
-					or request_item.from_warehouse != location.warehouse
-				):
-					frappe.throw(_("Pick List row {0} does not match a Stock Item row on the linked request").format(location.idx))
-				available_qty = flt(request_item.stock_qty or request_item.qty) - flt(request_item.fulfilled_qty)
-				if flt(location.picked_qty) <= 0 or flt(location.picked_qty) > available_qty:
-					frappe.throw(_("Pick List row {0}: Picked Qty exceeds the unfulfilled request quantity").format(location.idx))
-			elif flt(location.picked_qty) <= 0:
-				frappe.throw(_("Pick List row {0}: Picked Qty must be greater than zero").format(location.idx))
-			conversion.append("stock_items", {
-				"item_code": location.item_code, "qty": location.picked_qty,
-				"warehouse": location.warehouse,
-				"material_request_item": location.material_request_item if request else None,
-			})
-		if not conversion.stock_items:
-			frappe.throw(_("Add picked Stock Items before creating the conversion"))
-		conversion.insert()
-		return conversion.as_dict()
+		frappe.throw(_("Create Stock to Asset Conversions directly without a Pick List."))
 
 	def validate_expired_batches(self):
 		batches = []
@@ -1265,6 +1236,26 @@ def get_picked_items_qty(items, contains_packed_items=False) -> list[dict]:
 		).where(pi_item.sales_order_item.isin(items))
 
 	return query.run(as_dict=True)
+
+
+@frappe.whitelist()
+def scan_pick_list_barcode(search_value, ctx=None):
+	from erpnext.stock.doctype.storage_location.storage_location import serial_locations
+	from erpnext.stock.utils import scan_barcode
+
+	frappe.has_permission("Pick List", ptype="write", throw=True)
+	ctx = frappe.parse_json(ctx) if ctx else {}
+	data = scan_barcode(search_value, ctx)
+	if data.get("serial_no"):
+		warehouse = frappe.db.get_value("Serial No", data["serial_no"], "warehouse")
+		if not warehouse or frappe.db.get_value("Warehouse", warehouse, "company") != ctx.get("company"):
+			frappe.throw(_("Serial No {0} is not available in this company.").format(data["serial_no"]))
+		locations = serial_locations([data["serial_no"]], warehouse)
+		if len(locations) > 1:
+			frappe.throw(_("Serial No {0} has stock in multiple locations. Check its stock ledger.").format(data["serial_no"]))
+		data["serial_warehouse"] = warehouse
+		data["serial_storage_location"] = next(iter(locations), None)
+	return data
 
 
 def validate_item_locations(pick_list):

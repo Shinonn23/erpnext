@@ -79,6 +79,7 @@
    "fetch_from": "asset.is_demo_asset",
    "fieldname": "is_demo_asset",
    "fieldtype": "Check",
+   "hidden": 1,
    "label": "Is Demo Asset",
    "read_only": 1
   },

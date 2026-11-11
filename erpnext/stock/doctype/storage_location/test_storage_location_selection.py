@@ -185,6 +185,12 @@ class TestStorageLocationStock(unittest.TestCase):
 		self.assertEqual([row[0] for row in rows], ["B-1", "A-2", "A-1"])
 		self.assertEqual([row[2] for row in rows], ["Qty 1", "Qty 5", "Qty 0"])
 
+	def test_preferred_locations_are_sorted_by_quantity_before_their_saved_order(self):
+		self.candidates.append(frappe._dict(name="B-2", location_code="B2", preferred=1, idx=2))
+		with patch(f"{MODULE}.location_stock", return_value={"A-2": 50.0, "B-1": 1.0, "B-2": 5.0}):
+			rows = self.query()
+		self.assertEqual([row[0] for row in rows], ["B-2", "B-1", "A-2", "A-1"])
+
 	def test_a_source_field_offers_only_locations_holding_the_item(self):
 		with patch(f"{MODULE}.location_stock", return_value={"A-2": 5.0}):
 			self.assertEqual([row[0] for row in self.query(only_stock=1)], ["A-2"])

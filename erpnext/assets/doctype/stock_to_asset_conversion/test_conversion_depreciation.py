@@ -158,3 +158,11 @@ class TestConversionDepreciation(TestCase):
 		account.assert_called_once_with("fixed_asset_account", asset_category="One Period", company="CD")
 		self.assertEqual(entries[0]["credit"], 10000)
 		self.assertEqual((entries[1]["account"], entries[1]["debit"]), ("Selected Fixed Asset", 10000))
+
+	def test_serial_costs_use_each_machine_in_the_selected_warehouse(self):
+		doc = SimpleNamespace(name="CONV-1", posting_date="2026-11-11", posting_time="12:00:00")
+		row = frappe._dict(item_code="MACHINE", warehouse="STOCK")
+		with patch.object(conversion.SerialNoValuation, "get_serial_no_wise_incoming_rate", return_value={"S1": 100, "S2": 200}) as lookup:
+			rates = conversion.StocktoAssetConversion.get_serial_costs(doc, row, ["S1", "S2"])
+		self.assertEqual(rates, {"S1": 100, "S2": 200})
+		lookup.assert_called_once_with(["S1", "S2"])

@@ -658,12 +658,6 @@ class CustodyLoan(Document):
 					"target_location": row.target_location,
 					"to_employee": self.borrower if self.borrower_type == "Employee" else None,
 					"custody_loan_item": row.name,
-					"demo_asset_required": cint(
-						frappe.db.get_value(
-							"Material Request", self.material_request, "material_request_type"
-						)
-						== "Customer Demo"
-					),
 				},
 			)
 		movement.insert(ignore_permissions=True)

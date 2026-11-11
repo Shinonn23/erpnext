@@ -1,6 +1,54 @@
 // Copyright (c) 2019, Frappe Technologies Pvt. Ltd. and contributors
 // For license information, please see license.txt
 
+class PickListBarcodeScanner extends erpnext.utils.BarcodeScanner {
+	update_table(data) {
+		this.serial_scan = data.serial_no ? data : null;
+		const rows = this.frm.doc.locations || [];
+		if (this.serial_scan) {
+			if (rows.some((row) => (row.serial_no || "").split("\n").map((s) => s.trim()).includes(data.serial_no))) {
+				this.show_alert(__("Serial No {0} is already added", [data.serial_no]), "orange");
+				return Promise.reject();
+			}
+		}
+		const row = this.get_row_to_modify_on_scan(data.item_code, data.batch_no, data.uom, data.barcode, data.default_warehouse);
+		if (!row?.item_code && rows.some((r) => r.item_code === data.item_code)) {
+			this.show_alert(__("No available row for item {0}; check the picked quantity and location.", [data.item_code]), "red");
+			this.clean_up();
+			return Promise.reject();
+		}
+		return super.update_table(data);
+	}
+
+	get_row_to_modify_on_scan(item_code, batch_no, ...args) {
+		if (!this.serial_scan) return super.get_row_to_modify_on_scan(item_code, batch_no, ...args);
+		const data = this.serial_scan;
+		const rows = this.frm.doc.locations || [];
+		const eligible = rows.filter((row) => {
+			const demand = this.demand_ref_fields.some((f) => row[f]);
+			return row.item_code === item_code && !row.serial_and_batch_bundle && !row.has_item_scanned &&
+				(!demand || flt(row.picked_qty) < flt(row.qty)) &&
+				(!row.batch_no || row.batch_no === batch_no) &&
+				(!row.picked_qty || (row.warehouse === data.serial_warehouse &&
+					(row.storage_location || null) === (data.serial_storage_location || null)));
+		});
+		return eligible.find((r) => r.warehouse === data.serial_warehouse &&
+			(r.storage_location || null) === (data.serial_storage_location || null)) || eligible[0];
+	}
+
+	async set_serial_no(row, serial_no) {
+		if (serial_no && this.serial_scan) {
+			await frappe.model.set_value(row.doctype, row.name, "warehouse", this.serial_scan.serial_warehouse);
+			await frappe.model.set_value(row.doctype, row.name, "storage_location", this.serial_scan.serial_storage_location);
+		}
+		return super.set_serial_no(row, serial_no);
+	}
+
+	is_duplicate_serial_no(row, serial_no) {
+		return serial_no ? (row.serial_no || "").split("\n").map((s) => s.trim()).includes(serial_no) : false;
+	}
+}
+
 frappe.ui.form.on("Pick List", {
 	after_save(frm) {
 		setTimeout(() => {
@@ -154,20 +202,7 @@ frappe.ui.form.on("Pick List", {
 							__("Create")
 						);
 					}
-				} else if (["Customer Demo - Asset Conversion", "Asset Conversion"].includes(frm.doc.pick_list_type)) {
-					frm.add_custom_button(
-						__("Stock to Asset Conversion"),
-						() => frm.call("make_stock_to_asset_conversion").then((r) => {
-							if (r.message) {
-								frappe.model.with_doctype(r.message.doctype, () => {
-									const doc = frappe.model.sync(r.message)[0];
-									frappe.set_route("Form", doc.doctype, doc.name);
-								});
-							}
-						}),
-						__("Create")
-					);
-				} else {
+				} else if (!["Customer Demo - Asset Conversion", "Asset Conversion"].includes(frm.doc.pick_list_type)) {
 					frm.add_custom_button(
 						__("Stock Entry"),
 						() => frm.trigger("create_stock_entry"),
@@ -316,9 +351,9 @@ frappe.ui.form.on("Pick List", {
 			demand_ref_fields: ["sales_order_item", "material_request_item", "product_bundle_item"],
 			dont_allow_new_row: !frm.doc.pick_manually,
 			prompt_qty: frm.doc.prompt_qty,
-			serial_no_field: "not_supported", // doesn't make sense for picklist without a separate field.
+			scan_api: "erpnext.stock.doctype.pick_list.pick_list.scan_pick_list_barcode",
 		};
-		const barcode_scanner = new erpnext.utils.BarcodeScanner(opts);
+		const barcode_scanner = new PickListBarcodeScanner(opts);
 		barcode_scanner.process_scan();
 	},
 	create_stock_reservation_entries: (frm) => {
@@ -396,8 +431,9 @@ frappe.ui.form.on("Pick List Item", {
 		const row = frappe.get_doc(cdt, cdn);
 		if (!row.item_code || !row.warehouse) return;
 		if (row.storage_location) {
-			frappe.db.get_value("Storage Location", row.storage_location, "warehouse").then((r) => {
-				if (r.message?.warehouse !== row.warehouse) {
+			const location = row.storage_location;
+			frappe.db.get_value("Storage Location", location, "warehouse").then((r) => {
+				if (row.storage_location === location && r.message?.warehouse !== row.warehouse) {
 					frappe.model.set_value(cdt, cdn, "storage_location", null);
 				}
 			});

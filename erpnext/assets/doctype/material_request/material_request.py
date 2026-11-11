@@ -441,11 +441,6 @@ class CustomerMaterialRequest(MaterialRequest):
 				frappe.throw(
 					_("Row {0}: Asset is already reserved by another active Material Request").format(row.idx)
 				)
-			if purpose == "Customer Demo" and not frappe.db.get_value("Asset", row.asset, "is_demo_asset"):
-				frappe.throw(
-					_("Row {0}: Customer Demo requires an Asset from a Demo Asset Category").format(row.idx)
-				)
-
 			row.item_code = asset.item_code
 			row.asset_name = frappe.db.get_value("Asset", row.asset, "asset_name")
 			row.asset_serial_number = frappe.db.get_value("Asset", row.asset, "asset_serial_number")
@@ -993,6 +988,7 @@ class CustomerMaterialRequest(MaterialRequest):
 
 
 def get_available_assets(item_code, company, demo_only=False, location=None, exclude_custodian=True):
+	"""Find available assets; demo_only is retained for existing callers and no longer restricts eligibility."""
 	filters = [
 		"a.company=%s",
 		"a.docstatus=1",
@@ -1005,8 +1001,6 @@ def get_available_assets(item_code, company, demo_only=False, location=None, exc
 	if location:
 		filters.append("a.location=%s")
 		values.append(location)
-	if demo_only:
-		filters.append("a.is_demo_asset=1")
 	if exclude_custodian:
 		filters.append("ifnull(a.custodian, '') = ''")
 	return frappe.db.sql(
@@ -1064,8 +1058,6 @@ def get_asset_request_details(
 		or (item_code and item_code != asset.item_code)
 	):
 		frappe.throw(_("Select a submitted Asset matching the requested company and model."))
-	if material_request_type == "Customer Demo" and not asset.is_demo_asset:
-		frappe.throw(_("Customer Demo requires a Demo Asset."))
 	waiting = material_request_type == "Customer Demo" and acquisition_method == "Wait Return"
 	unavailable = {"Draft", "Cancelled", "Sold", "Scrapped", "Capitalized", "Work In Progress"}
 	if not waiting:
@@ -1149,8 +1141,6 @@ def asset_query(doctype, txt, searchfield, start, page_len, filters, as_dict=Fal
 	]
 	if filters.material_request_type == "Customer Borrow / Loan":
 		conditions.append("ifnull(tabAsset.custodian, '')=''")
-	if filters.material_request_type == "Customer Demo":
-		conditions.append("tabAsset.is_demo_asset=1")
 	values = {"company": filters.company, "txt": f"%{txt}%", "start": start, "page_len": page_len}
 	if filters.item_code:
 		conditions.append("tabAsset.item_code=%(item_code)s")

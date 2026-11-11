@@ -88,12 +88,12 @@ for (const doctype of [
 						return result;
 					}
 					if (get_row) {
-						// Each location shows the Item's quantity; a row that names serial nos is offered
-						// only their locations, and a source field only the locations holding the Item.
-						result.filters.serial_no = row.serial_no || "";
-						result.filters.serial_and_batch_bundle = row.serial_and_batch_bundle || "";
+						// Sources stay limited to available stock; targets show all compatible locations.
+						const restrict_source = is_source_field(fieldname);
+						result.filters.serial_no = restrict_source ? row.serial_no || "" : "";
+						result.filters.serial_and_batch_bundle = restrict_source ? row.serial_and_batch_bundle || "" : "";
 						result.filters.batch_no = row.batch_no || "";
-						result.filters.only_stock = is_source_field(fieldname) ? 1 : 0;
+						result.filters.only_stock = restrict_source ? 1 : 0;
 					}
 					return result;
 				};

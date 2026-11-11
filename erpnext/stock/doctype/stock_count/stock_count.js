@@ -100,6 +100,9 @@ frappe.ui.form.on("Stock Count", {
 		erpnext.stock_count.fill_loss_warehouses?.(frm);
 		erpnext.stock_count.show_review_summary?.(frm);
 		erpnext.stock_count.guard_first_counter?.(frm);
+		if (can_count) {
+			frm.add_custom_button(__("Add Found Item"), () => erpnext.stock_count.add_found_item(frm));
+		}
 
 		if (can_count && (frm.doc.items || []).some((row) => !row.is_counted)) {
 			// explicit, never automatic: the counter says that what was not found is zero
@@ -200,7 +203,7 @@ frappe.ui.form.on("Stock Count", {
 		erpnext.stock_count.fill_loss_warehouses?.(frm);
 		frm.toggle_display("item_count", monthly && frm.doc.item_selection !== "Selected Items");
 		frm.toggle_display("quarantine_warehouse", monthly);
-		frm.toggle_display("found_warehouse", monthly);
+		frm.toggle_display("found_warehouse", !!frm.doc.found_stock_entry || !!frm.doc.found_transfer_entry);
 		// the Lost Storage Location is rarely used: shown only when the count names one
 		frm.toggle_display("quarantine_storage_location", monthly && !!frm.doc.quarantine_storage_location);
 		// the series has one option and the counter never chooses it
@@ -215,6 +218,12 @@ frappe.ui.form.on("Stock Count", {
 
 	warehouse(frm) {
 		erpnext.stock_count.fill_loss_warehouses?.(frm);
+		frm.remove_custom_button(__("Add Storage Locations"));
+		if (!frm.doc.docstatus && frm.doc.status === "Draft" && frm.doc.warehouse) {
+			frm.add_custom_button(__("Add Storage Locations"), () =>
+				erpnext.stock_count.add_storage_locations(frm)
+			);
+		}
 	},
 
 	company(frm) {
@@ -324,9 +333,11 @@ frappe.ui.form.on("Stock Count", {
 				const row = matches[0];
 
 				if (!row) {
-					frappe.show_alert({
-						message: __("This item, batch, or serial number is not in the prepared sample."),
-						indicator: "orange",
+					erpnext.stock_count.add_found_item(frm, {
+						item_code: scanned.item_code,
+						batch_no: scanned.batch_no,
+						serial_no: scanned.serial_no,
+						storage_location: location,
 					});
 					return;
 				}
@@ -391,6 +402,45 @@ frappe.ui.form.on("Stock Count Item", {
 // Count a whole zone or a range of locations at once: fills the Inventory Dimensions table with one Storage Location
 // row each (Connect Diagnostics, 5 Nov 2026).
 frappe.provide("erpnext.stock_count");
+erpnext.stock_count.add_found_item = (frm, defaults = {}) => {
+	const dialog = new frappe.ui.Dialog({
+		title: __("Add Found Item"),
+		fields: [
+			{ fieldname: "item_code", label: __("Item"), fieldtype: "Link", options: "Item", reqd: 1,
+				default: defaults.item_code, get_query: () => ({ filters: { is_stock_item: 1, disabled: 0 } }) },
+			{ fieldname: "batch_no", label: __("Batch No"), fieldtype: "Data", default: defaults.batch_no },
+			{ fieldname: "serial_no", label: __("Serial No"), fieldtype: "Data", default: defaults.serial_no },
+			{ fieldname: "storage_location", label: __("Storage Location"), fieldtype: "Link", options: "Storage Location",
+				default: defaults.storage_location, get_query: () => ({ filters: { warehouse: frm.doc.warehouse, disabled: 0 } }) },
+			{ fieldname: "counted_qty", label: __("Counted Qty"), fieldtype: "Float", reqd: 1, default: 1 },
+		],
+		primary_action_label: __("Add"),
+		async primary_action(values) {
+			const item = (await frappe.db.get_value("Item", values.item_code, ["item_name", "is_stock_item", "disabled", "has_batch_no", "has_serial_no"])).message;
+			if (!item || !item.is_stock_item || item.disabled) return frappe.msgprint(__("Choose an active stock item."));
+			values.batch_no = (values.batch_no || "").trim();
+			values.serial_no = (values.serial_no || "").trim();
+			if (item.has_batch_no && !values.batch_no) return frappe.msgprint(__("Batch No is required for this item."));
+			if (item.has_serial_no && !values.serial_no) return frappe.msgprint(__("Serial No is required for this item."));
+			if (flt(values.counted_qty) <= 0 || (values.serial_no && flt(values.counted_qty) !== 1)) {
+				return frappe.msgprint(__("Enter a positive quantity; a serial number must have quantity 1."));
+			}
+			const duplicate = (frm.doc.items || []).some((row) =>
+				(values.serial_no && row.serial_no === values.serial_no) ||
+				(row.item_code === values.item_code && (row.batch_no || "") === values.batch_no &&
+					(row.serial_no || "") === values.serial_no && (row.storage_location || "") === (values.storage_location || ""))
+			);
+			if (duplicate) return frappe.msgprint(__("This item, batch, serial number and location is already in the count. Use the existing row."));
+			frm.add_child("items", { ...values, item_name: item.item_name, system_qty: 0,
+				is_counted: 1, difference_qty: flt(values.counted_qty) });
+			frm.refresh_field("items");
+			frm.dirty();
+			dialog.hide();
+		},
+	});
+	dialog.show();
+};
+
 erpnext.stock_count.add_storage_locations = async (frm) => {
 	const method = "erpnext.stock.doctype.stock_count.stock_count.";
 	const zones =
@@ -481,8 +531,7 @@ erpnext.stock_count.add_storage_locations = async (frm) => {
 	dialog.show();
 };
 
-// A Monthly count moves what it did not find to the company's LOST warehouse and what a recount found into FOUND; the
-// system fills both when the company, the warehouse or the type changes (they are read-only).
+// A Monthly count moves what it did not find to the company's LOST warehouse.
 erpnext.stock_count.fill_loss_warehouses = async (frm) => {
 	// a saved count keeps what it holds (the server fills a blank on save); opening it never marks it unsaved
 	if (
@@ -502,10 +551,9 @@ erpnext.stock_count.fill_loss_warehouses = async (frm) => {
 	});
 	const found = r?.message || {};
 	const before = frm.__loss_defaults || {};
-	frm.__loss_defaults = { quarantine_warehouse: found.lost, found_warehouse: found.found };
+	frm.__loss_defaults = { quarantine_warehouse: found.lost };
 	for (const [fieldname, value] of [
 		["quarantine_warehouse", found.lost],
-		["found_warehouse", found.found],
 	]) {
 		// each counted warehouse has its own Lost and Found warehouse (7 Nov 2026): an empty field, one that names the
 		// counted warehouse itself or the default of the warehouse chosen before takes the new default; a saved value stays
@@ -570,5 +618,6 @@ erpnext.stock_count.guard_first_counter = async (frm) => {
 	if (r?.message?.counted_by !== frappe.session.user) return;
 	frm.set_df_property("items", "read_only", 1);
 	frm.remove_custom_button?.(__("Prepare Count"));
+	frm.remove_custom_button?.(__("Add Found Item"));
 	frm.set_intro?.(__("You counted the first count; another person must do this recount."), "red");
 };

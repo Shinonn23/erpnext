@@ -22,7 +22,7 @@ def get_data():
 					"Asset Movement",
 				],
 			},
-			{"label": _("Stock"), "items": ["Stock Entry", "Purchase Receipt", "Pick List"]},
+			{"label": _("Stock"), "items": ["Stock Entry", "Purchase Receipt", "Pick List", "Custody Loan"]},
 			{"label": _("Manufacturing"), "items": ["Work Order"]},
 			{"label": _("Internal Transfer"), "items": ["Sales Order"]},
 			{"label": _("Accounting Dimensions"), "items": ["Project", "Cost Center"]},

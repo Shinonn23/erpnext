@@ -2,6 +2,7 @@
 
 import unittest
 from collections import defaultdict
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import frappe
@@ -53,6 +54,49 @@ class TestSystemPostingIdentity(unittest.TestCase):
 			self.assertEqual(failure_reason(Exception("raw"), 0), "Item X needs 5 more in LOST")
 			self.assertEqual(log, [])
 			self.assertEqual(failure_reason(Exception("raw text"), 0), "raw text")
+
+
+class TestSurplusIsNotPosted(unittest.TestCase):
+	def test_reconciliation_records_shortages_without_receiving_surplus(self):
+		rows = [
+			frappe._dict(item_code="A", batch_no=None, serial_no=None, system_qty=5, counted_qty=8),
+			frappe._dict(item_code="B", batch_no=None, serial_no=None, system_qty=5, counted_qty=3),
+			frappe._dict(item_code="S", batch_no=None, serial_no="SN-NEW", system_qty=0, counted_qty=1),
+		]
+		doc = SimpleNamespace(items=rows, company="C", warehouse="WH", name="COUNT", snapshot_datetime="2026-01-01 12:00:00")
+		doc.get_row_dimension_values = lambda row: {}
+		doc.posts_variance = lambda: False
+		doc.set_reconciliation_department = lambda reconciliation: None
+		reconciliation = Mock()
+		reconciliation.meta.has_field.return_value = False
+		with (
+			patch.object(frappe, "new_doc", return_value=reconciliation),
+			patch.object(frappe, "get_meta", return_value=Mock()),
+			patch.object(frappe, "get_cached_doc", return_value=frappe._dict(has_serial_no=0)),
+		):
+			StockCount.make_stock_reconciliation(doc)
+		items = [call.args[1] for call in reconciliation.append.call_args_list]
+		self.assertEqual([(row["item_code"], row["qty"]) for row in items], [("B", 3)])
+
+	def test_serial_surplus_does_not_replace_a_missing_serial(self):
+		rows = [
+			frappe._dict(item_code="S", batch_no=None, serial_no="SN-OLD", system_qty=1, counted_qty=0),
+			frappe._dict(item_code="S", batch_no=None, serial_no="SN-NEW", system_qty=0, counted_qty=1),
+		]
+		doc = SimpleNamespace(items=rows, company="C", warehouse="WH", name="COUNT", snapshot_datetime="2026-01-01 12:00:00")
+		doc.get_row_dimension_values = lambda row: {}
+		doc.posts_variance = lambda: False
+		doc.set_reconciliation_department = lambda reconciliation: None
+		reconciliation = Mock()
+		reconciliation.meta.has_field.return_value = False
+		with (
+			patch.object(frappe, "new_doc", return_value=reconciliation),
+			patch.object(frappe, "get_meta", return_value=Mock()),
+			patch.object(frappe, "get_cached_doc", return_value=frappe._dict(has_serial_no=1)),
+		):
+			StockCount.make_stock_reconciliation(doc)
+		row = reconciliation.append.call_args.args[1]
+		self.assertEqual((row["qty"], row["serial_no"]), (0, ""))
 
 
 class TestPostEntry(unittest.TestCase):

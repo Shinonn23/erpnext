@@ -1,4 +1,5 @@
 import unittest
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import frappe
@@ -30,6 +31,32 @@ class TestSnapshotRows(unittest.TestCase):
 		StockCount.keep_snapshot_rows(doc)
 		self.assertEqual([row.system_qty for row in doc["items"]], [10, 3])
 
+
+class TestFoundIdentifiers(unittest.TestCase):
+	def test_new_identifiers_are_recorded_but_existing_ones_must_match_item_and_batch(self):
+		row = frappe._dict(idx=1, item_code="I", batch_no="B", serial_no="S", storage_location=None,
+			is_counted=1, counted_qty=1, system_qty=0)
+		doc = SimpleNamespace(items=[row], warehouse="WH", get_countable_dimensions=lambda: [])
+		item = frappe._dict(is_stock_item=1, has_batch_no=1, has_serial_no=1)
+		db = Mock()
+		with (
+			patch.object(frappe, "get_cached_doc", return_value=item),
+			patch.object(frappe, "db", db),
+			patch.object(stock_count, "_", lambda text: text),
+			patch.object(frappe, "throw", side_effect=frappe.ValidationError),
+		):
+			db.get_value.side_effect = [None, None]
+			StockCount.validate_count_lines(doc)
+			self.assertEqual(row.difference_qty, 1)
+			db.get_value.side_effect = ["OTHER"]
+			with self.assertRaises(frappe.ValidationError):
+				StockCount.validate_count_lines(doc)
+			db.get_value.side_effect = ["I", frappe._dict(item_code="I", batch_no="OTHER")]
+			with self.assertRaises(frappe.ValidationError):
+				StockCount.validate_count_lines(doc)
+
+
+class TestRemainingSnapshotRows(unittest.TestCase):
 	def test_an_added_row_is_found_stock(self):
 		# A row the snapshot lacks is stock the counter found: System Qty 0 (Connect Diagnostics, 5 Nov 2026)
 		added = {"item_code": "ITEM-C", "batch_no": None, "serial_no": None, "storage_location": "L1"}

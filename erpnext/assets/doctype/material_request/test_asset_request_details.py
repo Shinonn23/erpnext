@@ -38,6 +38,8 @@ class TestAssetRequestDetails(TestCase):
 			patch.object(frappe, "has_permission", side_effect=self.permission),
 			patch.object(frappe, "throw", side_effect=ValueError),
 			patch.object(requests, "_", lambda text: text),
+			patch("erpnext.loan.doctype.custody_loan.custody_loan_core.asset_awaiting_inspection", return_value=False),
+			patch.object(requests, "held_for_inspection_condition", return_value="1=1"),
 		):
 			context.start()
 			self.addCleanup(context.stop)
@@ -76,14 +78,13 @@ class TestAssetRequestDetails(TestCase):
 				self.details()
 			self.db.get_value.assert_not_called()
 
-	def test_model_company_and_demo_mismatches_are_rejected(self):
+	def test_model_and_company_mismatches_are_rejected_but_non_demo_asset_is_allowed(self):
 		with self.assertRaises(ValueError):
 			self.details(item_code="OTHER-MODEL")
 		with self.assertRaises(ValueError):
 			self.details(company="UB")
 		self.asset.is_demo_asset = 0
-		with self.assertRaises(ValueError):
-			self.details()
+		self.assertEqual(self.details()["name"], "ASSET-A")
 
 	def test_unsubmitted_or_unusable_asset_is_rejected(self):
 		for field, value in (("docstatus", 0), ("status", "Sold"), ("status", "Out of Order")):
@@ -146,7 +147,7 @@ class TestAssetRequestDetails(TestCase):
 		match.assert_called_once_with("Asset")
 		query, values = self.db.sql.call_args.args
 		self.assertIn("NATIVE_SCOPE", query)
-		self.assertIn("tabAsset.is_demo_asset=1", query)
+		self.assertNotIn("tabAsset.is_demo_asset=1", query)
 		self.assertEqual((values["company"], values["item_code"]), ("CD", "MODEL"))
 		frappe.has_permission.assert_any_call("Asset", "select", throw=True)
 		frappe.has_permission.assert_any_call("Company", "select", doc="CD", throw=True)
