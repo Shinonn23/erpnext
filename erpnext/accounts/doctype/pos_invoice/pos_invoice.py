@@ -716,7 +716,9 @@ class POSInvoice(SalesInvoice):
 				"company_address",
 				"update_stock",
 			):
-				if not for_validate:
+				if not for_validate and not (
+					self.is_return and self.return_against and fieldname in ("taxes_and_charges", "tax_category")
+				):
 					self.set(fieldname, profile.get(fieldname))
 
 			if self.customer:

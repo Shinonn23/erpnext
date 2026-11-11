@@ -11,6 +11,24 @@ from erpnext.controllers.stock_controller import get_sl_entries_for_preview
 
 
 class TestLedgerPreview(TestCase):
+	def test_accounting_preview_prepares_legacy_bundle_before_stock_ledger(self):
+		steps = []
+		doc = frappe._dict(
+			doctype="Purchase Receipt",
+			name="PR-1",
+			make_bundle_using_old_serial_batch_fields=lambda: steps.append("bundle"),
+			update_stock_ledger=lambda: steps.append("stock"),
+			make_gl_entries=lambda: steps.append("accounting"),
+		)
+		with (
+			patch("erpnext.accounts.doctype.accounting_dimension.accounting_dimension.get_accounting_dimensions", return_value=[]),
+			patch("erpnext.accounts.report.general_ledger.general_ledger.get_columns", return_value=[]),
+			patch("erpnext.get_company_currency", return_value="THB"),
+			patch.object(preview, "get_gl_entries_for_preview", return_value=[]),
+		):
+			preview.get_accounting_ledger_preview(doc, frappe._dict(company="CD"))
+		self.assertEqual(steps, ["bundle", "stock", "accounting"])
+
 	def test_in_out_rate_is_only_set_for_outgoing_entries(self):
 		stock_ledger_entries = [
 			frappe._dict(actual_qty=5, stock_value_difference=10),

@@ -745,7 +745,7 @@ def _inventory_signature(rows):
 			flt(row.get("stock_qty") or flt(row.get("qty")) * flt(row.get("conversion_factor") or 1), 9),
 			row.get("serial_and_batch_bundle"),
 			tuple(sorted((row.get("serial_no") or "").split())),
-			row.get("batch_no"),
+			row.get("batch_no") or None,
 			row.get("storage_location"),
 			row.get("target_warehouse"),
 			row.get("to_storage_location"),
