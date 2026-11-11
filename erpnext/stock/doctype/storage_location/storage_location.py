@@ -678,7 +678,7 @@ def storage_location_query(doctype, txt, searchfield, start, page_len, filters):
 		candidates = [row for row in candidates if row.name in holding]
 	elif cint(filters.get("only_stock")) and stock:
 		candidates = [row for row in candidates if row.name in stock]
-	candidates.sort(key=lambda row: (-row.preferred, row.idx or 0, -stock.get(row.name, 0), row.name))
+	candidates.sort(key=lambda row: (-row.preferred, -stock.get(row.name, 0), row.idx or 0, row.name))
 	start, page_len = cint(start), cint(page_len) or 20
 	return [
 		(

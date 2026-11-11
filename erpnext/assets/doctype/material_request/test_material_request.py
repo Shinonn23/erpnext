@@ -1133,11 +1133,11 @@ class TestCustomerMaterialRequestIntegration(ERPNextTestSuite):
 				include_expected_return_date=False,
 			)
 
-	def test_demo_request_rejects_an_asset_not_marked_for_demo(self):
+	def test_demo_request_accepts_an_asset_not_marked_for_demo(self):
 		asset_item_code = f"Non Demo Asset {test_id()}"
 		asset = self.make_asset(asset_item_code, is_demo=False)
-		with self.assertRaises(frappe.ValidationError):
-			self.make_request("Customer Demo", items=[{"asset": asset.name}])
+		request = self.make_request("Customer Demo", items=[{"asset": asset.name}])
+		self.assertEqual(request.items[0].asset, asset.name)
 
 	def test_custody_loan_rejects_changing_generated_asset_to_another_asset(self):
 		asset_item_code = f"Requested Loan Asset {test_id()}"

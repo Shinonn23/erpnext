@@ -76,9 +76,9 @@
   },
   {
    "default": "0",
-   "description": "Equipment in this category is lent to customers for demos. A Demo request names Items; an Asset of this category is what the back office lends.",
    "fieldname": "is_demo_category",
    "fieldtype": "Check",
+   "hidden": 1,
    "label": "Is Demo Category"
   }
  ],

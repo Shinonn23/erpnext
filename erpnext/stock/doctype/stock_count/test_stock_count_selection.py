@@ -233,10 +233,10 @@ class StockCountSelectionTest(unittest.TestCase):
 			patch(f"{StockCount.__module__}.get_found_warehouse", return_value="FOUND - C") as found,
 		):
 			StockCount.validate_quarantine_if_needed(doc)
-		self.assertEqual((doc.quarantine_warehouse, doc.found_warehouse), ("LOST - C", "FOUND - C"))
+		self.assertEqual((doc.quarantine_warehouse, doc.found_warehouse), ("LOST - C", None))
 		# the counted warehouse chooses its own Lost and Found warehouse (7 Nov 2026)
 		lost.assert_called_once_with("C", exclude="CD STOCK", counted="CD STOCK")
-		found.assert_called_once_with("C", exclude="CD STOCK", counted="CD STOCK")
+		found.assert_not_called()
 		# a count that posts its differences needs none
 		doc = count(quarantine_warehouse=None, company="C")
 		doc.uses_variance = lambda: True
@@ -338,7 +338,7 @@ class StockCountSelectionTest(unittest.TestCase):
 			doc.handle_surplus = lambda calls=calls: calls.append("found")
 			doc.db_set = Mock()
 			StockCount.on_submit(doc)
-			self.assertEqual(calls, [expected, "found"] if expected == "quarantine" else [expected])
+			self.assertEqual(calls, [expected])
 
 	def test_make_count_template_checks_permission_and_state(self):
 		doc = count(docstatus=0, selected_items=rows("A"))
@@ -420,7 +420,7 @@ class PrepareCountTest(unittest.TestCase):
 		self.assertEqual(self.prepare(doc, ["A", "B"]), 1)
 		message = self.msgprint.call_args.args[0]
 		self.assertIn("GONE", message)
-		self.assertIn("for the chosen filters", message)
+		self.assertIn("in the chosen locations", message)
 		self.assertEqual(doc.status, "In Progress")
 		self.assertEqual(doc.posts_variance_snapshot, 0)
 
@@ -599,6 +599,7 @@ class LostWarehouseAndLocationsTest(unittest.TestCase):
 		doc.has_differences = lambda: {"SHORT", "OVER", "SN"}
 		doc.get_row_dimension_values = lambda row: {}
 		doc.get_current_stock_qty = lambda row: 100
+		doc.post_entry = lambda entry, what: entry
 		entry = Mock()
 		entry.items = []
 		entry.append = lambda field, row: entry.items.append(row)
@@ -617,82 +618,7 @@ class LostWarehouseAndLocationsTest(unittest.TestCase):
 
 
 class FoundWarehouseTest(unittest.TestCase):
-	"""A count's surplus is counted again; what both found is received into FOUND (5 Nov 2026)."""
-
-	def surplus_count(self, *count_rows, recount_of=None):
-		doc = Doc(
-			count(
-				found_warehouse="FOUND - C",
-				recount_of=recount_of,
-				items=[frappe._dict(row) for row in count_rows],
-			)
-		)
-		doc.get_row_dimension_values = lambda row: {"storage_location": row.get("storage_location")}
-		doc.surplus = lambda: StockCount.surplus(doc)
-		doc.db_set = lambda field, value: doc.__setitem__(field, value)
-		doc.make_found_receipt = lambda rows: frappe._dict(name="RECEIPT", rows=dict(rows))
-		doc.make_found_transfer = lambda rows: frappe._dict(name="TRANSFER", rows=dict(rows))
-		doc.make_recount = lambda pending: frappe._dict(name="RECOUNT", pending=dict(pending))
-		return doc
-
-	def run_surplus(self, doc, serials, first=None):
-		with (
-			patch.object(
-				stock_count.frappe,
-				"db",
-				fake_db(get_value=lambda doctype, name, fields, as_dict=False: serials.get(name)),
-			),
-			patch.object(stock_count.frappe, "get_doc", return_value=first),
-			patch.object(stock_count, "serial_note", side_effect=lambda serial: f"note {serial}"),
-		):
-			StockCount.handle_surplus(doc)
-
-	def test_a_first_count_receives_nothing_and_asks_for_a_recount(self):
-		doc = self.surplus_count(
-			{"item_code": "A", "system_qty": 3, "counted_qty": 5, "storage_location": "L1"},
-			{"item_code": "A", "system_qty": 4, "counted_qty": 1, "storage_location": "L2"},  # missing: LOST
-			{"item_code": "S", "serial_no": "NEW", "system_qty": 0, "counted_qty": 1},
-			{"item_code": "S", "serial_no": "IN-LOST", "system_qty": 0, "counted_qty": 1},
-			{"item_code": "S", "serial_no": "MISPLACED", "system_qty": 0, "counted_qty": 1},
-			{"item_code": "S", "serial_no": "SOLD", "system_qty": 0, "counted_qty": 1},
-		)
-		serials = {
-			"IN-LOST": frappe._dict(name="IN-LOST", warehouse="LOST - C"),
-			"MISPLACED": frappe._dict(name="MISPLACED", warehouse="W"),
-			"SOLD": frappe._dict(name="SOLD", warehouse=None),
-		}
-		self.run_surplus(doc, serials)
-		self.assertIsNone(doc.get("found_stock_entry"))
-		self.assertEqual(doc.recount_stock_count, "RECOUNT")
-		self.assertEqual(doc.found_transfer_entry, "TRANSFER")
-		self.assertEqual(doc.surplus_notes, "note SOLD")
-
-	def test_the_recount_receives_what_both_counts_found(self):
-		first = self.surplus_count(
-			{"item_code": "A", "system_qty": 3, "counted_qty": 6, "storage_location": "L1"},
-			{"item_code": "B", "system_qty": 1, "counted_qty": 2, "storage_location": "L1"},
-			{"item_code": "S", "serial_no": "NEW", "system_qty": 0, "counted_qty": 1},
-		)
-		doc = self.surplus_count(
-			{"item_code": "A", "system_qty": 3, "counted_qty": 5, "storage_location": "L1"},
-			{
-				"item_code": "B",
-				"system_qty": 1,
-				"counted_qty": 1,
-				"storage_location": "L1",
-			},  # not found again
-			{"item_code": "S", "serial_no": "NEW", "system_qty": 0, "counted_qty": 1},
-			recount_of="SC-1",
-		)
-		received = {}
-		doc.make_found_receipt = lambda rows: received.update(rows) or frappe._dict(name="RECEIPT")
-		self.run_surplus(doc, {}, first=first)
-		self.assertEqual(doc.found_stock_entry, "RECEIPT")
-		self.assertIsNone(doc.get("recount_stock_count"))
-		self.assertEqual(
-			{key[0]: (values["qty"], values["serial_nos"]) for key, values in received.items()},
-			{"A": (2.0, []), "S": (1.0, ["NEW"])},
-		)
+	"""Count surplus data and snapshot rows."""
 
 	def test_confirmed_surplus_is_the_smaller_of_the_two_counts(self):
 		self.assertEqual(

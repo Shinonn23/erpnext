@@ -20,11 +20,12 @@ class TestGeneratedAssetSubmission(unittest.TestCase):
 		)
 		with (
 			patch.object(conversion.frappe, "get_doc", return_value=asset),
-			patch.object(conversion.frappe, "db", Mock()),
+			patch.object(conversion.frappe, "db", Mock()) as db,
 		):
 			conversion.StocktoAssetConversion.submit_generated_assets(doc)
 		# The approver may only read Assets; the approval itself authorises the system submission.
 		self.assertEqual(seen, {"ignore_permissions": True})
+		db.set_value.assert_called_once_with("Asset", "ASSET-1", "demo_loan_status", "Available")
 
 
 class TestSystemAssetReceiptMovement(unittest.TestCase):

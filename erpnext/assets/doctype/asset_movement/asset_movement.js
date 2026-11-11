@@ -117,7 +117,6 @@ frappe.ui.form.on("Asset Movement", {
 				filters: {
 					company: doc.company,
 					item_code: row.asset_item_code || ["!=", ""],
-					...(row.demo_asset_required ? { is_demo_asset: 1 } : {}),
 					status: ["not in", ["Draft"]],
 				},
 			};
@@ -297,24 +296,18 @@ frappe.ui.form.on("Asset Movement Item", {
 		const row = locals[cdt][cdn];
 		if (!row.request_item) return;
 		frappe.db
-			.get_value("Material Request Item", row.request_item, ["item_code", "item_type", "parent"])
+			.get_value("Material Request Item", row.request_item, ["item_code", "item_type"])
 			.then(({ message }) => {
 				if (!message) return;
-				return frappe.db.get_doc("Material Request", message.parent).then((request) => {
-					return frappe.db
-						.get_value("Item", message.item_code, "demo_asset_item_code")
-						.then(({ message: mapping }) => {
-							const asset_item_code =
-								message.item_type === "Stock Item"
-									? mapping?.demo_asset_item_code
-									: message.item_code;
-							frappe.model.set_value(cdt, cdn, {
-								asset_item_code,
-								demo_asset_required:
-									request.material_request_type === "Customer Demo" ? 1 : 0,
-							});
-						});
-				});
+				return frappe.db
+					.get_value("Item", message.item_code, "demo_asset_item_code")
+					.then(({ message: mapping }) => {
+						const asset_item_code =
+							message.item_type === "Stock Item"
+								? mapping?.demo_asset_item_code
+								: message.item_code;
+						frappe.model.set_value(cdt, cdn, { asset_item_code });
+					});
 			});
 	},
 	asset: function (frm, cdt, cdn) {

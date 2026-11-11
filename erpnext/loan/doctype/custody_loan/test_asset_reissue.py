@@ -80,6 +80,7 @@ class TestAssetReissue(TestCase):
 		)
 		for context in (
 			patch.object(frappe, "db", self.db),
+			patch.object(frappe, "get_meta", return_value=Mock(has_field=Mock(return_value=False))),
 			patch.object(frappe, "throw", side_effect=ValueError),
 			patch.object(frappe, "get_cached_doc", return_value=self.request),
 			patch.object(core, "_", lambda text: text),
@@ -176,6 +177,7 @@ class TestAssetReissue(TestCase):
 				core.CustodyLoan.validate_items(self.loan)
 
 	def test_native_asset_picker_releases_only_received_a(self):
+		self.sql.execute("update `tabAsset` set is_demo_asset=0 where name='ASSET-A'")
 		assets = requests.get_available_assets("MODEL", "CD", demo_only=True)
 		self.assertEqual([row.name for row in assets], ["ASSET-A"])
 		self.sql.execute("update `tabAsset Movement` set docstatus=0 where name='RECEIPT-A'")

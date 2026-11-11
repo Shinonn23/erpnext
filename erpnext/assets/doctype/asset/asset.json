@@ -310,7 +310,6 @@
   },
   {
    "default": "Available",
-   "depends_on": "eval:doc.is_demo_asset",
    "fieldname": "demo_loan_status",
    "fieldtype": "Select",
    "in_list_view": 1,

@@ -71,6 +71,8 @@ test("Stock Entry source and target use their own warehouse and the same Item", 
   const f = fixture("Stock Entry");
   f.context.locals.Row.row.s_warehouse = "Source";
   f.context.locals.Row.row.t_warehouse = "Target";
+  f.context.locals.Row.row.serial_no = "SN-1";
+  f.context.locals.Row.row.serial_and_batch_bundle = "BUNDLE-1";
   f.frm.meta.fields[0].options = "Row";
   f.context.frappe.get_meta = () => ({
     fields: ["storage_location", "to_storage_location"].map((fieldname) => ({
@@ -92,6 +94,14 @@ test("Stock Entry source and target use their own warehouse and the same Item", 
     f.queries["to_storage_location:items"]({}, "Row", "row").filters.item_code,
     "Item"
   );
+  const source = f.queries["storage_location:items"]({}, "Row", "row").filters;
+  const target = f.queries["to_storage_location:items"]({}, "Row", "row").filters;
+  assert.equal(source.serial_no, "SN-1");
+  assert.equal(source.serial_and_batch_bundle, "BUNDLE-1");
+  assert.equal(source.only_stock, 1);
+  assert.equal(target.serial_no, "");
+  assert.equal(target.serial_and_batch_bundle, "");
+  assert.equal(target.only_stock, 0);
 });
 
 test("Item master previews unsaved Storage Condition without overriding transaction requirements", () => {
@@ -99,6 +109,14 @@ test("Item master previews unsaved Storage Condition without overriding transact
   const result = f.queries["storage_location:items"](f.frm.doc, "Row", "row");
   assert.equal(result.filters.storage_condition, "Cold");
   assert.equal(result.filters.item_code, "");
+});
+
+test("other outbound documents still filter source locations by serial", () => {
+  const f = fixture("Delivery Note");
+  f.context.locals.Row.row.serial_no = "SN-1";
+  const filters = f.queries["storage_location:items"]({}, "Row", "row").filters;
+  assert.equal(filters.serial_no, "SN-1");
+  assert.equal(filters.only_stock, 1);
 });
 
 test("default warehouse without Item context remains a scoped location search", () => {

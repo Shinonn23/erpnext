@@ -5,9 +5,6 @@ frappe.ui.form.on("Stock to Asset Conversion", {
 		// which skipped those checks and did not match the Cancel → Yes the user expects.
 		frm.ignore_doctypes_on_cancel_all = ["Asset", "Asset Movement", "Serial and Batch Bundle"];
 		frm.set_query("material_request", () => ({ filters: { docstatus: 1 } }));
-		frm.set_query("pick_list", () => ({
-			filters: { docstatus: 1, purpose: "Material Transfer", company: frm.doc.company },
-		}));
 		frm.set_query("warehouse", "stock_items", (doc) => ({ filters: { company: doc.company, is_group: 0 } }));
 		frm.set_query("item_code", "stock_items", () => ({ filters: { is_stock_item: 1 } }));
 		frm.set_query("asset_item_code", "stock_items", () => ({ filters: { is_fixed_asset: 1, is_stock_item: 0 } }));
@@ -26,17 +23,32 @@ frappe.ui.form.on("Stock to Asset Conversion", {
 	company(frm) {
 		frm.set_value("asset_location", null);
 	},
-	pick_list(frm) {
-		if (!frm.doc.pick_list) return;
-		frappe.db.get_value("Pick List", frm.doc.pick_list, "material_request").then(({ message }) => {
-			if (message && message.material_request && !frm.doc.material_request) {
-				frm.set_value("material_request", message.material_request);
-			}
-		});
-	},
 });
 
 frappe.ui.form.on("Stock to Asset Conversion Item", {
+	pick_serial_and_batch(frm, cdt, cdn) {
+		const row = locals[cdt][cdn];
+		if (!row.item_code || !row.warehouse) {
+			frappe.msgprint(__("Select a Stock Item and Warehouse first."));
+			return;
+		}
+		frappe.db.get_value("Item", row.item_code, ["has_batch_no", "has_serial_no"]).then(({ message }) => {
+			if (!message || (!message.has_batch_no && !message.has_serial_no)) {
+				frappe.msgprint(__("This Item does not use Serial or Batch Numbers."));
+				return;
+			}
+			row.has_serial_no = message.has_serial_no;
+			row.has_batch_no = message.has_batch_no;
+			row.type_of_transaction = "Outward";
+			new erpnext.SerialBatchPackageSelector(frm, row, (bundle) => {
+				if (bundle) frappe.model.set_value(cdt, cdn, {
+					serial_and_batch_bundle: bundle.name,
+					warehouse: bundle.warehouse,
+					qty: Math.abs(bundle.total_qty),
+				});
+			});
+		});
+	},
 	item_code(frm, cdt, cdn) {
 		const row = locals[cdt][cdn];
 		if (!row.item_code) return;

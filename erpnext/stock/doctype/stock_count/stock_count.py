@@ -186,13 +186,6 @@ class StockCount(Document):
 			)
 		if self.quarantine_warehouse or not self.uses_variance():
 			self.validate_quarantine_warehouse()
-		# What the count finds beyond the system quantity is received into the Found Warehouse (5 Nov 2026)
-		if not self.uses_variance() and not self.found_warehouse and self.company:
-			self.found_warehouse = get_found_warehouse(
-				self.company, exclude=self.warehouse, counted=self.warehouse
-			)
-		if self.found_warehouse:
-			self.validate_found_warehouse()
 
 	def validate_found_warehouse(self):
 		if self.found_warehouse in (self.warehouse, self.quarantine_warehouse):
@@ -311,9 +304,7 @@ class StockCount(Document):
 
 	def keep_snapshot_rows(self):
 		"""The snapshot owns the rows and their System Qty; an edited or uploaded Items table changes only counts.
-		A row the counter adds (stock found that the snapshot does not list: a serial number, a batch, another
-		location or Item) holds System Qty 0, so all of it is found stock (Found Warehouse, Connect Diagnostics,
-		5 Nov 2026)."""
+		A row the counter adds for stock the snapshot does not list holds System Qty 0."""
 		before = self.get_doc_before_save()
 		if not before or not before.get("snapshot_datetime") or not before.get("items"):
 			return
@@ -367,6 +358,14 @@ class StockCount(Document):
 				frappe.throw(_("Row {0}: Batch No is required for this item.").format(row.idx))
 			if item.has_serial_no and not row.serial_no:
 				frappe.throw(_("Row {0}: Serial No is required for this item.").format(row.idx))
+			if item.has_batch_no and row.batch_no:
+				batch_item = frappe.db.get_value("Batch", row.batch_no, "item")
+				if batch_item and batch_item != row.item_code:
+					frappe.throw(_("Row {0}: Batch No belongs to another Item.").format(row.idx))
+			if item.has_serial_no and row.serial_no:
+				serial = frappe.db.get_value("Serial No", row.serial_no, ["item_code", "batch_no"], as_dict=True)
+				if serial and (serial.item_code != row.item_code or (serial.batch_no and serial.batch_no != row.batch_no)):
+					frappe.throw(_("Row {0}: Serial No belongs to another Item or Batch.").format(row.idx))
 			if row.serial_no and row.serial_no in seen_serials:
 				frappe.throw(
 					_("Row {0}: Serial No {1} is listed more than once.").format(row.idx, row.serial_no)
@@ -668,16 +667,11 @@ class StockCount(Document):
 		return self.count_type == "Monthly" and bool(self.posts_variance_snapshot)
 
 	def on_submit(self):
-		"""Approving the count posts its result at once (Connect Diagnostics, 5 Nov 2026): the approval is the decision and
-		the count is the evidence, so the system makes AND submits the transfer of the quantity not found to the Lost
-		Warehouse, the serial numbers' transfer back and what the recount confirmed (back from Lost first, the rest into
-		the Found Warehouse). Nobody reviews or approves them again. If one cannot be posted, the whole approval is
-		undone with a message that says which."""
+		"""Post shortages; keep surplus as count evidence for later review."""
 		if self.count_type == "Monthly" and not self.posts_variance():
 			stock_entry = self.make_quarantine_stock_entry()
 			if stock_entry:
 				self.db_set("stock_entry", stock_entry.name)
-			self.handle_surplus()
 		else:
 			stock_reconciliation = self.make_stock_reconciliation()
 			if stock_reconciliation:
@@ -1155,10 +1149,10 @@ class StockCount(Document):
 			key = (row.item_code, row.batch_no or "", tuple(sorted(dimension_values.items())))
 			values = reconciliation_rows[key]
 			values["system_qty"] += flt(row.system_qty)
-			values["counted_qty"] += flt(row.counted_qty)
+			values["counted_qty"] += min(flt(row.counted_qty), flt(row.system_qty))
 			if row.serial_no and flt(row.system_qty):
 				values.setdefault("system_serial_nos", []).append(row.serial_no)
-			if row.serial_no and flt(row.counted_qty):
+			if row.serial_no and flt(row.counted_qty) and flt(row.system_qty):
 				values["serial_nos"].append(row.serial_no)
 
 		different_rows = {

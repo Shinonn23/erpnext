@@ -21,6 +21,18 @@ class StockDocument(frappe._dict):
 
 
 class TestSerialDimensions(unittest.TestCase):
+	def test_scan_serial_resolves_its_current_warehouse_and_location(self):
+		from erpnext.stock.doctype.pick_list.pick_list import scan_pick_list_barcode
+
+		with (
+			patch("frappe.has_permission"),
+			patch("erpnext.stock.utils.scan_barcode", return_value=frappe._dict(item_code="I", serial_no="SN")),
+			patch.object(frappe, "db", frappe._dict(get_value=Mock(side_effect=["WH", "Company"]))),
+			patch("erpnext.stock.doctype.storage_location.storage_location.serial_locations", return_value={"Shelf": 1}),
+		):
+			data = scan_pick_list_barcode("SN", {"company": "Company"})
+		self.assertEqual((data.serial_warehouse, data.serial_storage_location), ("WH", "Shelf"))
+
 	def test_serial_selection_accepts_single_and_multiple_warehouses(self):
 		with (
 			patch(f"{BUNDLE}.get_reserved_serial_nos_for_sre", return_value=[]),

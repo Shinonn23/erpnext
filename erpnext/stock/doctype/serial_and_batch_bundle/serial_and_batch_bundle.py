@@ -2693,6 +2693,10 @@ def get_serial_and_batch_ledger(**kwargs):
 @frappe.whitelist()
 def get_auto_data(**kwargs):
 	kwargs = frappe._dict(kwargs)
+	if isinstance(kwargs.inventory_dimensions_dict, str):
+		kwargs.inventory_dimensions_dict = parse_json(kwargs.inventory_dimensions_dict)
+	if kwargs.inventory_dimensions_dict is not None and not isinstance(kwargs.inventory_dimensions_dict, dict):
+		frappe.throw(_("Inventory dimensions must be an object."))
 	if cint(kwargs.has_serial_no):
 		return get_serial_nos_from_sre(kwargs) if kwargs.scio_detail else get_available_serial_nos(kwargs)
 	elif cint(kwargs.has_batch_no):

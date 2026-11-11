@@ -1,6 +1,6 @@
 import frappe
 from frappe import _
-from frappe.utils import cint, flt, getdate, nowtime
+from frappe.utils import cint, flt, get_datetime, getdate, nowtime
 
 import erpnext
 from erpnext.assets.doctype.asset_category.asset_category import get_asset_category_account
@@ -9,6 +9,7 @@ from erpnext.stock.doctype.inventory_dimension.inventory_dimension import (
 	get_document_wise_inventory_dimensions,
 )
 from erpnext.stock.utils import _get_incoming_rate, get_stock_balance
+from erpnext.stock.serial_batch_bundle import SerialNoValuation
 
 _GENERATED_ASSET_TOKEN = object()
 
@@ -69,6 +70,9 @@ class StocktoAssetConversion(StockController):
 	def validate_company_settings(self):
 		if not self.company:
 			frappe.throw(_("Company is required"))
+		previous = self.get_doc_before_save()
+		if self.pick_list and (not previous or previous.pick_list != self.pick_list):
+			frappe.throw(_("Create Stock to Asset Conversions directly without a Pick List."))
 		if not self.posting_time:
 			self.posting_time = nowtime()
 		if self.material_request:
@@ -216,22 +220,21 @@ class StocktoAssetConversion(StockController):
 			)[0][0]
 		)
 
-	def validate_demo_category(self, row, asset_category):
-		"""The category chosen for each Demo object must identify demonstration equipment."""
-		if not self.material_request:
-			return
-		request_type = frappe.db.get_value("Material Request", self.material_request, "material_request_type")
-		if request_type == "Customer Demo" and not frappe.get_cached_value(
-			"Asset Category", asset_category, "is_demo_category"
-		):
-			frappe.throw(_("Row {0}: select a Demo Category for {1}.").format(row.idx, row.asset_item_code))
-
 	def validate_bundle(self, row, item):
 		bundle = frappe.get_doc("Serial and Batch Bundle", row.serial_and_batch_bundle)
 		if bundle.item_code != row.item_code or bundle.warehouse != row.warehouse:
 			frappe.throw(
 				_("Row {0}: Bundle Item and Warehouse must match the conversion row").format(row.idx)
 			)
+		if (
+			bundle.docstatus == 0
+			and bundle.voucher_type == self.doctype
+			and not bundle.voucher_no
+			and not bundle.voucher_detail_no
+		):
+			bundle.check_permission("write")
+			bundle.set_serial_and_batch_values(self, row, qty_field="qty")
+			bundle.reload()
 		if self.pick_list:
 			linked_to_conversion_row = (
 				bundle.voucher_type == self.doctype
@@ -271,6 +274,10 @@ class StocktoAssetConversion(StockController):
 			frappe.throw(_("Row {0}: The Serial and Batch Bundle must be Outward").format(row.idx))
 		if abs(flt(bundle.total_qty)) != flt(row.qty):
 			frappe.throw(_("Row {0}: Bundle Qty must match conversion Qty").format(row.idx))
+		row.bundle_summary = "\n".join(
+			" / ".join(value for value in (entry.serial_no, entry.batch_no) if value)
+			for entry in bundle.entries
+		)
 
 	def sync_pick_list_selections(self):
 		if not self.pick_list:
@@ -417,13 +424,15 @@ class StocktoAssetConversion(StockController):
 				)
 			if not entries:
 				entries = [frappe._dict(qty=row.qty, incoming_rate=row.valuation_rate)]
+			serials = [entry.serial_no for entry in entries if entry.serial_no]
+			rates = self.get_serial_costs(row, serials) if serials else {}
 			for entry in entries:
 				unit_count = cint(abs(flt(entry.qty)))
 				if flt(entry.qty) % 1:
 					frappe.throw(_("Asset conversion requires whole unit quantities"))
 				for _asset_index in range(unit_count):
 					source_unit_index += 1
-					asset_value = flt(entry.incoming_rate or row.valuation_rate)
+					asset_value = flt(rates.get(entry.serial_no)) if entry.serial_no else flt(row.valuation_rate)
 					asset_location = existing_locations.get(
 						(row.name, source_unit_index), warehouse_location or self.asset_location
 					)
@@ -446,12 +455,35 @@ class StocktoAssetConversion(StockController):
 						},
 					)
 
+	def get_serial_costs(self, row, serials):
+		valuation = SerialNoValuation.__new__(SerialNoValuation)
+		valuation.sle = frappe._dict(
+			item_code=row.item_code,
+			warehouse=row.warehouse,
+			voucher_no=self.name,
+			posting_datetime=get_datetime(f"{self.posting_date} {self.posting_time}"),
+		)
+		return valuation.get_serial_no_wise_incoming_rate(serials)
+
 	def calculate_totals(self):
 		self.total_value = sum(flt(row.amount) for row in self.stock_items)
 
 	def before_submit(self):
 		if not self.assets:
 			frappe.throw(_("At least one Stock Item is required"))
+		for row in self.stock_items:
+			item = frappe.get_cached_doc("Item", row.item_code)
+			if not item.has_serial_no or not item.use_serial_no_wise_valuation:
+				frappe.throw(_("Row {0}: Conversion requires a serialized Item with serial number wise valuation enabled").format(row.idx))
+			serials = frappe.get_all(
+				"Serial and Batch Entry", filters={"parent": row.serial_and_batch_bundle, "is_cancelled": 0},
+				pluck="serial_no",
+			) if row.serial_and_batch_bundle else []
+			if not serials or any(not serial for serial in serials):
+				frappe.throw(_("Row {0}: Select a Serial Number for every unit").format(row.idx))
+			rates = self.get_serial_costs(row, serials)
+			if any(serial not in rates for serial in serials):
+				frappe.throw(_("Row {0}: Serial Number valuation history is missing in the selected Warehouse").format(row.idx))
 		if self.material_request:
 			self.lock_material_request_items()
 		self.sync_draft_assets()
@@ -491,7 +523,6 @@ class StocktoAssetConversion(StockController):
 				frappe.throw(_("Select an Asset Category for {0}.").format(output.asset_item_code))
 			if not frappe.get_cached_doc("Asset Category", category).finance_books:
 				frappe.throw(_("Configure the depreciation plan in Asset Category {0}.").format(category))
-			self.validate_demo_category(output, category)
 			get_depreciation_accounts(category, self.company)
 
 	def lock_material_request_items(self):
@@ -624,28 +655,18 @@ class StocktoAssetConversion(StockController):
 				abs(flt(sle.stock_value_difference, self.get_debit_field_precision()))
 				for sle in sle_map.get(row.name, [])
 			)
-			stock_value = sle_value or flt(row.amount, self.get_debit_field_precision())
+			stock_value = sle_value if sle_map.get(row.name) else flt(row.amount, self.get_debit_field_precision())
 			stock_value_by_row[row.name] = stock_value
 
-		# SLE valuation is authoritative. Apply any bundle/rounding difference to
-		# the last Asset for each source row so the conversion journal always balances.
+		# Do not hide a valuation mismatch by changing an individual machine's cost.
 		for source_row in self.stock_items:
 			outputs = [output for output in self.assets if output.source_item_row == source_row.name]
 			if outputs:
 				assigned_value = sum(
 					flt(output.asset_value, self.precision("total_value")) for output in outputs
 				)
-				outputs[-1].asset_value = flt(
-					flt(outputs[-1].asset_value) + stock_value_by_row[source_row.name] - assigned_value,
-					self.precision("total_value"),
-				)
-				outputs[-1].db_set("asset_value", outputs[-1].asset_value)
-				if outputs[-1].asset:
-					asset = frappe.get_doc("Asset", outputs[-1].asset)
-					asset.net_purchase_amount = outputs[-1].asset_value
-					asset.flags.stock_to_asset_conversion_sync = self.name
-					asset.set_missing_values()
-					asset.save(ignore_permissions=True)
+				if flt(stock_value_by_row[source_row.name] - assigned_value, self.precision("total_value")):
+					frappe.throw(_("Row {0}: Serial Number costs do not match the stock ledger value. Please check valuation before submitting.").format(source_row.idx))
 
 		for row in self.stock_items:
 			stock_value = stock_value_by_row[row.name]
@@ -785,8 +806,7 @@ class StocktoAssetConversion(StockController):
 			asset.submit()
 			if output.source_serial_no:
 				frappe.db.set_value("Serial No", output.source_serial_no, "asset", asset.name)
-			if asset.is_demo_asset:
-				frappe.db.set_value("Asset", asset.name, "demo_loan_status", "Available")
+			frappe.db.set_value("Asset", asset.name, "demo_loan_status", "Available")
 
 	def on_trash(self):
 		if self.docstatus != 0:
