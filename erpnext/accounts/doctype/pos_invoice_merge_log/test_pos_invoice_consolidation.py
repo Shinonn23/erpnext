@@ -85,6 +85,15 @@ class TestPOSInvoiceConsolidation(TestCase):
 				merge.is_verified_pos_consolidation(self.invoice)
 			self.assertTrue(merge.is_verified_pos_consolidation(self.invoice, check_packed=False))
 
+	def test_empty_batch_values_match_but_different_batches_do_not(self):
+		self.original_item.batch_no = ""
+		self.invoice["items"][0].batch_no = None
+		with merge.pos_invoice_consolidation(["POS"]):
+			self.assertTrue(merge.is_verified_pos_consolidation(self.invoice))
+			self.invoice["items"][0].batch_no = "BATCH"
+			with self.assertRaisesRegex(frappe.ValidationError, "inventory allocation"):
+				merge.is_verified_pos_consolidation(self.invoice)
+
 	def test_context_restores_outer_source_after_failure(self):
 		frappe.flags.stock_control_pos_consolidation = frozenset({"OUTER"})
 		with self.assertRaises(ValueError), merge.pos_invoice_consolidation(["POS"]):
