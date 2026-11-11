@@ -40,8 +40,10 @@
   "has_subcontracted",
   "accounting_dimensions_section",
   "cost_center",
+  "territory",
   "dimension_col_break",
   "project",
+  "sales_person",
   "currency_and_price_list",
   "currency",
   "conversion_rate",
@@ -181,8 +183,6 @@
   "contact_display",
   "contact_mobile",
   "contact_email",
-  "territory",
-  "sales_person",
   "shipping_address_section",
   "shipping_address_name",
   "shipping_address",
@@ -383,14 +383,14 @@
    "print_hide": 1
   },
   {
-   "fieldname": "note_issuer",
-   "label": "Note Issuer",
-   "fieldtype": "Select",
-   "options": "Company\nCounterparty",
    "default": "Company",
    "depends_on": "eval:doc.is_return || doc.is_debit_note",
+   "description": "Company-issued credit/debit notes require approval before submission. Counterparty-issued notes can be submitted directly.",
+   "fieldname": "note_issuer",
+   "fieldtype": "Select",
+   "label": "Note Issuer",
    "mandatory_depends_on": "eval:doc.is_return || doc.is_debit_note",
-   "description": "Company-issued credit/debit notes require approval before submission. Counterparty-issued notes can be submitted directly."
+   "options": "Company\nCounterparty"
   },
   {
    "fieldname": "column_break1",
@@ -1690,6 +1690,7 @@
    "read_only": 1
   },
   {
+   "default": "0",
    "fieldname": "is_system_generated",
    "fieldtype": "Check",
    "hidden": 1,
@@ -1697,6 +1698,7 @@
    "read_only": 1
   },
   {
+   "default": "0",
    "fieldname": "is_custody_loan_transaction",
    "fieldtype": "Check",
    "hidden": 1,
@@ -2516,11 +2518,10 @@
    "read_only": 1
   },
   {
-   "depends_on": "",
+   "default": "0",
    "fieldname": "is_deposit_invoice",
    "fieldtype": "Check",
-   "label": "Is Deposit Invoice",
-   "read_only": 0
+   "label": "Is Deposit Invoice"
   },
   {
    "collapsible": 1,
@@ -2531,17 +2532,18 @@
    "label": "Deposit Deductions"
   },
   {
+   "default": "0",
    "description": "Untied Deposits are deposits that are not linked to any order.",
    "fieldname": "use_untied_deposit",
    "fieldtype": "Check",
    "label": "Include Untied Deposits"
   },
   {
+   "default": "0",
    "description": "Allow user to manually allocate deposit amount to deduct.",
    "fieldname": "manual_deposit_allocation",
    "fieldtype": "Check",
-   "label": "Manual Deposit Allocation",
-   "read_only": 0
+   "label": "Manual Deposit Allocation"
   },
   {
    "fieldname": "deposits",
@@ -2562,7 +2564,7 @@
    "link_fieldname": "consolidated_invoice"
   }
  ],
- "modified": "2026-11-08 12:00:00.000000",
+ "modified": "2026-11-10 21:01:55.174880",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Sales Invoice",
