@@ -69,23 +69,19 @@ class SalesInvoice(SellingController):
 	from typing import TYPE_CHECKING
 
 	if TYPE_CHECKING:
-		from frappe.types import DF
-
 		from erpnext.accounts.doctype.item_wise_tax_detail.item_wise_tax_detail import ItemWiseTaxDetail
 		from erpnext.accounts.doctype.payment_schedule.payment_schedule import PaymentSchedule
 		from erpnext.accounts.doctype.pricing_rule_detail.pricing_rule_detail import PricingRuleDetail
 		from erpnext.accounts.doctype.sales_invoice_advance.sales_invoice_advance import SalesInvoiceAdvance
 		from erpnext.accounts.doctype.sales_invoice_item.sales_invoice_item import SalesInvoiceItem
 		from erpnext.accounts.doctype.sales_invoice_payment.sales_invoice_payment import SalesInvoicePayment
-		from erpnext.accounts.doctype.sales_invoice_timesheet.sales_invoice_timesheet import (
-			SalesInvoiceTimesheet,
-		)
-		from erpnext.accounts.doctype.sales_taxes_and_charges.sales_taxes_and_charges import (
-			SalesTaxesandCharges,
-		)
+		from erpnext.accounts.doctype.sales_invoice_timesheet.sales_invoice_timesheet import SalesInvoiceTimesheet
+		from erpnext.accounts.doctype.sales_taxes_and_charges.sales_taxes_and_charges import SalesTaxesandCharges
 		from erpnext.accounts.doctype.tax_withholding_entry.tax_withholding_entry import TaxWithholdingEntry
+		from erpnext.regional.doctype.sales_invoice_deposit.sales_invoice_deposit import SalesInvoiceDeposit
 		from erpnext.selling.doctype.sales_team.sales_team import SalesTeam
 		from erpnext.stock.doctype.packed_item.packed_item import PackedItem
+		from frappe.types import DF
 
 		account_for_change_amount: DF.Link | None
 		additional_discount_account: DF.Link | None
@@ -126,11 +122,15 @@ class SalesInvoice(SellingController):
 		cost_center: DF.Link | None
 		coupon_code: DF.Link | None
 		currency: DF.Link
+		custody_loan: DF.Link | None
+		custody_loan_source_doctype: DF.Link | None
+		custody_loan_source_name: DF.DynamicLink | None
 		customer: DF.Link
 		customer_address: DF.Link | None
 		customer_group: DF.Link | None
 		customer_name: DF.SmallText | None
 		debit_to: DF.Link
+		deposits: DF.Table[SalesInvoiceDeposit]
 		disable_rounded_total: DF.Check
 		discount_amount: DF.Currency
 		dispatch_address: DF.TextEditor | None
@@ -150,12 +150,15 @@ class SalesInvoice(SellingController):
 		is_cash_or_non_trade_discount: DF.Check
 		is_consolidated: DF.Check
 		is_created_using_pos: DF.Check
+		is_custody_loan_transaction: DF.Check
 		is_debit_note: DF.Check
+		is_deposit_invoice: DF.Check
 		is_discounted: DF.Check
 		is_internal_customer: DF.Check
 		is_opening: DF.Literal["No", "Yes"]
 		is_pos: DF.Check
 		is_return: DF.Check
+		is_system_generated: DF.Check
 		item_wise_tax_details: DF.Table[ItemWiseTaxDetail]
 		items: DF.Table[SalesInvoiceItem]
 		language: DF.Link | None
@@ -165,9 +168,11 @@ class SalesInvoice(SellingController):
 		loyalty_program: DF.Link | None
 		loyalty_redemption_account: DF.Link | None
 		loyalty_redemption_cost_center: DF.Link | None
+		manual_deposit_allocation: DF.Check
 		named_place: DF.Data | None
 		naming_series: DF.Literal["ACC-SINV-.YYYY.-", "ACC-SINV-RET-.YYYY.-"]
 		net_total: DF.Currency
+		note_issuer: DF.Literal["Company", "Counterparty"]
 		only_include_allocated_payments: DF.Check
 		other_charges_calculation: DF.TextEditor | None
 		outstanding_amount: DF.Currency
@@ -207,25 +212,14 @@ class SalesInvoice(SellingController):
 		shipping_address: DF.TextEditor | None
 		shipping_address_name: DF.Link | None
 		shipping_rule: DF.Link | None
-		status: DF.Literal[
-			"",
-			"Draft",
-			"Return",
-			"Credit Note Issued",
-			"Submitted",
-			"Paid",
-			"Partly Paid",
-			"Unpaid",
-			"Unpaid and Discounted",
-			"Partly Paid and Discounted",
-			"Overdue and Discounted",
-			"Overdue",
-			"Cancelled",
-			"Internal Transfer",
-		]
+		status: DF.Literal["", "Draft", "Return", "Credit Note Issued", "Submitted", "Paid", "Partly Paid", "Unpaid", "Unpaid and Discounted", "Partly Paid and Discounted", "Overdue and Discounted", "Overdue", "Cancelled", "Internal Transfer"]
 		subscription: DF.Link | None
 		tax_category: DF.Link | None
 		tax_id: DF.Data | None
+		tax_invoice_date: DF.Date | None
+		tax_invoice_number: DF.Data | None
+		tax_invoice_ref: DF.DynamicLink | None
+		tax_invoice_ref_type: DF.Link | None
 		tax_withholding_entries: DF.Table[TaxWithholdingEntry]
 		tax_withholding_group: DF.Link | None
 		taxes: DF.Table[SalesTaxesandCharges]
@@ -250,10 +244,12 @@ class SalesInvoice(SellingController):
 		update_outstanding_for_self: DF.Check
 		update_stock: DF.Check
 		use_company_roundoff_cost_center: DF.Check
+		use_untied_deposit: DF.Check
 		utm_campaign: DF.Link | None
 		utm_content: DF.Data | None
 		utm_medium: DF.Link | None
 		utm_source: DF.Link | None
+		workflow_state: DF.Link | None
 		write_off_account: DF.Link | None
 		write_off_amount: DF.Currency
 		write_off_cost_center: DF.Link | None
