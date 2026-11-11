@@ -40,7 +40,12 @@ class OpeningInvoiceCreationTool(Document):
 		summary, max_count = self.get_opening_invoice_summary()
 		self.set_onload("opening_invoices_summary", summary)
 		self.set_onload("max_count", max_count)
-		self.set_onload("temporary_opening_account", get_temporary_opening_account(self.company))
+		self.set_onload(
+			"temporary_opening_account",
+			get_temporary_opening_account(self.company)
+			if self.company and frappe.has_permission("Company", "read", doc=self.company)
+			else None,
+		)
 
 	def get_opening_invoice_summary(self):
 		def prepare_invoice_summary(doctype, invoices):
@@ -75,14 +80,20 @@ class OpeningInvoiceCreationTool(Document):
 			{"COUNT": "*", "as": "total_invoices"},
 			{"SUM": "outstanding_amount", "as": "outstanding_amount"},
 		]
-		companies = frappe.get_all("Company", fields=["name as company", "default_currency as currency"])
+		companies = frappe.get_list(
+			"Company", fields=["name as company", "default_currency as currency"], limit_page_length=0
+		)
 		if not companies:
 			return None, None
 
 		company_wise_currency = {row.company: row.currency for row in companies}
 		for doctype in ["Sales Invoice", "Purchase Invoice"]:
-			invoices = frappe.get_all(
-				doctype, filters=dict(is_opening="Yes", docstatus=1), fields=fields, group_by="company"
+			invoices = frappe.get_list(
+				doctype,
+				filters=dict(is_opening="Yes", docstatus=1, company=["in", list(company_wise_currency)]),
+				fields=fields,
+				group_by="company",
+				limit_page_length=0,
 			)
 			prepare_invoice_summary(doctype, invoices)
 
@@ -96,6 +107,7 @@ class OpeningInvoiceCreationTool(Document):
 	def validate_company(self):
 		if not self.company:
 			frappe.throw(_("Please select the Company"))
+		frappe.get_doc("Company", self.company).check_permission("read")
 
 	def set_missing_values(self, row):
 		row.qty = row.qty or 1.0
@@ -345,7 +357,10 @@ def get_temporary_opening_account(company=None):
 	if not company:
 		return
 
-	accounts = frappe.get_all("Account", filters={"company": company, "account_type": "Temporary"})
+	frappe.get_doc("Company", company).check_permission("read")
+	accounts = frappe.get_list(
+		"Account", filters={"company": company, "account_type": "Temporary"}, limit_page_length=1
+	)
 	if not accounts:
 		frappe.throw(_("Please add a Temporary Opening account in Chart of Accounts"))
 

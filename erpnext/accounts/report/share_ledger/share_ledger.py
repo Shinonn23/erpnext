@@ -62,15 +62,23 @@ def get_columns(filters):
 
 
 def get_all_transfers(date, shareholder):
-	condition = " "
-	# if company:
-	# 	condition = 'AND company = %(company)s '
-	return frappe.db.sql(
-		f"""SELECT * FROM `tabShare Transfer`
-		WHERE ((DATE(date) <= %(date)s AND from_shareholder = %(shareholder)s {condition})
-		OR (DATE(date) <= %(date)s AND to_shareholder = %(shareholder)s {condition}))
-		AND docstatus = 1
-		ORDER BY date""",
-		{"date": date, "shareholder": shareholder},
-		as_dict=1,
+	frappe.get_doc("Shareholder", shareholder).check_permission("read")
+	return frappe.get_list(
+		"Share Transfer",
+		filters={"date": ["<=", date], "docstatus": 1},
+		or_filters={"from_shareholder": shareholder, "to_shareholder": shareholder},
+		fields=[
+			"name",
+			"date",
+			"transfer_type",
+			"share_type",
+			"no_of_shares",
+			"rate",
+			"amount",
+			"company",
+			"from_shareholder",
+			"to_shareholder",
+		],
+		order_by="date asc, creation asc, name asc",
+		limit_page_length=0,
 	)

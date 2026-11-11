@@ -15,6 +15,8 @@
   "column_break0",
   "customer",
   "serial_no",
+  "service_equipment",
+  "service_equipment_coverage",
   "section_break_7",
   "complaint",
   "issue_details",
@@ -96,6 +98,19 @@
    "label": "Serial No",
    "options": "Serial No",
    "search_index": 1
+  },
+  {
+   "fieldname": "service_equipment",
+   "fieldtype": "Link",
+   "label": "Service Equipment",
+   "options": "Service Equipment"
+  },
+  {
+   "depends_on": "eval:doc.service_equipment",
+   "fieldname": "service_equipment_coverage",
+   "fieldtype": "Data",
+   "label": "Equipment Coverage",
+   "read_only": 1
   },
   {
    "fieldname": "customer",
@@ -381,7 +396,7 @@
  "icon": "shield-alert",
  "idx": 1,
  "links": [],
- "modified": "2024-03-27 13:10:59.601423",
+ "modified": "2026-11-10 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Support",
  "name": "Warranty Claim",

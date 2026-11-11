@@ -7,25 +7,23 @@ function get_material_request_recipient_details(request) {
 	const recipient_type = is_customer_demo
 		? "Customer"
 		: is_borrow_request
-			? request.loan_recipient_type || (request.customer ? "Customer" : null)
-			: null;
+		? request.loan_recipient_type || (request.customer ? "Customer" : null)
+		: null;
 	const recipient = is_customer_demo
 		? request.customer
 		: is_borrow_request
-			? request.loan_recipient || (recipient_type === "Customer" ? request.customer : null)
-			: null;
+		? request.loan_recipient || (recipient_type === "Customer" ? request.customer : null)
+		: null;
 	const has_recipient_details = is_customer_demo || is_borrow_request;
 	const contact = has_recipient_details
 		? request.contact_person || request.loan_recipient_contact || null
 		: null;
-	const contact_display =
-		has_recipient_details
-			? request.customer_contact_display || request.loan_recipient_contact_display || null
-			: null;
-	const contact_email =
-		has_recipient_details
-			? request.customer_contact_email || request.loan_recipient_contact_email || null
-			: null;
+	const contact_display = has_recipient_details
+		? request.customer_contact_display || request.loan_recipient_contact_display || null
+		: null;
+	const contact_email = has_recipient_details
+		? request.customer_contact_email || request.loan_recipient_contact_email || null
+		: null;
 	const has_return_date = ["Customer Demo", "Customer Borrow / Loan"].includes(
 		request.material_request_type
 	);
@@ -34,9 +32,7 @@ function get_material_request_recipient_details(request) {
 		customer: recipient_type === "Customer" ? recipient : null,
 		customer_contact: contact,
 		customer_address: has_recipient_details ? request.recipient_address || null : null,
-		customer_address_display: has_recipient_details
-			? request.recipient_address_display || null
-			: null,
+		customer_address_display: has_recipient_details ? request.recipient_address_display || null : null,
 		customer_contact_display: contact_display,
 		customer_contact_email: contact_email,
 		recipient_type,
@@ -70,6 +66,14 @@ async function set_material_request_purpose_lock(frm, material_request = null) {
 
 frappe.ui.form.on("Asset Movement", {
 	setup: (frm) => {
+		// Service Equipment rows: the equipment of the movement's company that is not retired
+		frm.set_query("service_equipment", "assets", (doc) => ({
+			filters: { company: doc.company, status: ["!=", "Retired"] },
+		}));
+		frm.set_query("service_target_address", (doc) => ({
+			query: "frappe.contacts.doctype.address.address.address_query",
+			filters: { link_doctype: "Customer", link_name: doc.service_target_customer },
+		}));
 		frm.set_query("to_employee", "assets", (doc) => {
 			return {
 				filters: {
@@ -156,10 +160,7 @@ frappe.ui.form.on("Asset Movement", {
 		if (frm.doc.reference_doctype === "Material Request" && frm.doc.reference_name) {
 			const reference_name = frm.doc.reference_name;
 			const request = await frappe.db.get_doc("Material Request", reference_name);
-			if (
-				frm.doc.reference_doctype !== "Material Request" ||
-				frm.doc.reference_name !== reference_name
-			)
+			if (frm.doc.reference_doctype !== "Material Request" || frm.doc.reference_name !== reference_name)
 				return;
 			await set_material_request_purpose_lock(frm, request);
 			await frm.set_value({
@@ -167,8 +168,8 @@ frappe.ui.form.on("Asset Movement", {
 					request.material_request_type === "Asset Transfer"
 						? "Transfer"
 						: frm.doc.purpose === "Receipt"
-							? "Receipt"
-							: "Transfer",
+						? "Receipt"
+						: "Transfer",
 				...get_material_request_recipient_details(request),
 			});
 		} else {
@@ -195,24 +196,14 @@ frappe.ui.form.on("Asset Movement", {
 	set_required_fields: (frm, cdt, cdn) => {
 		const grid = frm.fields_dict.assets.grid;
 		const has_material_request_recipient = Boolean(
-			frm.doc.reference_doctype === "Material Request" &&
-				frm.doc.reference_name &&
-				frm.doc.recipient
+			frm.doc.reference_doctype === "Material Request" && frm.doc.reference_name && frm.doc.recipient
 		);
-		frm.toggle_display(
-			"address_and_contact_tab",
-			has_material_request_recipient
-		);
+		frm.toggle_display("address_and_contact_tab", has_material_request_recipient);
 		const fields_by_purpose = {
 			Transfer: ["source_location", "target_location", "to_employee"],
 			Receipt: ["target_location", "to_employee"],
 			Issue: ["to_employee"],
-			"Transfer and Issue": [
-				"source_location",
-				"target_location",
-				"from_employee",
-				"to_employee",
-			],
+			"Transfer and Issue": ["source_location", "target_location", "from_employee", "to_employee"],
 			Reassignment: [
 				"change_custodian",
 				"from_employee",
@@ -319,7 +310,8 @@ frappe.ui.form.on("Asset Movement Item", {
 									: message.item_code;
 							frappe.model.set_value(cdt, cdn, {
 								asset_item_code,
-								demo_asset_required: request.material_request_type === "Customer Demo" ? 1 : 0,
+								demo_asset_required:
+									request.material_request_type === "Customer Demo" ? 1 : 0,
 							});
 						});
 				});

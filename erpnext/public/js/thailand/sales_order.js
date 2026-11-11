@@ -1,6 +1,16 @@
 frappe.ui.form.on("Sales Order", {
-	refresh: function (frm) {
-		erpnext.regional.thailand.deposit_utils.add_create_deposit_button(frm);
+	refresh(frm) {
+		if (frm.doc.docstatus !== 1 || !frm.doc.has_deposit || frm.doc.deposit_invoice ||
+			!["Accounts User", "Accounts Manager"].some((role) => frappe.user.has_role(role))) return;
+		const terms = [...(frm.doc.payment_schedule || [])].sort((a, b) => a.idx - b.idx);
+		const portion = terms[0]?.invoice_portion || 0;
+		frm.add_custom_button(__("Deposit Invoice"), () => {
+			frappe.model.open_mapped_doc({
+				method: "erpnext.regional.thailand.custom.deposit_utils.create_deposit_invoice",
+				frm,
+				args: { doctype: "Sales Order", deposit_amount: frm.doc.total * portion / 100 },
+			});
+		}, __("Create"), "Sales Invoice");
 	},
 
 	deposit_amount: function (frm) {

@@ -31,6 +31,7 @@ class SalesTaxInvoice(Document):
 
 	def validate(self):
 		self.validate_account()
+		self.validate_months_delayed()
 		self.compute_report_date()
 		self.compute_tax_percent()
 		set_company_branch_snapshot(self)
@@ -45,8 +46,20 @@ class SalesTaxInvoice(Document):
 
 	def on_update_after_submit(self):
 		if self.get_doc_before_save():  # Some change is made
+			self.validate_months_delayed()
 			self.compute_report_date()
 			self.compute_tax_percent()
+
+	def validate_months_delayed(self):
+		"""Only input VAT (Purchase Tax Invoice) may be reported in a later month (Revenue Department
+		notice on VAT no. 4); output VAT belongs to the month the liability arises."""
+		if int(self.months_delayed or 0) != 0:
+			frappe.throw(
+				_(
+					"Output VAT must be reported in the month the liability arises. Delayed (months) must be 0 "
+					"on a Sales Tax Invoice; change the date of the source document instead."
+				)
+			)
 
 	def compute_report_date(self):
 		if int(self.months_delayed) == 0:

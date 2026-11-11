@@ -35,10 +35,13 @@ class AssetRepair(AccountsController):
 		from erpnext.assets.doctype.asset_repair_purchase_invoice.asset_repair_purchase_invoice import (
 			AssetRepairPurchaseInvoice,
 		)
+		from erpnext.support.doctype.service_equipment_repair_part.service_equipment_repair_part import (
+			ServiceEquipmentRepairPart,
+		)
 
 		actions_performed: DF.LongText | None
 		amended_from: DF.Link | None
-		asset: DF.Link
+		asset: DF.Link | None
 		asset_name: DF.ReadOnly | None
 		capitalize_repair_cost: DF.Check
 		company: DF.Link | None
@@ -47,19 +50,31 @@ class AssetRepair(AccountsController):
 		cost_center: DF.Link | None
 		department: DF.Link | None
 		description: DF.LongText | None
+		equipment_name: DF.Data | None
 		downtime: DF.Data | None
+		equipment_parts: DF.Table[ServiceEquipmentRepairPart]
+		equipment_repair_cost: DF.Currency
+		equipment_status_before: DF.Data | None
 		failure_date: DF.Datetime
 		increase_in_asset_life: DF.Int
 		invoices: DF.Table[AssetRepairPurchaseInvoice]
+		issue: DF.Link | None
 		naming_series: DF.Literal["ACC-ASR-.YYYY.-"]
+		maintenance_visit: DF.Link | None
 		project: DF.Link | None
 		repair_cost: DF.Currency
 		repair_status: DF.Literal["Pending", "Completed", "Cancelled"]
+		service_equipment: DF.Link | None
 		stock_items: DF.Table[AssetRepairConsumedItem]
 		total_repair_cost: DF.Currency
 	# end: auto-generated types
 
 	def validate(self):
+		if self.service_equipment:
+			self.validate_equipment_repair()
+			return
+		if not self.asset:
+			frappe.throw(_("Choose the Asset or the Service Equipment to repair."))
 		self.set_department()
 		self.asset_doc = frappe.get_lazy_doc("Asset", self.asset)
 		self.validate_asset()
@@ -202,7 +217,80 @@ class AssetRepair(AccountsController):
 	def calculate_total_repair_cost(self):
 		self.total_repair_cost = flt(self.repair_cost) + flt(self.consumed_items_cost)
 
+	# Service Equipment: the repair is a service record. Parts and invoices are noted only; no stock is consumed, no
+	# cost is capitalized, no GL Entry is made and no depreciation is rescheduled.
+	# The parts used on equipment are rows of `equipment_parts` (a record only), never consumed stock items.
+	EQUIPMENT_FINANCIAL_FIELDS = (
+		"asset",
+		"capitalize_repair_cost",
+		"increase_in_asset_life",
+		"invoices",
+		"stock_items",
+	)
+
+	def validate_equipment_repair(self):
+		"""A draft or a save changes nothing on the equipment; only submit, completion and cancel do."""
+		from erpnext.support.service_equipment import CLOSED_STATUSES, refuse_financial
+
+		refuse_financial(self, self.EQUIPMENT_FINANCIAL_FIELDS)
+		status = frappe.db.get_value("Service Equipment", self.service_equipment, "status")
+		if self.docstatus == 0 and status in CLOSED_STATUSES:
+			frappe.throw(
+				_("Service Equipment {0} is {1}: it cannot be repaired.").format(
+					self.service_equipment, _(status)
+				)
+			)
+		self.company = self.company or frappe.db.get_value(
+			"Service Equipment", self.service_equipment, "company"
+		)
+		self.cost_center = None
+		self.repair_cost = 0
+		self.consumed_items_cost = 0
+		self.total_repair_cost = 0
+		self.validate_dates()
+		self.set_downtime()
+
+	def before_submit(self):
+		if not self.service_equipment:
+			return
+		self.equipment_status_before = frappe.db.get_value(
+			"Service Equipment", self.service_equipment, "status"
+		)
+
+	def set_equipment_status(self, status):
+		from erpnext.support.service_equipment import add_activity
+
+		frappe.db.set_value("Service Equipment", self.service_equipment, "status", status)
+		add_activity(self.service_equipment, _("Status {0}").format(_(status)), self)
+
+	def restore_equipment_status(self):
+		"""Back to the status before the repair, unless something else changed it meanwhile."""
+		current = frappe.db.get_value("Service Equipment", self.service_equipment, "status")
+		if current == "Under Repair" and self.equipment_status_before:
+			self.set_equipment_status(self.equipment_status_before)
+
+	def before_update_after_submit(self):
+		if self.service_equipment:
+			self.validate_dates()
+			self.set_downtime()
+			return
+		previous = self.get_doc_before_save()
+		if previous and any(
+			previous.get(field) != self.get(field)
+			for field in ("repair_status", "completion_date", "actions_performed", "downtime")
+		):
+			frappe.throw(_("A submitted Asset Repair cannot change its status or completion."))
+
+	def on_update_after_submit(self):
+		if self.service_equipment and self.repair_status != "Pending":
+			self.restore_equipment_status()
+
 	def on_submit(self):
+		if self.service_equipment:
+			# submitted while Pending: the repair is open and the equipment is Under Repair until it is completed
+			if self.repair_status == "Pending":
+				self.set_equipment_status("Under Repair")
+			return
 		self.decrease_stock_quantity()
 
 		if self.get("capitalize_repair_cost"):
@@ -223,6 +311,9 @@ class AssetRepair(AccountsController):
 				doc.cancel()
 
 	def on_cancel(self):
+		if self.service_equipment:
+			self.restore_equipment_status()
+			return
 		self.asset_doc = frappe.get_doc("Asset", self.asset)
 		if self.get("capitalize_repair_cost"):
 			self.update_asset_value()
@@ -236,10 +327,12 @@ class AssetRepair(AccountsController):
 		self.cancel_sabb()
 
 	def after_delete(self):
+		if self.service_equipment:
+			return
 		frappe.get_lazy_doc("Asset", self.asset).set_status()
 
 	def check_repair_status(self):
-		if self.repair_status == "Pending" and self.docstatus == 1:
+		if self.repair_status == "Pending" and self.docstatus == 1 and not self.service_equipment:
 			frappe.throw(_("Please update Repair Status."))
 
 	def set_downtime(self):

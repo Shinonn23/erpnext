@@ -3,6 +3,15 @@
 
 frappe.ui.form.on("Sales Billing", {
 	refresh(frm) {
+		if (
+			frm.doc.docstatus === 1 && !frm.doc.closed &&
+			flt(frm.doc.total_outstanding_amount) > 0 && frappe.model.can_create("Payment Entry")
+		) {
+			frm.add_custom_button(__("Payment Entry"), () => frappe.model.open_mapped_doc({
+				method: "erpnext.regional.doctype.sales_billing.sales_billing.make_payment_entry",
+				frm,
+			}), __("Create"));
+		}
 		if (frm.doc.docstatus == 1 && frappe.model.can_write(frm.doctype)) {
 			frm.add_custom_button(frm.doc.closed ? __("Force Open") : __("Force Closed"), () => {
 				frm.set_value("closed", !frm.doc.closed);
@@ -74,7 +83,7 @@ frappe.ui.form.on("Sales Billing", {
 		if (
 			frm.doc.docstatus === 1 &&
 			frm.doc.closed === 0 &&
-			frm.doc.total_outstanding_amount > 0
+			frm.doc.total_outstanding_amount > 0 && frappe.model.can_create("Payment Entry")
 		) {
 			frm.add_custom_button(__("Create Multi-Payments"), function () {
 				let fields = [

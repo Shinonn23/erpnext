@@ -186,10 +186,12 @@ def validate_vat_closing(doc):
 
 
 def validate_vat_closing_submitter(doc):
-	"""Only an Accounts Manager submits the VAT Closing entry (it closes the month's VAT after PP30 is filed)."""
-	if doc.voucher_type == VAT_CLOSING and "Accounts Manager" not in frappe.get_roles():
+	"""Accounting staff post VAT Closing under the same direct-submit policy as other journals."""
+	if doc.voucher_type == VAT_CLOSING and not {"Accounts User", "Accounts Manager"}.intersection(
+		frappe.get_roles()
+	):
 		frappe.throw(
-			_("Only an Accounts Manager submits a VAT Closing entry."),
+			_("Only accounting staff may submit a VAT Closing entry."),
 			frappe.PermissionError,
 			title=_("VAT Closing"),
 		)

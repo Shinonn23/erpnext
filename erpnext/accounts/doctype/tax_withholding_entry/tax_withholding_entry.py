@@ -711,7 +711,8 @@ class TaxWithholdingController:
 		category_withholding_map = self._get_category_withholding_map()
 		existing_taxes = {row.account_head: row for row in self.doc.taxes if row.is_tax_withholding_account}
 		precision = self.doc.precision("tax_amount", "taxes")
-		conversion_rate = self.get_conversion_rate()
+		# Payment taxes are in company currency; invoice taxes are in invoice currency.
+		conversion_rate = 1 if self.doc.doctype == "Payment Entry" else self.get_conversion_rate()
 		add_deduct_tax = "Deduct"
 
 		if self.party_type == "Customer":
@@ -1569,6 +1570,16 @@ class JournalTaxWithholding(TaxWithholdingController):
 			validate_party_frozen_disabled(self.doc.company, "Supplier", self.party)
 			if frappe.get_lazy_doc("Supplier", self.party).is_blocked_for("Payments"):
 				frappe.throw(_("{0} is blocked so this transaction cannot proceed").format(self.party))
+
+			if self.doc.override_tax_withholding_entries:
+				for entry in self.doc.tax_withholding_entries:
+					if flt(entry.withholding_amount) and (
+						entry.party_type != "Supplier" or entry.party != self.party
+					):
+						frappe.throw(_(
+							"Tax Withholding Entries must use Supplier {0} from the input VAT rows. "
+							"Correct the entries or disable Edit Tax Withholding Entries to recalculate."
+						).format(self.party))
 
 		return True
 

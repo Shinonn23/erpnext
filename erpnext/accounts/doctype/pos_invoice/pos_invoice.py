@@ -666,6 +666,14 @@ class POSInvoice(SalesInvoice):
 		if update:
 			self.db_set("status", self.status, update_modified=update_modified)
 
+	def keeps_original_taxes(self, fieldname):
+		"""A return keeps the tax template and tax rows of the invoice it returns (e.g. VAT 7 %);
+		the POS Profile's template (e.g. VAT 0 / Exempt) must not replace them, or the refund
+		would not match the amount paid."""
+		return bool(
+			fieldname in ("taxes_and_charges", "tax_category") and self.is_return and self.get("taxes")
+		)
+
 	def set_pos_fields(self, for_validate=False):
 		"""Set retail related fields from POS Profiles"""
 		from erpnext.stock.get_item_details import (
@@ -716,9 +724,9 @@ class POSInvoice(SalesInvoice):
 				"company_address",
 				"update_stock",
 			):
-				if not for_validate and not (
-					self.is_return and self.return_against and fieldname in ("taxes_and_charges", "tax_category")
-				):
+				if self.keeps_original_taxes(fieldname):
+					continue
+				if not for_validate:
 					self.set(fieldname, profile.get(fieldname))
 
 			if self.customer:

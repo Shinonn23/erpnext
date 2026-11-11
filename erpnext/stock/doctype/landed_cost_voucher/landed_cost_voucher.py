@@ -88,6 +88,7 @@ class LandedCostVoucher(Document):
 
 		self.set_applicable_charges_on_item()
 		self.set_total_vendor_invoices_cost()
+		self.validate_vendor_invoices()
 		self.validate_mandatory_dimensions()
 
 	def set_total_vendor_invoices_cost(self):
@@ -383,12 +384,63 @@ class LandedCostVoucher(Document):
 		self.update_claimed_landed_cost()
 
 	def update_claimed_landed_cost(self):
-		for row in self.vendor_invoices:
+		"""A vendor invoice can be claimed by several vouchers: submit adds this voucher's amount to what the
+		invoice already carries and cancel takes only that amount away (it never overwrites or resets)."""
+		for vendor_invoice, amount in self.get_claims_by_vendor_invoice().items():
+			# the row is locked so two vouchers submitted together add both claims
+			current = frappe.db.get_value(
+				"Purchase Invoice", vendor_invoice, "claimed_landed_cost_amount", for_update=True
+			)
 			frappe.db.set_value(
 				"Purchase Invoice",
-				row.vendor_invoice,
+				vendor_invoice,
 				"claimed_landed_cost_amount",
-				flt(row.amount, row.precision("amount")) if self.docstatus == 1 else 0.0,
+				get_new_claimed_amount(current, amount, self.docstatus),
+			)
+
+	def get_claims_by_vendor_invoice(self):
+		claims = {}
+		for row in self.vendor_invoices:
+			if row.vendor_invoice:
+				claims[row.vendor_invoice] = claims.get(row.vendor_invoice, 0.0) + flt(
+					row.amount, row.precision("amount")
+				)
+		return claims
+
+	def validate_vendor_invoices(self):
+		"""The cost booked on the vouchers must not exceed what the vendor invoices still hold: the same
+		invoice is claimed once per voucher, within its unclaimed amount, and the charges added to the stock
+		value (Taxes and Charges) are covered by the invoices listed."""
+		# an empty row is dropped by the form; through the API or an import it is skipped here, as in the claims
+		if not any(row.vendor_invoice for row in self.get("vendor_invoices") or []):
+			return
+
+		seen = set()
+		for row in self.vendor_invoices:
+			if not row.vendor_invoice:
+				continue
+			if row.vendor_invoice in seen:
+				frappe.throw(
+					_("Row #{0}: Vendor Invoice {1} is already listed in this Landed Cost Voucher").format(
+						row.idx, frappe.bold(row.vendor_invoice)
+					)
+				)
+			seen.add(row.vendor_invoice)
+
+			unclaimed = self.get_vendor_invoice_amount(row.vendor_invoice).get("amount")
+			if flt(row.amount, row.precision("amount")) > flt(unclaimed, row.precision("amount")):
+				frappe.throw(
+					_(
+						"Row #{0}: Amount {1} is more than the unclaimed amount {2} of Vendor Invoice {3}"
+					).format(row.idx, row.amount, unclaimed, frappe.bold(row.vendor_invoice))
+				)
+
+		precision = self.precision("total_taxes_and_charges")
+		if flt(self.total_taxes_and_charges, precision) > flt(self.total_vendor_invoices_cost, precision):
+			frappe.throw(
+				_(
+					"Total Taxes and Charges {0} is more than the Vendor Invoices cost {1}: the landed cost would be counted twice"
+				).format(self.total_taxes_and_charges, self.total_vendor_invoices_cost)
 			)
 
 	def update_landed_cost(self):
@@ -554,6 +606,14 @@ def get_pr_items(purchase_receipt):
 		)
 
 	return query.run(as_dict=True)
+
+
+def get_new_claimed_amount(current, amount, docstatus):
+	"""Claimed landed cost of a vendor invoice after a voucher is submitted (docstatus 1, adds) or cancelled
+	(otherwise, takes away; never below zero)."""
+	if docstatus == 1:
+		return flt(current) + flt(amount)
+	return max(flt(current) - flt(amount), 0.0)
 
 
 @frappe.whitelist()

@@ -3,8 +3,6 @@
 
 
 import frappe
-
-from erpnext.assets import service_equipment
 from frappe import _
 from frappe.query_builder import DocType
 from frappe.utils import cstr, flt
@@ -30,14 +28,6 @@ def get_data(filters):
 		["account", "in", depreciation_accounts],
 		["is_cancelled", "=", 0],
 	]
-
-	filters_data.append(
-		[
-			"against_voucher",
-			"not in",
-			service_equipment.names(),
-		]
-	)
 
 	if filters.get("asset"):
 		filters_data.append(["against_voucher", "=", filters.get("asset")])
@@ -112,7 +102,10 @@ def get_data(filters):
 								"GL Entry",
 								filters=opening_filters,
 								or_filters=or_filters_data,
-								fields=["against_voucher", {"SUM": "debit_in_account_currency", "as": "depreciation"}],
+								fields=[
+									"against_voucher",
+									{"SUM": "debit_in_account_currency", "as": "depreciation"},
+								],
 								group_by="against_voucher",
 							)
 						}

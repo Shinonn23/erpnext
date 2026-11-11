@@ -1758,6 +1758,15 @@ class StockController(AccountsController):
 			if is_inspection_exempt_secondary_row(self, row):
 				continue
 
+			if qi_required and self.is_inspected_after_receipt_without_stock(row):
+				# nothing enters a warehouse (a fixed asset or service Item): there is no quarantine to wait in
+				continue
+
+			if qi_required and self.is_receipt_into_quarantine(row):
+				# received first, inspected after (Connect Diagnostics, Siwat, 9 Nov 2026): the row waits in the
+				# Quarantine warehouse for the QI team, so the submit does not ask for the inspection
+				continue
+
 			if qi_required:  # validate row only if inspection is required on item level
 				if self.doctype in [
 					"Purchase Receipt",
@@ -1799,6 +1808,33 @@ class StockController(AccountsController):
 				frappe.throw(msg, title=_("Inspection Submission"), exc=QualityInspectionNotSubmittedError)
 			else:
 				frappe.msgprint(msg, alert=True, indicator="orange")
+
+	def is_inspected_after_receipt_without_stock(self, row):
+		"""A receipt row of an Item that is not a stock Item (a fixed asset) cannot be received into quarantine and a
+		Quality Inspection of an unsubmitted receipt is refused, so the submit does not ask for one (9 Nov 2026)."""
+		if self.doctype not in ("Purchase Receipt", "Purchase Invoice", "Delivery Note", "Sales Invoice"):
+			return False
+		if (self.doctype in ("Delivery Note", "Sales Invoice")) != bool(cint(self.get("is_return"))):
+			return False
+		return bool(row.get("item_code")) and not cint(
+			frappe.get_cached_value("Item", row.item_code, "is_stock_item")
+		)
+
+	def is_receipt_into_quarantine(self, row):
+		"""A goods receipt row received into a Quarantine warehouse (Purchase Receipt, Purchase Invoice with stock, or a
+		return of goods: Delivery Note / Sales Invoice) is inspected after the receipt, not before it. A flagged row
+		received anywhere else is still stopped without its inspection."""
+		if self.doctype not in ("Purchase Receipt", "Purchase Invoice", "Delivery Note", "Sales Invoice"):
+			return False
+		if self.doctype in ("Delivery Note", "Sales Invoice") and not cint(self.get("is_return")):
+			return False
+		if self.doctype in ("Purchase Receipt", "Purchase Invoice") and cint(self.get("is_return")):
+			return False
+		if not row.get("warehouse"):
+			return False
+		from erpnext.loan.doctype.custody_loan.custody_loan_core import is_quarantine_warehouse
+
+		return is_quarantine_warehouse(row.warehouse, self.company)
 
 	def is_return_into_quarantine(self, row):
 		"""Goods that failed their inspection on coming back are received into the Quarantine warehouse (Connect

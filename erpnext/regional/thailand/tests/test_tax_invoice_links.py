@@ -84,6 +84,76 @@ class TestCancelAll(unittest.TestCase):
 			custom_api.cancel_related_tax_invoice(frappe._dict(doctype="Purchase Invoice", name="P1"), None)
 		self.assertEqual(docs, ["PTI-1", "PTI-2"])
 
+	def test_registered_journal_cancel_cancels_only_its_tax_invoices_and_clears_its_rows(self):
+		hooks = importlib.import_module("erpnext.hooks")
+		invoices = [
+			tinv(name="PTI-1", voucher_type="Journal Entry", voucher_no="JV-1", docstatus=1),
+			tinv(name="PTI-2", voucher_type="Journal Entry", voucher_no="JV-1", docstatus=1),
+			tinv("Sales Tax Invoice", "STI-1", voucher_type="Journal Entry", voucher_no="JV-1", docstatus=1),
+			tinv(name="PTI-OTHER", voucher_type="Journal Entry", voucher_no="JV-2", docstatus=1),
+			tinv(name="PTI-PI", voucher_type="Purchase Invoice", voucher_no="JV-1", docstatus=1),
+			tinv(name="PTI-CANCELLED", voucher_type="Journal Entry", voucher_no="JV-1", docstatus=2),
+		]
+		rows = [
+			frappe._dict(tax_invoice_ref_type=invoice.doctype, tax_invoice_ref=invoice.name)
+			for invoice in invoices[:3]
+		]
+		journal = frappe._dict(
+			doctype="Journal Entry",
+			name="JV-1",
+			docstatus=1,
+			tax_invoice_details=rows,
+			meta=SimpleNamespace(has_field=lambda field: False),
+		)
+		other = voucher(name="JV-2", tax_invoice_ref="PTI-OTHER")
+		fake = mock.MagicMock()
+
+		def get_all(doctype, filters, pluck):
+			self.assertEqual(pluck, "name")
+			self.assertEqual(
+				filters, {"voucher_type": "Journal Entry", "voucher_no": "JV-1", "docstatus": ("!=", 2)}
+			)
+			return [
+				invoice.name
+				for invoice in invoices
+				if invoice.doctype == doctype
+				and invoice.voucher_type == filters["voucher_type"]
+				and invoice.voucher_no == filters["voucher_no"]
+				and invoice.docstatus != 2
+			]
+
+		def get_doc(doctype, name):
+			invoice = next(i for i in invoices if (i.doctype, i.name) == (doctype, name))
+			controller = PurchaseTaxInvoice if doctype == "Purchase Tax Invoice" else SalesTaxInvoice
+
+			def cancel():
+				controller.before_cancel(invoice)
+				self.assertIn("Journal Entry", invoice.ignore_linked_doctypes)
+				invoice.docstatus = 2
+				controller.on_cancel(invoice)
+
+			return SimpleNamespace(cancel=cancel)
+
+		fake.get_all.side_effect = get_all
+		fake.get_doc.side_effect = get_doc
+		handlers = hooks.doc_events["Journal Entry"].get("before_cancel", [])
+		handlers = handlers if isinstance(handlers, list) else [handlers]
+		with mock.patch.object(custom_api, "frappe", fake):
+			for handler in handlers:
+				module, method = handler.rsplit(".", 1)
+				getattr(importlib.import_module(module), method)(journal, "before_cancel")
+		self.assertEqual([invoice.docstatus for invoice in invoices], [2, 2, 2, 1, 1, 2])
+		self.assertEqual(fake.get_doc.call_count, 3)
+		for row in rows:
+			self.assertIsNone(row.tax_invoice_ref)
+			self.assertIsNone(row.tax_invoice_ref_type)
+		self.assertEqual(other.tax_invoice_ref, "PTI-OTHER")
+		self.assertEqual(other.splitted_tax_invoices[0].tax_invoice_ref, "PTI-1")
+		for invoice in invoices[:3]:
+			self.assertEqual((invoice.voucher_type, invoice.voucher_no), ("Journal Entry", "JV-1"))
+		for call in fake.db.set_value.call_args_list:
+			self.assertEqual(call.args[1]["name"], "JV-1")
+
 
 class TestCancelKeepsSourceLinks(unittest.TestCase):
 	def test_tax_invoices_ignore_their_submitted_source_vouchers_on_cancel(self):

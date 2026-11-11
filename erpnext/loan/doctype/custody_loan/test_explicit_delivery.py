@@ -71,7 +71,7 @@ class TestExplicitDelivery(TestCase):
 		return_doc = Document(
 			delivery_note="DN-BACK",
 			update_status=Mock(),
-			inspect_or_receive=Mock(side_effect=lambda note: setattr(note, "docstatus", 1)),
+			receive_returned_goods=Mock(side_effect=lambda note: setattr(note, "docstatus", 1)),
 		)
 		documents = {
 			("Custody Loan", loan.name): loan,
@@ -95,7 +95,7 @@ class TestExplicitDelivery(TestCase):
 		outgoing.submit.assert_not_called()
 		self.assertEqual(outgoing.docstatus, 0)
 		loan.confirm_delivery.assert_not_called()
-		return_doc.inspect_or_receive.assert_called_once_with(returned)
+		return_doc.receive_returned_goods.assert_called_once_with(returned)
 		self.assertEqual(return_doc.update_status.call_count, 2)
 		self.assertEqual(loan.update_status.call_count, 2)
 		get_all.assert_called_with(

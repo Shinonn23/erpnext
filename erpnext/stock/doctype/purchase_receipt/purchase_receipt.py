@@ -1577,6 +1577,7 @@ def make_purchase_invoice(source_name, target_doc=None, args=None):
 		if args and args.get("merge_taxes"):
 			merge_taxes(source, doc)
 
+		doc.set_discount_amount_after_mapping(source)
 		doc.run_method("calculate_taxes_and_totals")
 		doc.set_payment_schedule()
 
@@ -1591,28 +1592,12 @@ def make_purchase_invoice(source_name, target_doc=None, args=None):
 		target_doc._old_name = source_doc.name
 
 	def get_pending_qty(item_row):
-		qty = item_row.qty
-		if frappe.db.get_single_value("Buying Settings", "bill_for_rejected_quantity_in_purchase_invoice"):
-			qty = item_row.received_qty
-
-		pending_qty = qty - invoiced_qty_map.get(item_row.name, 0)
-
-		if frappe.db.get_single_value("Buying Settings", "bill_for_rejected_quantity_in_purchase_invoice"):
-			return pending_qty, 0
-
-		returned_qty = flt(returned_qty_map.get(item_row.name, 0))
-		if item_row.rejected_qty and returned_qty:
-			returned_qty -= item_row.rejected_qty
-
-		if returned_qty:
-			if returned_qty >= pending_qty:
-				pending_qty = 0
-				returned_qty -= pending_qty
-			else:
-				pending_qty -= returned_qty
-				returned_qty = 0
-
-		return pending_qty, returned_qty
+		return get_pending_invoice_qty(
+			item_row,
+			invoiced_qty_map.get(item_row.name, 0),
+			returned_qty_map.get(item_row.name, 0),
+			frappe.db.get_single_value("Buying Settings", "bill_for_rejected_quantity_in_purchase_invoice"),
+		)
 
 	def select_item(d):
 		filtered_items = args.get("filtered_children", [])
@@ -1664,6 +1649,26 @@ def make_purchase_invoice(source_name, target_doc=None, args=None):
 	)
 
 	return doclist
+
+
+def get_pending_invoice_qty(item_row, invoiced_qty, returned_qty, bill_for_rejected_qty):
+	"""Bill the same remaining receipt quantity in the mapper and invoice validation."""
+	qty = item_row.received_qty if bill_for_rejected_qty else item_row.qty
+	pending_qty = flt(qty) - flt(invoiced_qty)
+	if bill_for_rejected_qty:
+		return pending_qty, 0
+
+	returned_qty = flt(returned_qty)
+	if item_row.rejected_qty and returned_qty:
+		returned_qty -= item_row.rejected_qty
+	if returned_qty:
+		if returned_qty >= pending_qty:
+			pending_qty = 0
+			returned_qty -= pending_qty
+		else:
+			pending_qty -= returned_qty
+			returned_qty = 0
+	return pending_qty, returned_qty
 
 
 def get_invoiced_qty_map(purchase_receipt):

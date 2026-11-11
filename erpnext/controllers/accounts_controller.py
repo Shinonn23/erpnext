@@ -3332,6 +3332,7 @@ class AccountsController(TransactionBase):
 		for schedule in po_or_so.payment_schedule:
 			payment_schedule = {
 				"payment_term": schedule.payment_term,
+				"payment_term_type": schedule.get("payment_term_type") or "Regular",
 				"due_date": schedule.due_date,
 				"invoice_portion": schedule.invoice_portion,
 				"mode_of_payment": schedule.mode_of_payment,
@@ -3380,7 +3381,7 @@ class AccountsController(TransactionBase):
 			self.append("payment_schedule", payment_schedule)
 
 	def set_due_date(self):
-		due_dates = [d.due_date for d in self.get("payment_schedule") if d.due_date]
+		due_dates = [getdate(d.due_date) for d in self.get("payment_schedule") if d.due_date]
 		if due_dates:
 			self.due_date = max(due_dates)
 
@@ -3710,6 +3711,56 @@ class AccountsController(TransactionBase):
 
 		# ensure both doctypes have discount_amount field
 		if not self.meta.get_field("discount_amount") or not source_doc.meta.get_field("discount_amount"):
+			return
+
+		mapped_sources = {
+			"Purchase Receipt": (("purchase_order", "Purchase Order"),),
+			"Purchase Invoice": (
+				("purchase_receipt", "Purchase Receipt"),
+				("purchase_order", "Purchase Order"),
+			),
+			"Delivery Note": (("sales_order", "Sales Order"),),
+			"Sales Invoice": (("delivery_note", "Delivery Note"), ("sales_order", "Sales Order")),
+		}.get(self.doctype, ())
+		if source_doc.doctype in {doctype for field, doctype in mapped_sources}:
+			message = _(
+				"Create separate documents for sources with different additional discount terms "
+				"or discounted sources combined with items without a source reference."
+			)
+			# Parent mapping overwrites the discount before appending rows; compare their sources instead.
+			sources = {(source_doc.doctype, source_doc.name): source_doc}
+			contracts = set()
+			for row in self.get("items") or []:
+				# A receipt/delivery is the price reference even when its upstream order is also linked.
+				reference = next(
+					((doctype, row.get(field)) for field, doctype in mapped_sources if row.get(field)), None
+				)
+				if not reference:
+					contracts.add((None, 0))
+				elif reference not in sources:
+					doc = frappe.get_doc(*reference)
+					doc.check_permission("read")
+					sources[reference] = doc
+
+			for doc in sources.values():
+				percentage = flt(doc.get("additional_discount_percentage"))
+				if not percentage and doc.get("discount_amount"):
+					basis = "net_total" if doc.apply_discount_on == "Net Total" else "grand_total"
+					total = flt(doc.get(basis)) + flt(doc.discount_amount)
+					if not total:
+						frappe.throw(message)
+					percentage = 100 * flt(doc.discount_amount) / total
+				contracts.add((doc.apply_discount_on, flt(percentage, 9)) if percentage else (None, 0))
+				if doc is source_doc:
+					source_percentage = percentage
+			if len(contracts) > 1:
+				frappe.throw(message)
+
+			if source_doc.get("discount_amount") and not source_doc.get("additional_discount_percentage"):
+				# Preserve the effective discount when only part of the source is mapped or billed.
+				if self.get("additional_discount_percentage") != source_percentage:
+					self.additional_discount_percentage = source_percentage
+					self.discount_amount = 0
 			return
 
 		# ensure discount_amount is set in source doc
@@ -4331,6 +4382,7 @@ def get_payment_term_details(
 		term_details.payment_term = term.payment_term
 
 	fields_to_copy = [
+		"payment_term_type",
 		"description",
 		"invoice_portion",
 		"discount_type",
@@ -4345,6 +4397,8 @@ def get_payment_term_details(
 
 	for field in fields_to_copy:
 		term_details[field] = term.get(field)
+
+	term_details.payment_term_type = term.get("payment_term_type") or "Regular"
 
 	term_details.payment_amount = flt(term.invoice_portion) * flt(grand_total) / 100
 	term_details.base_payment_amount = flt(term.invoice_portion) * flt(base_grand_total) / 100
@@ -4370,6 +4424,7 @@ def _payment_terms_contract(terms):
 	return tuple(
 		(
 			term.get("payment_term") or None,
+			term.get("payment_term_type") or "Regular",
 			flt(term.get("invoice_portion")),
 			term.get("due_date_based_on"),
 			cint(term.get("credit_days")),

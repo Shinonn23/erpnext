@@ -20,8 +20,6 @@
   "gle_processing_status",
   "remarks",
   "error_message",
-  "connect_period_close_review_section",
-  "md_period_close_acknowledged",
   "approval_snapshot"
  ],
  "fields": [
@@ -137,24 +135,12 @@
    "reqd": 1
   },
   {
-   "fieldname": "md_period_close_acknowledged",
-   "fieldtype": "Check",
-   "label": "MD Period Close Acknowledged",
-   "no_copy": 1,
-   "read_only": 1
-  },
-  {
    "fieldname": "approval_snapshot",
    "fieldtype": "Long Text",
    "hidden": 1,
    "label": "Approval Snapshot",
    "no_copy": 1,
    "read_only": 1
-  },
-  {
-   "fieldname": "connect_period_close_review_section",
-   "fieldtype": "Section Break",
-   "label": "Period Close Review"
   }
  ],
  "icon": "folder-lock",

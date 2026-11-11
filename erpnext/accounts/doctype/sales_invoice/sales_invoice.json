@@ -27,6 +27,7 @@
   "is_consolidated",
   "is_deposit_invoice",
   "is_return",
+  "note_issuer",
   "return_against",
   "update_outstanding_for_self",
   "update_billed_amount_in_sales_order",
@@ -39,8 +40,10 @@
   "has_subcontracted",
   "accounting_dimensions_section",
   "cost_center",
+  "territory",
   "dimension_col_break",
   "project",
+  "sales_person",
   "currency_and_price_list",
   "currency",
   "conversion_rate",
@@ -180,8 +183,6 @@
   "contact_display",
   "contact_mobile",
   "contact_email",
-  "territory",
-  "sales_person",
   "shipping_address_section",
   "shipping_address_name",
   "shipping_address",
@@ -260,13 +261,6 @@
   "is_discounted",
   "connections_tab",
   "connect_operations_tab",
-  "connect_project_acceptance_section",
-  "operation_acceptance",
-  "connect_asset_disposal_section",
-  "operation_disposal_approval",
-  "connect_asset_disposal_column",
-  "requires_asset_disposal_approval",
-  "asset_disposal_value",
   "connect_approval_section",
   "workflow_state",
   "connect_approval_column"
@@ -387,6 +381,16 @@
    "label": "Is Return (Credit Note)",
    "no_copy": 1,
    "print_hide": 1
+  },
+  {
+   "default": "Company",
+   "depends_on": "eval:doc.is_return || doc.is_debit_note",
+   "description": "Company-issued credit/debit notes require approval before submission. Counterparty-issued notes can be submitted directly.",
+   "fieldname": "note_issuer",
+   "fieldtype": "Select",
+   "label": "Note Issuer",
+   "mandatory_depends_on": "eval:doc.is_return || doc.is_debit_note",
+   "options": "Company\nCounterparty"
   },
   {
    "fieldname": "column_break1",
@@ -1686,6 +1690,7 @@
    "read_only": 1
   },
   {
+   "default": "0",
    "fieldname": "is_system_generated",
    "fieldtype": "Check",
    "hidden": 1,
@@ -1693,6 +1698,7 @@
    "read_only": 1
   },
   {
+   "default": "0",
    "fieldname": "is_custody_loan_transaction",
    "fieldtype": "Check",
    "hidden": 1,
@@ -2445,54 +2451,9 @@
    "print_hide": 1
   },
   {
-   "description": "Optional: attach the approved disposal evidence if you have it.",
-   "fieldname": "operation_disposal_approval",
-   "fieldtype": "Attach",
-   "label": "Asset Disposal Approval Evidence",
-   "no_copy": 1
-  },
-  {
-   "fieldname": "requires_asset_disposal_approval",
-   "fieldtype": "Check",
-   "label": "Requires Asset Disposal Approval",
-   "no_copy": 1,
-   "read_only": 1,
-   "depends_on": "eval:doc.requires_asset_disposal_approval"
-  },
-  {
-   "fieldname": "asset_disposal_value",
-   "fieldtype": "Currency",
-   "label": "Asset Disposal Net Book Value",
-   "no_copy": 1,
-   "read_only": 1,
-   "depends_on": "eval:doc.asset_disposal_value"
-  },
-  {
-   "fieldname": "operation_acceptance",
-   "fieldtype": "Attach",
-   "label": "Project Milestone Acceptance",
-   "no_copy": 1
-  },
-  {
    "fieldname": "connect_operations_tab",
    "fieldtype": "Tab Break",
    "label": "Operations and Approval"
-  },
-  {
-   "depends_on": "eval:doc.project || (doc.items || []).some(row => row.project) || doc.operation_acceptance",
-   "fieldname": "connect_project_acceptance_section",
-   "fieldtype": "Section Break",
-   "label": "Project Acceptance"
-  },
-  {
-   "depends_on": "eval:(!doc.is_return && (doc.items || []).some(row => row.is_fixed_asset && row.asset)) || doc.operation_disposal_approval",
-   "fieldname": "connect_asset_disposal_section",
-   "fieldtype": "Section Break",
-   "label": "Asset Disposal"
-  },
-  {
-   "fieldname": "connect_asset_disposal_column",
-   "fieldtype": "Column Break"
   },
   {
    "fieldname": "connect_approval_section",
@@ -2557,11 +2518,10 @@
    "read_only": 1
   },
   {
-   "depends_on": "",
+   "default": "0",
    "fieldname": "is_deposit_invoice",
    "fieldtype": "Check",
-   "label": "Is Deposit Invoice",
-   "read_only": 0
+   "label": "Is Deposit Invoice"
   },
   {
    "collapsible": 1,
@@ -2572,17 +2532,18 @@
    "label": "Deposit Deductions"
   },
   {
+   "default": "0",
    "description": "Untied Deposits are deposits that are not linked to any order.",
    "fieldname": "use_untied_deposit",
    "fieldtype": "Check",
    "label": "Include Untied Deposits"
   },
   {
+   "default": "0",
    "description": "Allow user to manually allocate deposit amount to deduct.",
    "fieldname": "manual_deposit_allocation",
    "fieldtype": "Check",
-   "label": "Manual Deposit Allocation",
-   "read_only": 0
+   "label": "Manual Deposit Allocation"
   },
   {
    "fieldname": "deposits",
@@ -2603,7 +2564,7 @@
    "link_fieldname": "consolidated_invoice"
   }
  ],
- "modified": "2026-11-08 12:00:00.000000",
+ "modified": "2026-11-10 21:01:55.174880",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Sales Invoice",

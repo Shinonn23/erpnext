@@ -1825,6 +1825,7 @@
    "description": "If checked, the 1st invoice from this order should be a deposit invoice.",
    "fieldname": "has_deposit",
    "fieldtype": "Check",
+   "read_only": 1,
    "label": "Deposit on 1st Invoice"
   },
   {
@@ -1841,11 +1842,13 @@
   {
    "fieldname": "deposit_amount",
    "fieldtype": "Currency",
+   "read_only": 1,
    "label": "Deposit Amount"
   },
   {
    "fieldname": "percent_deposit",
    "fieldtype": "Percent",
+   "read_only": 1,
    "label": "Percent Deposit"
   },
   {

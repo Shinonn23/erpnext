@@ -19,6 +19,7 @@
   "contact_mobile",
   "contact_email",
   "maintenance_schedule",
+  "service_equipment",
   "maintenance_schedule_detail",
   "column_break1",
   "mntc_date",
@@ -29,6 +30,19 @@
   "maintenance_type",
   "section_break0",
   "purposes",
+  "service_visit_section",
+  "service_employee",
+  "service_visit_column",
+  "service_appointment",
+  "service_started_on",
+  "service_completed_on",
+  "service_visit_place_section",
+  "service_visit_location",
+  "service_visit_customer_address",
+  "service_visit_place_column",
+  "service_visit_address",
+  "service_checklist_section",
+  "service_checklist",
   "more_info",
   "customer_feedback",
   "col_break3",
@@ -196,6 +210,78 @@
    "options": "Maintenance Visit Purpose"
   },
   {
+   "depends_on": "eval:doc.service_equipment",
+   "fieldname": "service_visit_section",
+   "fieldtype": "Section Break",
+   "label": "Service Visit"
+  },
+  {
+   "fieldname": "service_employee",
+   "fieldtype": "Link",
+   "label": "Service Technician",
+   "options": "Employee"
+  },
+  {
+   "fieldname": "service_visit_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "service_appointment",
+   "fieldtype": "Datetime",
+   "label": "Appointment"
+  },
+  {
+   "fieldname": "service_started_on",
+   "fieldtype": "Datetime",
+   "label": "Work Started"
+  },
+  {
+   "fieldname": "service_completed_on",
+   "fieldtype": "Datetime",
+   "label": "Work Completed"
+  },
+  {
+   "depends_on": "eval:doc.service_equipment",
+   "fieldname": "service_visit_place_section",
+   "fieldtype": "Section Break",
+   "label": "Equipment Location at Visit"
+  },
+  {
+   "fieldname": "service_visit_location",
+   "fieldtype": "Link",
+   "label": "Location at Visit",
+   "options": "Location",
+   "read_only": 1
+  },
+  {
+   "fieldname": "service_visit_customer_address",
+   "fieldtype": "Link",
+   "label": "Address at Visit",
+   "options": "Address",
+   "read_only": 1
+  },
+  {
+   "fieldname": "service_visit_place_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "service_visit_address",
+   "fieldtype": "Text",
+   "label": "Address Snapshot",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.service_equipment",
+   "fieldname": "service_checklist_section",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "service_checklist",
+   "fieldtype": "Table",
+   "label": "Checklist and Measurements",
+   "options": "Service Equipment Check"
+  },
+  {
    "fieldname": "more_info",
    "fieldtype": "Section Break",
    "label": "More Information",
@@ -296,6 +382,15 @@
    "read_only": 1
   },
   {
+   "description": "The first equipment of the Purposes table; the visit lists every equipment there.",
+   "fieldname": "service_equipment",
+   "fieldtype": "Link",
+   "label": "First Equipment",
+   "no_copy": 1,
+   "options": "Service Equipment",
+   "read_only": 1
+  },
+  {
    "fieldname": "maintenance_schedule_detail",
    "fieldtype": "Link",
    "hidden": 1,
@@ -307,7 +402,7 @@
  "idx": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-11-07 23:00:00.000000",
+ "modified": "2026-11-10 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Maintenance",
  "name": "Maintenance Visit",

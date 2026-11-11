@@ -3,6 +3,11 @@ frappe.ui.form.on("Payment Entry", {
 		erpnext.regional.thailand.clear_tax_invoice_links(frm);
 	},
 	refresh(frm) {
+		const withholding_category_query = () => ({
+			filters: frm.doc.party_type === "Employee" ? { thai_income_tax_form: ["in", ["", "PND3"]] } : {},
+		});
+		frm.set_query("tax_withholding_category", withholding_category_query);
+		frm.set_query("tax_withholding_category", "tax_withholding_categories", withholding_category_query);
 		// Filter company tax address
 		frm.set_query("company_tax_address", function () {
 			return {

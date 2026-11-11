@@ -23,8 +23,9 @@ from erpnext.regional.thailand.custom.custom_api import CLEAR_UNDUE_TAX, get_tha
 from erpnext.regional.thailand.custom.withholding import apply_receive_withholding, validate_receive_rows
 from erpnext.regional.thailand.custom.withholding_cert import (
 	CERT,
-	existing_certificates,
+	employee_income_tax_form,
 	employee_recipient,
+	existing_certificates,
 	withholding_recipient,
 )
 from erpnext.regional.thailand.custom.withholding_cert import (
@@ -67,6 +68,12 @@ class PaymentEntry:
 				)
 
 	def validate(self):
+		if self.party_type == "Employee" and self.apply_tds and self.tax_withholding_category:
+			employee_income_tax_form(
+				frappe.db.get_value(
+					"Tax Withholding Category", self.tax_withholding_category, "thai_income_tax_form"
+				)
+			)
 		super().validate()
 		if not self.is_petty_cash and (self.petty_cash_holder or self.petty_cash_holder_name):
 			self.update(
@@ -228,6 +235,8 @@ def make_withholding_tax_cert(filters, doc):
 		if filters.get("income_tax_form") and cert.income_tax_form != category_form:
 			frappe.throw(_("The selected income tax form does not match the withholding category."))
 		cert.income_tax_form = category_form
+	if party_type == "Employee":
+		cert.income_tax_form = employee_income_tax_form(cert.income_tax_form)
 	for (income_type, rate), amounts in income_totals.items():
 		base = amounts["tax_base"]
 		cert.append(

@@ -68,7 +68,8 @@ def get_all_shares(shareholder, date, company=None):
 
 	A share number is held when it was received more often than sent, so the result does not depend
 	on the order the transfers were saved or submitted in."""
-	holder = frappe.db.get_value("Shareholder", shareholder, ["name", "is_company", "company"], as_dict=True)
+	holder = frappe.get_doc("Shareholder", shareholder)
+	holder.check_permission("read")
 	transfers = get_transfers(holder, date, company)
 	received = [transfer for transfer in transfers if is_received(transfer, holder)]
 	sent = [transfer for transfer in transfers if not is_received(transfer, holder)]
@@ -80,36 +81,42 @@ def get_all_shares(shareholder, date, company=None):
 
 
 def get_transfers(holder, date, company=None):
-	share_transfer = frappe.qb.DocType("Share Transfer")
-	is_involved = (share_transfer.to_shareholder == holder.name) | (
-		share_transfer.from_shareholder == holder.name
-	)
-	if holder.is_company:
-		is_involved |= share_transfer.transfer_type.isin(["Issue", "Purchase"]) & (
-			share_transfer.company == holder.company
-		)
-
-	query = (
-		frappe.qb.from_(share_transfer)
-		.select(
-			share_transfer.transfer_type,
-			share_transfer.share_type,
-			share_transfer.from_no,
-			share_transfer.to_no,
-			share_transfer.no_of_shares,
-			share_transfer.rate,
-			share_transfer.amount,
-			share_transfer.to_shareholder,
-		)
-		.where((share_transfer.docstatus == 1) & (share_transfer.date <= date) & is_involved)
-		.orderby(share_transfer.date)
-		.orderby(share_transfer.creation)
-	)
-
+	filters = {"docstatus": 1, "date": ["<=", date]}
 	if company:
-		query = query.where(share_transfer.company == company)
-
-	return query.run(as_dict=True)
+		filters["company"] = company
+	fields = [
+		"name",
+		"date",
+		"creation",
+		"transfer_type",
+		"share_type",
+		"from_no",
+		"to_no",
+		"no_of_shares",
+		"rate",
+		"amount",
+		"to_shareholder",
+	]
+	transfers = frappe.get_list(
+		"Share Transfer",
+		filters=filters,
+		or_filters={"to_shareholder": holder.name, "from_shareholder": holder.name},
+		fields=fields,
+		order_by="date asc, creation asc, name asc",
+		limit_page_length=0,
+	)
+	if holder.is_company and holder.company and (not company or company == holder.company):
+		transfers += frappe.get_list(
+			"Share Transfer",
+			filters={**filters, "company": holder.company, "transfer_type": ["in", ["Issue", "Purchase"]]},
+			fields=fields,
+			order_by="date asc, creation asc, name asc",
+			limit_page_length=0,
+		)
+	return sorted(
+		{row.name: row for row in transfers}.values(),
+		key=lambda row: (row.date, row.creation, row.name),
+	)
 
 
 def is_received(transfer, holder):

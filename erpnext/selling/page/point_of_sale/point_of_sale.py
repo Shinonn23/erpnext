@@ -409,8 +409,10 @@ def create_opening_voucher(pos_profile, company, balance_details):
 
 @frappe.whitelist()
 def get_past_order_list(search_term, status, limit=20):
+	# Sales Invoices made in the POS are listed only for a user who may read them;
+	# the POS Invoices are listed under their own permission. No permission is granted here.
+	may_read_sales_invoice = frappe.has_permission("Sales Invoice", "read")
 	fields = ["name", "grand_total", "currency", "customer", "customer_name", "posting_time", "posting_date"]
-	invoice_list = []
 	pos_invoice_list = []
 	sales_invoice_list = []
 
@@ -437,7 +439,7 @@ def get_past_order_list(search_term, status, limit=20):
 			"POS Invoice", pos_invoices_by_customer + pos_invoices_by_name
 		)
 
-		if frappe.has_permission("Sales Invoice", "select"):
+		if may_read_sales_invoice:
 			sales_invoices_by_customer = frappe.db.get_list(
 				"Sales Invoice",
 				filters=get_invoice_filters("Sales Invoice", status),
@@ -468,7 +470,7 @@ def get_past_order_list(search_term, status, limit=20):
 		)
 		pos_invoice_list = add_doctype_to_results("POS Invoice", pos_invoice_list)
 
-		if frappe.has_permission("Sales Invoice", "select"):
+		if may_read_sales_invoice:
 			sales_invoice_list = frappe.db.get_list(
 				"Sales Invoice",
 				filters=get_invoice_filters("Sales Invoice", status),
@@ -626,18 +628,20 @@ def get_invoice_filters(doctype, status, name=None):
 
 @frappe.whitelist()
 def get_customer_recent_transactions(customer):
-	sales_invoices = frappe.db.get_list(
-		"Sales Invoice",
-		filters={
-			"customer": customer,
-			"docstatus": 1,
-			"is_pos": 1,
-			"is_consolidated": 0,
-			"is_created_using_pos": 1,
-		},
-		fields=["name", "grand_total", "status", "posting_date", "posting_time", "currency"],
-		page_length=20,
-	)
+	sales_invoices = []
+	if frappe.has_permission("Sales Invoice", "read"):
+		sales_invoices = frappe.db.get_list(
+			"Sales Invoice",
+			filters={
+				"customer": customer,
+				"docstatus": 1,
+				"is_pos": 1,
+				"is_consolidated": 0,
+				"is_created_using_pos": 1,
+			},
+			fields=["name", "grand_total", "status", "posting_date", "posting_time", "currency"],
+			page_length=20,
+		)
 
 	pos_invoices = frappe.db.get_list(
 		"POS Invoice",

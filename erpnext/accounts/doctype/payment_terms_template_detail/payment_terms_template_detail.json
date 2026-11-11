@@ -6,6 +6,7 @@
  "engine": "InnoDB",
  "field_order": [
   "payment_term",
+  "payment_term_type",
   "section_break_13",
   "description",
   "section_break_4",
@@ -31,6 +32,14 @@
    "in_list_view": 1,
    "label": "Payment Term",
    "options": "Payment Term"
+  },
+  {
+   "fieldname": "payment_term_type",
+   "fieldtype": "Select",
+   "label": "Payment Term Type",
+   "options": "Regular\nAdvance\nDeposit Invoice",
+   "read_only": 1,
+   "fetch_from": "payment_term.payment_term_type"
   },
   {
    "columns": 2,

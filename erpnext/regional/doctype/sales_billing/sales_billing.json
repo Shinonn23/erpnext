@@ -38,9 +38,7 @@
   "cd_collection_date",
   "cd_collection_column",
   "cd_billing_status",
-  "cd_customer_signed_section",
-  "cd_customer_signed_document",
-  "cd_customer_signed_date"
+  "cd_customer_signed_section"
  ],
  "fields": [
   {
@@ -230,12 +228,12 @@
    "fieldname": "cd_billing_status",
    "label": "Billing Status",
    "fieldtype": "Select",
-   "options": "\nSent\nCustomer Acknowledged\nPaid",
+   "options": "\nSent\nPaid",
    "read_only": 1,
    "allow_on_submit": 1,
    "no_copy": 1,
    "in_standard_filter": 1,
-   "description": "Sent after submit, Customer Acknowledged once the signed copy is attached, Paid when no invoice of the billing is outstanding."
+   "description": "Sent after submit, Paid when no invoice of the billing is outstanding."
   },
   {
    "fieldname": "cd_customer_signed_section",
@@ -243,23 +241,6 @@
    "fieldtype": "Section Break",
    "collapsible": 1,
    "allow_on_submit": 1
-  },
-  {
-   "fieldname": "cd_customer_signed_document",
-   "label": "Customer Signed Copy",
-   "fieldtype": "Attach",
-   "allow_on_submit": 1,
-   "no_copy": 1,
-   "print_hide": 1,
-   "description": "The scan of the copy the customer signed. Can be attached after submit."
-  },
-  {
-   "fieldname": "cd_customer_signed_date",
-   "label": "Customer Signed On",
-   "fieldtype": "Date",
-   "allow_on_submit": 1,
-   "no_copy": 1,
-   "print_hide": 1
   }
  ],
  "grid_page_length": 50,

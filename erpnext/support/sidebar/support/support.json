@@ -101,27 +101,64 @@
   {
    "child": 1,
    "collapsible": 1,
-   "filters": "[[\"Asset\", \"service_nonfinancial\", \"=\", 1]]",
    "indent": 0,
    "keep_closed": 0,
    "label": "Service Equipment",
-   "link_to": "Asset",
+   "link_to": "Service Equipment",
    "link_type": "DocType",
-   "open_in_new_tab": 0,
-   "show_arrow": 0,
    "type": "Link"
   },
   {
    "child": 1,
    "collapsible": 1,
-   "filters": "[[\"Asset Movement\", \"service_movement_type\", \"is\", \"set\"]]",
    "indent": 0,
    "keep_closed": 0,
-   "label": "Custody Movements",
+   "label": "Equipment Movements",
    "link_to": "Asset Movement",
    "link_type": "DocType",
-   "open_in_new_tab": 0,
-   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "filters": "[[\"Asset Maintenance\", \"service_equipment\", \"is\", \"set\"]]",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Equipment Maintenance",
+   "link_to": "Asset Maintenance",
+   "link_type": "DocType",
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "filters": "[[\"Asset Maintenance Log\", \"service_equipment\", \"is\", \"set\"]]",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Maintenance Logs",
+   "link_to": "Asset Maintenance Log",
+   "link_type": "DocType",
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "filters": "[[\"Asset Repair\", \"service_equipment\", \"is\", \"set\"]]",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Equipment Repairs",
+   "link_to": "Asset Repair",
+   "link_type": "DocType",
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Maintenance Teams",
+   "link_to": "Asset Maintenance Team",
+   "link_type": "DocType",
    "type": "Link"
   },
   {
@@ -133,8 +170,6 @@
    "label": "Service Visits",
    "link_to": "Maintenance Visit",
    "link_type": "DocType",
-   "open_in_new_tab": 0,
-   "show_arrow": 0,
    "type": "Link"
   },
   {
@@ -146,8 +181,6 @@
    "label": "Maintenance Schedules",
    "link_to": "Maintenance Schedule",
    "link_type": "DocType",
-   "open_in_new_tab": 0,
-   "show_arrow": 0,
    "type": "Link"
   },
   {
@@ -158,8 +191,6 @@
    "label": "Service Equipment Settings",
    "link_to": "Service Equipment Settings",
    "link_type": "DocType",
-   "open_in_new_tab": 0,
-   "show_arrow": 0,
    "type": "Link"
   },
   {
@@ -182,7 +213,6 @@
    "label": "Service Schedule",
    "link_to": "Service Schedule",
    "link_type": "Report",
-   "open_in_new_tab": 0,
    "show_arrow": 0,
    "type": "Link"
   },
@@ -194,7 +224,6 @@
    "label": "Site Visit Plan",
    "link_to": "Site Visit Plan",
    "link_type": "Report",
-   "open_in_new_tab": 0,
    "show_arrow": 0,
    "type": "Link"
   },
@@ -206,7 +235,6 @@
    "label": "Technician Workload",
    "link_to": "Technician Workload",
    "link_type": "Report",
-   "open_in_new_tab": 0,
    "show_arrow": 0,
    "type": "Link"
   },
@@ -218,7 +246,39 @@
    "label": "Equipment Register",
    "link_to": "Service Equipment Register",
    "link_type": "Report",
-   "open_in_new_tab": 0,
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Location History",
+   "link_to": "Service Equipment Location History",
+   "link_type": "Report",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Maintenance Due",
+   "link_to": "Service Equipment Maintenance Due",
+   "link_type": "Report",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Repair History",
+   "link_to": "Service Equipment Repair History",
+   "link_type": "Report",
    "show_arrow": 0,
    "type": "Link"
   },
@@ -230,7 +290,6 @@
    "label": "Open Service Issues",
    "link_to": "Open Service Issues",
    "link_type": "Report",
-   "open_in_new_tab": 0,
    "show_arrow": 0,
    "type": "Link"
   },
@@ -242,7 +301,6 @@
    "label": "Service Visit History",
    "link_to": "Service Visit History",
    "link_type": "Report",
-   "open_in_new_tab": 0,
    "show_arrow": 0,
    "type": "Link"
   },
@@ -254,7 +312,6 @@
    "label": "Coverage Expiry",
    "link_to": "Service Equipment Coverage Expiry",
    "link_type": "Report",
-   "open_in_new_tab": 0,
    "show_arrow": 0,
    "type": "Link"
   },
@@ -266,7 +323,6 @@
    "label": "Service Data Gaps",
    "link_to": "Service Data Gaps",
    "link_type": "Report",
-   "open_in_new_tab": 0,
    "show_arrow": 0,
    "type": "Link"
   },
@@ -377,7 +433,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-10-20 12:00:00.000000",
+ "modified": "2026-11-10 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Support",
  "name": "Support",

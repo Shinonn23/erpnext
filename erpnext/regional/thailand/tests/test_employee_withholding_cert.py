@@ -13,6 +13,7 @@ from pypika.dialects import MySQLQueryBuilder
 
 from erpnext.regional.doctype.withholding_tax_cert import withholding_tax_cert as controller
 from erpnext.regional.report.pnd3 import pnd3
+from erpnext.regional.thailand.custom import payment_entry
 from erpnext.regional.thailand.custom import withholding_cert as certificates
 
 
@@ -23,7 +24,7 @@ class Certificate(frappe._dict):
 
 class TestEmployeeWithholdingCertificate(unittest.TestCase):
 	def setUp(self):
-		for module in (certificates, controller):
+		for module in (certificates, controller, payment_entry):
 			translation = patch.object(module, "_", lambda text: text)
 			translation.start()
 			self.addCleanup(translation.stop)
@@ -75,6 +76,7 @@ class TestEmployeeWithholdingCertificate(unittest.TestCase):
 		doc.__dict__.update(dict(
 			doctype="Withholding Tax Cert", employee="EMP-1", supplier=None, company="Company",
 			supplier_address=None, voucher_type="Payment Entry", voucher_no="PE-EMP-1",
+			income_tax_form="PND3",
 		))
 		doc.__dict__.update(values)
 		return doc
@@ -111,6 +113,138 @@ class TestEmployeeWithholdingCertificate(unittest.TestCase):
 					doc.before_submit()
 			with patch.object(frappe, "db", Mock(get_value=Mock(return_value=1))):
 				doc.before_submit()
+
+	def test_employee_payment_rejects_other_forms_before_native_validation(self):
+		class BasePayment(frappe._dict):
+			def validate(self):
+				self.native_validation_called = True
+
+		class EmployeePayment(payment_entry.PaymentEntry, BasePayment):
+			pass
+
+		for form in ("PND53", "PND1", "Unsupported"):
+			for docstatus in (0, 1):
+				with self.subTest(form=form, docstatus=docstatus):
+					doc = EmployeePayment(
+						party_type="Employee",
+						apply_tds=1,
+						tax_withholding_category="Services",
+						docstatus=docstatus,
+					)
+					with (
+						patch.object(frappe, "db", Mock(get_value=Mock(return_value=form))),
+						patch.object(frappe, "throw", side_effect=frappe.ValidationError),
+						self.assertRaises(frappe.ValidationError),
+					):
+						doc.validate()
+					self.assertFalse(doc.native_validation_called)
+
+		for form in ("PND3", "", None):
+			with self.subTest(form=form):
+				doc = EmployeePayment(
+					party_type="Employee",
+					apply_tds=1,
+					tax_withholding_category="Services",
+				)
+				with (
+					patch.object(frappe, "db", Mock(get_value=Mock(return_value=form))) as db,
+					patch.object(payment_entry, "validate_receive_rows"),
+					patch.object(payment_entry, "validate_advance_vat"),
+				):
+					doc.validate()
+					db.get_value.assert_called_once_with(
+						"Tax Withholding Category", "Services", "thai_income_tax_form"
+					)
+				self.assertTrue(doc.native_validation_called)
+
+		for party_type, apply_tds in (("Supplier", 1), ("Employee", 0)):
+			with self.subTest(party_type=party_type, apply_tds=apply_tds):
+				doc = EmployeePayment(
+					party_type=party_type,
+					apply_tds=apply_tds,
+					tax_withholding_category="Services",
+				)
+				with (
+					patch.object(frappe, "db", Mock()) as db,
+					patch.object(payment_entry, "validate_receive_rows"),
+					patch.object(payment_entry, "validate_advance_vat"),
+				):
+					doc.validate()
+					db.get_value.assert_not_called()
+				self.assertTrue(doc.native_validation_called)
+
+	def test_manual_employee_certificate_requires_pnd3_and_defaults_blank(self):
+		for form in ("PND53", "PND1"):
+			with (
+				self.subTest(form=form),
+				patch.object(frappe, "throw", side_effect=frappe.ValidationError),
+				patch.object(controller, "employee_recipient") as employee,
+				self.assertRaises(frappe.ValidationError),
+			):
+				self.document(income_tax_form=form).validate()
+			employee.assert_not_called()
+		for form in ("PND3", "", None):
+			doc = self.document(income_tax_form=form, voucher_no=None)
+			with patch.object(
+				controller, "employee_recipient", return_value=frappe._dict(employee_name="Name")
+			):
+				doc.validate()
+			self.assertEqual(doc.income_tax_form, "PND3")
+		self.document(employee=None, supplier="SUP-1", income_tax_form="PND53").validate()
+
+	def test_generated_employee_certificate_rejects_wrong_form_before_creation(self):
+		with (
+			patch.object(frappe, "throw", side_effect=frappe.ValidationError),
+			patch.object(frappe, "new_doc") as new_doc,
+			self.assertRaises(frappe.ValidationError),
+		):
+			certificates.new_certificate(self.voucher(), "EMP-1", "PND53", {}, party_type="Employee")
+		new_doc.assert_not_called()
+
+	def test_fallback_employee_certificate_rejects_form_from_request_or_category(self):
+		for request_form, category_form in (("PND53", ""), ("", "PND53"), ("PND3", "PND3"), ("", "")):
+			with self.subTest(request_form=request_form, category_form=category_form):
+				cert = Certificate()
+				with (
+					patch.object(frappe, "parse_json", side_effect=lambda value: value),
+					patch.object(frappe, "get_doc", return_value=self.voucher()),
+					patch.object(frappe, "has_permission"),
+					patch.object(frappe, "new_doc", return_value=cert),
+					patch.object(payment_entry, "existing_certificates", return_value={}),
+					patch.object(
+						payment_entry, "employee_recipient", return_value=frappe._dict(employee_name="Name")
+					),
+					patch.object(
+						frappe,
+						"db",
+						Mock(
+							get_value=Mock(
+								side_effect=lambda dt, name, fields, **kw: (
+									"Services"
+									if fields == "category_name"
+									else frappe._dict(
+										thai_type_of_income="5",
+										thai_income_tax_form=category_form,
+									)
+								)
+							)
+						),
+					),
+					patch.object(frappe, "get_system_settings", return_value="Commercial Rounding"),
+					patch.object(frappe, "throw", side_effect=frappe.ValidationError),
+				):
+
+					def make_cert():
+						return payment_entry.make_withholding_tax_cert(
+							{"income_tax_form": request_form, "company_address": "Address"},
+							{"doctype": "Payment Entry", "name": "PE-EMP-1"},
+						)
+
+					if "PND53" in (request_form, category_form):
+						with self.assertRaises(frappe.ValidationError):
+							make_cert()
+					else:
+						self.assertEqual(make_cert().income_tax_form, "PND3")
 
 	def test_pnd3_keeps_supplier_addresses_for_empty_employee_links(self):
 		sql = []

@@ -17,6 +17,7 @@ class TestPOSReturnProfile(TestCase):
 					tax_category="Original", account_for_change_amount="Cash",
 				)
 				doc.set = lambda key, value: doc.__setitem__(key, value)
+				doc.keeps_original_taxes = lambda fieldname: pos_invoice.POSInvoice.keeps_original_taxes(doc, fieldname)
 				with (
 					patch.object(frappe, "get_doc", return_value=profile),
 					patch.object(pos_invoice, "add_return_modes"),

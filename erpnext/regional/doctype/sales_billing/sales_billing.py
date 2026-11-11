@@ -208,3 +208,11 @@ def create_multi_payment_entries(payment_details, sales_billing_name, posting_da
 		res["payment_receipt_name"] = payment_receipt.name
 
 	return res
+
+
+@frappe.whitelist()
+def make_payment_entry(source_name: str):
+	"""Open the billing's current invoices in one unsaved Payment Entry."""
+	from erpnext.regional.doctype.billing_payment import make_billing_payment
+
+	return make_billing_payment("Sales Billing", source_name)

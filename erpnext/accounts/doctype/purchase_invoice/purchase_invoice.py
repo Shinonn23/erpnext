@@ -44,6 +44,8 @@ from erpnext.controllers.accounts_controller import merge_taxes, validate_accoun
 from erpnext.controllers.buying_controller import BuyingController, get_stock_qty
 from erpnext.controllers.mapper import get_qty_already_mapped
 from erpnext.stock.doctype.purchase_receipt.purchase_receipt import (
+	get_pending_invoice_qty,
+	get_returned_qty_map,
 	update_billed_amount_based_on_po,
 )
 
@@ -449,6 +451,7 @@ class PurchaseInvoice(BuyingController):
 		self.party_account_currency = account.account_currency
 
 	def validate_with_previous_doc(self):
+		self.validate_receipt_quantity()
 		super().validate_with_previous_doc(
 			{
 				"Purchase Order": {
@@ -484,6 +487,52 @@ class PurchaseInvoice(BuyingController):
 					["Purchase Receipt", "purchase_receipt", "pr_detail"],
 				]
 			)
+
+	def validate_receipt_quantity(self):
+		if self.get("is_return"):
+			return
+		quantities = {}
+		returned_qty_maps = {}
+		bill_for_rejected_qty = frappe.db.get_single_value(
+			"Buying Settings", "bill_for_rejected_quantity_in_purchase_invoice"
+		)
+		for row in self.get("items"):
+			if not row.get("purchase_receipt") and not row.get("pr_detail"):
+				continue
+			if not row.get("purchase_receipt") or not row.get("pr_detail"):
+				frappe.throw(_("Purchase Receipt and its item reference are both required."))
+			receipt = frappe.db.get_value(
+				"Purchase Receipt Item",
+				row.pr_detail,
+				["parent", "item_code", "uom", "conversion_factor", "qty", "received_qty", "rejected_qty"],
+				as_dict=True,
+				for_update=True,
+			)
+			if (
+				not receipt
+				or receipt.parent != row.purchase_receipt
+				or any(
+					row.get(field) != receipt.get(field)
+					for field in ("item_code", "uom", "conversion_factor")
+				)
+			):
+				frappe.throw(_("Invoice items must match their Purchase Receipt item and unit of measure."))
+			quantities[row.pr_detail] = quantities.get(row.pr_detail, 0) + flt(row.qty)
+			billed = frappe.db.sql(
+				"""select coalesce(sum(qty), 0) from `tabPurchase Invoice Item`
+				where pr_detail=%s and docstatus=1 and parent != %s for update""",
+				(row.pr_detail, self.name or ""),
+			)[0][0]
+			if row.purchase_receipt not in returned_qty_maps:
+				returned_qty_maps[row.purchase_receipt] = get_returned_qty_map(row.purchase_receipt)
+			pending_qty, _returned_qty = get_pending_invoice_qty(
+				receipt,
+				billed,
+				returned_qty_maps[row.purchase_receipt].get(row.pr_detail, 0),
+				bill_for_rejected_qty,
+			)
+			if quantities[row.pr_detail] > pending_qty + 0.000001:
+				frappe.throw(_("Invoice quantity exceeds the unbilled Purchase Receipt quantity."))
 
 	def validate_warehouse(self, for_validate=True):
 		if self.update_stock and for_validate:

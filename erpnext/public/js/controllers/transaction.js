@@ -426,10 +426,19 @@ erpnext.TransactionController = class TransactionController extends erpnext.taxe
 			show_qc_button = this.frm.doc.update_stock;
 		}
 
+		// A receipt is submitted first and inspected after it (Connect Diagnostics, Siwat, 9 Nov 2026): a Purchase
+		// Receipt / Purchase Invoice shows the button only once submitted. A return (goods coming back) the same.
+		const receipt_first =
+			["Purchase Receipt", "Purchase Invoice"].includes(this.frm.doc.doctype) ||
+			(["Delivery Note", "Sales Invoice"].includes(this.frm.doc.doctype) && this.frm.doc.is_return);
+		const qc_stage_open = receipt_first
+			? this.frm.doc.docstatus === 1
+			: this.frm.doc.docstatus === 0 || this.frm.doc.__onload?.allow_to_make_qc_after_submission;
+
 		const me = this;
 		if (
 			!this.frm.is_new() &&
-			(this.frm.doc.docstatus === 0 || this.frm.doc.__onload?.allow_to_make_qc_after_submission) &&
+			qc_stage_open &&
 			frappe.model.can_create("Quality Inspection") &&
 			show_qc_button
 		) {
@@ -2901,6 +2910,9 @@ erpnext.TransactionController = class TransactionController extends erpnext.taxe
 		const incoming_doctypes = ["Purchase Receipt", "Purchase Invoice", "Subcontracting Receipt"];
 		const is_incoming =
 			incoming_doctypes.includes(this.frm.doc.doctype) ||
+			// goods coming back are a receipt (Connect Diagnostics, 9 Nov 2026)
+			(["Delivery Note", "Sales Invoice"].includes(this.frm.doc.doctype) &&
+				cint(this.frm.doc.is_return)) ||
 			(this.frm.doc.doctype === "Stock Entry" &&
 				erpnext.stock.is_incoming_qi_purpose(this.frm.doc.purpose));
 		return is_incoming ? "Incoming" : "Outgoing";

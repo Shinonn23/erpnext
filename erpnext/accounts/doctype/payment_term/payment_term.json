@@ -11,6 +11,7 @@
  "engine": "InnoDB",
  "field_order": [
   "payment_term_name",
+  "payment_term_type",
   "invoice_portion",
   "mode_of_payment",
   "column_break_3",
@@ -33,6 +34,15 @@
    "fieldtype": "Data",
    "label": "Payment Term Name",
    "unique": 1
+  },
+  {
+   "fieldname": "payment_term_type",
+   "fieldtype": "Select",
+   "label": "Payment Term Type",
+   "options": "Regular\nAdvance\nDeposit Invoice",
+   "default": "Regular",
+   "reqd": 1,
+   "description": "Regular payment, advance payment, or a payment that requires a Deposit Invoice."
   },
   {
    "bold": 1,

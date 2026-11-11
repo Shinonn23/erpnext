@@ -15,7 +15,6 @@ from erpnext.accounts.report.financial_statements import (
 	validate_fiscal_year,
 )
 from erpnext.accounts.utils import get_fiscal_year
-from erpnext.assets import service_equipment
 from erpnext.assets.doctype.asset.asset import _get_asset_value_after_depreciation
 
 
@@ -120,7 +119,6 @@ def get_data(filters):
 def get_conditions(filters):
 	conditions = {
 		"docstatus": 1,
-		"name": ["not in", service_equipment.names()],
 	}
 	status = filters.status
 	date_field = frappe.scrub(filters.date_based_on or "Purchase Date")
@@ -277,8 +275,6 @@ def get_asset_depreciation_amount_map(filters, finance_book):
 		.where(asset.docstatus == 1)
 	)
 
-	query = query.where(service_equipment.not_service_equipment(asset))
-
 	if filters.only_existing_assets:
 		query = query.where(asset.asset_type == "Existing Asset")
 	if filters.asset_category:
@@ -329,8 +325,6 @@ def get_asset_value_adjustment_map(filters, finance_book):
 		.where(company.name == filters.company)
 		.where(asset.docstatus == 1)
 	)
-
-	query = query.where(service_equipment.not_service_equipment(asset))
 
 	if filters.only_existing_assets:
 		query = query.where(asset.asset_type == "Existing Asset")

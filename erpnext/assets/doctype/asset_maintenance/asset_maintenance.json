@@ -9,6 +9,8 @@
  "engine": "InnoDB",
  "field_order": [
   "asset_name",
+  "service_equipment",
+  "equipment_name",
   "asset_category",
   "company",
   "column_break_3",
@@ -24,13 +26,31 @@
  ],
  "fields": [
   {
+   "depends_on": "eval:!doc.service_equipment",
    "fieldname": "asset_name",
    "fieldtype": "Link",
    "in_list_view": 1,
    "label": "Asset Name",
+   "mandatory_depends_on": "eval:!doc.service_equipment",
    "options": "Asset",
-   "reqd": 1,
    "unique": 1
+  },
+  {
+   "depends_on": "eval:!doc.asset_name",
+   "fieldname": "service_equipment",
+   "fieldtype": "Link",
+   "label": "Service Equipment",
+   "mandatory_depends_on": "eval:!doc.asset_name",
+   "options": "Service Equipment",
+   "unique": 1
+  },
+  {
+   "depends_on": "eval:doc.service_equipment",
+   "fetch_from": "service_equipment.equipment_name",
+   "fieldname": "equipment_name",
+   "fieldtype": "Data",
+   "label": "Equipment Name",
+   "read_only": 1
   },
   {
    "fetch_from": "asset_name.asset_category",
@@ -106,7 +126,7 @@
  ],
  "icon": "wrench",
  "links": [],
- "modified": "2024-03-27 13:06:34.491299",
+ "modified": "2026-11-10 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Assets",
  "name": "Asset Maintenance",
@@ -133,6 +153,29 @@
    "read": 1,
    "report": 1,
    "role": "Manufacturing User",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Maintenance Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Maintenance User",
    "share": 1,
    "write": 1
   }

@@ -160,7 +160,8 @@ def validate_warehouse_operation(
 	# not tied to `outgoing`: a review-only workflow transition of the unchanged draft passes outgoing=False (the role
 	# check is skipped) but the issue out of Lost is still the write-off's own
 	if not cint(policy.get(f"allow_{operation}")) and not (
-		operation == "issue" and is_write_off_from_lost(doc, location)
+		operation == "issue"
+		and (is_write_off_from_lost(doc, location) or is_rejected_return_from_quarantine(doc, location))
 	):
 		frappe.throw(
 			_(
@@ -179,10 +180,35 @@ def validate_warehouse_operation(
 		if location.warehouse_type in ("Quarantine", "QA"):
 			# the same way out as the app's refusal of a manual move out (Connect Diagnostics, 5 Nov 2026)
 			message += " " + _(
-				"Open the receipt that put them in quarantine and press Move out of quarantine once the "
-				"Quality Inspection is done."
+				"Goods inspected by the QI team leave quarantine with the Stock team's own Material Transfer to a "
+				"non-quarantine warehouse of the company; any other document needs this role."
 			)
 		frappe.throw(message, frappe.PermissionError)
+
+
+def is_rejected_return_from_quarantine(doc, warehouse):
+	"""Whether ``doc`` is the Purchase Return of goods a Quality Inspection rejected while they were held in this
+	Quarantine warehouse (Connect Diagnostics, 9 Nov 2026): every row of the return that leaves the warehouse reverses a
+	receipt row whose submitted inspection is Rejected, so Purchasing sends them back without a Stock Manager."""
+	if (
+		doc is None
+		or doc.doctype != "Purchase Receipt"
+		or not doc.get("is_return")
+		or warehouse.get("warehouse_type") not in ("Quarantine", "QA")
+	):
+		return False
+	rows = [row for row in doc.get("items") or [] if row.get("warehouse") == warehouse.get("name")]
+	if not rows:
+		return False
+	for row in rows:
+		original = row.get("purchase_receipt_item")
+		inspection = original and frappe.db.get_value("Purchase Receipt Item", original, "quality_inspection")
+		status = inspection and frappe.db.get_value(
+			"Quality Inspection", inspection, ["docstatus", "status"], as_dict=True
+		)
+		if not (status and status.docstatus == 1 and status.status == "Rejected"):
+			return False
+	return True
 
 
 def is_write_off_from_lost(doc, warehouse):
@@ -216,6 +242,8 @@ def outgoing_role_waived(doc, warehouse, policy):
 		return True
 	if is_write_off_from_lost(doc, warehouse):
 		return True
+	if is_rejected_return_from_quarantine(doc, warehouse):
+		return True
 	return any(
 		frappe.get_attr(path)(doc, warehouse, policy)
 		for path in frappe.get_hooks("warehouse_outgoing_role_waivers")
@@ -233,6 +261,8 @@ def is_loan_movement(doc):
 	from erpnext.loan.doctype.custody_loan.custody_loan_core import validate_generated_transaction
 
 	validate_generated_transaction(doc)
+	if doc.doctype == "Stock Entry" and is_return_lot_swap(doc):
+		return True
 	if doc.doctype == "Stock Entry":
 		if (
 			doc.get("custody_loan_source_doctype") != "Custody Loan Adjustment"
@@ -259,6 +289,32 @@ def is_loan_movement(doc):
 				)
 			)
 	return True
+
+
+def is_return_lot_swap(doc):
+	"""Whether ``doc`` is the Repack a Custody Loan Return makes to exchange the lent batch for the batch the customer
+	brought back (Siwat, 5 and 9 Nov 2026): one Item, one batch out and one batch in, the same quantity, both inside
+	the customer's loan warehouse, linked to a submitted return of that loan. Any other Repack stays refused."""
+	if doc.get("purpose") != "Repack" or doc.get("custody_loan_source_doctype") != "Custody Loan Return":
+		return False
+	loan = frappe.get_doc("Custody Loan", doc.custody_loan)
+	source = frappe.db.get_value(
+		"Custody Loan Return", doc.custody_loan_source_name, ["docstatus", "custody_loan"], as_dict=True
+	)
+	if not source or source.docstatus != 1 or source.custody_loan != loan.name:
+		return False
+	rows = list(doc.get("items") or [])
+	outgoing = [row for row in rows if row.get("s_warehouse") and not row.get("t_warehouse")]
+	incoming = [row for row in rows if row.get("t_warehouse") and not row.get("s_warehouse")]
+	if len(rows) != 2 or len(outgoing) != 1 or len(incoming) != 1:
+		return False
+	out, into = outgoing[0], incoming[0]
+	return (
+		out.s_warehouse == loan.customer_loan_warehouse
+		and into.t_warehouse == loan.customer_loan_warehouse
+		and out.item_code == into.item_code
+		and flt(out.qty) == flt(into.qty)
+	)
 
 
 def movement_operation(doc, outgoing, loan=False, row=None):
@@ -299,30 +355,34 @@ def movement_operation(doc, outgoing, loan=False, row=None):
 def _rejected_sales_return_into_quarantine(doc, row):
 	"""Goods of a sales return that failed inspection are received into the company's quarantine warehouse (Siwat,
 	5 Nov 2026): that leg is a receipt there, not a sale, which a Quarantine type does not allow."""
-	if not (
-		row
-		and doc.doctype in ("Delivery Note", "Sales Invoice")
-		and doc.get("is_return")
-		and row.get("quality_inspection")
-	):
+	if not (row and doc.doctype in ("Delivery Note", "Sales Invoice") and doc.get("is_return")):
 		return False
 	from erpnext.loan.doctype.custody_loan.custody_loan_core import is_quarantine_warehouse
 
+	if not is_quarantine_warehouse(row.get("warehouse"), doc.company):
+		return False
+	# received first, inspected after (Siwat, 9 Nov 2026): a row of an Item inspected on receipt is received into
+	# quarantine before any inspection; a rejected one may also be received there
+	if row.get("item_code") and frappe.get_cached_value(
+		"Item", row.item_code, "inspection_required_before_purchase"
+	):
+		return True
+	return _rejected_inspection(row)
+
+
+def _rejected_inspection(row):
+	if not row.get("quality_inspection"):
+		return False
 	inspection = frappe.db.get_value(
 		"Quality Inspection", row.quality_inspection, ["docstatus", "status"], as_dict=True
 	)
-	return bool(
-		inspection
-		and inspection.docstatus == 1
-		and inspection.status == "Rejected"
-		and is_quarantine_warehouse(row.get("warehouse"), doc.company)
-	)
+	return bool(inspection and inspection.docstatus == 1 and inspection.status == "Rejected")
 
 
 def _rejected_loan_return_into_quarantine(doc, row):
 	"""Goods of a Custody Loan return that failed inspection are received into the company's quarantine warehouse
 	(Siwat, 4 Nov 2026): that leg is a receipt there, not a loan movement, which a Quarantine type does not allow."""
-	if not (row and doc.doctype == "Delivery Note" and row.get("quality_inspection")):
+	if not (row and doc.doctype == "Delivery Note"):
 		return False
 	from erpnext.loan.doctype.custody_loan.custody_loan_core import (
 		is_custody_loan_return_delivery_note,
@@ -331,15 +391,14 @@ def _rejected_loan_return_into_quarantine(doc, row):
 
 	if not is_custody_loan_return_delivery_note(doc):
 		return False
-	inspection = frappe.db.get_value(
-		"Quality Inspection", row.quality_inspection, ["docstatus", "status"], as_dict=True
-	)
-	return bool(
-		inspection
-		and inspection.docstatus == 1
-		and inspection.status == "Rejected"
-		and is_quarantine_warehouse(row.get("warehouse"), doc.company)
-	)
+	if not is_quarantine_warehouse(row.get("warehouse"), doc.company):
+		return False
+	# a returned row of an Item inspected on receipt is received into quarantine before its inspection (9 Nov 2026)
+	if row.get("item_code") and frappe.get_cached_value(
+		"Item", row.item_code, "inspection_required_before_purchase"
+	):
+		return True
+	return _rejected_inspection(row)
 
 
 def validate_document_policy(doc):

@@ -124,6 +124,35 @@ class PartyTestCase(ERPNextTestSuite):
 
 		self.assertEqual(party_details.selling_price_list, pos_price_list)
 
+	def test_customer_group_default_should_win_over_pos_profile(self):
+		group_price_list = self.create_price_list(enabled=1)
+		group = frappe.get_doc(
+			{
+				"doctype": "Customer Group",
+				"customer_group_name": frappe.generate_hash(length=10),
+				"parent_customer_group": "All Customer Groups",
+				"default_price_list": group_price_list,
+			}
+		).insert(ignore_permissions=True)
+		pos_profile = make_pos_profile(selling_price_list=self.create_price_list(enabled=1))
+		customer = self.create_customer()
+		customer.customer_group = group.name
+
+		party_details = frappe._dict()
+		set_price_list(party_details, customer, "Customer", None, pos=pos_profile.name, doctype="POS Invoice")
+
+		self.assertEqual(party_details.selling_price_list, group_price_list)
+
+	def test_customer_default_should_win_over_pos_profile(self):
+		own_price_list = self.create_price_list(enabled=1)
+		pos_profile = make_pos_profile(selling_price_list=self.create_price_list(enabled=1))
+		customer = self.create_customer(default_price_list=own_price_list)
+
+		party_details = frappe._dict()
+		set_price_list(party_details, customer, "Customer", None, pos=pos_profile.name, doctype="POS Invoice")
+
+		self.assertEqual(party_details.selling_price_list, own_price_list)
+
 	def test_disabled_permitted_price_lists_should_clear_the_price_list(self):
 		permitted = [self.create_price_list(enabled=0), self.create_price_list(enabled=0)]
 		user = self.create_user_with_price_list_permissions(permitted)

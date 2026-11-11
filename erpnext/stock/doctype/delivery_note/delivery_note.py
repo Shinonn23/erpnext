@@ -862,6 +862,7 @@ def make_sales_invoice(
 		if args and args.get("merge_taxes"):
 			merge_taxes(source, target)
 
+		target.set_discount_amount_after_mapping(source)
 		target.run_method("calculate_taxes_and_totals")
 
 		# set company address

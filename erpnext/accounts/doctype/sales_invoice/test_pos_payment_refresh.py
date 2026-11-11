@@ -8,7 +8,8 @@ from erpnext.accounts.doctype.sales_invoice.sales_invoice import update_multi_mo
 
 class TestPOSPaymentRefresh(TestCase):
 	def test_refresh_with_existing_payments_and_no_sales_invoice_field(self):
-		doc = Mock(spec=["payments", "company", "get", "set", "append"])
+		doc = Mock(spec=["doctype", "payments", "company", "get", "set", "append"])
+		doc.doctype = "Sales Invoice"
 		doc.payments = [frappe._dict(mode_of_payment="Cash")]
 		doc.company = "Company"
 		doc.get.return_value = None
