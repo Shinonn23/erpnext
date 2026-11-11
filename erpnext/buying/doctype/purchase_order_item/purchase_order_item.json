@@ -56,6 +56,13 @@
   "pricing_rules",
   "stock_uom_rate",
   "is_free_item",
+  "free_goods_section",
+  "free_goods_reference_rate",
+  "allocate_free_goods_cost",
+  "free_goods_cb",
+  "free_goods_weight",
+  "free_goods_weight_manual",
+  "allocated_unit_cost",
   "section_break_29",
   "net_rate",
   "net_amount",
@@ -392,6 +399,55 @@
    "fieldtype": "Check",
    "label": "Is Free Item",
    "read_only": 0
+  },
+  {
+   "collapsible": 1,
+   "depends_on": "eval:doc.is_free_item || doc.allocated_unit_cost",
+   "fieldname": "free_goods_section",
+   "fieldtype": "Section Break",
+   "label": "Free Goods Cost"
+  },
+  {
+   "depends_on": "eval:doc.is_free_item",
+   "description": "Estimated Buying price, else the latest purchase, else the valuation rate. Type it if none was found.",
+   "fieldname": "free_goods_reference_rate",
+   "fieldtype": "Currency",
+   "label": "Reference Rate (per stock UOM)",
+   "options": "Company:company:default_currency"
+  },
+  {
+   "default": "1",
+   "depends_on": "eval:doc.is_free_item",
+   "description": "Untick to give this free item no cost; the paid rows then keep theirs.",
+   "fieldname": "allocate_free_goods_cost",
+   "fieldtype": "Check",
+   "label": "Allocate Cost to this Free Item"
+  },
+  {
+   "fieldname": "free_goods_cb",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:doc.is_free_item || doc.allocated_unit_cost",
+   "description": "Worked out as stock quantity x reference rate. Type a value to set it yourself; it is then kept.",
+   "fieldname": "free_goods_weight",
+   "fieldtype": "Float",
+   "label": "Allocation Weight"
+  },
+  {
+   "fieldname": "free_goods_weight_manual",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "Weight Typed"
+  },
+  {
+   "depends_on": "eval:doc.allocated_unit_cost",
+   "fieldname": "allocated_unit_cost",
+   "fieldtype": "Currency",
+   "label": "Allocated Unit Cost (per stock UOM)",
+   "no_copy": 1,
+   "options": "Company:company:default_currency",
+   "read_only": 1
   },
   {
    "fieldname": "section_break_29",
@@ -1044,7 +1100,7 @@
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-11-07 16:00:00.000000",
+ "modified": "2026-11-12 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "Buying",
  "name": "Purchase Order Item",

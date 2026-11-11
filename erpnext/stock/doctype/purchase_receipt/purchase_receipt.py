@@ -732,6 +732,9 @@ class PurchaseReceipt(BuyingController):
 				+ flt(item.rm_supp_cost)
 				+ flt(item.item_tax_amount)
 				+ flt(item.amount_difference_with_purchase_invoice)
+				# free goods cost moves value between the rows of one order and adds up to zero: the
+				# stock debit carries it, the Stock Received But Not Billed credit stays base_net_amount
+				+ flt(item.get("free_goods_cost_adjustment"))
 			)
 
 			divisional_loss = flt(
