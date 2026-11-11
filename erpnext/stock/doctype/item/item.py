@@ -73,7 +73,7 @@ class Item(Document):
 		allow_negative_stock: DF.Check
 		asset_category: DF.Link | None
 		asset_naming_series: DF.Literal[None]
-		demo_asset_item_code: DF.Link | None
+		default_asset_item_for_conversion: DF.Link | None
 		attributes: DF.Table[ItemVariantAttribute]
 		auto_create_assets: DF.Check
 		barcodes: DF.Table[ItemBarcode]
@@ -237,7 +237,7 @@ class Item(Document):
 		self.validate_variant_attributes()
 		self.validate_variant_based_on_change()
 		self.validate_fixed_asset()
-		self.validate_demo_asset_item_code()
+		self.validate_default_asset_item_for_conversion()
 		self.clear_retain_sample()
 		self.validate_retain_sample()
 		self.validate_uom_conversion_factor()
@@ -267,13 +267,13 @@ class Item(Document):
 				storage_condition=self.get("storage_condition") or "",
 			)
 
-	def validate_demo_asset_item_code(self):
-		if not self.demo_asset_item_code:
+	def validate_default_asset_item_for_conversion(self):
+		if not self.default_asset_item_for_conversion:
 			return
 		if not self.is_stock_item:
 			frappe.throw(_("Asset Item Code can only be set on a Stock Item"))
 		asset_item = frappe.get_cached_value(
-			"Item", self.demo_asset_item_code, ["is_stock_item", "is_fixed_asset"], as_dict=True
+			"Item", self.default_asset_item_for_conversion, ["is_stock_item", "is_fixed_asset"], as_dict=True
 		)
 		if not asset_item or asset_item.is_stock_item or not asset_item.is_fixed_asset:
 			frappe.throw(_("Asset Item Code must be a non-stock Fixed Asset Item"))

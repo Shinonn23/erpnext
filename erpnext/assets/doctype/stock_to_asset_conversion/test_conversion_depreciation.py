@@ -64,7 +64,7 @@ class TestConversionDepreciation(TestCase):
 		self.assertEqual((doctype, field), ("Asset Category", "is_demo_category"))
 		return 0
 
-	def sync(self, value, category, existing=None):
+	def sync(self, value, category, existing=None, treatment="Capitalize"):
 		asset = existing or DraftAsset(asset_owner="Company", flags=frappe._dict(), finance_books=[])
 		output = frappe._dict(
 			asset=asset.name,
@@ -74,6 +74,7 @@ class TestConversionDepreciation(TestCase):
 			asset_category=category,
 			asset_location="Warehouse",
 			asset_value=value,
+			accounting_treatment=treatment,
 			db_set=Mock(),
 		)
 		doc = SimpleNamespace(
@@ -101,6 +102,19 @@ class TestConversionDepreciation(TestCase):
 					self.assertEqual(asset.calculate_depreciation, 1)
 					self.assertEqual(asset.net_purchase_amount, value)
 					self.assertEqual(asset.finance_books[0]["total_number_of_depreciations"], periods)
+
+	def test_immediate_expense_generates_zero_value_without_depreciation(self):
+		asset = self.sync(8500, "Normal", treatment="Expense Immediately")
+		self.assertEqual(asset.net_purchase_amount, 0)
+		self.assertEqual(asset.calculate_depreciation, 0)
+		self.assertEqual(conversion.get_native_conversion_source(asset), "CONV-1")
+		asset.opening_accumulated_depreciation = 1
+		asset.opening_number_of_booked_depreciations = 1
+		asset.additional_asset_cost = 1
+		self.sync(8500, "Normal", existing=asset, treatment="Expense Immediately")
+		self.assertEqual(asset.opening_accumulated_depreciation, 0)
+		self.assertEqual(asset.opening_number_of_booked_depreciations, 0)
+		self.assertEqual(asset.additional_asset_cost, 0)
 
 	def test_one_period_zero_residual_uses_category_date_and_native_schedule(self):
 		asset = self.sync(10000, "One Period")

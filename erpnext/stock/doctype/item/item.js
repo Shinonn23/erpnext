@@ -8,7 +8,7 @@ const PURCHASE_DOCTYPES = ["Purchase Order", "Purchase Receipt", "Purchase Invoi
 
 frappe.ui.form.on("Item", {
 	setup(frm) {
-		frm.set_query("demo_asset_item_code", () => ({
+		frm.set_query("default_asset_item_for_conversion", () => ({
 			filters: { is_stock_item: 0, is_fixed_asset: 1 },
 		}));
 	},

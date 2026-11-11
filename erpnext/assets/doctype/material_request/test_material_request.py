@@ -132,7 +132,14 @@ class TestMaterialRequestActions(unittest.TestCase):
 		self.assertEqual(purpose["options"].splitlines(), list(MATERIAL_REQUEST_PURPOSES))
 		self.assertEqual(
 			MATERIAL_REQUEST_PURPOSES,
-			("Purchase", "Material Transfer", "Asset Transfer", "Customer Demo", "Customer Borrow / Loan"),
+			(
+				"Purchase",
+				"Material Transfer",
+				"Material Issue",
+				"Asset Transfer",
+				"Customer Demo",
+				"Customer Borrow / Loan",
+			),
 		)
 
 	def test_custom_asset_statuses_do_not_include_in_transit(self):
@@ -241,7 +248,7 @@ class TestMaterialRequestActions(unittest.TestCase):
 		self.assertEqual(field_sections["items"], "items_section")
 
 	def test_legacy_material_request_purposes_are_rejected(self):
-		for purpose in ("Material Issue", "Manufacture", "Subcontracting", "Customer Provided"):
+		for purpose in ("Manufacture", "Subcontracting", "Customer Provided"):
 			with self.subTest(purpose=purpose), patch("frappe.throw", side_effect=ValueError):
 				with self.assertRaises(ValueError):
 					request = CustomerMaterialRequest.__new__(CustomerMaterialRequest)

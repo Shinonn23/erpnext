@@ -446,7 +446,7 @@ class StockController(AccountsController):
 		if not table_name:
 			table_name = "items"
 
-		if self.doctype == "Asset Capitalization":
+		if self.doctype in ("Asset Capitalization", "Stock to Asset Conversion"):
 			table_name = "stock_items"
 
 		parent_details = frappe._dict()
@@ -2344,12 +2344,13 @@ class StockController(AccountsController):
 def show_accounting_ledger_preview(company: str, doctype: str, docname: str):
 	filters = frappe._dict(company=company, include_dimensions=1)
 	doc = frappe.get_lazy_doc(doctype, docname)
-	doc.check_permission("read")
-	doc.run_method("before_gl_preview")
-
-	gl_columns, gl_data = get_accounting_ledger_preview(doc, filters)
-
-	frappe.db.rollback()
+	try:
+		doc.check_permission("read")
+		validate_conversion_ledger_preview(doc, company)
+		doc.run_method("before_gl_preview")
+		gl_columns, gl_data = get_accounting_ledger_preview(doc, filters)
+	finally:
+		frappe.db.rollback()
 
 	return {"gl_columns": gl_columns, "gl_data": gl_data}
 
@@ -2363,17 +2364,27 @@ def show_stock_ledger_preview(company: str, doctype: str, docname: str):
 		segregate_serial_batch_bundle=1,
 	)
 	doc = frappe.get_lazy_doc(doctype, docname)
-	doc.check_permission("read")
-	doc.run_method("before_sl_preview")
-
-	sl_columns, sl_data = get_stock_ledger_preview(doc, filters)
-
-	frappe.db.rollback()
+	try:
+		doc.check_permission("read")
+		validate_conversion_ledger_preview(doc, company)
+		doc.run_method("before_sl_preview")
+		sl_columns, sl_data = get_stock_ledger_preview(doc, filters)
+	finally:
+		frappe.db.rollback()
 
 	return {
 		"sl_columns": sl_columns,
 		"sl_data": sl_data,
 	}
+
+
+def validate_conversion_ledger_preview(doc, company):
+	if doc.doctype != "Stock to Asset Conversion":
+		return
+	if doc.company != company or doc.docstatus != 0:
+		frappe.throw(_("Preview requires a draft Conversion in the selected Company."))
+	if not doc.has_permlevel_access_to("total_value"):
+		frappe.throw(_("You do not have permission to preview Conversion values."), frappe.PermissionError)
 
 
 def get_accounting_ledger_preview(doc, filters):
@@ -2401,7 +2412,12 @@ def get_accounting_ledger_preview(doc, filters):
 
 	doc.docstatus = 1
 
-	if doc.get("update_stock") or doc.doctype in ("Purchase Receipt", "Delivery Note", "Stock Entry"):
+	if doc.get("update_stock") or doc.doctype in (
+		"Purchase Receipt",
+		"Delivery Note",
+		"Stock Entry",
+		"Stock to Asset Conversion",
+	):
 		doc.make_bundle_using_old_serial_batch_fields()
 		doc.update_stock_ledger()
 
@@ -2437,7 +2453,12 @@ def get_stock_ledger_preview(doc, filters):
 	]
 	columns_fields = [*fields, "in_qty", "out_qty", "in_out_rate"]
 
-	if doc.get("update_stock") or doc.doctype in ("Purchase Receipt", "Delivery Note", "Stock Entry"):
+	if doc.get("update_stock") or doc.doctype in (
+		"Purchase Receipt",
+		"Delivery Note",
+		"Stock Entry",
+		"Stock to Asset Conversion",
+	):
 		doc.docstatus = 1
 		doc.make_bundle_using_old_serial_batch_fields()
 		doc.update_stock_ledger()

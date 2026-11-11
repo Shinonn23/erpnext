@@ -82,7 +82,7 @@ class TestStockToAssetConversionIntegration(ERPNextTestSuite):
 			properties={
 				"is_stock_item": 1,
 				"stock_uom": "Nos",
-				"demo_asset_item_code": self.asset_item,
+				"default_asset_item_for_conversion": self.asset_item,
 			}
 		).name
 		self.receipt = make_stock_entry(
@@ -402,7 +402,7 @@ class TestStockToAssetConversionIntegration(ERPNextTestSuite):
 
 	def test_conversion_rejects_missing_asset_mapping(self):
 		item = frappe.get_doc("Item", self.stock_item)
-		item.demo_asset_item_code = None
+		item.default_asset_item_for_conversion = None
 		item.save()
 		self.assert_invalid_conversion(1, "Set Asset Item Code")
 

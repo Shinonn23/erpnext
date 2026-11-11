@@ -263,6 +263,7 @@ erpnext.patches.v15_0.rename_subcontracting_fields
 erpnext.patches.v15_0.unset_incorrect_additional_discount_percentage
 
 [post_model_sync]
+erpnext.patches.v16_0.rename_item_asset_conversion_fields
 erpnext.patches.v16_0.remove_legacy_material_request_address_fields
 erpnext.patches.v16_0.migrate_asset_movement_customer_use_reference
 erpnext.patches.v16_0.use_transfer_for_customer_asset_movements

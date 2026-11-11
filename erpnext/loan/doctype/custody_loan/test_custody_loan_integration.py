@@ -223,7 +223,7 @@ class TestCustodyLoanIntegration(ERPNextTestSuite):
 			properties={
 				"is_stock_item": 1,
 				"stock_uom": "Nos",
-				"demo_asset_item_code": asset_item.name,
+				"default_asset_item_for_conversion": asset_item.name,
 			}
 		)
 		make_stock_entry(

@@ -10,6 +10,14 @@
   "source_serial_no",
   "source_batch_no",
   "asset_category",
+  "accounting_treatment",
+  "purchase_price_source",
+  "purchase_reference_type",
+  "purchase_reference",
+  "purchase_reference_item",
+  "purchase_unit_price",
+  "purchase_price_reason",
+  "expense_account",
   "asset_value",
   "asset_location",
   "asset"
@@ -67,9 +75,71 @@
    "in_list_view": 1
   },
   {
+   "fieldname": "accounting_treatment",
+   "fieldtype": "Select",
+   "label": "Accounting Treatment",
+   "options": "Capitalize\nExpense Immediately",
+   "default": "Capitalize",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "purchase_price_source",
+   "fieldtype": "Select",
+   "label": "Purchase Price Source",
+   "options": "Purchase Document\nManual Evidence",
+   "default": "Purchase Document",
+   "depends_on": "eval:doc.accounting_treatment == \"Expense Immediately\"",
+   "description": "Choose a purchase document or enter a price with an explanation."
+  },
+  {
+   "fieldname": "purchase_reference_type",
+   "fieldtype": "Select",
+   "label": "Purchase Reference Type",
+   "options": "Purchase Receipt\nPurchase Invoice",
+   "default": "Purchase Receipt",
+   "depends_on": "eval:doc.accounting_treatment == \"Expense Immediately\" && doc.purchase_price_source != \"Manual Evidence\""
+  },
+  {
+   "fieldname": "purchase_reference",
+   "fieldtype": "Dynamic Link",
+   "label": "Purchase Reference",
+   "options": "purchase_reference_type",
+   "depends_on": "eval:doc.accounting_treatment == \"Expense Immediately\" && doc.purchase_price_source != \"Manual Evidence\""
+  },
+  {
+   "fieldname": "purchase_reference_item",
+   "fieldtype": "Data",
+   "label": "Purchase Reference Item",
+   "read_only": 1,
+   "depends_on": "eval:doc.accounting_treatment == \"Expense Immediately\" && doc.purchase_price_source != \"Manual Evidence\""
+  },
+  {
+   "fieldname": "purchase_unit_price",
+   "fieldtype": "Currency",
+   "label": "Purchase Unit Price (THB)",
+   "options": "Company:company:default_currency",
+   "description": "Purchase price per stock unit, excluding recoverable VAT. Derived from the reference or entered by accounting with evidence.",
+   "depends_on": "eval:doc.accounting_treatment == \"Expense Immediately\"",
+   "read_only_depends_on": "eval:doc.purchase_price_source != \"Manual Evidence\""
+  },
+  {
+   "fieldname": "purchase_price_reason",
+   "fieldtype": "Small Text",
+   "label": "Purchase Price Explanation",
+   "depends_on": "eval:doc.accounting_treatment == \"Expense Immediately\" && doc.purchase_price_source == \"Manual Evidence\""
+  },
+  {
+   "fieldname": "expense_account",
+   "fieldtype": "Link",
+   "label": "Demo Expense Account",
+   "options": "Account",
+   "depends_on": "eval:doc.accounting_treatment == \"Expense Immediately\""
+  },
+  {
    "fieldname": "asset_value",
    "fieldtype": "Currency",
-   "label": "Asset Value",
+   "label": "Stock Conversion Cost",
+   "description": "The stock cost. Immediate expense creates a tracking Asset with zero value.",
    "options": "Company:company:default_currency",
    "read_only": 1,
    "in_list_view": 1

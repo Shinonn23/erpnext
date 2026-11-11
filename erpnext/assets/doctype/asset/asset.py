@@ -498,6 +498,17 @@ class Asset(AccountsController):
 	def validate_asset_values(self):
 		if not self.asset_category:
 			self.asset_category = frappe.get_cached_value("Item", self.item_code, "asset_category")
+		from erpnext.assets.doctype.stock_to_asset_conversion.stock_to_asset_conversion import (
+			is_expensed_conversion_asset,
+		)
+
+		if is_expensed_conversion_asset(self):
+			if (
+				flt(self.net_purchase_amount) or flt(self.additional_asset_cost) or self.calculate_depreciation
+				or flt(self.opening_accumulated_depreciation) or self.opening_number_of_booked_depreciations
+			):
+				frappe.throw(_("An immediately expensed Demo Asset must have zero value and no depreciation."))
+			return
 
 		if not flt(self.net_purchase_amount) and self.asset_type != "Composite Asset":
 			frappe.throw(_("Net Purchase Amount is mandatory"), frappe.MandatoryError)

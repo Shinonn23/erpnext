@@ -300,11 +300,11 @@ frappe.ui.form.on("Asset Movement Item", {
 			.then(({ message }) => {
 				if (!message) return;
 				return frappe.db
-					.get_value("Item", message.item_code, "demo_asset_item_code")
+					.get_value("Item", message.item_code, "default_asset_item_for_conversion")
 					.then(({ message: mapping }) => {
 						const asset_item_code =
 							message.item_type === "Stock Item"
-								? mapping?.demo_asset_item_code
+								? mapping?.default_asset_item_for_conversion
 								: message.item_code;
 						frappe.model.set_value(cdt, cdn, { asset_item_code });
 					});

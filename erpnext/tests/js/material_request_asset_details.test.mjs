@@ -21,7 +21,7 @@ function fixture(reply) {
 			material_request_type: "Customer Demo",
 			customer_location: "Customer Site",
 		},
-		fields_dict: { items: { grid: { set_column_disp_in_list_view() {} } } },
+		fields_dict: { items: { grid: { set_column_disp_in_list_view() {}, update_docfield_property() {} } } },
 		set_query: (...args) => {
 			queries[args[0]] = args.at(-1);
 		},
@@ -151,6 +151,8 @@ test("late metadata cannot cross Asset, company or purpose changes", async () =>
 
 test("native Asset picker keeps the scoped selector interface", () => {
 	const ui = fixture(Promise.resolve({ message: metadata }));
+	ui.frm.doc.material_request_type = "Asset Transfer";
+	ui.frm.doc.asset_source_location = "Stock Room";
 	ui.handlers["Material Request"].setup(ui.frm);
 	const query = ui.queries.asset(ui.frm.doc, "Material Request Item", "ROW");
 	assert.equal(
@@ -159,8 +161,8 @@ test("native Asset picker keeps the scoped selector interface", () => {
 	);
 	assert.deepEqual(plain(query.filters), {
 		company: "CD",
-		material_request_type: "Customer Demo",
+		material_request_type: "Asset Transfer",
 		item_code: "MODEL",
-		location: null,
+		location: "Stock Room",
 	});
 });

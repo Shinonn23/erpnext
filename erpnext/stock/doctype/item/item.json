@@ -144,8 +144,8 @@
   "default_item_manufacturer",
   "column_break_vipt",
   "customer_code",
-  "demo_tab",
-  "demo_asset_item_code",
+  "asset_conversion_tab",
+  "default_asset_item_for_conversion",
   "quality_tab",
   "inspection_required_before_purchase",
   "column_break_pxjh",
@@ -345,7 +345,7 @@
   {
    "depends_on": "eval:doc.is_stock_item",
    "description": "Default fixed-asset Item for stock conversion. It can be changed on the conversion document.",
-   "fieldname": "demo_asset_item_code",
+   "fieldname": "default_asset_item_for_conversion",
    "fieldtype": "Link",
    "label": "Default Asset Item for Conversion",
    "options": "Item"
@@ -994,7 +994,7 @@
   },
   {
    "depends_on": "eval:doc.is_stock_item",
-   "fieldname": "demo_tab",
+   "fieldname": "asset_conversion_tab",
    "fieldtype": "Tab Break",
    "label": "Asset Conversion"
   },

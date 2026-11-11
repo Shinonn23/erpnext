@@ -8,8 +8,8 @@ from erpnext.controllers.stock_controller import StockController, get_item_wise_
 from erpnext.stock.doctype.inventory_dimension.inventory_dimension import (
 	get_document_wise_inventory_dimensions,
 )
-from erpnext.stock.utils import _get_incoming_rate, get_stock_balance
 from erpnext.stock.serial_batch_bundle import SerialNoValuation
+from erpnext.stock.utils import _get_incoming_rate, get_stock_balance
 
 _GENERATED_ASSET_TOKEN = object()
 
@@ -17,6 +17,24 @@ _GENERATED_ASSET_TOKEN = object()
 def get_native_conversion_source(asset):
 	if asset.flags.get("stock_conversion_token") is _GENERATED_ASSET_TOKEN:
 		return asset.flags.get("stock_conversion_source")
+
+
+def is_expensed_conversion_asset(asset):
+	conversion_name = asset.get("stock_to_asset_conversion")
+	if not conversion_name:
+		return False
+	conversion = frappe.get_doc("Stock to Asset Conversion", conversion_name)
+	if conversion.docstatus == 2 or conversion.company != asset.company:
+		return False
+	trusted_save = get_native_conversion_source(asset) == conversion_name
+	return any(
+		row.accounting_treatment == "Expense Immediately"
+		and row.source_item_row == asset.get("stock_to_asset_conversion_item")
+		and row.source_unit_index == asset.get("stock_to_asset_conversion_unit")
+		and row.asset_item_code == asset.item_code
+		and (row.asset == asset.name or trusted_save)
+		for row in conversion.assets
+	)
 
 
 class StocktoAssetConversion(StockController):
@@ -62,6 +80,7 @@ class StocktoAssetConversion(StockController):
 		self.set_missing_values()
 		self.validate_stock_items()
 		self.build_asset_preview()
+		self.validate_accounting_treatments()
 		self.calculate_totals()
 		from erpnext.stock.warehouse_policy import validate_document_policy
 
@@ -99,7 +118,7 @@ class StocktoAssetConversion(StockController):
 				row.stock_uom = item.stock_uom
 				# the row names the asset Item; the stock Item's own mapping only fills an empty row
 				# (Siwat's UX review, 6 Nov 2026: the stock team no longer edits each Item first)
-				row.asset_item_code = row.asset_item_code or item.demo_asset_item_code
+				row.asset_item_code = row.asset_item_code or item.default_asset_item_for_conversion
 				if row.warehouse:
 					args = frappe._dict(
 						item_code=row.item_code,
@@ -140,7 +159,7 @@ class StocktoAssetConversion(StockController):
 			item = frappe.get_cached_doc("Item", row.item_code)
 			if not item.is_stock_item:
 				frappe.throw(_("Row {0}: {1} must be a Stock Item").format(row.idx, row.item_code))
-			target_code = row.asset_item_code or item.demo_asset_item_code
+			target_code = row.asset_item_code or item.default_asset_item_for_conversion
 			if not target_code:
 				frappe.throw(_("Row {0}: Set Asset Item Code on {1}").format(row.idx, row.item_code))
 			target = frappe.get_cached_doc("Item", target_code)
@@ -379,6 +398,22 @@ class StocktoAssetConversion(StockController):
 				)
 
 	def build_asset_preview(self):
+		accounting_fields = (
+			"accounting_treatment",
+			"purchase_price_source",
+			"purchase_reference_type",
+			"purchase_reference",
+			"purchase_reference_item",
+			"purchase_unit_price",
+			"purchase_price_reason",
+			"expense_account",
+		)
+		existing_accounting = {
+			(row.source_item_row, row.source_unit_index): {
+				field: row.get(field) for field in accounting_fields
+			}
+			for row in self.assets
+		}
 		existing_categories = {}
 		existing_locations = {}
 		existing_assets = {}
@@ -442,6 +477,7 @@ class StocktoAssetConversion(StockController):
 					self.append(
 						"assets",
 						{
+							**existing_accounting.get((row.name, source_unit_index), {}),
 							"asset": existing_assets.get((row.name, source_unit_index)),
 							"source_item_row": row.name,
 							"source_unit_index": source_unit_index,
@@ -467,6 +503,113 @@ class StocktoAssetConversion(StockController):
 
 	def calculate_totals(self):
 		self.total_value = sum(flt(row.amount) for row in self.stock_items)
+
+	def validate_accounting_treatments(self):
+		for output in self.assets:
+			if output.accounting_treatment not in (None, "", "Capitalize", "Expense Immediately"):
+				frappe.throw(_("Row {0}: Invalid accounting treatment.").format(output.idx))
+			if output.accounting_treatment != "Expense Immediately":
+				continue
+			if (
+				not self.material_request
+				or frappe.db.get_value("Material Request", self.material_request, "material_request_type")
+				!= "Customer Demo"
+			):
+				frappe.throw(_("Immediate expense is available only for Customer Demo conversions."))
+			if frappe.get_cached_value("Company", self.company, "default_currency") != "THB":
+				frappe.throw(_("The 10,000 baht Demo expense policy requires a THB company."))
+			if not erpnext.is_perpetual_inventory_enabled(self.company):
+				frappe.throw(_("Immediate Demo expense currently requires perpetual inventory accounting."))
+			self.set_purchase_unit_price(output)
+			if not 0 <= output.purchase_unit_price < 10000:
+				frappe.throw(
+					_("Immediate expense requires a purchase price below 10,000 baht per stock unit.")
+				)
+			if not output.expense_account:
+				frappe.throw(_("Row {0}: Select a Demo Expense Account.").format(output.idx))
+			account = frappe.get_cached_doc("Account", output.expense_account)
+			if (
+				account.company != self.company
+				or account.is_group
+				or account.disabled
+				or account.root_type != "Expense"
+			):
+				frappe.throw(_("Select an enabled expense ledger account for this company."))
+
+	def set_purchase_unit_price(self, output):
+		if output.purchase_price_source == "Manual Evidence":
+			if flt(output.purchase_unit_price) <= 0 or not (output.purchase_price_reason or "").strip():
+				frappe.throw(_("Enter the purchase price and explain its source."))
+			return
+		if output.purchase_price_source not in (None, "", "Purchase Document"):
+			frappe.throw(_("Select a valid purchase price source."))
+		if output.purchase_reference_type not in ("Purchase Receipt", "Purchase Invoice"):
+			frappe.throw(_("Select Purchase Receipt or Purchase Invoice as the purchase reference type."))
+		if not output.purchase_reference or not output.purchase_reference_item:
+			frappe.throw(_("Row {0}: Select a purchase document and its item row.").format(output.idx))
+		purchase = frappe.get_doc(output.purchase_reference_type, output.purchase_reference)
+		purchase.check_permission("read")
+		if (
+			purchase.docstatus != 1
+			or purchase.is_return
+			or purchase.company != self.company
+			or getdate(purchase.posting_date) > getdate(self.posting_date)
+		):
+			frappe.throw(
+				_("Select a submitted purchase document for this company dated on or before conversion.")
+			)
+		if any(
+			tax.category in ("Valuation", "Valuation and Total") and flt(tax.base_tax_amount)
+			for tax in purchase.get("taxes", [])
+		):
+			frappe.throw(
+				_(
+					"This purchase includes valuation charges. Use Manual Evidence to confirm the price including non-recoverable VAT."
+				)
+			)
+		source = next(row for row in self.stock_items if row.name == output.source_item_row)
+		purchase_row = next(
+			(row for row in purchase.get("items") if row.name == output.purchase_reference_item), None
+		)
+		if not purchase_row or purchase_row.item_code != source.item_code or flt(purchase_row.stock_qty) <= 0:
+			frappe.throw(
+				_("Row {0}: Purchase reference item must match the source Stock Item.").format(output.idx)
+			)
+		self.validate_purchase_provenance(output, purchase_row)
+		output.purchase_unit_price = flt(purchase_row.base_net_amount) / flt(purchase_row.stock_qty)
+
+	def validate_purchase_provenance(self, output, purchase_row):
+		if not output.source_serial_no and not output.source_batch_no:
+			frappe.throw(
+				_(
+					"Purchase provenance cannot be verified without Serial or Batch details. Accounting evidence is required."
+				)
+			)
+		if purchase_row.get("purchase_receipt") and purchase_row.get("pr_detail"):
+			receipt = frappe.get_doc("Purchase Receipt", purchase_row.purchase_receipt)
+			receipt.check_permission("read")
+			if receipt.docstatus != 1 or receipt.is_return or receipt.company != self.company:
+				frappe.throw(_("The invoice must reference a submitted purchase receipt for this company."))
+			purchase_row = next(
+				(row for row in receipt.get("items") if row.name == purchase_row.pr_detail), None
+			)
+			if not purchase_row:
+				frappe.throw(_("The invoice purchase receipt item reference is invalid."))
+		bundle = purchase_row.get("serial_and_batch_bundle")
+		if bundle:
+			filters = {"parent": bundle, "is_cancelled": 0}
+			if output.source_serial_no:
+				filters["serial_no"] = output.source_serial_no
+			if output.source_batch_no:
+				filters["batch_no"] = output.source_batch_no
+			matched = frappe.db.exists("Serial and Batch Entry", filters)
+		else:
+			matched = (
+				not output.source_serial_no
+				or output.source_serial_no in (purchase_row.get("serial_no") or "").splitlines()
+			) and (not output.source_batch_no or output.source_batch_no == purchase_row.get("batch_no"))
+		if not matched:
+			frappe.throw(_("The purchase item does not contain this conversion unit's Serial or Batch."))
 
 	def before_submit(self):
 		if not self.assets:
@@ -503,7 +646,8 @@ class StocktoAssetConversion(StockController):
 				frappe.throw(_("Asset {0} must remain a Draft linked to this Conversion").format(asset.name))
 			output.asset_category = asset.asset_category
 			output.asset_location = asset.location or output.asset_location
-			output.asset_value = flt(asset.net_purchase_amount)
+			if output.accounting_treatment != "Expense Immediately":
+				output.asset_value = flt(asset.net_purchase_amount)
 			if not output.asset_location:
 				frappe.throw(_("Select an Asset Location for {0}").format(output.asset_item_code))
 			source_row = next((row for row in self.stock_items if row.name == output.source_item_row), None)
@@ -521,9 +665,10 @@ class StocktoAssetConversion(StockController):
 			category = output.asset_category
 			if not category:
 				frappe.throw(_("Select an Asset Category for {0}.").format(output.asset_item_code))
-			if not frappe.get_cached_doc("Asset Category", category).finance_books:
-				frappe.throw(_("Configure the depreciation plan in Asset Category {0}.").format(category))
-			get_depreciation_accounts(category, self.company)
+			if output.accounting_treatment != "Expense Immediately":
+				if not frappe.get_cached_doc("Asset Category", category).finance_books:
+					frappe.throw(_("Configure the depreciation plan in Asset Category {0}.").format(category))
+				get_depreciation_accounts(category, self.company)
 
 	def lock_material_request_items(self):
 		request_items = sorted(
@@ -643,6 +788,8 @@ class StocktoAssetConversion(StockController):
 	def get_gl_entries(self):
 		entries = []
 		perpetual = erpnext.is_perpetual_inventory_enabled(self.company)
+		if not perpetual and any(row.accounting_treatment == "Expense Immediately" for row in self.assets):
+			frappe.throw(_("Immediate Demo expense currently requires perpetual inventory accounting."))
 		# the conversion has no Cost Center of its own: book it on the company's default
 		cost_center = erpnext.get_default_cost_center(self.company)
 		inventory_map = self.get_inventory_account_map()
@@ -651,11 +798,11 @@ class StocktoAssetConversion(StockController):
 		sle_map = self.get_stock_ledger_details()
 		stock_value_by_row = {}
 		for row in self.stock_items:
+			row_entries = sle_map.get(row.name, [])
 			sle_value = sum(
-				abs(flt(sle.stock_value_difference, self.get_debit_field_precision()))
-				for sle in sle_map.get(row.name, [])
+				abs(flt(sle.stock_value_difference, self.get_debit_field_precision())) for sle in row_entries
 			)
-			stock_value = sle_value if sle_map.get(row.name) else flt(row.amount, self.get_debit_field_precision())
+			stock_value = sle_value if row_entries else flt(row.amount, self.get_debit_field_precision())
 			stock_value_by_row[row.name] = stock_value
 
 		# Do not hide a valuation mismatch by changing an individual machine's cost.
@@ -695,8 +842,14 @@ class StocktoAssetConversion(StockController):
 				)
 		for output in self.assets:
 			value = flt(output.asset_value, self.precision("total_value"))
-			account = get_asset_category_account(
-				"fixed_asset_account", asset_category=output.asset_category, company=self.company
+			account = (
+				output.expense_account
+				if output.accounting_treatment == "Expense Immediately"
+				else (
+					get_asset_category_account(
+						"fixed_asset_account", asset_category=output.asset_category, company=self.company
+					)
+				)
 			)
 			if not account:
 				frappe.throw(_("Set a Fixed Asset Account for Item {0}").format(output.asset_item_code))
@@ -779,13 +932,22 @@ class StocktoAssetConversion(StockController):
 			asset.source_serial_no = output.source_serial_no
 			asset.source_batch_no = output.source_batch_no
 			asset.material_request = self.material_request
-			asset.net_purchase_amount = output.asset_value
+			expensed = output.accounting_treatment == "Expense Immediately"
+			asset.net_purchase_amount = 0 if expensed else output.asset_value
 			asset.purchase_date = self.posting_date
 			asset.available_for_use_date = self.posting_date
-			asset.calculate_depreciation = 1
+			asset.calculate_depreciation = 0 if expensed else 1
+			if expensed:
+				asset.set("finance_books", [])
+				asset.additional_asset_cost = 0
+				asset.opening_accumulated_depreciation = 0
+				asset.opening_number_of_booked_depreciations = 0
+				asset.is_fully_depreciated = 0
 			asset.booked_fixed_asset = 1
 			# Process-local mark (not settable from a form or REST): this save is the Conversion's own.
 			asset.flags.stock_to_asset_conversion_sync = self.name
+			asset.flags.stock_conversion_token = _GENERATED_ASSET_TOKEN
+			asset.flags.stock_conversion_source = self.name
 			asset.set_missing_values()
 			if asset.is_new():
 				asset.insert(ignore_permissions=True)

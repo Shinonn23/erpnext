@@ -438,7 +438,21 @@ function configure_material_request_item_columns(frm) {
 
 	const purpose = frm.doc.material_request_type;
 	const is_loan = ["Customer Demo", "Customer Borrow / Loan"].includes(purpose);
+	grid.update_docfield_property("storage_location", "label",
+		__(purpose === "Material Issue" ? "Source Storage Location" : "Target Storage Location"));
+	frm.set_query("storage_location", "items", (doc, cdt, cdn) => {
+		const row = locals[cdt][cdn];
+		const query = erpnext.queries.storage_location(row.warehouse, row.item_code);
+		Object.assign(query.filters, {
+			serial_no: row.serial_no || "",
+			serial_and_batch_bundle: row.serial_and_batch_bundle || "",
+			batch_no: row.batch_no || "",
+			only_stock: doc.material_request_type === "Material Issue" ? 1 : 0,
+		});
+		return query;
+	});
 	const visible_columns = new Set();
+	visible_columns.add("item_code");
 
 	if (purpose === "Asset Transfer") {
 		visible_columns.add("asset");
@@ -447,8 +461,14 @@ function configure_material_request_item_columns(frm) {
 	} else {
 		// a Demo / Borrow request asks for the Item and the Qty only; the Assets are chosen by the Stock team
 		visible_columns.add("qty");
-		if (!is_loan && ["Purchase", "Material Transfer"].includes(purpose)) visible_columns.add("warehouse");
-		if (purpose === "Material Transfer") visible_columns.add("from_warehouse");
+		if (!is_loan && ["Purchase", "Material Transfer", "Material Issue"].includes(purpose)) visible_columns.add("warehouse");
+		if (!is_loan && ["Purchase", "Material Transfer", "Material Issue"].includes(purpose)) visible_columns.add("storage_location");
+		if (purpose === "Material Transfer") {
+			visible_columns.add("from_warehouse");
+			visible_columns.add("from_storage_location");
+		}
+		visible_columns.add("uom");
+		if (purpose === "Purchase") visible_columns.add("rate");
 	}
 
 	// The header date is copied to every row by ERPNext's standard handler.
@@ -456,18 +476,24 @@ function configure_material_request_item_columns(frm) {
 	if (!frm.doc.schedule_date && !is_loan) visible_columns.add("schedule_date");
 
 	const managed_columns = [
+		"item_code",
 		"asset",
 		"source_location",
 		"target_location",
 		"qty",
 		"warehouse",
 		"from_warehouse",
+		"storage_location",
+		"from_storage_location",
 		"schedule_date",
+		"uom",
+		"rate",
 	];
 	grid.set_column_disp_in_list_view(
-		managed_columns.filter((fieldname) => visible_columns.has(fieldname)),
-		true
+		managed_columns.filter((fieldname) => visible_columns.has(fieldname) && fieldname !== "rate"),
+		true, true
 	);
+	grid.set_column_disp_in_list_view(["rate"].filter((fieldname) => visible_columns.has(fieldname)), true);
 	grid.set_column_disp_in_list_view(
 		managed_columns.filter((fieldname) => !visible_columns.has(fieldname)),
 		false

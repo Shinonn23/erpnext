@@ -12,6 +12,7 @@ ASSET_TRANSFER_TYPE = "Asset Transfer"
 MATERIAL_REQUEST_PURPOSES = (
 	"Purchase",
 	"Material Transfer",
+	"Material Issue",
 	"Asset Transfer",
 	"Customer Demo",
 	"Customer Borrow / Loan",
@@ -356,6 +357,8 @@ class CustomerMaterialRequest(MaterialRequest):
 			self.update_progress()
 		elif self.material_request_type == "Material Transfer":
 			self.validate_material_transfer_warehouses()
+		elif self.material_request_type == "Material Issue":
+			self.validate_material_issue_items()
 
 	def validate_loan_recipient(self):
 		if self.loan_recipient_type not in ("Employee", "Customer", "Supplier", "Contact"):
@@ -642,6 +645,20 @@ class CustomerMaterialRequest(MaterialRequest):
 							row.idx, label, self.company
 						)
 					)
+
+	def validate_material_issue_items(self):
+		for row in self.items:
+			if not row.warehouse:
+				frappe.throw(_("Row {0}: Select a Source Warehouse.").format(row.idx))
+			warehouse = frappe.get_cached_value(
+				"Warehouse", row.warehouse, ["company", "is_group"], as_dict=True
+			)
+			if not warehouse or warehouse.company != self.company or warehouse.is_group:
+				frappe.throw(
+					_("Row {0}: Select a source warehouse in Company {1}.").format(row.idx, self.company)
+				)
+			if not frappe.get_cached_value("Item", row.item_code, "is_stock_item"):
+				frappe.throw(_("Row {0}: Material Issue requires a Stock Item.").format(row.idx))
 
 	def get_default_warehouse(self, item_code):
 		warehouse = frappe.db.get_value(
@@ -1005,11 +1022,11 @@ def get_available_assets(item_code, company, demo_only=False, location=None, exc
 		filters.append("ifnull(a.custodian, '') = ''")
 	return frappe.db.sql(
 		f"""select a.name, a.asset_name, a.item_code, a.location from `tabAsset` a
-		where {' and '.join(filters)}
+		where {" and ".join(filters)}
 		and exists (select 1 from `tabItem` item where item.name=a.item_code and item.is_fixed_asset=1)
 		and ifnull(a.demo_loan_status, 'Available') = 'Available'
-		and {held_for_inspection_condition('a')}
-		and not {active_asset_request_condition('a.name')}
+		and {held_for_inspection_condition("a")}
+		and not {active_asset_request_condition("a.name")}
 		order by name""",
 		values,
 		as_dict=True,
@@ -1161,7 +1178,7 @@ def asset_query(doctype, txt, searchfield, start, page_len, filters, as_dict=Fal
 	return frappe.db.sql(
 		f"""select {result_fields}
 		from `tabAsset` tabAsset inner join `tabItem` tabItem on tabItem.name=tabAsset.item_code
-		where {' and '.join(conditions)} {match_condition}
+		where {" and ".join(conditions)} {match_condition}
 		order by tabAsset.name limit %(page_len)s offset %(start)s""",
 		values,
 		as_dict=as_dict,
