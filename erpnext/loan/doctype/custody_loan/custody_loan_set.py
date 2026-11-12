@@ -1,18 +1,7 @@
-"""Return a loan set in one step, with what the borrower used up (Siwat, 5 Nov 2026).
+"""Read a request's mixed Asset / Stock loan set and open explicit linked Return documents.
 
-A Demo / Borrow request can make two loans, one of Assets and one of Stock. One dialog lists what is still out of
-both; the person presses Return and the system makes the Asset Return and the Stock Return behind the scenes.
-
-- A stock row may come back in another batch or serial number than the one lent (customers return a different lot):
-  ``register_returned_lot`` creates an unknown batch (its expiry date is asked, mandatory) or serial number first. A
-  fixed Asset must come back as the same Asset (a different machine is an exchange, out of scope).
-- A quantity the customer used up is not returned: for a Customer Demo the system writes it off as a demo expense (a
-  Custody Loan Adjustment, reason "Consumed during demo", the Company's Stock Adjustment Account); for a Customer
-  Borrow / Loan it writes it off the same way; accounts explicitly creates the Sales Invoice from the adjustment.
-- The loan closes when every item is returned or consumed (``CustodyLoan.get_submitted_status``).
-
-The set is the loans issued from one Material Request (``loans_of_set``: the only place that knows it, so a dedicated
-link can replace it).
+Each loan has its own Return, reviewed and submitted by the user. Creating a Return never posts stock,
+Asset movements, consumption adjustments or invoices. The native Return lifecycle owns those posting rules.
 """
 
 from __future__ import annotations
@@ -22,11 +11,11 @@ from frappe import _
 from frappe.utils import cint, flt, getdate, nowdate
 
 from erpnext.loan.doctype.custody_loan.custody_loan_core import (
-	loan_item_available_to_adjust,
 	loan_item_available_to_receive,
 	set_loan_transaction_source,
 )
 from erpnext.loan.doctype.custody_loan.custody_loan_tracking import (
+	conversion_factors,
 	grouped_open_rows,
 	is_tracked,
 	item_flags,
@@ -34,7 +23,6 @@ from erpnext.loan.doctype.custody_loan.custody_loan_tracking import (
 
 OPEN_STATUSES = ("Active", "Partially Returned")
 DEMO_REQUEST = "Customer Demo"
-DEMO_REASON = "Consumed during demo"
 
 
 def loans_of_set(loan_name):
@@ -214,8 +202,10 @@ def register_returned_lot(
 	return made
 
 
-def _rows(value):
-	return frappe.parse_json(value) if isinstance(value, str) else (value or [])
+@frappe.whitelist()
+def make_return(custody_loan: str):
+	"""Open the native linked Return without saving or submitting it."""
+	return frappe.get_doc("Custody Loan", custody_loan).make_return()
 
 
 @frappe.whitelist(methods=["POST"])
@@ -225,189 +215,8 @@ def return_loan_set(
 	assets: str | list | None = None,
 	stock: str | list | None = None,
 ):
-	"""One Return for the set. ``assets``: [{custody_loan_item}] of the Assets that came back. ``stock``: [{custody_loan_item,
-	batch_no, serial_no, qty, consumed}] (a loan item may have several lines: one per returned batch; ``consumed`` is
-	the used-up quantity, given on one line). Everything is checked first, then the Asset Return, the Stock Return and
-	the write-off of what was consumed are made; nothing is left half done on a failure. Returns what was made."""
-	frappe.has_permission("Custody Loan Return", "create", throw=True)
-	names = _set_names(loan, material_request)
-	assets, stock = _rows(assets), _rows(stock)
-	loans = {name: frappe.get_doc("Custody Loan", name) for name in names}
-	items = {row.name: (doc, row) for doc in loans.values() for row in doc.items}
-	plan = _check_plan(loans, items, assets, stock)
-	if not any(plan.values()):
-		frappe.throw(_("Tick what came back or enter a quantity."))
-	made = {"returns": [], "adjustments": [], "invoices": [], "waiting": [], "notes": []}
-	savepoint = "return_loan_set"
-	frappe.db.savepoint(savepoint)
-	try:
-		for name in names:
-			doc = loans[name]
-			if doc.loan_type == "Asset" and plan["assets"].get(name):
-				_return_assets(doc, plan["assets"][name], made)
-			elif doc.loan_type == "Stock" and plan["returns"].get(name):
-				_return_stock(doc, plan["returns"][name], made)
-		for name in names:
-			if plan["consumed"].get(name):
-				_consume_stock(loans[name], plan["consumed"][name], made)
-		for name in names:
-			frappe.get_doc("Custody Loan", name).update_status()
-	except Exception:
-		frappe.db.rollback(save_point=savepoint)
-		raise
-	return made
-
-
-def _check_plan(loans, items, assets, stock):
-	"""Group the dialog's lines per loan and refuse what cannot be: another loan's row, an Asset that is not the lent
-	one, more than is out."""
-	plan = {"assets": {}, "returns": {}, "consumed": {}}
-	for line in assets:
-		doc, row = items.get(line.get("custody_loan_item"), (None, None))
-		if not doc or doc.loan_type != "Asset" or not row.asset:
-			frappe.throw(_("{0} is not an Asset row of this loan set.").format(line.get("custody_loan_item")))
-		if line.get("asset") and line["asset"] != row.asset:
-			frappe.throw(
-				_("{0} was lent, not {1}: a different machine is an exchange, not a return.").format(
-					row.asset, line["asset"]
-				)
-			)
-		if loan_item_available_to_receive(doc.name, row) < 1:
-			frappe.throw(_("Asset {0} is already returned.").format(row.asset))
-		plan["assets"].setdefault(doc.name, []).append(row)
-	totals = {}
-	for line in stock:
-		doc, row = items.get(line.get("custody_loan_item"), (None, None))
-		if not doc or doc.loan_type != "Stock":
-			frappe.throw(_("{0} is not a Stock row of this loan set.").format(line.get("custody_loan_item")))
-		qty, consumed = flt(line.get("qty")), flt(line.get("consumed"))
-		if qty < 0 or consumed < 0:
-			frappe.throw(_("Quantities cannot be negative."))
-		totals[row.name] = totals.get(row.name, 0) + qty + consumed
-		if qty > 0:
-			plan["returns"].setdefault(doc.name, []).append(
-				{
-					"custody_loan_item": row.name,
-					"item_code": row.item_code,
-					"returned_qty": qty,
-					"batch_no": line.get("batch_no") or None,
-					"serial_no": line.get("serial_no") or None,
-				}
-			)
-		if consumed > 0:
-			plan["consumed"].setdefault(doc.name, {})
-			plan["consumed"][doc.name][row.name] = plan["consumed"][doc.name].get(row.name, 0) + consumed
-	for name, total in totals.items():
-		doc, row = items[name]
-		if total - loan_item_available_to_receive(doc.name, row) > 1e-9:
-			frappe.throw(
-				_("{0}: {1} returned and used up is more than the {2} still out.").format(
-					row.item_code, flt(total), flt(loan_item_available_to_receive(doc.name, row))
-				)
-			)
-	return plan
-
-
-def _return_assets(loan, rows, made):
-	doc = frappe.new_doc("Custody Loan Return")
-	doc.company = loan.company
-	doc.custody_loan = loan.name
-	doc.loan_type = "Asset"
-	for row in rows:
-		doc.append(
-			"items",
-			{
-				"custody_loan_item": row.name,
-				"item_code": row.item_code,
-				"returned_qty": 1,
-				"asset": row.asset,
-				"target_location": row.source_location,
-			},
-		)
-	doc.insert()
-	made["returns"].append(doc.name)
-	savepoint = "return_loan_set_asset_submit"
-	frappe.db.savepoint(savepoint)
-	try:
-		doc.submit()
-	except frappe.ValidationError:
-		# an inspection is asked first: the QI team is asked and the system submits the return after it
-		frappe.db.rollback(save_point=savepoint)
-		frappe.clear_last_message()
-		made["waiting"].append(doc.name)
-
-
-def _return_stock(loan, lines, made):
-	doc = frappe.new_doc("Custody Loan Return")
-	doc.company = loan.company
-	doc.custody_loan = loan.name
-	doc.loan_type = "Stock"
-	for line in lines:
-		doc.append("items", line)
-	doc.insert()
-	doc.submit()
-	made["returns"].append(doc.name)
-
-
-def _consume_stock(loan, consumed, made):
-	"""Write off what was used up; accounts starts borrower billing separately."""
-	request_type = frappe.db.get_value("Material Request", loan.material_request, "material_request_type")
-	demo = request_type == DEMO_REQUEST
-	account = frappe.db.get_value("Company", loan.company, "stock_adjustment_account")
-	if not account:
-		frappe.throw(
-			_("Set the Stock Adjustment Account of {0} to write off what was used up.").format(loan.company)
-		)
-	reason = _(DEMO_REASON) if demo else "Consumed by the borrower"
-	adjustment = frappe.new_doc("Custody Loan Adjustment")
-	adjustment.company = loan.company
-	adjustment.custody_loan = loan.name
-	adjustment.adjustment_account = account
-	adjustment.reason = reason
-	fresh = frappe.get_doc("Custody Loan", loan.name)
-	for row in fresh.items:
-		left = flt(consumed.get(row.name))
-		if left <= 0:
-			continue
-		if loan_item_available_to_adjust(loan.name, row) + 1e-9 < left:
-			frappe.throw(
-				_("{0}: only {1} is left to write off.").format(
-					row.item_code, flt(loan_item_available_to_adjust(loan.name, row))
-				)
-			)
-		if not is_tracked(row.item_code):
-			adjustment.append(
-				"items", {"custody_loan_item": row.name, "item_code": row.item_code, "qty": left}
-			)
-			continue
-		for group in grouped_open_rows(fresh, row):
-			take = min(flt(group["qty"]), left)
-			if take <= 0:
-				continue
-			serials = group["serials"][: int(take)] if group["serials"] else []
-			adjustment.append(
-				"items",
-				{
-					"custody_loan_item": row.name,
-					"item_code": row.item_code,
-					"qty": take,
-					"batch_no": group["batch_no"],
-					"serial_no": "\n".join(serials) or None,
-				},
-			)
-			left -= take
-			if left <= 0:
-				break
-		if left > 1e-9:
-			frappe.throw(_("{0}: the lots still out do not cover what was used up.").format(row.item_code))
-	adjustment.flags.ignore_permissions = True
-	adjustment.insert()
-	adjustment.submit()
-	made["adjustments"].append(adjustment.name)
-	if not demo and loan.borrower_type == "Customer":
-		made["notes"].append(
-			_("Accounts must create the consumption invoice from adjustment {0}.").format(adjustment.name)
-		)
+	"""Reject retired one-click posting, including stale browser sessions."""
+	frappe.throw(_("Create a Custody Loan Return, review its items, then Save and Submit it."))
 
 
 @frappe.whitelist(methods=["POST"])
@@ -441,6 +250,8 @@ def create_consumption_invoice(adjustment: str):
 		invoice = frappe.get_doc("Sales Invoice", existing)
 		invoice.check_permission("read")
 		return invoice.as_dict()
+	if not source.stock_entry or frappe.db.get_value("Stock Entry", source.stock_entry, "docstatus") != 1:
+		frappe.throw(_("Submit the write-off Stock Entry before creating its consumption invoice."))
 	consumed = {}
 	for row in source.items:
 		consumed[row.custody_loan_item] = consumed.get(row.custody_loan_item, 0) + flt(row.qty)
@@ -462,8 +273,9 @@ def _make_consumption_invoice(loan, consumed, source):
 	set_loan_transaction_source(invoice, loan, source)
 	# Billing still follows its own Sales Invoice workflow; a stock movement's authority cannot approve it.
 	invoice.flags.custody_operation_token = None
+	factors = conversion_factors(loan)
 	for row in loan.items:
-		qty = flt(consumed.get(row.name))
+		qty = flt(consumed.get(row.name)) * factors.get(row.name, 1)
 		if qty <= 0:
 			continue
 		uom = frappe.db.get_value("Item", row.item_code, "stock_uom")
@@ -496,5 +308,4 @@ def _make_consumption_invoice(loan, consumed, source):
 				"conversion_factor": 1,
 			},
 		)
-	invoice.insert()
 	return invoice

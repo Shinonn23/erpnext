@@ -119,7 +119,7 @@ def _movement_rows(loan_name, *, exclude=None):
 			fields=["parent", "custody_loan_item", "batch_no", "serial_no", f"{qty_field} as qty"],
 		):
 			if doctype == "Custody Loan Adjustment":
-				kind = "adjusted"
+				kind = "adjusted" if state[row.parent] == "Submitted" else "pending"
 			else:
 				kind = "returned" if state[row.parent] == "Received" else "pending"
 			rows.append((kind, row))

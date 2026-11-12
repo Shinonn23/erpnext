@@ -629,6 +629,8 @@ class StocktoAssetConversion(StockController):
 				frappe.throw(_("Row {0}: Serial Number valuation history is missing in the selected Warehouse").format(row.idx))
 		if self.material_request:
 			self.lock_material_request_items()
+		if any(not output.asset for output in self.assets):
+			frappe.throw(_("Use Create > Assets to generate the approved Assets before submitting."))
 		self.sync_draft_assets()
 		if self.material_request:
 			self.validate_stock_items()
@@ -682,8 +684,8 @@ class StocktoAssetConversion(StockController):
 	def on_update(self):
 		if self.stock_items:
 			self.set_serial_and_batch_bundle(table_name="stock_items")
-		if self.docstatus == 0:
-			self.sync_draft_assets()
+		if self.docstatus == 0 and any(output.asset for output in self.assets):
+			self.sync_draft_assets(create_missing=False)
 
 	def on_submit(self):
 		self.update_stock_ledger()
@@ -870,7 +872,7 @@ class StocktoAssetConversion(StockController):
 	def get_items_and_warehouses(self):
 		return [row.item_code for row in self.stock_items], [row.warehouse for row in self.stock_items]
 
-	def sync_draft_assets(self):
+	def sync_draft_assets(self, *, create_missing=True):
 		if not self.name:
 			return
 
@@ -915,6 +917,8 @@ class StocktoAssetConversion(StockController):
 			if asset and asset.docstatus != 0:
 				frappe.throw(_("Asset {0} must be Draft while its Conversion is Draft").format(asset.name))
 			if not asset:
+				if not create_missing:
+					continue
 				asset = frappe.new_doc("Asset")
 				asset.asset_type = "Existing Asset"
 				asset.stock_to_asset_conversion = self.name
@@ -970,13 +974,65 @@ class StocktoAssetConversion(StockController):
 				frappe.db.set_value("Serial No", output.source_serial_no, "asset", asset.name)
 			frappe.db.set_value("Asset", asset.name, "demo_loan_status", "Available")
 
-	def on_trash(self):
+	@frappe.whitelist(methods=["POST"])
+	def create_assets(self):
+		"""Accounting explicitly generates the approved table, atomically and safely on retries."""
+		self.check_permission("write")
+		frappe.has_permission("Asset", "create", throw=True)
+		if self.is_new():
+			frappe.throw(_("Save the Conversion before generating Assets."))
+		frappe.db.get_value(self.doctype, self.name, "name", for_update=True)
+		self.reload()
+		self.check_permission("write")
 		if self.docstatus != 0:
+			frappe.throw(_("Assets can only be generated for a draft approved Conversion."))
+		if frappe.db.exists("Workflow", {"document_type": self.doctype, "is_active": 1}):
+			from frappe.model.workflow import get_transitions, get_workflow, has_approval_access
+
+			workflow = get_workflow(self.doctype)
+			submitted_states = {state.state for state in workflow.states if cint(state.doc_status) == 1}
+			transitions = get_transitions(self, workflow)
+			if "connect_diagnostics_setup" in frappe.get_installed_apps():
+				from connect_diagnostics_setup.workflows.step_authority import filter_transitions
+
+				transitions = filter_transitions(self, transitions)
+			eligible = [
+				transition
+				for transition in transitions
+				if transition.next_state in submitted_states
+				and has_approval_access(frappe.session.user, self, transition)
+			]
+			if not eligible:
+				frappe.throw(_("Complete the required approvals before generating Assets."))
+		self.save()
+		self.sync_draft_assets()
+		return [output.asset for output in self.assets]
+
+	def on_trash(self):
+		if self.docstatus == 1:
 			return
-		for asset_name in frappe.get_all(
-			"Asset", filters={"stock_to_asset_conversion": self.name, "docstatus": 0}, pluck="name"
+		# Only this conversion's native receipts and generated Assets are removed; other links still block deletion.
+		for movement in frappe.get_all(
+			"Asset Movement",
+			filters={"reference_doctype": self.doctype, "reference_name": self.name, "purpose": "Receipt"},
+			fields=["name", "docstatus"],
 		):
-			frappe.delete_doc("Asset", asset_name, ignore_permissions=True)
+			if movement.docstatus == 1:
+				frappe.throw(_("Cancel the generated Asset Receipt before deleting this Conversion."))
+			frappe.delete_doc("Asset Movement", movement.name, ignore_permissions=True)
+		for output in self.assets:
+			if output.asset:
+				output.db_set("asset", None)
+		for asset in frappe.get_all(
+			"Asset", filters={"stock_to_asset_conversion": self.name}, fields=["name", "docstatus"]
+		):
+			if asset.docstatus == 1:
+				frappe.throw(_("Cancel the generated Asset before deleting this Conversion."))
+			for schedule in frappe.get_all(
+				"Asset Depreciation Schedule", filters={"asset": asset.name}, pluck="name"
+			):
+				frappe.delete_doc("Asset Depreciation Schedule", schedule, ignore_permissions=True)
+			frappe.delete_doc("Asset", asset.name, ignore_permissions=True)
 
 
 @frappe.whitelist()

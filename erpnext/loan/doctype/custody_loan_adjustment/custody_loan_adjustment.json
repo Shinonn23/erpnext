@@ -28,7 +28,7 @@
  "fields": [
   {"fieldname": "adjustment_section", "fieldtype": "Section Break"},
   {"fieldname": "custody_loan", "fieldtype": "Link", "label": "Custody Loan", "options": "Custody Loan", "reqd": 1, "in_list_view": 1, "bold": 1},
-  {"fieldname": "status", "fieldtype": "Select", "label": "Status", "options": "Draft\nSubmitted\nCancelled", "default": "Draft", "read_only": 1, "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "status", "fieldtype": "Select", "label": "Status", "options": "Draft\nPending Issue\nSubmitted\nCancelled", "default": "Draft", "read_only": 1, "in_list_view": 1, "in_standard_filter": 1},
   {"fieldname": "adjustment_column", "fieldtype": "Column Break"},
   {"fieldname": "adjustment_date", "fieldtype": "Date", "label": "Adjustment Date", "default": "Today", "reqd": 1},
   {"fieldname": "adjustment_account", "fieldtype": "Link", "label": "Company Stock Adjustment Account", "options": "Account", "reqd": 1, "read_only": 1},

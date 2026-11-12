@@ -211,6 +211,8 @@ class TestStockToAssetConversionIntegration(ERPNextTestSuite):
 		self.assertEqual(conversion.total_value, 2 * self.unit_value)
 		self.assertEqual(conversion.stock_items[0].storage_location, self.storage_location)
 		self.assertEqual(len(conversion.assets), 2)
+		self.assertTrue(all(not output.asset for output in conversion.assets))
+		conversion.create_assets()
 		asset_names = [row.asset for row in conversion.assets]
 		self.assertEqual(len(set(asset_names)), 2)
 		for output in conversion.assets:
@@ -321,6 +323,7 @@ class TestStockToAssetConversionIntegration(ERPNextTestSuite):
 
 	def test_follow_up_movement_blocks_conversion_cancellation(self):
 		conversion = self.make_conversion().insert()
+		conversion.create_assets()
 		for output in conversion.assets:
 			asset = frappe.get_doc("Asset", output.asset)
 			asset.save()
@@ -416,6 +419,7 @@ class TestStockToAssetConversionIntegration(ERPNextTestSuite):
 		category.insert()
 		conversion.assets[0].asset_category = category.name
 		conversion.save()
+		conversion.create_assets()
 		asset = frappe.get_doc("Asset", conversion.assets[0].asset)
 		self.assertEqual(asset.asset_category, category.name)
 		self.assertEqual(asset.calculate_depreciation, 1)
@@ -472,6 +476,7 @@ class TestStockToAssetConversionIntegration(ERPNextTestSuite):
 			(self.stock_item, self.warehouse, self.storage_location, 2),
 		)
 		self.assertEqual(conversion.total_value, 2 * self.unit_value)
+		conversion.create_assets()
 		asset_names = [output.asset for output in conversion.assets]
 		self.assertEqual(len(set(asset_names)), 2)
 		repeated = frappe.get_doc(pick_list.make_stock_to_asset_conversion())

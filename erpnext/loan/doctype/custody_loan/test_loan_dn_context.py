@@ -51,7 +51,9 @@ class TestLoanDeliveryNoteContext(TestCase):
 			name="LOAN-1", delivery_note="DN-LOAN", items=[], company="CD", customer_loan_warehouse="Customer"
 		)
 		receipt = SimpleNamespace(items=[], flags=frappe._dict(), set=Mock(), insert=Mock())
-		request = SimpleNamespace(custody_loan=loan.name, items=[], doctype="Custody Loan Return", name="RET-1")
+		request = SimpleNamespace(
+			custody_loan=loan.name, items=[], doctype="Custody Loan Return", name="RET-1"
+		)
 		with (
 			patch.object(frappe, "get_doc", side_effect=[loan, SimpleNamespace(items=[])]),
 			patch.object(frappe, "db", Mock(get_value=Mock(return_value=1))),
@@ -61,4 +63,4 @@ class TestLoanDeliveryNoteContext(TestCase):
 		mapper.assert_called_once_with("Delivery Note", "DN-LOAN")
 		self.assertEqual(receipt.custody_loan_source_name, "RET-1")
 		self.assertEqual(receipt.is_custody_loan_transaction, 1)
-		receipt.insert.assert_called_once_with(ignore_permissions=True)
+		receipt.insert.assert_not_called()

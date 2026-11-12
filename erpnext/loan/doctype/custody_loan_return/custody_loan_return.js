@@ -35,23 +35,38 @@ frappe.ui.form.on("Custody Loan Return", {
 			frm,
 			frm.doc.loan_type === "Asset"
 				? __(
-						"Check the asset and the Location it goes back to, then Save and Submit. If its Item is inspected on return the asset is held (Awaiting Inspection) until the QI team has inspected it."
+						"Review and submit this return, then use Create → Asset Movement. Save and submit the receiving movement. Required inspections still hold the returned Asset."
 				  )
 				: __(
-						"Check what is coming back (the batches and serial numbers are filled in), then Save and Submit. The system receives the items at once; those that need an inspection wait in Quarantine for the QI team."
+						"Review and submit this return, then use Create → Receiving Delivery Note. Save and submit the receiving document. Items requiring inspection enter Quarantine."
 				  )
 		);
 		if (frm.doc.docstatus === 0 && frm.doc.loan_type === "Stock" && frm.doc.custody_loan) {
-			frm.add_custom_button(__("Select Serial / Batch"), () =>
-				select_open_serial_batches(frm, "returned_qty")
+			frm.add_custom_button(
+				__("Select Serial / Batch"),
+				() => select_open_serial_batches(frm, "returned_qty"),
+				__("Actions")
 			);
 		}
 		if (frm.doc.docstatus !== 1) return;
+		if (frm.doc.loan_type === "Stock" && frm.doc.status === "Pending Receipt" && frappe.model.can_create("Stock Entry")) {
+			frm.add_custom_button(__("Batch Exchange"), () => frm.call("prepare_batch_exchange").then((r) => open_generated_doc(r.message)), __("Create"));
+		}
+		const receipt_type = frm.doc.loan_type === "Stock" ? "Delivery Note" : "Asset Movement";
+		const receipt_name = frm.doc.loan_type === "Stock" ? frm.doc.delivery_note : frm.doc.asset_movement;
+		if (!receipt_name && frappe.model.can_create(receipt_type)) {
+			frm.add_custom_button(
+				__(frm.doc.loan_type === "Stock" ? "Receiving Delivery Note" : "Asset Movement"),
+				() => frm.call("prepare_receipt").then((r) => open_generated_doc(r.message)),
+				__("Create")
+			);
+		}
+
 		if (frm.doc.loan_type === "Stock") {
 			if (frm.doc.status === "Pending Receipt") {
 				frm.set_intro(
 					__(
-						"The system could not receive the items by itself (see the comments). Open the receiving Delivery Note, fix what it says and submit it."
+						"Use Create → Receiving Delivery Note, review it, then save and submit it to receive the goods."
 					),
 					"blue"
 				);
@@ -62,13 +77,17 @@ frappe.ui.form.on("Custody Loan Return", {
 			frm.doc.status === "Pending Receipt" &&
 			frappe.model.can_read("Delivery Note")
 		) {
-			frm.add_custom_button(__("Open Receiving Delivery Note"), () =>
-				frappe.set_route("Form", "Delivery Note", frm.doc.delivery_note)
+			frm.add_custom_button(
+				__("Receiving Delivery Note"),
+				() => frappe.set_route("Form", "Delivery Note", frm.doc.delivery_note),
+				__("View")
 			);
 		}
 		if (frm.doc.asset_movement && frappe.model.can_read("Asset Movement")) {
-			frm.add_custom_button(__("Open Asset Movement"), () =>
-				frappe.set_route("Form", "Asset Movement", frm.doc.asset_movement)
+			frm.add_custom_button(
+				__("Asset Movement"),
+				() => frappe.set_route("Form", "Asset Movement", frm.doc.asset_movement),
+				__("View")
 			);
 		}
 	},
@@ -98,7 +117,7 @@ frappe.ui.form.on("Custody Loan Return Item", {
 });
 
 function open_generated_doc(doc) {
-	if (!doc?.doctype || !doc?.name) return;
+	if (!doc?.doctype) return;
 	frappe.model.sync(doc);
 	frappe.set_route("Form", doc.doctype, doc.name);
 }
@@ -230,7 +249,7 @@ function show_draft_guidance(frm, message) {
 }
 
 // A return started from the list has no loan yet: ask who is returning and list their open loans (the user
-// never types a Custody Loan ID). Started from a loan (its Return button) the form opens filled in.
+// never types a Custody Loan ID). Started from a loan (Create → Custody Loan Return) the form opens filled in.
 function ask_who_returns(frm) {
 	if (!frm.is_new() || frm.doc.custody_loan || frm._asked_who) return;
 	frm._asked_who = true;
@@ -323,7 +342,7 @@ function ask_who_returns(frm) {
 }
 
 // A customer may return another batch of the Item than the one lent (Siwat, 5 Nov 2026): any batch of the Item is
-// offered; a batch that does not exist yet is added from the Return Loan Set dialog ("New Batch / Serial"); a serial number is never added: only the serials that were lent come back (Siwat, 8 Nov 2026).
+// offered; a batch that does not exist yet is created from the Batch link; a serial number is never added: only the serials that were lent come back (Siwat, 8 Nov 2026).
 function set_open_batch_query(frm) {
 	frm.set_query("batch_no", "items", (doc, cdt, cdn) => {
 		const row = locals[cdt][cdn];

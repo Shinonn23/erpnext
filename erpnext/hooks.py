@@ -593,6 +593,9 @@ permission_query_conditions = {
 has_permission = dict.fromkeys(_service_equipment_shared, "erpnext.support.service_equipment.has_permission")
 
 doc_events = {
+	"Pick List": {
+		"on_trash": "erpnext.loan.doctype.custody_loan.custody_loan_core.unlink_deleted_loan_transaction",
+	},
 	"*": {
 		"validate": [
 			"erpnext.support.doctype.service_level_agreement.service_level_agreement.apply",
@@ -632,6 +635,7 @@ doc_events = {
 		"after_rename": "erpnext.stock.doctype.item.item_search.reindex_renamed_item",
 	},
 	"Stock Entry": {
+		"on_trash": "erpnext.loan.doctype.custody_loan.custody_loan_core.unlink_deleted_loan_transaction",
 		"before_validate": [
 			"erpnext.loan.doctype.custody_loan.custody_loan_core.validate_generated_transaction",
 			"erpnext.stock.doctype.stock_entry.shipment_stock_entry.prepare_stock_entry_for_shipment",
@@ -655,6 +659,7 @@ doc_events = {
 		],
 	},
 	"Asset Movement": {
+		"on_trash": "erpnext.loan.doctype.custody_loan.custody_loan_core.unlink_deleted_loan_transaction",
 		"validate": [
 			"erpnext.loan.doctype.custody_loan.custody_loan_core.validate_generated_transaction",
 			"erpnext.support.service_equipment.refuse_company_asset",
@@ -664,6 +669,7 @@ doc_events = {
 		"on_cancel": "erpnext.loan.doctype.custody_loan.custody_loan_core.update_custody_loan_status",
 	},
 	"Delivery Note": {
+		"on_trash": "erpnext.loan.doctype.custody_loan.custody_loan_core.unlink_deleted_loan_transaction",
 		"validate": "erpnext.loan.doctype.custody_loan.custody_loan_core.validate_generated_transaction",
 		"before_submit": "erpnext.loan.doctype.custody_loan.custody_loan_core.validate_custody_loan_return_receipt",
 		"before_cancel": "erpnext.loan.doctype.custody_loan.custody_loan_core.validate_generated_transaction_cancellation",
@@ -702,7 +708,10 @@ doc_events = {
 			"erpnext.regional.italy.utils.sales_invoice_on_cancel",
 			"erpnext.loan.doctype.custody_loan.custody_loan_core.update_custody_loan_status",
 		],
-		"on_trash": "erpnext.regional.check_deletion_permission",
+		"on_trash": [
+			"erpnext.regional.check_deletion_permission",
+			"erpnext.loan.doctype.custody_loan.custody_loan_core.unlink_deleted_loan_transaction",
+		],
 	},
 	"Purchase Invoice": {
 		"validate": [

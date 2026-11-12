@@ -131,9 +131,9 @@
 					{% endif %}
 				{% endfor %}
 			</td>
-			<td class="number">{{ row.get_formatted("system_qty") }}</td>
-			<td class="number">{{ row.get_formatted("counted_qty") if row.is_counted else "" }}</td>
-			<td class="number">{{ row.get_formatted("difference_qty") if row.is_counted else "" }}</td>
+			<td class="number">{{ frappe.utils.fmt_money(row.system_qty, precision=2) }}</td>
+			<td class="number">{{ frappe.utils.fmt_money(row.counted_qty, precision=2) if row.is_counted else "" }}</td>
+			<td class="number">{{ frappe.utils.fmt_money(row.difference_qty, precision=2) if row.is_counted else "" }}</td>
 		</tr>
 		{% endfor %}
 	</tbody>

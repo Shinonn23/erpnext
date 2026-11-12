@@ -40,6 +40,7 @@ class TestExplicitDelivery(TestCase):
 			release_assets=Mock(),
 			make_pick_list=Mock(),
 			update_status=Mock(),
+			refresh_balances=Mock(),
 		)
 
 	def test_submitting_a_loan_never_picks_or_moves_goods(self):
@@ -108,32 +109,65 @@ class TestExplicitDelivery(TestCase):
 	def test_an_asset_loan_without_movement_waits_for_explicit_handover(self):
 		self.assertEqual(core.CustodyLoan.get_submitted_status(self.loan()), "Pending Delivery")
 
-	def test_confirm_delivery_checks_authority_before_starting(self):
+	def test_legacy_confirm_cannot_post_documents(self):
 		loan = self.loan()
-		loan.check_permission.side_effect = frappe.PermissionError
-		with self.assertRaises(frappe.PermissionError):
-			core.CustodyLoan.confirm_delivery(loan)
-		loan.release_assets.assert_not_called()
-
-	def test_confirm_delivery_checks_then_moves_and_is_repeatable(self):
-		loan = self.loan()
-		with patch.object(core, "delivery_loans", return_value=[loan]):
-			self.assertEqual(core.CustodyLoan.confirm_delivery(loan), {"loans": [loan.name]})
-			loan.release_assets.assert_called_once()
-			loan.run_method.assert_called_with("before_delivery")
-			loan.asset_movement = "MOVE-1"
-			core.CustodyLoan.confirm_delivery(loan)
-			loan.release_assets.assert_called_once()
-
-	def test_failed_movement_rolls_back_the_entire_delivery(self):
-		loan = self.loan()
-		loan.release_assets.side_effect = frappe.ValidationError
 		with (
-			patch.object(core, "delivery_loans", return_value=[loan]),
+			patch.object(frappe, "throw", side_effect=frappe.ValidationError),
 			self.assertRaises(frappe.ValidationError),
 		):
 			core.CustodyLoan.confirm_delivery(loan)
-		self.database.rollback.assert_called_once_with(save_point="custody_loan_confirm_delivery")
+		loan.release_assets.assert_not_called()
+		self.database.savepoint.assert_not_called()
+
+	def test_return_submission_only_records_pending_receipt(self):
+		loan = self.loan()
+		returned = Document(
+			custody_loan=loan.name,
+			update_status=Mock(),
+			make_stock_return_delivery_note=Mock(),
+			make_asset_receipt=Mock(),
+		)
+		with patch.object(frappe, "get_doc", return_value=loan):
+			core.CustodyLoanReturn.on_submit(returned)
+		returned.make_stock_return_delivery_note.assert_not_called()
+		returned.make_asset_receipt.assert_not_called()
+		returned.update_status.assert_called_once()
+
+	def test_submitting_stock_does_not_automatically_release_assets(self):
+		loan = self.loan("Stock")
+		loan.capture_delivery_note_details = Mock()
+		doc = Document(
+			doctype="Delivery Note",
+			custody_loan_source_doctype="Custody Loan",
+			custody_loan_source_name=loan.name,
+		)
+		with (
+			patch.object(frappe, "get_doc", return_value=loan),
+			patch.object(core, "release_held_assets") as release,
+		):
+			core.update_custody_loan_status(doc, "on_submit")
+			release.assert_not_called()
+		loan.capture_delivery_note_details.assert_called_once_with(doc)
+
+	def test_duplicate_active_movement_is_rejected_under_loan_lock(self):
+		source = Document(name="LOAN-1", doctype="Custody Loan", db_set=Mock())
+		transaction = Document(name="DN-NEW", doctype="Delivery Note")
+		self.database.get_value.side_effect = ["DN-OTHER", 0]
+		with (
+			patch.object(frappe, "throw", side_effect=frappe.ValidationError),
+			self.assertRaises(frappe.ValidationError),
+		):
+			core.link_manual_loan_transaction(source, "delivery_note", transaction)
+		self.database.sql.assert_called_once()
+		source.db_set.assert_not_called()
+
+	def test_first_save_links_the_movement_to_its_source(self):
+		source = Document(name="LOAN-1", doctype="Custody Loan", db_set=Mock())
+		self.database.get_value.return_value = None
+		core.link_manual_loan_transaction(
+			source, "delivery_note", Document(name="DN-1", doctype="Delivery Note")
+		)
+		source.db_set.assert_called_once_with("delivery_note", "DN-1", update_modified=False)
 
 	def test_mixed_request_without_stock_loan_cannot_deliver_asset(self):
 		loan = self.loan()
@@ -158,16 +192,6 @@ class TestExplicitDelivery(TestCase):
 			core.CustodyLoan.confirm_delivery(asset)
 		asset.release_assets.assert_not_called()
 
-	def test_asset_readiness_is_checked_again_when_handover_starts(self):
-		asset = self.loan()
-		asset.validate_items.side_effect = frappe.ValidationError("Asset is now Out of Order")
-		with (
-			patch.object(core, "delivery_loans", return_value=[asset]),
-			self.assertRaises(frappe.ValidationError),
-		):
-			core.CustodyLoan.confirm_delivery(asset)
-		asset.release_assets.assert_not_called()
-
 	def test_native_loan_api_cannot_lend_stock_waiting_for_conversion(self):
 		loan = self.loan("Stock")
 		loan.company = "CD"
@@ -186,8 +210,10 @@ class TestExplicitDelivery(TestCase):
 
 	def test_pick_preparation_reuses_existing_draft(self):
 		self.database.get_value.return_value = 0
-		with patch.object(frappe, "get_doc", return_value="EXISTING-PICK"):
-			self.assertEqual(core.CustodyLoan.make_pick_list(self.loan("Stock")), "EXISTING-PICK")
+		pick_list = Mock(name="EXISTING-PICK")
+		with patch.object(frappe, "get_doc", return_value=pick_list):
+			self.assertIs(core.CustodyLoan.make_pick_list(self.loan("Stock")), pick_list)
+		pick_list.check_permission.assert_called_once_with("read")
 
 	def test_consumption_invoice_reuses_immutable_source_link(self):
 		source = Document(
@@ -217,27 +243,13 @@ class TestExplicitDelivery(TestCase):
 			loan_set.create_consumption_invoice("ADJ-1")
 		self.database.sql.assert_not_called()
 
-	def test_stock_submission_is_rolled_back_if_asset_handover_fails(self):
-		stock, asset = self.loan("Stock"), self.loan()
-		stock._make_delivery_note = Mock(return_value={"name": "DN-1"})
-		note = Document(docstatus=0, meta=Mock(), flags=frappe._dict(), submit=Mock())
-		asset.release_assets.side_effect = frappe.ValidationError
-		self.database.get_value.return_value = 1
-		with (
-			patch.object(core, "delivery_loans", return_value=[stock, asset]),
-			patch.object(frappe, "get_doc", return_value=note),
-			self.assertRaises(frappe.ValidationError),
-		):
-			core.CustodyLoan.confirm_delivery(stock)
-		note.submit.assert_called_once()
-		self.database.rollback.assert_called_once_with(save_point="custody_loan_confirm_delivery")
-
 	def consumption(self):
 		source = Document(
 			name="ADJ-1",
 			docstatus=1,
 			custody_loan="LOAN-Stock",
 			reason="Consumed by the borrower",
+			stock_entry="STE-1",
 			items=[Document(custody_loan_item="ROW-1", qty=2)],
 		)
 		loan = self.loan("Stock")
@@ -258,7 +270,9 @@ class TestExplicitDelivery(TestCase):
 
 	def test_consumption_invoice_cannot_increase_quantity_or_move_stock(self):
 		source, loan, invoice = self.consumption()
-		self.database.get_value.return_value = "Customer Borrow / Loan"
+		self.database.get_value.side_effect = lambda doctype, *args, **kwargs: (
+			1 if doctype == "Stock Entry" else "Customer Borrow / Loan"
+		)
 		self.database.exists.return_value = False
 		with (
 			patch.object(frappe, "get_doc", return_value=source),
@@ -276,7 +290,9 @@ class TestExplicitDelivery(TestCase):
 
 	def test_consumption_invoice_refuses_a_second_active_invoice(self):
 		source, loan, invoice = self.consumption()
-		self.database.get_value.return_value = "Customer Borrow / Loan"
+		self.database.get_value.side_effect = lambda doctype, *args, **kwargs: (
+			1 if doctype == "Stock Entry" else "Customer Borrow / Loan"
+		)
 		self.database.exists.return_value = True
 		with (
 			patch.object(frappe, "get_doc", return_value=source),

@@ -65,159 +65,24 @@ class Patched(unittest.TestCase):
 		return loans, items
 
 
-class TestPlan(Patched):
-	def test_returns_and_consumed_are_grouped_per_loan_and_loan_item(self):
-		loans, items = self.set_up()
-		plan = module._check_plan(
-			loans,
-			items,
-			[{"custody_loan_item": "A1"}],
-			[
-				{"custody_loan_item": "S1", "batch_no": "NEW-LOT", "qty": 4},
-				{"custody_loan_item": "S1", "batch_no": "B-1", "qty": 2, "consumed": 4},
-			],
-		)
-		self.assertEqual([row.asset for row in plan["assets"]["CL-A"]], ["AST-1"])
-		self.assertEqual(
-			[(line["batch_no"], line["returned_qty"]) for line in plan["returns"]["CL-S"]],
-			[("NEW-LOT", 4), ("B-1", 2)],
-		)
-		self.assertEqual(plan["consumed"], {"CL-S": {"S1": 4}})
+class TestExplicitReturn(Patched):
+	def test_opening_return_delegates_to_native_mapper_without_saving(self):
+		source = MagicMock()
+		doc = MagicMock()
+		source.make_return.return_value = doc
+		with patch.object(frappe, "get_doc", return_value=source) as get_doc:
+			self.assertIs(module.make_return("CL-S"), doc)
+		get_doc.assert_called_once_with("Custody Loan", "CL-S")
+		source.make_return.assert_called_once_with()
+		doc.insert.assert_not_called()
+		doc.submit.assert_not_called()
 
-	def test_more_than_is_out_another_machine_and_a_foreign_row_are_refused(self):
-		loans, items = self.set_up()
-		with self.assertRaisesRegex(frappe.ValidationError, "more than the 10.0 still out"):
-			module._check_plan(loans, items, [], [{"custody_loan_item": "S1", "qty": 8, "consumed": 3}])
-		with self.assertRaisesRegex(frappe.ValidationError, "different machine is an exchange"):
-			module._check_plan(loans, items, [{"custody_loan_item": "A1", "asset": "AST-2"}], [])
-		with self.assertRaisesRegex(frappe.ValidationError, "not a Stock row"):
-			module._check_plan(loans, items, [], [{"custody_loan_item": "A1", "qty": 1}])
-		self.available["A1"] = 0
-		with self.assertRaisesRegex(frappe.ValidationError, "already returned"):
-			module._check_plan(loans, items, [{"custody_loan_item": "A1"}], [])
-
-
-class TestReturnLoanSet(Patched):
-	def run_set(self, request_type, borrower_type="Customer", invoice="SINV-1"):
-		loans, _items = self.set_up()
-		loans["CL-S"].borrower_type = borrower_type
-		calls = []
-		fresh = MagicMock()
-
-		def get_doc(doctype, name=None):
-			return loans.get(name) or fresh
-
-		with (
-			patch.object(frappe, "has_permission", return_value=True),
-			patch.object(frappe, "get_doc", side_effect=get_doc),
-			patch.object(frappe, "db", MagicMock(get_value=MagicMock(return_value=request_type))),
-			patch.object(module, "loans_of_request", return_value=["CL-A", "CL-S"]),
-			patch.object(
-				module,
-				"_return_assets",
-				side_effect=lambda doc, rows, made: calls.append(("assets", doc.name)),
-			),
-			patch.object(
-				module,
-				"_return_stock",
-				side_effect=lambda doc, rows, made: calls.append(("stock", doc.name, rows)),
-			),
-			patch.object(
-				module,
-				"_consume_stock",
-				side_effect=lambda doc, rows, made: calls.append(("consumed", doc.name, rows)),
-			),
-		):
-			module.return_loan_set(
-				material_request="MR-1",
-				assets=[{"custody_loan_item": "A1"}],
-				stock=[
-					{"custody_loan_item": "S1", "batch_no": "NEW-LOT", "qty": 4, "consumed": 6},
-				],
-			)
-		return calls
-
-	def test_one_dialog_makes_the_asset_return_the_stock_return_and_the_write_off(self):
-		calls = self.run_set("Customer Demo")
-		self.assertEqual(
-			[call[:2] for call in calls], [("assets", "CL-A"), ("stock", "CL-S"), ("consumed", "CL-S")]
-		)
-		self.assertEqual(calls[1][2][0]["batch_no"], "NEW-LOT")
-		self.assertEqual(calls[2][2], {"S1": 6})
-
-
-class TestConsume(Patched):
-	"""Write off consumption; accounts explicitly starts invoicing a Customer Borrow."""
-
-	def consume(self, request_type, borrower_type="Customer"):
-		stock = loan(
-			"CL-S",
-			"Stock",
-			REAGENT,
-			borrower_type=borrower_type,
-			recipient_address=None,
-			recipient_contact=None,
-		)
-		adjustment = MagicMock()
-		adjustment.name = "ADJ-1"
-		adjustment.items = []
-		adjustment.append.side_effect = lambda key, value: adjustment.items.append(value)
-		made = {"returns": [], "adjustments": [], "invoices": [], "waiting": [], "notes": []}
-
-		def get_value(doctype, name, field=None, *a, **k):
-			return request_type if doctype == "Material Request" else "5150-02 - Stock Adjustment"
-
-		with (
-			patch.object(frappe, "db", MagicMock(get_value=MagicMock(side_effect=get_value))),
-			patch.object(frappe, "new_doc", return_value=adjustment) as new_doc,
-			patch.object(frappe, "get_doc", return_value=stock),
-			patch.object(module, "loan_item_available_to_adjust", return_value=10),
-			patch.object(module, "is_tracked", return_value=True),
-			patch.object(
-				module,
-				"grouped_open_rows",
-				return_value=[
-					{"batch_no": "B-1", "serials": [], "qty": 2},
-					{"batch_no": "B-2", "serials": [], "qty": 5},
-				],
-			),
-			patch.object(module, "_make_consumption_invoice") as invoice,
-		):
-			module._consume_stock(stock, {"S1": 4}, made)
-		new_doc.assert_called_once_with("Custody Loan Adjustment")
-		adjustment.insert.assert_called_once_with()
-		adjustment.submit.assert_called_once_with()
-		return adjustment, invoice, made
-
-	def test_a_demo_is_written_off_as_a_demo_expense_from_the_earliest_lots(self):
-		adjustment, invoice, made = self.consume("Customer Demo")
-		invoice.assert_not_called()
-		self.assertEqual(adjustment.reason, "Consumed during demo")
-		self.assertEqual(adjustment.adjustment_account, "5150-02 - Stock Adjustment")
-		self.assertEqual(
-			[(row["batch_no"], row["qty"]) for row in adjustment.items], [("B-1", 2), ("B-2", 2)]
-		)
-		adjustment.submit.assert_called_once_with()
-		self.assertEqual(len(made["adjustments"]), 1)
-		self.assertEqual(made["invoices"], [])
-		self.assertEqual(made["notes"], [])
-
-	def test_a_borrow_by_a_customer_leaves_invoicing_to_an_explicit_accounts_action(self):
-		adjustment, invoice, made = self.consume("Customer Borrow / Loan")
-		invoice.assert_not_called()
-		self.assertEqual(adjustment.reason, "Consumed by the borrower")
-		self.assertEqual(made["adjustments"], ["ADJ-1"])
-		self.assertEqual(made["invoices"], [])
-		self.assertEqual(
-			made["notes"], ["Accounts must create the consumption invoice from adjustment ADJ-1."]
-		)
-
-	def test_a_borrow_by_an_employee_is_not_invoiced(self):
-		adjustment, invoice, made = self.consume("Customer Borrow / Loan", borrower_type="Employee")
-		invoice.assert_not_called()
-		self.assertEqual(adjustment.reason, "Consumed by the borrower")
-		self.assertEqual(made["invoices"], [])
-		self.assertEqual(made["notes"], [])
+	def test_retired_rpc_cannot_post_returns_or_write_off_stock(self):
+		with patch.object(frappe, "get_doc") as get_doc, patch.object(frappe, "new_doc") as new_doc:
+			with self.assertRaisesRegex(frappe.ValidationError, "Save and Submit"):
+				module.return_loan_set(loan="CL-S", stock=[{"custody_loan_item": "S1", "qty": 2}])
+		get_doc.assert_not_called()
+		new_doc.assert_not_called()
 
 
 class TestRegisterLot(Patched):
@@ -366,7 +231,7 @@ class TestSetDelivery(unittest.TestCase):
 			CustodyLoan.waits_for_stock_delivery(SimpleNamespace(loan_type="Stock", asset_movement=None))
 		)
 
-	def test_the_held_asset_loan_moves_with_the_delivery_note(self):
+	def test_the_asset_loan_requires_its_own_explicit_movement(self):
 		from types import SimpleNamespace
 
 		from erpnext.loan.doctype.custody_loan import custody_loan_core as core
@@ -386,7 +251,7 @@ class TestSetDelivery(unittest.TestCase):
 		)
 		with patch.object(core, "delivery_loans", return_value=[held, done]):
 			core.release_held_assets(SimpleNamespace(loan_type="Stock", material_request="MR-1"))
-		self.assertEqual(calls, ["moved"])
+		self.assertEqual(calls, [])
 
 	def test_an_asset_loan_releases_nothing(self):
 		from types import SimpleNamespace

@@ -24,7 +24,28 @@ frappe.ui.form.on("Stock to Asset Conversion", {
 				}, __("Preview"));
 			}
 		}
-
+		if (
+			!frm.is_new() && frm.doc.docstatus === 0 &&
+			frappe.model.can_create("Asset") &&
+			(frm.doc.assets || []).some((row) => !row.asset)
+		) {
+			const stateField = frappe.workflow.get_state_fieldname(frm.doc.doctype);
+			if (stateField) {
+				const transitions = await frappe.workflow.get_transitions(frm.doc);
+				const workflow = frappe.workflow.workflows[frm.doc.doctype];
+				const submittedStates = workflow.states.filter((row) => cint(row.doc_status) === 1);
+				if (!transitions.some((row) => submittedStates.some((state) => state.state === row.next_state))) {
+					return;
+				}
+			}
+			frm.add_custom_button(__("Assets"), () => {
+				if (frm.is_dirty()) {
+					frappe.msgprint(__("Save your changes before generating Assets."));
+					return;
+				}
+				frm.call("create_assets").then(() => frm.reload_doc());
+			}, __("Create"));
+		}
 	},
 	setup(frm) {
 		// Cancelling the conversion reverses the Assets it created (and their receipt movements) after checking they
@@ -55,6 +76,44 @@ frappe.ui.form.on("Stock to Asset Conversion", {
 	},
 	company(frm) {
 		frm.set_value("asset_location", null);
+	},
+});
+
+frappe.ui.form.on("Stock to Asset Conversion Asset", {
+	purchase_reference_type(frm, cdt, cdn) {
+		return frappe.model.set_value(cdt, cdn, {
+			purchase_reference: null, purchase_reference_item: null, purchase_unit_price: null,
+		});
+	},
+	async purchase_reference(frm, cdt, cdn) {
+		const row = locals[cdt][cdn];
+		await frappe.model.set_value(cdt, cdn, {
+			purchase_reference_item: null, purchase_unit_price: null,
+		});
+		if (!row.purchase_reference || !row.purchase_reference_type) return;
+		const source = frm.doc.stock_items.find((item) => item.name === row.source_item_row);
+		if (!source) return;
+		const reference = row.purchase_reference;
+		const reference_type = row.purchase_reference_type;
+		const purchase = await frappe.db.get_doc(reference_type, reference);
+		if (row.purchase_reference !== reference || row.purchase_reference_type !== reference_type) return;
+		const items = purchase.items.filter((item) => item.item_code === source.item_code);
+		if (!items.length) {
+			frappe.msgprint(__("The purchase document has no matching Stock Item."));
+			return;
+		}
+		if (items.length === 1) {
+			return frappe.model.set_value(cdt, cdn, "purchase_reference_item", items[0].name);
+		}
+		const choices = items.map((item) => `${item.idx}: ${item.item_code} (${item.name})`);
+		frappe.prompt([
+			{ fieldname: "purchase_row", fieldtype: "Select", label: __("Purchase Row"),
+				options: choices, reqd: 1 },
+		], (values) => {
+			if (row.purchase_reference !== reference || row.purchase_reference_type !== reference_type) return;
+			const selected = items[choices.indexOf(values.purchase_row)];
+			if (selected) frappe.model.set_value(cdt, cdn, "purchase_reference_item", selected.name);
+		}, __("Select Purchase Row"), __("Select"));
 	},
 });
 

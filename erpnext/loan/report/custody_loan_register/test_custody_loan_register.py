@@ -34,6 +34,9 @@ class TestCustodyLoanRegister(TestCase):
 		self.matches = patch.object(report, "get_match_cond", return_value="")
 		self.matches.start()
 		self.addCleanup(self.matches.stop)
+		self.hooks = patch.object(report.frappe, "get_hooks", return_value={})
+		self.hooks.start()
+		self.addCleanup(self.hooks.stop)
 
 	def insert(self, table, **values):
 		columns = ",".join(values)
@@ -144,5 +147,14 @@ class TestCustodyLoanRegister(TestCase):
 		self.loan()
 		with patch.object(
 			report, "get_match_cond", return_value=" and (`tabCustody Loan`.company = 'OTHER')"
+		):
+			self.assertEqual(report.execute({"summary_by_requester": 1})[1], [])
+
+	def test_query_guard_cannot_be_widened_by_a_shared_loan(self):
+		self.loan()
+		with (
+			patch.object(report.frappe, "get_hooks", return_value={"Custody Loan": ["loan.guard"]}),
+			patch.object(report.frappe, "get_attr", return_value=lambda user: "`tabCustody Loan`.company = 'OTHER'"),
+			patch.object(report.frappe, "session", frappe._dict(user="requester@example.com")),
 		):
 			self.assertEqual(report.execute({"summary_by_requester": 1})[1], [])

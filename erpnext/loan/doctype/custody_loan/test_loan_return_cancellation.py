@@ -61,6 +61,7 @@ class TestLoanReturnCancellation(TestCase):
 			patch.object(frappe, "throw", side_effect=ValueError),
 			patch.object(core, "_", lambda value: value),
 			patch.object(core, "cancel_source_transaction", side_effect=self.cancel_source),
+			patch.object(core, "cancel_lot_swaps"),
 			patch.object(core, "set_workflow_state_on_action", side_effect=self.cancel_workflow),
 		]
 		for patcher in patchers:

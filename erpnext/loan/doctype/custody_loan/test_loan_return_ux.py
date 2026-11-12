@@ -230,15 +230,16 @@ class TestQuarantinePerWarehouse(Patched):
 class TestNoShipmentCoupling(Patched):
 	"""A Shipment is optional (Siwat, 5 Nov 2026): nothing in a loan waits for one."""
 
-	def test_the_return_is_received_at_once_whatever_a_shipment_does_and_whatever_its_items_need(self):
+	def test_receiving_requires_explicit_submission_of_the_receiving_document(self):
 		doc = core.CustodyLoanReturn.__new__(core.CustodyLoanReturn)
 		note = Row(name="DN-1", items=[Row(item_code="PLAIN")])
 		with (
 			patch.object(core, "receive_return_delivery_note") as receive,
 			patch.object(core, "custody_loan_return_row_requires_inspection", return_value=True),
 		):
-			doc.receive_returned_goods(note)
-		receive.assert_called_once_with("DN-1", prepare=None)
+			with self.assertRaises(frappe.ValidationError):
+				doc.receive_returned_goods(note)
+		receive.assert_not_called()
 
 	def test_the_shipment_gates_are_gone(self):
 		for name in (
@@ -258,6 +259,9 @@ class TestPickListRows(Patched):
 			loan_type="Stock",
 			docstatus=1,
 			company="CD",
+			doctype="Custody Loan",
+			check_permission=MagicMock(),
+			db_set=MagicMock(),
 			pick_list="PL-1",
 			material_request="MR-1",
 			name="L1",
@@ -341,6 +345,7 @@ class TestPickedWarehousesFollow(Patched):
 class TestAdjustmentReason(Patched):
 	def adjustment(self, header, row):
 		doc = core.CustodyLoanAdjustment.__new__(core.CustodyLoanAdjustment)
+		doc.name = "ADJ-1"
 		doc.reason = header
 		doc.custody_loan = "L1"
 		doc.items = [Row(idx=1, custody_loan_item="LI-1", qty=1, reason=row, batch_no=None, serial_no=None)]

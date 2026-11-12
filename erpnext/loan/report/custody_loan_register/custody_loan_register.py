@@ -31,6 +31,10 @@ def execute(filters=None):
 		conditions.append("request.material_request_type = %(purpose)s")
 		values["purpose"] = filters.purpose
 	match_conditions = get_match_cond("Custody Loan").replace("`tabCustody Loan`", "loan")
+	# Shares must not widen the requester's report scope beyond the document's query guards.
+	for method in frappe.get_hooks("permission_query_conditions", {}).get("Custody Loan", []):
+		if condition := frappe.call(frappe.get_attr(method), frappe.session.user):
+			conditions.append(f"({condition.replace('`tabCustody Loan`', 'loan')})")
 
 	columns = [
 		{
