@@ -24,6 +24,11 @@
   "item_serial_no",
   "batch_no",
   "sample_size",
+  "purchase_unit_qty",
+  "purchase_accepted_qty",
+  "purchase_rejected_qty",
+  "purchase_rejected_serials",
+  "purchase_serial_results",
   "column_break1",
   "item_name",
   "description",
@@ -284,6 +289,39 @@
    "fieldtype": "Link",
    "label": "Letter Head",
    "options": "Letter Head"
+  },
+  {
+   "fieldname": "purchase_unit_qty",
+   "fieldtype": "Float",
+   "label": "Received Unit Quantity",
+   "depends_on": "eval:doc.purchase_unit_qty > 0",
+   "read_only": 1
+  },
+  {
+   "fieldname": "purchase_accepted_qty",
+   "fieldtype": "Float",
+   "label": "Accepted Quantity",
+   "depends_on": "eval:doc.purchase_unit_qty > 0"
+  },
+  {
+   "fieldname": "purchase_rejected_qty",
+   "fieldtype": "Float",
+   "label": "Rejected Quantity",
+   "depends_on": "eval:doc.purchase_unit_qty > 0"
+  },
+  {
+   "fieldname": "purchase_rejected_serials",
+   "fieldtype": "Small Text",
+   "label": "Rejected Serial Numbers",
+   "depends_on": "eval:doc.purchase_unit_qty > 0"
+  },
+  {
+   "fieldname": "purchase_serial_results",
+   "fieldtype": "Table",
+   "label": "Inspected Serial Numbers",
+   "options": "Purchase Inspection Serial",
+   "read_only": 1,
+   "depends_on": "eval:doc.purchase_unit_qty > 0"
   }
  ],
  "icon": "clipboard-check",

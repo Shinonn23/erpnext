@@ -148,6 +148,7 @@
   "default_asset_item_for_conversion",
   "quality_tab",
   "inspection_required_before_purchase",
+  "purchase_inspection_granularity",
   "column_break_pxjh",
   "inspection_required_before_delivery",
   "qi_template_section",
@@ -1284,6 +1285,14 @@
    "options": "\nPending Assessment\nRequired\nNot Required",
    "description": "Purchasing or an Item Manager assesses whether this Item requires registration before sale. Regulatory Affairs confirms compliance.",
    "no_copy": 1
+  },
+  {
+   "fieldname": "purchase_inspection_granularity",
+   "fieldtype": "Select",
+   "label": "Purchase Inspection By",
+   "options": "Batch/Lot\nSerial Number",
+   "default": "Batch/Lot",
+   "depends_on": "eval:doc.inspection_required_before_purchase"
   }
  ],
  "icon": "package",

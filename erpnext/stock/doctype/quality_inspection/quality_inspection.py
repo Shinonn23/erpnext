@@ -135,14 +135,22 @@ class QualityInspection(Document):
 		):
 			return
 
-		if self.reference_type in ["Purchase Receipt", "Purchase Invoice"] and not frappe.get_cached_value(
-			"Item", self.item_code, "inspection_required_before_purchase"
-		):
-			frappe.throw(
-				_(
-					"Item {0} is not inspected when it is received, so it needs no Quality Inspection."
-				).format(get_link_to_form("Item", self.item_code))
+		if self.reference_type in ["Purchase Receipt", "Purchase Invoice"]:
+			purchase_snapshot = None
+			if self.reference_name and self.child_row_reference:
+				purchase_snapshot = frappe.db.get_value(
+					self.reference_type + " Item", {"name": self.child_row_reference, "parent": self.reference_name,
+						"docstatus": 1}, "purchase_inspection_granularity"
+				)
+			purchase_required = (purchase_snapshot != "Not Required") if purchase_snapshot else frappe.get_cached_value(
+				"Item", self.item_code, "inspection_required_before_purchase"
 			)
+			if not purchase_required:
+				frappe.throw(
+					_("Item {0} is not inspected when it is received, so it needs no Quality Inspection.").format(
+						get_link_to_form("Item", self.item_code)
+					)
+				)
 
 		if (
 			self.reference_type in ["Delivery Note", "Sales Invoice"]

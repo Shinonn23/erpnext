@@ -268,6 +268,9 @@ class PurchaseInvoice(BuyingController):
 		return self.on_hold and (not self.release_date or self.release_date > getdate(nowdate()))
 
 	def validate(self):
+		from erpnext.stock.doctype.quality_inspection.purchase_inspection_units import freeze_purchase_inspection_granularity
+
+		freeze_purchase_inspection_granularity(self)
 		if not self.is_opening:
 			self.is_opening = "No"
 

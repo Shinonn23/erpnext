@@ -26,6 +26,22 @@ frappe.ui.form.on("Serial No", {
 	refresh(frm) {
 		frm.toggle_enable("item_code", frm.doc.__islocal);
 		frm.trigger("view_ledgers");
+		if (!frm.is_new()) {
+			frm.add_custom_button(__("Inspection History"), async () => {
+				const { message: rows } = await frappe.call({
+					method: "erpnext.stock.doctype.quality_inspection.purchase_inspection_units.serial_inspection_history",
+					args: { serial_no: frm.doc.name },
+				});
+				const escape = frappe.utils.escape_html;
+				const lines = (rows || []).map((row) => {
+					const name = escape(row.name);
+					const reference = escape(`${row.reference_type || ""} ${row.reference_name || ""}`);
+					const result = escape(__(row.serial_result || "Draft"));
+					return `<a href="/app/quality-inspection/${encodeURIComponent(row.name)}">${name}</a> — ${result} — ${reference}`;
+				});
+				frappe.msgprint({ title: __("Inspection History"), message: lines.join("<br>") || __("No inspections found.") });
+			});
+		}
 	},
 
 	view_ledgers(frm) {

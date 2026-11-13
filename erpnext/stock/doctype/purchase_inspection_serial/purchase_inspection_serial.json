@@ -1,0 +1,31 @@
+{
+ "doctype": "DocType",
+ "name": "Purchase Inspection Serial",
+ "module": "Stock",
+ "istable": 1,
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "serial_no",
+  "result"
+ ],
+ "fields": [
+  {
+   "fieldname": "serial_no",
+   "fieldtype": "Link",
+   "label": "Serial Number",
+   "options": "Serial No",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "result",
+   "fieldtype": "Select",
+   "label": "Inspection Result",
+   "options": "Accepted\nRejected",
+   "in_list_view": 1,
+   "read_only": 1
+  }
+ ],
+ "permissions": []
+}

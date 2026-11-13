@@ -75,6 +75,7 @@
   "col_br_wh",
   "from_warehouse",
   "quality_inspection",
+  "purchase_inspection_granularity",
   "rejected_warehouse",
   "rejected_serial_and_batch_bundle",
   "inventory_dimension",
@@ -1080,6 +1081,15 @@
    "fieldtype": "Check",
    "label": "Is Deposit Item",
    "read_only": 1
+  },
+  {
+   "fieldname": "purchase_inspection_granularity",
+   "fieldtype": "Select",
+   "label": "Purchase Inspection By",
+   "options": "\nNot Required\nBatch/Lot\nSerial Number",
+   "read_only": 1,
+   "no_copy": 1,
+   "depends_on": "eval:doc.purchase_inspection_granularity"
   }
  ],
  "grid_page_length": 50,
