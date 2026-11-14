@@ -28,25 +28,17 @@ class Warehouse(NestedSet):
 
 		account: DF.Link | None
 		asset_location: DF.Link | None
-		address_line_1: DF.Data | None
-		address_line_2: DF.Data | None
-		city: DF.Data | None
 		company: DF.Link
 		customer: DF.Link | None
 		default_in_transit_warehouse: DF.Link | None
 		default_storage_location: DF.Link | None
 		disabled: DF.Check
-		email_id: DF.Data | None
 		is_group: DF.Check
 		is_rejected_warehouse: DF.Check
 		lft: DF.Int
-		mobile_no: DF.Data | None
 		old_parent: DF.Link | None
 		parent_warehouse: DF.Link | None
-		phone_no: DF.Data | None
-		pin: DF.Data | None
 		rgt: DF.Int
-		state: DF.Data | None
 		warehouse_name: DF.Data
 		warehouse_type: DF.Link | None
 	# end: auto-generated types

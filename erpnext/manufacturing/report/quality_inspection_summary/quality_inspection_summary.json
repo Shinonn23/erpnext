@@ -21,6 +21,9 @@
  "report_type": "Script Report",
  "roles": [
   {
+   "role": "Quality Inspection User"
+  },
+  {
    "role": "Quality Manager"
   },
   {

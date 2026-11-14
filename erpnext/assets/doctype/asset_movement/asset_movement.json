@@ -127,7 +127,6 @@
    "fieldname": "is_custody_loan_transaction",
    "fieldtype": "Check",
    "hidden": 1,
-   "in_standard_filter": 1,
    "label": "Is Custody Loan Transaction",
    "no_copy": 1,
    "read_only": 1

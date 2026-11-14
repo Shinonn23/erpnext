@@ -439,6 +439,7 @@ class TestWarehousePolicy(unittest.TestCase):
 			"set_missing_values",
 			"validate_stock_items",
 			"build_asset_preview",
+			"validate_accounting_treatments",
 			"calculate_totals",
 			"validate_posting_time",
 			"validate_target_item",
@@ -690,7 +691,7 @@ class TestWarehousePolicy(unittest.TestCase):
 			with self.assertRaises(frappe.ValidationError):
 				StockLedgerEntry.validate(entry)
 
-	def test_reloaded_shipment_loan_voucher_has_server_posting_action(self):
+	def test_reloaded_loan_voucher_has_server_posting_action_and_validates_its_source(self):
 		with patch.object(frappe, "logger", return_value=logging.getLogger("offline")):
 			from erpnext.loan.doctype.custody_loan import custody_loan_core as core
 		doc = SimpleNamespace(
@@ -709,7 +710,7 @@ class TestWarehousePolicy(unittest.TestCase):
 			represents_company="Co",
 			customer="IC",
 			is_return=0,
-			requires_shipment=1,
+			is_new=lambda: False,
 		)
 		doc.get = lambda field, default=None: getattr(doc, field, default)
 		loan = SimpleNamespace(name="Loan", docstatus=1, company="Co", loan_type="Stock")
@@ -744,13 +745,13 @@ class TestWarehousePolicy(unittest.TestCase):
 			patch.object(core, "_", side_effect=lambda text: text),
 			patch.object(
 				core,
-				"validate_delivery_note_shipment_link",
-				side_effect=frappe.ValidationError("Shipment must be submitted"),
-			) as shipment,
+				"validate_custody_loan_delivery_note",
+				side_effect=frappe.ValidationError("Loan Delivery Note source is invalid"),
+			) as validate_source,
 		):
-			with self.assertRaisesRegex(frappe.ValidationError, "Shipment must be submitted"):
+			with self.assertRaisesRegex(frappe.ValidationError, "Loan Delivery Note source is invalid"):
 				warehouse_policy.validate_stock_ledger_policy([entry])
-			shipment.assert_called_once_with(doc)
+			validate_source.assert_called_once_with(doc, loan, "Custody Loan", "Loan")
 			self.assertEqual(doc._action, "submit")
 
 	def test_verified_pos_consolidation_skips_changed_dispatch_policy(self):
@@ -811,7 +812,7 @@ class TestRejectedLoanReturnIntoQuarantine(unittest.TestCase):
 		# the return of a stock loan is an internal-customer Delivery Note leaving the customer's loan warehouse
 		self.doc.is_internal_customer = 1
 		self.row = frappe._dict(
-			quality_inspection="QI-1", warehouse="QUARANTINE - CD", target_warehouse="Loan & Borrow - CD"
+			quality_inspection="QI-1", warehouse="QUARANTINE - CD", target_warehouse="LOAN & BORROW - CD"
 		)
 
 	def operation(self, inspection, quarantine=True, outgoing=False, row=None):

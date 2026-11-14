@@ -454,7 +454,7 @@
   },
   {
    "depends_on": "eval:doc.putaway_warehouse",
-   "description": "The warehouse this row is meant for. It is held in Quarantine until the QI team has inspected it.",
+   "description": "The warehouse this row is meant for. It is held in Quarantine until the Quality Inspection team has inspected it.",
    "fieldname": "putaway_warehouse",
    "fieldtype": "Link",
    "label": "Receive for Warehouse",

@@ -1,4 +1,10 @@
 frappe.listview_settings["Asset Maintenance Log"] = {
+	onload(listview) {
+		const value = new URLSearchParams(window.location.search).get("service_equipment");
+		if (value === '["is","set"]' || value === '["is", "set"]' || JSON.stringify(frappe.route_options?.service_equipment) === '["is","set"]') {
+			listview.page.set_title(__("Equipment Maintenance Logs"));
+		}
+	},
 	add_fields: ["maintenance_status"],
 	has_indicator_for_draft: 1,
 	get_indicator: function (doc) {

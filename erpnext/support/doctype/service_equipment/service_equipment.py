@@ -64,10 +64,22 @@ class ServiceEquipment(Document):
 			self.serial_no = self.serial_no_link
 		if not self.equipment_name:
 			self.equipment_name = self.equipment_id
-		if not self.owner_supplier:
-			self.owner_supplier = frappe.db.get_single_value("Service Equipment Settings", "supplier")
+		if not self.get("owner_type"):
+			self.owner_type = "Supplier" if self.get("owner_supplier") else "Customer"
 
 	def validate(self):
+		owner_type = self.get("owner_type") or "Supplier"
+		if owner_type not in ("Supplier", "Customer"):
+			frappe.throw(_("Select Supplier or Customer as owner."))
+		if not self.get("owner_supplier" if owner_type == "Supplier" else "owner_customer"):
+			frappe.throw(_("Select the {0} owner.").format(owner_type))
+		if self.get("serial_no_link"):
+			serial_item = frappe.db.get_value("Serial No", self.serial_no_link, "item_code")
+			if not serial_item or (self.get("item") and self.item != serial_item):
+				frappe.throw(_("Stock Serial No must belong to the selected Item."))
+			if self.serial_no != self.serial_no_link:
+				frappe.throw(_("Serial Number must match Stock Serial No."))
+			self.item = serial_item
 		self.validate_place()
 		if self.technician:
 			company = frappe.db.get_value("Employee", self.technician, "company")

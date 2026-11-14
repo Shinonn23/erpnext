@@ -84,7 +84,8 @@
    "link_type": "DocType",
    "open_in_new_tab": 0,
    "show_arrow": 0,
-   "type": "Link"
+   "type": "Link",
+   "route_options": "{\"Asset Movement Item.asset\": [\"is\", \"set\"]}"
   },
   {
    "added": 0,
@@ -259,7 +260,8 @@
    "link_type": "DocType",
    "open_in_new_tab": 0,
    "show_arrow": 0,
-   "type": "Link"
+   "type": "Link",
+   "route_options": "{\"asset_name\": [\"is\", \"set\"]}"
   },
   {
    "added": 0,
@@ -274,7 +276,8 @@
    "link_type": "DocType",
    "open_in_new_tab": 0,
    "show_arrow": 0,
-   "type": "Link"
+   "type": "Link",
+   "route_options": "{\"asset_name\": [\"is\", \"set\"]}"
   },
   {
    "added": 0,
@@ -289,7 +292,8 @@
    "link_type": "DocType",
    "open_in_new_tab": 0,
    "show_arrow": 0,
-   "type": "Link"
+   "type": "Link",
+   "route_options": "{\"asset\": [\"is\", \"set\"]}"
   },
   {
    "added": 0,

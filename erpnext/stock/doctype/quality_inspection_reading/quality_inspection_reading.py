@@ -3,6 +3,15 @@
 
 
 from frappe.model.document import Document
+from frappe.utils import cint
+
+
+def has_automatic_criteria(reading):
+	if cint(reading.get("formula_based_criteria")):
+		return bool((reading.get("acceptance_formula") or "").strip())
+	if cint(reading.get("numeric")):
+		return bool(reading.get("min_value") or reading.get("max_value"))
+	return bool((reading.get("value") or "").strip())
 
 
 class QualityInspectionReading(Document):

@@ -7,6 +7,7 @@
  "engine": "InnoDB",
  "field_order": [
   "specification",
+  "acceptance_display",
   "parameter_group",
   "status",
   "value",
@@ -36,6 +37,15 @@
  "fields": [
   {
    "columns": 3,
+   "fieldname": "acceptance_display",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "is_virtual": 1,
+   "label": "Expected / Criteria",
+   "read_only": 1
+  },
+  {
+   "columns": 3,
    "fieldname": "specification",
    "fieldtype": "Link",
    "in_list_view": 1,
@@ -61,72 +71,91 @@
    "in_list_view": 1,
    "label": "Reading 1",
    "oldfieldname": "reading_1",
-   "oldfieldtype": "Data"
+   "oldfieldtype": "Data",
+   "depends_on": "eval:doc.numeric"
   },
   {
    "columns": 1,
    "fieldname": "reading_2",
    "fieldtype": "Data",
+   "in_list_view": 1,
    "label": "Reading 2",
    "oldfieldname": "reading_2",
-   "oldfieldtype": "Data"
+   "oldfieldtype": "Data",
+   "depends_on": "eval:doc.numeric"
   },
   {
    "columns": 1,
    "fieldname": "reading_3",
    "fieldtype": "Data",
+   "in_list_view": 1,
    "label": "Reading 3",
    "oldfieldname": "reading_3",
-   "oldfieldtype": "Data"
+   "oldfieldtype": "Data",
+   "depends_on": "eval:doc.numeric"
   },
   {
    "fieldname": "reading_4",
    "fieldtype": "Data",
+   "in_list_view": 1,
    "label": "Reading 4",
    "oldfieldname": "reading_4",
-   "oldfieldtype": "Data"
+   "oldfieldtype": "Data",
+   "depends_on": "eval:doc.numeric"
   },
   {
    "fieldname": "reading_5",
    "fieldtype": "Data",
+   "in_list_view": 1,
    "label": "Reading 5",
    "oldfieldname": "reading_5",
-   "oldfieldtype": "Data"
+   "oldfieldtype": "Data",
+   "depends_on": "eval:doc.numeric"
   },
   {
    "fieldname": "reading_6",
    "fieldtype": "Data",
+   "in_list_view": 1,
    "label": "Reading 6",
    "oldfieldname": "reading_6",
-   "oldfieldtype": "Data"
+   "oldfieldtype": "Data",
+   "depends_on": "eval:doc.numeric"
   },
   {
    "fieldname": "reading_7",
    "fieldtype": "Data",
+   "in_list_view": 1,
    "label": "Reading 7",
    "oldfieldname": "reading_7",
-   "oldfieldtype": "Data"
+   "oldfieldtype": "Data",
+   "depends_on": "eval:doc.numeric"
   },
   {
    "fieldname": "reading_8",
    "fieldtype": "Data",
+   "in_list_view": 1,
    "label": "Reading 8",
    "oldfieldname": "reading_8",
-   "oldfieldtype": "Data"
+   "oldfieldtype": "Data",
+   "depends_on": "eval:doc.numeric"
   },
   {
    "fieldname": "reading_9",
    "fieldtype": "Data",
+   "in_list_view": 1,
    "label": "Reading 9",
    "oldfieldname": "reading_9",
-   "oldfieldtype": "Data"
+   "oldfieldtype": "Data",
+   "depends_on": "eval:doc.numeric"
   },
   {
    "fieldname": "reading_10",
    "fieldtype": "Data",
+   "in_list_view": 1,
    "label": "Reading 10",
    "oldfieldname": "reading_10",
-   "oldfieldtype": "Data"
+   "oldfieldtype": "Data",
+   "depends_on": "eval:doc.numeric"
   },
   {
    "columns": 2,
@@ -199,23 +228,26 @@
    "label": "Numeric Inspection"
   },
   {
+   "columns": 1,
    "default": "0",
    "description": "Set the status manually.",
    "fieldname": "manual_inspection",
    "fieldtype": "Check",
-   "label": "Manual Inspection"
+   "in_list_view": 1,
+   "label": "Manual"
   },
   {
    "default": "1",
    "fieldname": "numeric",
    "fieldtype": "Check",
-   "in_list_view": 1,
    "label": "Numeric"
   },
   {
+   "columns": 2,
    "fetch_from": "specification.parameter_group",
    "fieldname": "parameter_group",
    "fieldtype": "Link",
+   "in_list_view": 1,
    "label": "Parameter Group",
    "options": "Quality Inspection Parameter Group",
    "read_only": 1

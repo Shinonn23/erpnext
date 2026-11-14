@@ -8,6 +8,7 @@ def get_data():
 			"Stock Reservation Entry": "from_voucher_no",
 			"Delivery Note": "against_pick_list",
 			"Sales Invoice": "against_pick_list",
+			"Quality Inspection": "reference_name",
 		},
 		"internal_links": {
 			"Sales Order": ["locations", "sales_order"],
@@ -23,7 +24,7 @@ def get_data():
 			},
 			{
 				"label": _("Reference"),
-				"items": ["Stock Reservation Entry"],
+				"items": ["Stock Reservation Entry", "Quality Inspection"],
 			},
 		],
 	}

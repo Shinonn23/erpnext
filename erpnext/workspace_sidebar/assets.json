@@ -76,7 +76,8 @@
    "link_to": "Asset Movement",
    "link_type": "DocType",
    "show_arrow": 0,
-   "type": "Link"
+   "type": "Link",
+   "route_options": "{\"Asset Movement Item.asset\": [\"is\", \"set\"]}"
   },
   {
    "child": 0,
@@ -132,7 +133,8 @@
    "link_to": "Asset Maintenance",
    "link_type": "DocType",
    "show_arrow": 0,
-   "type": "Link"
+   "type": "Link",
+   "route_options": "{\"asset_name\": [\"is\", \"set\"]}"
   },
   {
    "child": 1,
@@ -143,7 +145,8 @@
    "link_to": "Asset Maintenance Log",
    "link_type": "DocType",
    "show_arrow": 0,
-   "type": "Link"
+   "type": "Link",
+   "route_options": "{\"asset_name\": [\"is\", \"set\"]}"
   },
   {
    "child": 1,
@@ -165,7 +168,8 @@
    "link_to": "Asset Repair",
    "link_type": "DocType",
    "show_arrow": 0,
-   "type": "Link"
+   "type": "Link",
+   "route_options": "{\"asset\": [\"is\", \"set\"]}"
   },
   {
    "child": 0,

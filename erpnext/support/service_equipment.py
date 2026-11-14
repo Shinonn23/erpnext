@@ -8,8 +8,6 @@ Activity name either an Asset or a Service Equipment. A document about equipment
 value, depreciation, GL Entry, capitalization, stock consumption or cost center. This module holds what they share.
 """
 
-import os
-
 import frappe
 from frappe import _
 from frappe.utils import get_link_to_form, now_datetime
@@ -84,7 +82,7 @@ def check_private_file(doc, fieldname, url=None):
 		if url.startswith("/private/files/")
 		else None
 	)
-	if not name or not os.path.isfile(frappe.get_doc("File", name).get_full_path()):
+	if not name or not frappe.get_doc("File", name).exists_on_disk():
 		frappe.throw(_("The attachment must be a private File attached to this document."))
 
 

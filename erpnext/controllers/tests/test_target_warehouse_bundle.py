@@ -19,7 +19,7 @@ ROW = frappe._dict(
 	stock_qty=1,
 	conversion_factor=1,
 	warehouse="CD STOCK - CD",
-	target_warehouse="Loan & Borrow - CD",
+	target_warehouse="LOAN & BORROW - CD",
 	serial_and_batch_bundle="SABB-OUT",
 	incoming_rate=53730,
 )
@@ -49,19 +49,19 @@ class TestTargetWarehouseBundle(unittest.TestCase):
 	def test_the_delivery_gives_the_target_warehouse_its_own_bundle(self):
 		note = _note(docstatus=1)
 		sle, _ = self.target_sle(note)
-		self.assertEqual((sle.warehouse, sle.serial_and_batch_bundle), ("Loan & Borrow - CD", "SABB-IN"))
+		self.assertEqual((sle.warehouse, sle.serial_and_batch_bundle), ("LOAN & BORROW - CD", "SABB-IN"))
 		note.make_package_for_transfer.assert_called_once()
 
 	def test_the_cancellation_reverses_the_target_warehouse_bundle(self):
 		sle, get_value = self.target_sle(_note(docstatus=2))
-		self.assertEqual((sle.warehouse, sle.serial_and_batch_bundle), ("Loan & Borrow - CD", "SABB-IN"))
+		self.assertEqual((sle.warehouse, sle.serial_and_batch_bundle), ("LOAN & BORROW - CD", "SABB-IN"))
 		get_value.assert_called_once_with(
 			"Stock Ledger Entry",
 			{
 				"voucher_type": "Delivery Note",
 				"voucher_no": "DN-1",
 				"voucher_detail_no": "DNI-1",
-				"warehouse": "Loan & Borrow - CD",
+				"warehouse": "LOAN & BORROW - CD",
 				"is_cancelled": 0,
 			},
 			"serial_and_batch_bundle",

@@ -180,7 +180,7 @@ def validate_warehouse_operation(
 		if location.warehouse_type in ("Quarantine", "QA"):
 			# the same way out as the app's refusal of a manual move out (Connect Diagnostics, 5 Nov 2026)
 			message += " " + _(
-				"Goods inspected by the QI team leave quarantine with the Stock team's own Material Transfer to a "
+				"Goods inspected by the Quality Inspection team leave quarantine with the Stock team's own Material Transfer to a "
 				"non-quarantine warehouse of the company; any other document needs this role."
 			)
 		frappe.throw(message, frappe.PermissionError)

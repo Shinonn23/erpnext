@@ -1847,6 +1847,10 @@ class StockController(AccountsController):
 
 	def validate_qi_rejection(self, row):
 		"""Check if QI is rejected on row level, during submission"""
+		if self.doctype == "Delivery Note" and row.get("against_pick_list") and row.get("quality_inspection") and frappe.db.get_value("Quality Inspection", row.quality_inspection, "reference_type") == "Pick List":
+			from connect_diagnostics_setup.stock.outgoing_inspection import validate_delivery
+			validate_delivery(self)
+			return
 		action = frappe.get_single_value("Stock Settings", "action_if_quality_inspection_is_rejected")
 		qa_status = frappe.db.get_value("Quality Inspection", row.quality_inspection, "status")
 

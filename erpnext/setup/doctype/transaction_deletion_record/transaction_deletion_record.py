@@ -1065,8 +1065,6 @@ def export_to_delete_template(name):
 @frappe.whitelist()
 def process_import_template(transaction_deletion_record_name, file_url):
 	"""Import CSV template and populate To Delete list"""
-	import os
-
 	doc = frappe.get_doc("Transaction Deletion Record", transaction_deletion_record_name)
 	doc.check_permission("write")
 
@@ -1087,13 +1085,12 @@ def process_import_template(transaction_deletion_record_name, file_url):
 	if not file_doc.file_name or not file_doc.file_name.lower().endswith(".csv"):
 		frappe.throw(_("Only CSV files are allowed"))
 
-	file_path = file_doc.get_full_path()
-
-	if not os.path.isfile(file_path):
+	if not file_doc.exists_on_disk():
 		frappe.throw(_("File not found on server"))
 
-	with open(file_path, encoding="utf-8") as f:
-		csv_content = f.read()
+	csv_content = file_doc.get_content(encodings=["utf-8"])
+	if isinstance(csv_content, bytes):
+		csv_content = csv_content.decode("utf-8")
 
 	return doc.import_to_delete_template_method(csv_content)
 

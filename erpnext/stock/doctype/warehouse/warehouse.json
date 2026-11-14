@@ -10,48 +10,37 @@
  "engine": "InnoDB",
  "field_order": [
   "warehouse_detail",
-  "disabled",
   "warehouse_name",
-  "default_storage_location",
   "column_break_3",
   "company",
+  "disabled",
   "is_rejected_warehouse",
-  "column_break_4",
-  "account",
   "section_break_ujhu",
   "parent_warehouse",
-  "is_group",
   "column_break_qhdh",
+  "is_group",
   "customer",
   "stock_control_section",
   "warehouse_type",
-  "column_break_qajx",
+  "transit_section",
+  "default_storage_location",
+  "default_in_transit_warehouse",
+  "holding_section",
+  "lost_warehouse",
+  "found_warehouse",
+  "holding_column",
+  "quarantine_warehouse",
+  "count_variance_section",
+  "account",
+  "stock_adjustment_account",
+  "count_variance_column",
+  "department",
   "asset_location_section",
   "asset_location",
   "address_and_contact",
   "address_html",
   "column_break_10",
   "contact_html",
-  "warehouse_contact_info",
-  "email_id",
-  "phone_no",
-  "mobile_no",
-  "column_break0",
-  "address_line_1",
-  "address_line_2",
-  "city",
-  "state",
-  "pin",
-  "transit_section",
-  "default_in_transit_warehouse",
-  "count_variance_section",
-  "stock_adjustment_account",
-  "count_variance_column",
-  "department",
-  "holding_section",
-  "lost_warehouse",
-  "found_warehouse",
-  "quarantine_warehouse",
   "tree_details",
   "lft",
   "rgt",
@@ -103,10 +92,6 @@
    "label": "Disabled"
   },
   {
-   "fieldname": "column_break_4",
-   "fieldtype": "Column Break"
-  },
-  {
    "description": "If blank, parent Warehouse Account or company default will be considered in transactions",
    "fieldname": "account",
    "fieldtype": "Link",
@@ -133,76 +118,6 @@
    "fieldname": "contact_html",
    "fieldtype": "HTML",
    "label": "Contact HTML"
-  },
-  {
-   "collapsible": 1,
-   "fieldname": "warehouse_contact_info",
-   "fieldtype": "Section Break",
-   "label": "Warehouse Contact Info"
-  },
-  {
-   "fieldname": "email_id",
-   "fieldtype": "Data",
-   "hidden": 1,
-   "label": "Email Address",
-   "oldfieldname": "email_id",
-   "oldfieldtype": "Data"
-  },
-  {
-   "fieldname": "phone_no",
-   "fieldtype": "Data",
-   "label": "Phone No",
-   "oldfieldname": "phone_no",
-   "oldfieldtype": "Int",
-   "options": "Phone"
-  },
-  {
-   "fieldname": "mobile_no",
-   "fieldtype": "Data",
-   "label": "Mobile No",
-   "oldfieldname": "mobile_no",
-   "oldfieldtype": "Int",
-   "options": "Phone"
-  },
-  {
-   "fieldname": "column_break0",
-   "fieldtype": "Column Break",
-   "oldfieldtype": "Column Break"
-  },
-  {
-   "fieldname": "address_line_1",
-   "fieldtype": "Data",
-   "label": "Address Line 1",
-   "oldfieldname": "address_line_1",
-   "oldfieldtype": "Data"
-  },
-  {
-   "fieldname": "address_line_2",
-   "fieldtype": "Data",
-   "label": "Address Line 2",
-   "oldfieldname": "address_line_2",
-   "oldfieldtype": "Data"
-  },
-  {
-   "fieldname": "city",
-   "fieldtype": "Data",
-   "label": "City",
-   "oldfieldname": "city",
-   "oldfieldtype": "Data"
-  },
-  {
-   "fieldname": "state",
-   "fieldtype": "Data",
-   "label": "State/Province",
-   "oldfieldname": "state",
-   "oldfieldtype": "Select"
-  },
-  {
-   "fieldname": "pin",
-   "fieldtype": "Data",
-   "label": "PIN",
-   "oldfieldname": "pin",
-   "oldfieldtype": "Int"
   },
   {
    "collapsible": 1,
@@ -244,7 +159,7 @@
    "read_only": 1
   },
   {
-   "depends_on": "eval:(!doc.is_group);",
+   "depends_on": "eval:!doc.is_group || !!doc.warehouse_type",
    "fieldname": "warehouse_type",
    "fieldtype": "Link",
    "in_import_template": 1,
@@ -254,10 +169,10 @@
   },
   {
    "fieldname": "column_break_3",
-   "fieldtype": "Section Break"
+   "fieldtype": "Column Break"
   },
   {
-   "depends_on": "eval: doc.warehouse_type !== 'Transit';",
+   "depends_on": "eval:!!doc.default_in_transit_warehouse || (!doc.is_group && doc.warehouse_type !== 'Transit')",
    "fieldname": "default_in_transit_warehouse",
    "fieldtype": "Link",
    "ignore_user_permissions": 1,
@@ -265,13 +180,7 @@
    "options": "Warehouse"
   },
   {
-   "collapsible": 1,
    "fieldname": "transit_section",
-   "fieldtype": "Section Break",
-   "label": "Transit"
-  },
-  {
-   "fieldname": "column_break_qajx",
    "fieldtype": "Column Break"
   },
   {
@@ -303,7 +212,8 @@
   },
   {
    "fieldname": "section_break_ujhu",
-   "fieldtype": "Section Break"
+   "fieldtype": "Section Break",
+   "label": "Warehouse Structure"
   },
   {
    "fieldname": "column_break_qhdh",
@@ -314,18 +224,18 @@
    "fieldtype": "Link",
    "label": "Default Storage Location",
    "options": "Storage Location",
-   "depends_on": "eval:!doc.__islocal && !doc.is_group",
+   "depends_on": "eval:!!doc.default_storage_location || (!doc.__islocal && !doc.is_group)",
    "description": "Used for stock transactions when Storage Location is not specified."
   },
   {
    "fieldname": "stock_control_section",
    "fieldtype": "Section Break",
-   "label": "Stock Control"
+   "label": "Warehouse Operations"
   },
   {
    "fieldname": "count_variance_section",
    "fieldtype": "Section Break",
-   "label": "Count Variance"
+   "label": "Accounting"
   },
   {
    "description": "A Stock Reconciliation of this warehouse posts its difference here (an Expense account that is not a stock account). Leave empty for the company's Stock Adjustment Account.",
@@ -333,7 +243,8 @@
    "fieldtype": "Link",
    "label": "Count Variance Account",
    "no_copy": 1,
-   "options": "Account"
+   "options": "Account",
+   "depends_on": "eval:!!doc.stock_adjustment_account || !doc.is_group"
   },
   {
    "fieldname": "count_variance_column",
@@ -345,13 +256,14 @@
    "fieldtype": "Link",
    "label": "Cost Department",
    "no_copy": 1,
-   "options": "Department"
+   "options": "Department",
+   "depends_on": "eval:!!doc.department || !doc.is_group"
   },
   {
    "fieldname": "holding_section",
    "fieldtype": "Section Break",
-   "label": "Lost, Found and Quarantine",
-   "depends_on": "eval:!doc.is_group"
+   "label": "Related Warehouses",
+   "depends_on": "eval:!!(doc.lost_warehouse || doc.quarantine_warehouse || doc.damage_warehouse) || (!doc.is_group && !['Lost', 'Quarantine', 'Transit', 'Write-Off'].includes(doc.warehouse_type)) || (!doc.is_group && doc.warehouse_type === 'Quarantine')"
   },
   {
    "description": "A Monthly Stock Count of this warehouse moves what it did not find here. Leave empty for the company's Lost warehouse.",
@@ -359,11 +271,13 @@
    "fieldtype": "Link",
    "label": "Lost Warehouse",
    "no_copy": 1,
-   "options": "Warehouse"
+   "options": "Warehouse",
+   "depends_on": "eval:!!doc.lost_warehouse || (!doc.is_group && !['Lost', 'Quarantine', 'Transit', 'Write-Off'].includes(doc.warehouse_type))"
   },
   {
    "description": "A Monthly Stock Count of this warehouse receives what two counts found beyond the system quantity here. Leave empty for the company's Found warehouse.",
    "fieldname": "found_warehouse",
+   "hidden": 1,
    "fieldtype": "Link",
    "label": "Found Warehouse",
    "no_copy": 1,
@@ -375,7 +289,12 @@
    "fieldtype": "Link",
    "label": "Quarantine Warehouse",
    "no_copy": 1,
-   "options": "Warehouse"
+   "options": "Warehouse",
+   "depends_on": "eval:!!doc.quarantine_warehouse || (!doc.is_group && !['Lost', 'Quarantine', 'Transit', 'Write-Off'].includes(doc.warehouse_type))"
+  },
+  {
+   "fieldname": "holding_column",
+   "fieldtype": "Column Break"
   }
  ],
  "grid_page_length": 50,

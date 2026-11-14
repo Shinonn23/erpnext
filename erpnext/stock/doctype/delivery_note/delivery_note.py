@@ -303,6 +303,8 @@ class DeliveryNote(SellingController):
 		from erpnext.stock.doctype.packed_item.packed_item import make_packing_list
 
 		make_packing_list(self)
+		from connect_diagnostics_setup.stock.outgoing_inspection import allocate_service_components
+		allocate_service_components(self)
 		self.update_current_stock()
 
 		if not self.installation_status:

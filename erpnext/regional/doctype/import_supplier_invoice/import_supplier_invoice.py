@@ -2,6 +2,7 @@
 # License: GNU General Public License v3. See license.txt
 
 
+import io
 import re
 import zipfile
 
@@ -55,7 +56,7 @@ class ImportSupplierInvoice(Document):
 		self.purchase_invoices_count = 0
 		self.default_uom = frappe.db.get_value("Stock Settings", fieldname="stock_uom")
 
-		with zipfile.ZipFile(zip_file.get_full_path()) as zf:
+		with zipfile.ZipFile(io.BytesIO(zip_file.get_content(encodings=[]))) as zf:
 			for file_name in zf.namelist():
 				content = get_file_content(file_name, zf)
 				file_content = bs(content, "xml")

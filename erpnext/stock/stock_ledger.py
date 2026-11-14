@@ -10,6 +10,8 @@ from itertools import islice
 
 import frappe
 from frappe import _, bold, scrub
+from frappe.integrations.doctype.google_cloud_storage_settings import storage as gcs_storage
+from frappe.integrations.doctype.google_cloud_storage_settings.cutover_lock import register_writer
 from frappe.model.meta import get_field_precision
 from frappe.query_builder import Order
 from frappe.query_builder.functions import CombineDatetime, Sum
@@ -450,6 +452,7 @@ def get_reposting_file_name(dt, dn):
 
 
 def create_json_gz_file(data, doc, file_name=None) -> str:
+	register_writer()
 	encoded_content = frappe.safe_encode(frappe.as_json(data))
 	compressed_content = gzip.compress(encoded_content)
 
@@ -460,6 +463,13 @@ def create_json_gz_file(data, doc, file_name=None) -> str:
 		if "/frappe_s3_attachment." in file_doc.file_url:
 			file_doc.delete()
 			return create_file(doc, compressed_content)
+
+		if gcs_storage.enabled():
+			file_doc.save_file(
+				content=compressed_content, overwrite=True, ignore_existing_file_check=True
+			)
+			file_doc.db_update()
+			return doc.reposting_data_file
 
 		path = file_doc.get_full_path()
 

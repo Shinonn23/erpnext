@@ -18,6 +18,49 @@ from erpnext.stock.doctype.quality_inspection.purchase_inspection_units import (
 
 
 class TestPurchaseInspectionUnits(unittest.TestCase):
+	def test_manual_numeric_result_cannot_accept_an_out_of_range_reading(self):
+		from erpnext.stock.doctype.quality_inspection.quality_inspection import QualityInspection
+
+		row = frappe._dict(numeric=1, manual_inspection=1, min_value=1.4, max_value=2,
+			reading_1="5", status="Accepted")
+		doc = frappe._dict(purchase_unit_qty=1, purchase_rejected_qty=0, manual_inspection=0,
+			readings=[row], status="Accepted")
+		doc.min_max_criteria_passed = lambda reading: False
+		QualityInspection.inspect_and_set_status(doc)
+		self.assertEqual((row.status, doc.status), ("Rejected", "Rejected"))
+
+	def test_template_criteria_decide_the_default_manual_mode(self):
+		from erpnext.stock.doctype.quality_inspection_reading.quality_inspection_reading import (
+			has_automatic_criteria,
+		)
+		self.assertTrue(has_automatic_criteria(frappe._dict(numeric=0, value="Present")))
+		self.assertTrue(has_automatic_criteria(frappe._dict(numeric=1, min_value=1, max_value=2)))
+		self.assertTrue(has_automatic_criteria(frappe._dict(formula_based_criteria=1, acceptance_formula="reading_1 > 1")))
+		self.assertFalse(has_automatic_criteria(frappe._dict(numeric=1, min_value=0, max_value=0)))
+	def test_batch_only_item_ignores_serial_values_in_bundle(self):
+		row = frappe._dict(item_code="ITEM", qty=2, idx=1, serial_and_batch_bundle="BUNDLE",
+			purchase_inspection_granularity="Batch/Lot")
+		with (patch.object(frappe, "get_cached_value", return_value=0),
+			patch.object(frappe, "get_all", return_value=[]),
+			patch("erpnext.stock.serial_batch_bundle.get_serial_nos", return_value=["S1", "S2"]),
+			patch("erpnext.stock.serial_batch_bundle.get_batch_nos", return_value={"B": frappe._dict(qty=2)})):
+			self.assertEqual(module.receipt_units(row), [{"batch_no": "B", "serial_no": None, "qty": 2.0, "serials": []}])
+
+	def test_only_submitted_serials_and_batches_are_released(self):
+		units = split_units(2, ["S1", "S2"], {"B": 2}, {"S1": "B", "S2": "B"}, "Serial Number")
+		qi = frappe._dict(name="QI-1", docstatus=1, status="Accepted", purchase_unit_qty=1,
+			item_serial_no="S1", batch_no="B", purchase_accepted_qty=1, purchase_rejected_qty=0)
+		held = [{"batch_no": "B", "qty": 2, "serial_nos": ["S1", "S2"]}]
+		result = remaining_inspection_results(units, [qi], held, [])
+		self.assertEqual(len(result), 1)
+		self.assertEqual(result[0]["accepted"]["serial_nos"], ["S1"])
+		self.assertEqual(remaining_inspection_results(units, [qi], [{"batch_no": "B", "qty": 1, "serial_nos": ["S2"]}], [])[0]["accepted"]["qty"], 0)
+
+		lots = split_units(5, [], {"B1": 2, "B2": 3}, {}, "Batch/Lot")
+		lot_qi = frappe._dict(name="QI-2", docstatus=1, status="Accepted", purchase_unit_qty=2,
+			batch_no="B1", purchase_accepted_qty=2, purchase_rejected_qty=0)
+		result = remaining_inspection_results(lots, [lot_qi], [{"batch_no": "B1", "qty": 2}, {"batch_no": "B2", "qty": 3}], [])
+		self.assertEqual([(r["unit"]["batch_no"], r["accepted"]["qty"]) for r in result], [("B1", 2)])
 	def test_serial_and_batch_grouping(self):
 		serials = ["S1", "S2", "S3"]
 		batches = {"B1": 2, "B2": 1}
@@ -264,6 +307,30 @@ class TestPurchaseInspectionUnits(unittest.TestCase):
 			[{"serial_no": "S1", "result": "Accepted"}, {"serial_no": "S2", "result": "Rejected"}],
 		)
 
+	def test_serial_results_determine_quantities_and_reject_foreign_serials(self):
+		class Inspection(frappe._dict):
+			def set(self, field, value):
+				self[field] = value
+			def append(self, field, value):
+				self[field].append(value)
+		doc = Inspection(name="QI-1", item_code="ITEM", batch_no="B", purchase_unit_qty=2,
+			sample_size=1, status="Rejected", readings=[frappe._dict(status="Accepted")],
+			purchase_serial_results=[frappe._dict(serial_no="S1", result="Accepted"),
+				frappe._dict(serial_no="S2", result="Rejected")])
+		units = split_units(2, ["S1", "S2"], {"B": 2}, {"S1": "B", "S2": "B"}, "Batch/Lot")
+		with (patch.object(module, "receipt_units", return_value=units),
+			patch.object(module, "inspections_for_row", return_value=[])):
+			module.validate_purchase_unit_inspection(doc, frappe._dict(), frappe._dict(item_code="ITEM"), "before_submit")
+			self.assertEqual((doc.purchase_accepted_qty, doc.purchase_rejected_qty, doc.purchase_rejected_serials), (1, 1, "S2"))
+			doc.purchase_serial_results = [frappe._dict(serial_no="S1", result="Accepted"),
+				frappe._dict(serial_no="OTHER", result="Rejected")]
+			with (
+				patch.object(frappe, "throw", side_effect=frappe.ValidationError) as throw,
+				self.assertRaises(frappe.ValidationError),
+			):
+				module.validate_purchase_unit_inspection(doc, frappe._dict(), frappe._dict(item_code="ITEM"), "before_submit")
+			throw.assert_called_once_with("Serial numbers must match the received inspection unit.")
+
 	def test_submission_freezes_item_inspection_mode_on_receipt_row(self):
 		row = frappe._dict(item_code="ITEM", purchase_inspection_granularity="Batch/Lot")
 		doc = frappe._dict(
@@ -341,7 +408,7 @@ class TestPurchaseInspectionUnits(unittest.TestCase):
 			(qi.reference_name, qi.child_row_reference, qi.batch_no, qi.item_serial_no),
 			("PR-1", "row-1", "B1", "S1"),
 		)
-		self.assertEqual((qi.purchase_unit_qty, qi.sample_size, qi.manual_inspection), (1, 1, 1))
+		self.assertEqual((qi.purchase_unit_qty, qi.sample_size, qi.manual_inspection), (1, 1, 0))
 
 	def test_creation_reports_a_failed_unit_and_continues_with_the_next_one(self):
 		row = frappe._dict(idx=1, item_code="ITEM")

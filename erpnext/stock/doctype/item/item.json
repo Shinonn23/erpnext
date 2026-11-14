@@ -228,7 +228,7 @@
    "search_index": 1
   },
   {
-   "description": "The product line (POCT, LAB, SMART ...). It routes Quotation discount and Demo / Borrow approvals and gives the default QI team. Required for an Item that is sold (not a fixed asset).",
+   "description": "The product line (POCT, LAB, SMART ...). It routes Quotation discount and Demo / Borrow approvals and gives the default Quality Inspection team. Required for an Item that is sold (not a fixed asset).",
    "fieldname": "product_group",
    "fieldtype": "Link",
    "in_list_view": 1,

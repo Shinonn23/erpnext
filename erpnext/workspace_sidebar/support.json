@@ -94,7 +94,8 @@
    "label": "Equipment Movements",
    "link_to": "Asset Movement",
    "link_type": "DocType",
-   "type": "Link"
+   "type": "Link",
+   "route_options": "{\"Asset Movement Item.service_equipment\": [\"is\", \"set\"]}"
   },
   {
    "child": 1,
@@ -159,16 +160,6 @@
    "link_to": "Maintenance Schedule",
    "link_type": "DocType",
    "route_options": "{\"service_equipment\": [\"is\", \"set\"]}",
-   "type": "Link"
-  },
-  {
-   "child": 1,
-   "collapsible": 1,
-   "indent": 0,
-   "keep_closed": 0,
-   "label": "Service Equipment Settings",
-   "link_to": "Service Equipment Settings",
-   "link_type": "DocType",
    "type": "Link"
   },
   {

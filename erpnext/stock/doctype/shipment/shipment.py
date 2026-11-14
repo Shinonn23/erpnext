@@ -323,8 +323,11 @@ class Shipment(Document):
 		value_of_goods = 0
 		linked_delivery_notes = set()
 		for entry in self.get("shipment_delivery_note"):
-			value_of_goods += flt(entry.get("grand_total"))
-			if entry.get("delivery_note"):
+			if not entry.get("delivery_note"):
+				continue
+			entry.grand_total = get_transaction_value("Delivery Note", entry.delivery_note)
+			if entry.delivery_note not in linked_delivery_notes:
+				value_of_goods += entry.grand_total
 				linked_delivery_notes.add(entry.delivery_note)
 
 		for entry in self.get("shipment_documents"):

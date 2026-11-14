@@ -57,6 +57,8 @@ def receipt_units(row):
 	qty = abs(flt(row.get("transfer_qty") or row.get("stock_qty") or row.get("qty")))
 	bundle = row.get("serial_and_batch_bundle")
 	serials = bundle_serial_nos(bundle) if bundle else get_serial_nos(row.get("serial_no") or "")
+	if not cint(frappe.get_cached_value("Item", row.item_code, "has_serial_no")):
+		serials = []
 	batches = (
 		{batch: abs(flt(entry.qty)) for batch, entry in get_batch_nos(bundle).items()}
 		if bundle
@@ -84,6 +86,37 @@ def receipt_units(row):
 		return split_units(qty, serials, batches, serial_batches, granularity)
 	except ValueError as exc:
 		frappe.throw(_("Row {0} ({1}): {2}.").format(row.idx, row.item_code, str(exc)))
+
+
+@frappe.whitelist()
+def inspection_serial_results(name):
+	"""Return received serials for an existing lot inspection without changing its draft."""
+	doc = frappe.get_doc("Quality Inspection", name)
+	doc.check_permission("read")
+	if doc.reference_type not in ("Purchase Receipt", "Purchase Invoice", "Pick List") or not doc.purchase_unit_qty or doc.item_serial_no:
+		return []
+	reference = frappe.get_doc(doc.reference_type, doc.reference_name)
+	reference.check_permission("read")
+	if doc.reference_type == "Pick List":
+		from connect_diagnostics_setup.stock.outgoing_inspection import source_rows
+		rows = source_rows(reference)
+	else:
+		rows = reference.items
+	row = next((r for r in rows if r.name == doc.child_row_reference and r.item_code == doc.item_code), None)
+	if not row:
+		frappe.throw(_("The source row for this inspection was not found."))
+	if doc.reference_type == "Pick List":
+		from connect_diagnostics_setup.stock.outgoing_inspection import units
+		source_units = units(row)
+	else:
+		source_units = receipt_units(row)
+	unit = match_unit(source_units, doc.batch_no, None)
+	if not unit:
+		frappe.throw(_("The inspection unit does not match the receipt."))
+	from erpnext.stock.doctype.serial_no.serial_no import get_serial_nos
+
+	rejected = set(get_serial_nos(doc.purchase_rejected_serials or ""))
+	return [{"serial_no": serial, "result": "Rejected" if serial in rejected else "Accepted"} for serial in unit["serials"]]
 
 
 def freeze_purchase_inspection_granularity(doc):
@@ -131,13 +164,20 @@ def new_purchase_inspection(doc, row, unit, remarks=None):
 			"inspected_by": frappe.session.user,
 			"remarks": remarks
 			or _("Goods at the receiving location ({0} row {1})").format(doc.name, row.idx),
-			"manual_inspection": 1,
+			"manual_inspection": 0,
 		}
 	)
+	if not unit["serial_no"]:
+		for serial in unit["serials"]:
+			inspection.append("purchase_serial_results", {"serial_no": serial, "result": "Accepted"})
 	if inspection.quality_inspection_template:
 		inspection.get_item_specification_details()
+		from erpnext.stock.doctype.quality_inspection_reading.quality_inspection_reading import (
+			has_automatic_criteria,
+		)
+
 		for reading in inspection.get("readings") or []:
-			reading.manual_inspection = 1
+			reading.manual_inspection = int(not has_automatic_criteria(reading))
 			reading.status = ""
 	return inspection
 
@@ -443,11 +483,11 @@ def remaining_result_parts(unit, inspection, movements):
 def remaining_inspection_results(units, inspections, held_parts, movements):
 	"""Reconcile final inspection quantities against stock still held for this receipt row."""
 	progress = inspection_progress(units, inspections)
-	if any(entry["state"] != "submitted" for entry in progress):
-		raise ValueError("Every receipt unit must have a submitted inspection")
 	held = {part.get("batch_no"): part for part in held_parts}
 	results = []
 	for entry in progress:
+		if entry["state"] != "submitted":
+			continue
 		unit = entry["unit"]
 		batch = unit["batch_no"]
 		available = held.get(batch, {})
@@ -500,6 +540,17 @@ def validate_purchase_unit_inspection(doc, reference, row, method):
 		doc.purchase_accepted_qty = 1 if doc.status == "Accepted" else 0
 		doc.purchase_rejected_qty = 1 - doc.purchase_accepted_qty
 		doc.purchase_rejected_serials = unit["serial_no"] if doc.purchase_rejected_qty else ""
+	elif doc.get("purchase_serial_results"):
+		results = doc.get("purchase_serial_results")
+		serials = [row.get("serial_no") for row in results]
+		if len(serials) != len(set(serials)) or set(serials) != set(unit["serials"]):
+			frappe.throw(_("Serial numbers must match the received inspection unit."))
+		if any(row.get("result") not in ("Accepted", "Rejected") for row in results):
+			frappe.throw(_("Choose Accepted or Rejected for every serial number."))
+		rejected = [row.get("serial_no") for row in results if row.get("result") == "Rejected"]
+		doc.purchase_rejected_serials = "\n".join(rejected)
+		doc.purchase_rejected_qty = len(rejected)
+		doc.purchase_accepted_qty = len(serials) - len(rejected)
 	try:
 		validate_result(
 			unit,
@@ -918,15 +969,22 @@ def purchase_release_parts(doc, row, current=False, location=None):
 		frappe.throw(_("Row {0} ({1}): {2}.").format(row.idx, row.item_code, str(exc)))
 
 
-def write_off_warehouse(company):
-	"""The company's Write-Off warehouse (Warehouse Type "Write-Off", not a group): the DAMAGE warehouse."""
-	rows = frappe.get_all(
-		"Warehouse",
-		filters={"company": company, "warehouse_type": "Write-Off", "is_group": 0, "disabled": 0},
-		pluck="name",
-		order_by="name",
-	)
-	return rows[0] if rows else None
+def write_off_warehouse(company, source_warehouse=None):
+	"""Return the source warehouse's configured damage warehouse, when it is valid."""
+	if not company:
+		return None
+	if not source_warehouse:
+		matches = frappe.get_all("Warehouse", filters={"company": company, "warehouse_type": "Write-Off", "is_group": 0, "disabled": 0}, pluck="name", limit_page_length=2)
+		return matches[0] if len(matches) == 1 else None
+	if not frappe.db.has_column("Warehouse", "damage_warehouse"):
+		return None
+	source = frappe.db.get_value("Warehouse", source_warehouse, ["company", "damage_warehouse"], as_dict=True)
+	if not source or source.company != company or not source.damage_warehouse:
+		return None
+	target = frappe.db.get_value("Warehouse", source.damage_warehouse, ["company", "warehouse_type", "is_group", "disabled"], as_dict=True)
+	if not target or target.company != company or target.warehouse_type != "Write-Off" or target.is_group or target.disabled:
+		return None
+	return source.damage_warehouse
 
 
 def _preferred_location(item_code, warehouse):
@@ -959,9 +1017,7 @@ def build_release_entry(doc, sources, rows):
 		stock_uom = source.get("stock_uom") or frappe.db.get_value("Item", row["item_code"], "stock_uom")
 		rejected = row["status"] == "Rejected"
 		target = (
-			write_off_warehouse(doc.company)
-			if rejected and row.get("staging")
-			else None
+			write_off_warehouse(doc.company, row.get("home") or row.get("quarantine"))
 			if rejected
 			else row["home"]
 		)

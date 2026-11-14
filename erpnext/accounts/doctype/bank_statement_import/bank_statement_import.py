@@ -11,13 +11,16 @@ from datetime import date, datetime
 import frappe
 import mt940
 import openpyxl
+import xlsxwriter
 from frappe import _
 from frappe.core.doctype.data_import.data_import import DataImport
 from frappe.core.doctype.data_import.importer import Importer, ImportFile
+from frappe.integrations.doctype.google_cloud_storage_settings import storage as gcs_storage
+from frappe.integrations.doctype.google_cloud_storage_settings.cutover_lock import register_writer
 from frappe.query_builder.functions import Count
 from frappe.utils.background_jobs import enqueue
 from frappe.utils.file_manager import get_file, save_file
-from frappe.utils.xlsxutils import ILLEGAL_CHARACTERS_RE, handle_html
+from frappe.utils.xlsxutils import ILLEGAL_CHARACTERS_RE, handle_html, make_xlsx
 from openpyxl.styles import Font
 from openpyxl.utils import get_column_letter
 
@@ -343,11 +346,28 @@ def add_bank_account(data, bank_account):
 
 def write_files(import_file, data):
 	"""Write processed data to CSV or Excel files."""
-	full_file_path = import_file.file_doc.get_full_path()
+	register_writer()
 	parts = import_file.file_doc.get_extension()
 	extension = parts[1]
 	extension = extension.lstrip(".")
 
+	if gcs_storage.enabled():
+		if extension == "csv":
+			content = io.StringIO(newline="")
+			csv.writer(content).writerows(data)
+		elif extension in ("xlsx", "xls"):
+			content = io.BytesIO()
+			with xlsxwriter.Workbook(content, {"in_memory": True}) as wb:
+				make_xlsx(data, "trans", wb=wb)
+		else:
+			return
+		import_file.file_doc.save_file(
+			content=content.getvalue(), overwrite=True, ignore_existing_file_check=True
+		)
+		import_file.file_doc.db_update()
+		return
+
+	full_file_path = import_file.file_doc.get_full_path()
 	if extension == "csv":
 		with open(full_file_path, "w", newline="") as file:
 			writer = csv.writer(file)

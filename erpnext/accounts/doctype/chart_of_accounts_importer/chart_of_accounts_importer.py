@@ -3,16 +3,18 @@
 
 
 import csv
+import io
 import os
 from functools import reduce
 
 import frappe
+import xlsxwriter
 from frappe import _
 from frappe.core.doctype.file.utils import find_file_by_url
 from frappe.desk.form.linked_with import get_linked_fields
 from frappe.model.document import Document
 from frappe.utils import cint, cstr
-from frappe.utils.csvutils import UnicodeWriter
+from frappe.utils.csvutils import UnicodeWriter, read_csv_content
 from frappe.utils.xlsxutils import (
 	read_xls_file_from_attached_file,
 	read_xlsx_file_from_attached_file,
@@ -134,22 +136,19 @@ def get_file(file_name):
 def generate_data_from_csv(file_doc, as_dict=False):
 	"""read csv file and return the generated nested tree"""
 
-	file_path = file_doc.get_full_path()
-
 	data = []
-	with open(file_path) as in_file:
-		csv_reader = list(csv.reader(in_file))
-		headers = csv_reader[0]
-		del csv_reader[0]  # delete top row and headers row
+	csv_reader = read_csv_content(file_doc.get_content())
+	headers = csv_reader[0]
+	del csv_reader[0]  # delete top row and headers row
 
-		for row in csv_reader:
-			if as_dict:
-				data.append({frappe.scrub(header): row[index] for index, header in enumerate(headers)})
-			else:
-				if not row[1] and len(row) > 1:
-					row[1] = row[0]
-					row[3] = row[2]
-				data.append(row)
+	for row in csv_reader:
+		if as_dict:
+			data.append({frappe.scrub(header): row[index] for index, header in enumerate(headers)})
+		else:
+			if not row[1] and len(row) > 1:
+				row[1] = row[0]
+				row[3] = row[2]
+			data.append(row)
 
 	# convert csv data
 	return data
@@ -311,18 +310,13 @@ def build_forest(data):
 
 
 def build_response_as_excel(writer):
-	filename = frappe.generate_hash("", 10)
-	with open(filename, "wb") as f:
-		f.write(cstr(writer.getvalue()).encode("utf-8"))
-	f = open(filename)
-	reader = csv.reader(f)
+	reader = csv.reader(io.StringIO(cstr(writer.getvalue()), newline=""))
 
 	from frappe.utils.xlsxutils import make_xlsx
 
-	xlsx_file = make_xlsx(reader, "Chart of Accounts Importer Template")
-
-	f.close()
-	os.remove(filename)
+	xlsx_file = io.BytesIO()
+	with xlsxwriter.Workbook(xlsx_file, {"in_memory": True}) as wb:
+		make_xlsx(reader, "Chart of Accounts Importer Template", wb=wb)
 
 	# write out response as a xlsx type
 	frappe.response["filename"] = "coa_importer_template.xlsx"

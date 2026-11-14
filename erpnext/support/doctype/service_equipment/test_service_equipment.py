@@ -199,11 +199,15 @@ class TestEquipmentRecord(Offline):
 		return doc
 
 	def test_identity_defaults(self):
-		self.db.get_single_value.return_value = "SUP-1"
 		doc = self.record()
 		doc.before_validate()
 		self.assertEqual((doc.equipment_id, doc.equipment_name, doc.serial_no), ("EQ-1", "EQ-1", "SN-9"))
-		self.assertEqual(doc.owner_supplier, "SUP-1")
+		self.assertEqual(doc.owner_type, "Customer")
+
+	def test_existing_supplier_owner_is_preserved(self):
+		doc = self.record(owner_supplier="SUP-1")
+		doc.before_validate()
+		self.assertEqual(doc.owner_type, "Supplier")
 
 	def test_the_place_changes_only_by_movement(self):
 		doc = self.record(location="Store", custodian=None, address=None, placed_on=None, last_movement=None)

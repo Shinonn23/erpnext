@@ -1361,7 +1361,7 @@ def get_loss_warehouses(company, warehouse=None):
 	frappe.has_permission("Stock Count", "read", throw=True)
 	return {
 		"lost": get_lost_warehouse(company, exclude=warehouse, counted=warehouse),
-		"found": get_found_warehouse(company, exclude=warehouse, counted=warehouse),
+		"found": None,
 	}
 
 

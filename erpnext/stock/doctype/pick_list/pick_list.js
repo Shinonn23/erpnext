@@ -191,11 +191,13 @@ frappe.ui.form.on("Pick List", {
 							frappe.set_route("Form", "Custody Loan", frm.doc.custody_loan)
 						);
 					} else {
-						frm.add_custom_button(
-							__("Delivery Note"),
-							() => frm.events.create_delivery(frm, "Delivery Note"),
-							__("Create")
-						);
+						if ((frm.doc.locations || []).every((row) => row.outgoing_inspection_requirement === "Not Required")) {
+							frm.add_custom_button(
+								__("Delivery Note"),
+								() => frm.events.create_delivery(frm, "Delivery Note"),
+								__("Create")
+							);
+						}
 						frm.add_custom_button(
 							__("Sales Invoice"),
 							() => frm.events.create_delivery(frm, "Sales Invoice"),

@@ -9,7 +9,7 @@ Location. It is not an Asset: it has no value, depreciation, GL Entry, capitaliz
 optional Stock Serial No, Owner Supplier, responsible Company, status, received date), the current place (Location,
 custodian, customer, address, placed on, last movement; read only, written by a submitted Asset Movement), the service
 plan and cover (technician, Asset Maintenance Team, contract, warranty and contract end, next PM and calibration from
-its Asset Maintenance) and the import source. `Service Equipment Settings.supplier` is the default Owner Supplier.
+its Asset Maintenance) and the import source. Owners are chosen directly on each equipment record.
 `Service Equipment Check` is the checklist row of a Maintenance Visit, naming the equipment it was read on.
 
 Statuses: Received, Installed, In Service, Under Repair, Out of Order, Returned to Supplier, Retired.

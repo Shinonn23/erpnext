@@ -118,6 +118,9 @@ class PickList(TransactionBase):
 
 		validate_document_policy(self)
 		self.keep_manual_picking()
+		for row in self.locations:
+			if (row.serial_no or row.batch_no) and not row.serial_and_batch_bundle:
+				row.use_serial_batch_fields = 1
 		self.validate_picked_serial_batch()
 		self.validate_customer_demo_workflow()
 		self.validate_custody_loan()
@@ -555,7 +558,7 @@ class PickList(TransactionBase):
 		from erpnext.stock.doctype.serial_no.serial_no import get_serial_nos
 
 		for row in self.locations:
-			if not row.serial_no and not row.batch_no:
+			if (not row.serial_no and not row.batch_no) or row.serial_and_batch_bundle:
 				continue
 
 			if not row.use_serial_batch_fields and (row.serial_no or row.batch_no):
@@ -1235,7 +1238,8 @@ def get_picked_items_qty(items, contains_packed_items=False) -> list[dict]:
 			pi_item.sales_order,
 		).where(pi_item.sales_order_item.isin(items))
 
-	return query.run(as_dict=True)
+	from connect_diagnostics_setup.stock.outgoing_inspection import adjust_picked_totals
+	return adjust_picked_totals(query.run(as_dict=True), contains_packed_items)
 
 
 @frappe.whitelist()
@@ -1802,6 +1806,9 @@ def create_delivery_wo_so(pick_list, target, target_doc=None):
 		},
 	}
 	map_pl_locations(pick_list, item_table_mapper_without_so, target_doc)
+	if target == "Delivery Note":
+		from connect_diagnostics_setup.stock.outgoing_inspection import prepare_delivery
+		prepare_delivery(target_doc, pick_list)
 	target_doc.flags.ignore_mandatory = True
 	if target == "Sales Invoice":
 		target_doc.update_stock = 1
@@ -1863,6 +1870,9 @@ def create_delivery_with_so(sales_dict, pick_list, target):
 	for key in sales_dict:
 		document = create_delivery_from_so(pick_list, sales_dict[key], target)
 		if document:
+			if target == "Delivery Note":
+				from connect_diagnostics_setup.stock.outgoing_inspection import prepare_delivery
+				prepare_delivery(document, pick_list)
 			document.flags.ignore_mandatory = True
 			# updates packed_items on save
 			# save as multiple customers are possible

@@ -242,6 +242,8 @@ class QualityInspection(Document):
 				frappe.throw(_("Row #{0}: Status is mandatory").format(reading.idx))
 
 	def update_qc_reference(self, remove_reference=False):
+		if self.reference_type == "Pick List":
+			return
 		quality_inspection = self.name if self.docstatus < 2 and not remove_reference else ""
 
 		if self.reference_type == "Job Card":
@@ -295,14 +297,31 @@ class QualityInspection(Document):
 
 	def inspect_and_set_status(self):
 		for reading in self.readings:
+			if (
+				self.get("purchase_unit_qty") and cint(reading.manual_inspection) and cint(reading.numeric)
+				and (reading.get("min_value") or reading.get("max_value"))
+				and any(str(reading.get(f"reading_{i}") or "").strip() for i in range(1, 11))
+				and not self.min_max_criteria_passed(reading)
+			):
+				reading.status = "Rejected"
 			if not reading.manual_inspection:  # dont auto set status if manual
+				if self.get("purchase_unit_qty") and not any(
+					str(reading.get(field) or "").strip()
+					for field in ("reading_value", *(f"reading_{i}" for i in range(1, 11)))
+				):
+					reading.status = ""
+					continue
 				if reading.formula_based_criteria:
 					self.set_status_based_on_acceptance_formula(reading)
 				else:
 					# if not formula based check acceptance values set
 					self.set_status_based_on_acceptance_values(reading)
 
-		if not self.manual_inspection:
+		if self.get("purchase_unit_qty") and (
+			flt(self.get("purchase_rejected_qty")) > 0 or any(reading.status == "Rejected" for reading in self.readings)
+		):
+			self.status = "Rejected"
+		elif not self.manual_inspection:
 			self.status = "Accepted"
 			for reading in self.readings:
 				if reading.status == "Rejected":
@@ -324,7 +343,9 @@ class QualityInspection(Document):
 		before_save = self.get_doc_before_save()
 
 		for reading in self.readings:
-			if not cint(reading.numeric) or cint(reading.manual_inspection):
+			if not cint(reading.numeric) or (cint(reading.manual_inspection) and not (
+				self.get("purchase_unit_qty") and (reading.get("min_value") or reading.get("max_value"))
+			)):
 				continue
 
 			stored = before_save and before_save.get("readings", {"name": reading.name})

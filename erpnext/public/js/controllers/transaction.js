@@ -438,6 +438,7 @@ erpnext.TransactionController = class TransactionController extends erpnext.taxe
 		const me = this;
 		if (
 			!this.frm.is_new() &&
+			!(["Purchase Receipt", "Purchase Invoice"].includes(this.frm.doc.doctype) && !this.frm.doc.is_return) &&
 			qc_stage_open &&
 			frappe.model.can_create("Quality Inspection") &&
 			show_qc_button

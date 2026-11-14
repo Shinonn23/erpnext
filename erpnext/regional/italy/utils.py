@@ -131,9 +131,8 @@ def download_zip(files, output_filename):
 	zip_stream = io.BytesIO()
 	with zipfile.ZipFile(zip_stream, "w", zipfile.ZIP_DEFLATED) as zip_file:
 		for file in files:
-			file_path = frappe.utils.get_files_path(file.file_name, is_private=file.is_private)
-
-			zip_file.write(file_path, arcname=file.file_name)
+			file_doc = frappe.get_doc("File", file.name)
+			zip_file.writestr(file.file_name, file_doc.get_content(encodings=[]))
 
 	frappe.local.response.filename = output_filename
 	frappe.local.response.filecontent = zip_stream.getvalue()

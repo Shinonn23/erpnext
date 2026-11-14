@@ -11,6 +11,7 @@
   "fg_item",
   "fg_item_qty",
   "item_code",
+  "supplier_catalog_item",
   "supplier_part_no",
   "item_name",
   "brand",
@@ -1093,6 +1094,14 @@
    "label": "Coverage Date",
    "no_copy": 1,
    "read_only": 1
+  },
+  {
+   "fieldname": "supplier_catalog_item",
+   "fieldtype": "Link",
+   "label": "Supplier Catalog Item",
+   "options": "Supplier Catalog Item",
+   "insert_after": "item_code",
+   "in_list_view": 0
   }
  ],
  "grid_page_length": 50,
