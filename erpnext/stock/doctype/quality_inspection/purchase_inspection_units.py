@@ -88,37 +88,6 @@ def receipt_units(row):
 		frappe.throw(_("Row {0} ({1}): {2}.").format(row.idx, row.item_code, str(exc)))
 
 
-@frappe.whitelist()
-def inspection_serial_results(name):
-	"""Return received serials for an existing lot inspection without changing its draft."""
-	doc = frappe.get_doc("Quality Inspection", name)
-	doc.check_permission("read")
-	if doc.reference_type not in ("Purchase Receipt", "Purchase Invoice", "Pick List") or not doc.purchase_unit_qty or doc.item_serial_no:
-		return []
-	reference = frappe.get_doc(doc.reference_type, doc.reference_name)
-	reference.check_permission("read")
-	if doc.reference_type == "Pick List":
-		from connect_diagnostics_setup.stock.outgoing_inspection import source_rows
-		rows = source_rows(reference)
-	else:
-		rows = reference.items
-	row = next((r for r in rows if r.name == doc.child_row_reference and r.item_code == doc.item_code), None)
-	if not row:
-		frappe.throw(_("The source row for this inspection was not found."))
-	if doc.reference_type == "Pick List":
-		from connect_diagnostics_setup.stock.outgoing_inspection import units
-		source_units = units(row)
-	else:
-		source_units = receipt_units(row)
-	unit = match_unit(source_units, doc.batch_no, None)
-	if not unit:
-		frappe.throw(_("The inspection unit does not match the receipt."))
-	from erpnext.stock.doctype.serial_no.serial_no import get_serial_nos
-
-	rejected = set(get_serial_nos(doc.purchase_rejected_serials or ""))
-	return [{"serial_no": serial, "result": "Rejected" if serial in rejected else "Accepted"} for serial in unit["serials"]]
-
-
 def freeze_purchase_inspection_granularity(doc):
 	"""Keep the inspection unit chosen when a stock purchase is submitted."""
 	if doc.get("docstatus") != 1 or doc.get("is_return"):
@@ -167,9 +136,16 @@ def new_purchase_inspection(doc, row, unit, remarks=None):
 			"manual_inspection": 0,
 		}
 	)
-	if not unit["serial_no"]:
+	if doc.doctype == "Pick List" and not unit["serial_no"]:
 		for serial in unit["serials"]:
 			inspection.append("purchase_serial_results", {"serial_no": serial, "result": "Accepted"})
+	if unit.get("dispatch_id"):
+		inspection.update({
+			"purchase_dispatch_id": unit["dispatch_id"],
+			"purchase_dispatch_warehouse": unit["warehouse"],
+			"purchase_dispatch_location": unit.get("storage_location"),
+			"purchase_dispatch_serials": "\n".join(unit["serials"]),
+		})
 	if inspection.quality_inspection_template:
 		inspection.get_item_specification_details()
 		from erpnext.stock.doctype.quality_inspection_reading.quality_inspection_reading import (
@@ -228,17 +204,19 @@ def has_active_serial_outflow(inspection, row, unit):
 	"""Find an unreversed movement even if a later transfer brought the serial back."""
 	if not unit["serials"] or not inspection.get("creation"):
 		return False
-	location_filter = (
-		"and coalesce(nullif(entry.storage_location, ''), sle.storage_location) = %(location)s"
-		if row.get("storage_location")
-		else ""
-	)
+	internal_location_move = """
+		and not (sle.voucher_type = 'Stock Entry' and exists (
+			select 1 from `tabStock Entry Detail` detail join `tabStock Entry` transfer on transfer.name = detail.parent
+			where detail.name = sle.voucher_detail_no and transfer.purpose = 'Material Transfer'
+			and detail.s_warehouse = detail.t_warehouse
+			and detail.storage_location != detail.to_storage_location
+		))
+	"""
 	params = {
 		"item": row.item_code,
 		"warehouse": row.warehouse,
 		"created": inspection.creation,
 		"serials": tuple(unit["serials"]),
-		"location": row.get("storage_location"),
 	}
 	if frappe.db.sql(
 		"""select entry.serial_no from `tabStock Ledger Entry` sle
@@ -246,20 +224,19 @@ def has_active_serial_outflow(inspection, row, unit):
 		where sle.item_code = %(item)s and sle.warehouse = %(warehouse)s and sle.is_cancelled = 0
 		and sle.actual_qty < 0 and sle.creation >= %(created)s and entry.serial_no in %(serials)s
 		"""
-		+ location_filter
+		+ internal_location_move
 		+ " limit 1 for update",
 		params,
 	):
 		return True
 	from erpnext.stock.doctype.serial_no.serial_no import get_serial_nos
 
-	legacy_location = "and sle.storage_location = %(location)s" if row.get("storage_location") else ""
 	legacy = frappe.db.sql(
 		"""select sle.serial_no from `tabStock Ledger Entry` sle
 		where sle.item_code = %(item)s and sle.warehouse = %(warehouse)s and sle.is_cancelled = 0
 		and sle.actual_qty < 0 and sle.creation >= %(created)s and coalesce(sle.serial_no, '') != ''
 		"""
-		+ legacy_location
+		+ internal_location_move
 		+ " for update",
 		params,
 		as_dict=True,
@@ -304,6 +281,13 @@ def serial_inspection_history(serial_no):
 def inspections_for_row(doc, row, lock=False):
 	fields = [
 		"name",
+		"modified",
+		"creation",
+		"amended_from",
+		"purchase_dispatch_id",
+		"purchase_dispatch_warehouse",
+		"purchase_dispatch_location",
+		"purchase_dispatch_serials",
 		"status",
 		"docstatus",
 		"batch_no",
@@ -326,35 +310,79 @@ def inspections_for_row(doc, row, lock=False):
 	return frappe.get_all("Quality Inspection", filters=filters, fields=fields, order_by="creation")
 
 
+def inspection_unit(units, inspection):
+	"""Match an immutable dispatched slice, or an existing whole receipt-unit inspection."""
+	unit = match_unit(units, inspection.get("batch_no"), inspection.get("item_serial_no"))
+	if not unit and inspection.get("purchase_dispatch_id") and inspection.get("item_serial_no"):
+		unit = next((row for row in units if (row["batch_no"] or None) == (inspection.get("batch_no") or None)
+			and inspection.get("item_serial_no") in row["serials"]), None)
+	if not unit:
+		return None
+	if not inspection.get("purchase_dispatch_id"):
+		return dict(unit)
+	serials = [serial.strip() for serial in (inspection.get("purchase_dispatch_serials") or "").splitlines()
+		if serial.strip()]
+	if inspection.get("item_serial_no") and serials != [inspection.get("item_serial_no")]:
+		raise ValueError("An individual inspection must match its single serial number")
+	qty = flt(inspection.get("purchase_unit_qty"))
+	if (not isfinite(qty) or qty <= 0 or qty > unit["qty"] + 1e-9
+		or len(serials) != len(set(serials))
+		or not set(serials).issubset(unit["serials"])
+		or (unit["serials"] and abs(len(serials) - qty) > 1e-9)
+		or (not unit["serials"] and serials)
+		or not inspection.get("purchase_dispatch_warehouse")):
+		raise ValueError("Dispatched inspection does not match its received quantity and serial numbers")
+	return {**unit, "serial_no": inspection.get("item_serial_no"), "qty": qty, "serials": serials,
+		"dispatch_id": inspection.get("purchase_dispatch_id"),
+		"warehouse": inspection.get("purchase_dispatch_warehouse"),
+		"storage_location": inspection.get("purchase_dispatch_location")}
+
+
 def inspection_progress(units, inspections):
-	"""Match active inspections to receipt units without changing any stored result."""
-	matched = {}
+	"""Partition received units into disjoint active slices and undispatched quantities."""
+	inspections = [qi for qi in inspections if qi.get("docstatus") != 2]
 	legacy = [qi for qi in inspections if not flt(qi.get("purchase_unit_qty"))]
 	if legacy:
 		if len(inspections) != 1:
 			raise ValueError("Legacy inspection cannot be safely matched to receipt units")
-		matched = dict.fromkeys(range(len(units)), legacy[0])
-	else:
-		for qi in inspections:
-			unit = match_unit(units, qi.get("batch_no"), qi.get("item_serial_no"))
-			if unit is None or abs(flt(qi.get("purchase_unit_qty")) - unit["qty"]) > 1e-9:
-				raise ValueError("Inspection no longer matches the received unit")
-			index = units.index(unit)
-			if index in matched:
-				raise ValueError("More than one inspection covers the same unit")
-			matched[index] = qi
-	return [
-		{
-			"unit": unit,
-			"inspection": matched.get(index),
-			"state": "missing"
-			if index not in matched
-			else "submitted"
-			if matched[index].get("docstatus") == 1
-			else "draft",
-		}
-		for index, unit in enumerate(units)
-	]
+		return [{"unit": unit, "inspection": legacy[0],
+			"state": "submitted" if legacy[0].get("docstatus") == 1 else "draft"} for unit in units]
+	matched, seen_ids = defaultdict(list), set()
+	for qi in inspections:
+		unit = inspection_unit(units, qi)
+		if unit is None or abs(flt(qi.get("purchase_unit_qty")) - unit["qty"]) > 1e-9:
+			raise ValueError("Inspection no longer matches the received unit")
+		base = match_unit(units, qi.get("batch_no"), qi.get("item_serial_no"))
+		if not base and qi.get("purchase_dispatch_id") and qi.get("item_serial_no"):
+			base = next((row for row in units if (row["batch_no"] or None) == (qi.get("batch_no") or None)
+				and qi.get("item_serial_no") in row["serials"]), None)
+		identity = qi.get("purchase_dispatch_id")
+		if identity:
+			if identity in seen_ids:
+				raise ValueError("More than one inspection covers the same dispatched slice")
+			seen_ids.add(identity)
+		matched[units.index(base)].append((unit, qi))
+	progress = []
+	for index, base in enumerate(units):
+		covered, serials = 0, set()
+		entries = matched[index]
+		if len(entries) > 1 and any(not unit.get("dispatch_id") for unit, _ in entries):
+			raise ValueError("More than one inspection covers the same unit")
+		for unit, qi in entries:
+			if serials.intersection(unit["serials"]):
+				raise ValueError("More than one inspection covers the same serial number")
+			serials.update(unit["serials"])
+			covered += unit["qty"]
+			progress.append({"unit": unit, "inspection": qi,
+				"state": "submitted" if qi.get("docstatus") == 1 else "draft"})
+		remaining = base["qty"] - covered
+		if remaining < -1e-9:
+			raise ValueError("Dispatched quantities exceed the received unit")
+		if remaining > 1e-9:
+			progress.append({"unit": {**base, "qty": remaining,
+				"serials": [serial for serial in base["serials"] if serial not in serials]},
+				"inspection": None, "state": "missing"})
+	return progress
 
 
 def create_purchase_unit_inspections(doc, row, progress):
@@ -416,7 +444,7 @@ def summarize_progress(units, inspections):
 	"""Count received units and final result quantities without treating drafts as inspected."""
 	progress = inspection_progress(units, inspections)
 	summary = {
-		"required": len(units),
+		"required": 0,
 		"missing": 0,
 		"draft": 0,
 		"submitted": 0,
@@ -424,7 +452,9 @@ def summarize_progress(units, inspections):
 		"rejected_qty": 0,
 	}
 	for entry in progress:
-		summary[entry["state"]] += 1
+		count = len(entry["unit"]["serials"]) if entry["state"] == "missing" and entry["unit"]["serials"] else 1
+		summary["required"] += count
+		summary[entry["state"]] += count
 		if entry["state"] == "submitted":
 			parts = result_parts(entry["unit"], entry["inspection"])
 			summary["accepted_qty"] += parts["accepted"]["qty"]
@@ -514,7 +544,10 @@ def validate_purchase_unit_inspection(doc, reference, row, method):
 	from erpnext.stock.doctype.serial_no.serial_no import get_serial_nos
 
 	units = receipt_units(row)
-	unit = match_unit(units, doc.get("batch_no"), doc.get("item_serial_no"))
+	try:
+		unit = inspection_unit(units, doc)
+	except ValueError as exc:
+		frappe.throw(_(str(exc)))
 	if (
 		not unit
 		or doc.get("item_code") != row.item_code
@@ -523,13 +556,34 @@ def validate_purchase_unit_inspection(doc, reference, row, method):
 		frappe.throw(
 			_("The inspection unit must match the received Item, Batch, Serial Number and quantity.")
 		)
-	if flt(doc.get("sample_size")) > unit["qty"]:
+	if not unit.get("dispatch_id") and flt(doc.get("sample_size")) > unit["qty"]:
 		frappe.throw(_("The sample size cannot exceed the received unit quantity."))
-	for other in inspections_for_row(reference, row, lock=True):
-		if other.name == doc.get("name"):
-			continue
-		if not flt(other.purchase_unit_qty) or match_unit([unit], other.batch_no, other.item_serial_no):
-			frappe.throw(_("Quality Inspection {0} already covers this receipt unit.").format(other.name))
+	previous = doc.get_doc_before_save() if callable(getattr(doc, "get_doc_before_save", None)) else None
+	identity_fields = ("reference_type", "reference_name", "child_row_reference", "item_code", "batch_no",
+		"item_serial_no", "purchase_unit_qty", "purchase_dispatch_id", "purchase_dispatch_warehouse",
+		"purchase_dispatch_location", "purchase_dispatch_serials")
+	if unit.get("dispatch_id") and doc.is_new() and not doc.flags.get("stock_dispatch"):
+		amended = frappe.get_doc("Quality Inspection", doc.amended_from) if doc.get("amended_from") else None
+		if (not amended or cint(amended.docstatus) != 2
+			or any(amended.get(field) != doc.get(field) for field in identity_fields)):
+			frappe.throw(_("Only Stock can create a dispatched inspection slice."), frappe.PermissionError)
+	if previous and any(previous.get(field) != doc.get(field) for field in identity_fields):
+		frappe.throw(_("The received inspection unit and dispatched slice cannot be changed."))
+	if unit["serials"] and not unit["serial_no"] and not previous and doc.get("reference_type") != "Pick List":
+		amended = frappe.get_doc("Quality Inspection", doc.amended_from) if doc.get("amended_from") else None
+		original_serials = [result.get("serial_no") for result in amended.get("purchase_serial_results") or []] if amended else []
+		serials = [result.get("serial_no") for result in doc.get("purchase_serial_results") or []]
+		if (not amended or cint(amended.docstatus) != 2
+			or any(amended.get(field) != doc.get(field) for field in identity_fields)
+			or len(original_serials) != len(set(original_serials))
+			or set(original_serials) != set(unit["serials"])
+			or len(serials) != len(set(serials)) or set(serials) != set(original_serials)):
+			frappe.throw(_("Create a separate Quality Inspection for each Serial Number."))
+	others = [other for other in inspections_for_row(reference, row, lock=True) if other.name != doc.get("name")]
+	try:
+		inspection_progress(units, [*others, doc])
+	except ValueError as exc:
+		frappe.throw(_(str(exc)))
 	if method != "before_submit":
 		return
 	if doc.get("status") not in ("Accepted", "Rejected") or not doc.get("readings"):
@@ -540,17 +594,27 @@ def validate_purchase_unit_inspection(doc, reference, row, method):
 		doc.purchase_accepted_qty = 1 if doc.status == "Accepted" else 0
 		doc.purchase_rejected_qty = 1 - doc.purchase_accepted_qty
 		doc.purchase_rejected_serials = unit["serial_no"] if doc.purchase_rejected_qty else ""
-	elif doc.get("purchase_serial_results"):
-		results = doc.get("purchase_serial_results")
-		serials = [row.get("serial_no") for row in results]
-		if len(serials) != len(set(serials)) or set(serials) != set(unit["serials"]):
-			frappe.throw(_("Serial numbers must match the received inspection unit."))
-		if any(row.get("result") not in ("Accepted", "Rejected") for row in results):
-			frappe.throw(_("Choose Accepted or Rejected for every serial number."))
-		rejected = [row.get("serial_no") for row in results if row.get("result") == "Rejected"]
-		doc.purchase_rejected_serials = "\n".join(rejected)
-		doc.purchase_rejected_qty = len(rejected)
-		doc.purchase_accepted_qty = len(serials) - len(rejected)
+	elif unit["serials"]:
+		results = doc.get("purchase_serial_results") or []
+		if results:
+			serials = [result.get("serial_no") for result in results]
+			if len(serials) != len(set(serials)) or set(serials) != set(unit["serials"]):
+				frappe.throw(_("Serial numbers must match the received inspection unit."))
+			if any(result.get("result") not in ("Accepted", "Rejected") for result in results):
+				frappe.throw(_("Choose Accepted or Rejected for every serial number."))
+			rejected = [result.get("serial_no") for result in results if result.get("result") == "Rejected"]
+			doc.purchase_rejected_serials = "\n".join(rejected)
+			doc.purchase_rejected_qty = len(rejected)
+			doc.purchase_accepted_qty = len(serials) - len(rejected)
+		elif doc.get("reference_type") == "Pick List":
+			doc.purchase_accepted_qty = unit["qty"] if doc.status == "Accepted" else 0
+			doc.purchase_rejected_qty = unit["qty"] - doc.purchase_accepted_qty
+			doc.purchase_rejected_serials = "\n".join(unit["serials"]) if doc.purchase_rejected_qty else ""
+	elif unit.get("dispatch_id"):
+		doc.purchase_accepted_qty = unit["qty"] if doc.status == "Accepted" else 0
+		doc.purchase_rejected_qty = unit["qty"] - doc.purchase_accepted_qty
+		doc.purchase_rejected_serials = ""
+
 	try:
 		validate_result(
 			unit,
@@ -562,16 +626,14 @@ def validate_purchase_unit_inspection(doc, reference, row, method):
 		frappe.throw(_(str(exc)))
 	if bool(flt(doc.get("purchase_rejected_qty"))) != (doc.status == "Rejected"):
 		frappe.throw(_("Use Rejected status if any quantity is rejected; otherwise use Accepted."))
-	rejected = set(get_serial_nos(doc.get("purchase_rejected_serials") or ""))
-	doc.set("purchase_serial_results", [])
-	for serial in unit["serials"]:
-		doc.append(
-			"purchase_serial_results",
-			{
-				"serial_no": serial,
-				"result": "Rejected" if serial in rejected else "Accepted",
-			},
-		)
+
+	if unit["serials"] and (not unit["serial_no"] or doc.get("purchase_serial_results")):
+		rejected = set(get_serial_nos(doc.get("purchase_rejected_serials") or ""))
+		doc.set("purchase_serial_results", [])
+		for serial in unit["serials"]:
+			doc.append("purchase_serial_results", {
+				"serial_no": serial, "result": "Rejected" if serial in rejected else "Accepted",
+			})
 
 
 def _inspected_when_moved(leg, at):
@@ -959,6 +1021,24 @@ def purchase_release_parts(doc, row, current=False, location=None):
 	"""The inspected quantities still at this receipt row's receiving location."""
 	units = receipt_units(row)
 	inspections = inspections_for_row(doc, row, lock=current)
+	if any(inspection.get("purchase_dispatch_id") for inspection in inspections):
+		from connect_diagnostics_setup.stock.incoming_quality import inspection_positions
+
+		results = []
+		for entry in inspection_progress(units, inspections):
+			if entry["state"] != "submitted":
+				continue
+			positions = [position for position in inspection_positions(doc, row, entry["inspection"], current=current)
+				if position["warehouse"] == row.warehouse
+				and (location is None or position.get("storage_location") == location)]
+			parts = {}
+			for kind, state in (("accepted", ""), ("rejected", "rejected")):
+				selected = [position for position in positions if position["state"] == state]
+				parts[kind] = {"qty": sum(position["qty"] for position in selected),
+					"batch_no": entry["unit"]["batch_no"],
+					"serial_nos": [position["serial_no"] for position in selected if position.get("serial_no")]}
+			results.append({"unit": entry["unit"], "inspection": entry["inspection"], **parts})
+		return results
 	held = remaining_parts(doc, row, row.warehouse, current=current, location=location)
 	movements = {}
 	if not any(unit["serials"] for unit in units):
@@ -1026,6 +1106,8 @@ def build_release_entry(doc, sources, rows):
 			if doc.get("doctype") == "Stock Entry"
 			else source.get("storage_location")
 		)
+		if "storage_location" in row:
+			from_location = row["storage_location"]
 		if not target:
 			incomplete = True
 		target_location = _preferred_location(row["item_code"], target) if target else None

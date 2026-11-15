@@ -1386,7 +1386,8 @@ def get_available_item_locations(
 		locations = get_locations_based_on_required_qty(locations, required_qty, priority_warehouses)
 
 	if not ignore_validation:
-		validate_picked_materials(item_code, required_qty, locations, picked_item_details)
+		validate_picked_materials(item_code, required_qty, locations, picked_item_details,
+			show_warning=not frappe.flags.get("pick_list_custom_shortage_warning"))
 
 	return locations
 
@@ -1411,7 +1412,7 @@ def get_locations_based_on_required_qty(locations, required_qty, priority_wareho
 	return filtered_locations
 
 
-def validate_picked_materials(item_code, required_qty, locations, picked_item_details=None):
+def validate_picked_materials(item_code, required_qty, locations, picked_item_details=None, show_warning=True):
 	for location in list(locations):
 		if location["qty"] < 0:
 			locations.remove(location)
@@ -1419,7 +1420,7 @@ def validate_picked_materials(item_code, required_qty, locations, picked_item_de
 	total_qty_available = sum(location.get("qty") for location in locations)
 	remaining_qty = required_qty - total_qty_available
 
-	if remaining_qty > 0:
+	if remaining_qty > 0 and show_warning:
 		if picked_item_details:
 			frappe.msgprint(
 				_(

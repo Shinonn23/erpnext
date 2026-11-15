@@ -1278,7 +1278,6 @@
    "label": "Is Deposit Item"
   },
   {
-   "depends_on": "eval:doc.regulatory_product_category && doc.regulatory_product_category != 'Not Regulated'",
    "fieldname": "registration_requirement",
    "fieldtype": "Select",
    "label": "Registration Requirement for Sale",

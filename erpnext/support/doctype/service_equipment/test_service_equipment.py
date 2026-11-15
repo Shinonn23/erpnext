@@ -383,6 +383,7 @@ class TestServiceRoles(TestCase):
 	def test_a_service_only_user_lists_equipment_records_only(self):
 		with (
 			patch.object(frappe, "get_roles", return_value=["Maintenance User"]),
+			patch.object(frappe, "has_permission", return_value=False),
 			patch("frappe.permissions.get_doctype_roles", return_value=["Maintenance User", "Stock Manager"]),
 		):
 			self.assertIn("service_equipment", equipment.permission_query("tech", "Asset Repair"))
@@ -391,6 +392,13 @@ class TestServiceRoles(TestCase):
 			self.assertFalse(equipment.has_permission(company_asset, "read", "tech"))
 			own = frappe._dict(doctype="Asset Repair", service_equipment="EQ-1", is_new=lambda: False)
 			self.assertTrue(equipment.has_permission(own, "read", "tech"))
+
+	def test_service_only_list_does_not_query_unreadable_assets(self):
+		with (patch.object(equipment, "serves_equipment", return_value=True),
+			patch.object(equipment, "equipment_only", return_value=True),
+			patch.object(frappe, "has_permission", return_value=False),
+			patch.object(frappe, "get_list", side_effect=AssertionError("unreadable lookup"))):
+			self.assertIn("service_equipment", equipment.permission_query("tech", "Asset Repair"))
 
 	def test_accounting_does_not_act_on_an_equipment_repair(self):
 		with patch.object(frappe, "get_roles", return_value=["Accounts User", "Accounts Manager"]):
