@@ -100,7 +100,9 @@ frappe.ui.form.on("Stock Count", {
 		erpnext.stock_count.fill_loss_warehouses?.(frm);
 		erpnext.stock_count.show_review_summary?.(frm);
 		erpnext.stock_count.guard_first_counter?.(frm);
+		erpnext.stock_count.fill_stock_uoms(frm);
 		if (can_count) {
+			frm.add_custom_button(__("Count in UOM"), () => erpnext.stock_count.count_in_uom(frm));
 			frm.add_custom_button(__("Add Found Item"), () => erpnext.stock_count.add_found_item(frm));
 		}
 
@@ -619,5 +621,71 @@ erpnext.stock_count.guard_first_counter = async (frm) => {
 	frm.set_df_property("items", "read_only", 1);
 	frm.remove_custom_button?.(__("Prepare Count"));
 	frm.remove_custom_button?.(__("Add Found Item"));
+	frm.remove_custom_button?.(__("Count in UOM"));
 	frm.set_intro?.(__("You counted the first count; another person must do this recount."), "red");
+};
+
+
+// Each entry is a physical quantity; the saved count always uses the item's stock unit.
+erpnext.stock_count.count_in_uom = (frm) => {
+	const rows = frm.doc.items || [];
+	if (!rows.length) return;
+	const dialog = new frappe.ui.Dialog({
+		title: __("Count in UOM"),
+		fields: [
+			{ fieldname: "row", label: __("Count Row"), fieldtype: "Select", reqd: 1,
+				options: ["", ...rows.map((row) => `${row.idx}: ${row.item_code} — ${row.batch_no || ""} — ${row.storage_location || ""}`)],
+				onchange: async () => {
+					const row = rows.find((row) => dialog.get_value("row").startsWith(`${row.idx}: `));
+					if (!row) return;
+					dialog.count_units = null;
+					const data = (await frappe.call({
+						method: "erpnext.stock.doctype.stock_count.stock_count.get_count_uoms",
+						args: { item_code: row.item_code },
+					})).message;
+					if (!dialog.get_value("row").startsWith(`${row.idx}: `)) return;
+					dialog.count_units = { ...data, row: dialog.get_value("row") };
+					dialog.set_df_property("uom", "options", data.uoms.map((unit) => unit.uom));
+					dialog.set_value("uom", data.stock_uom);
+					dialog.set_value("stock_uom", data.stock_uom);
+				} },
+			{ fieldname: "qty", label: __("Quantity in Selected UOM"), fieldtype: "Float", reqd: 1 },
+			{ fieldname: "uom", label: __("Count UOM"), fieldtype: "Select", reqd: 1 },
+			{ fieldname: "stock_uom", label: __("Stock UOM"), fieldtype: "Data", read_only: 1 },
+			{ fieldname: "add", label: __("Add to Existing Count"), fieldtype: "Check",
+				description: __("For mixed units, set the first quantity, then add the remaining quantities in their units.") },
+		],
+		primary_action_label: __("Apply Count"),
+		async primary_action(values) {
+			const row = rows.find((row) => values.row.startsWith(`${row.idx}: `));
+			if (dialog.count_units?.row !== values.row) return;
+			const unit = dialog.count_units?.uoms.find((unit) => unit.uom === values.uom);
+			if (!row || !unit || !Number.isFinite(values.qty) || values.qty < 0) return;
+			const qty = flt(values.qty * unit.factor) + (values.add ? flt(row.counted_qty) : 0);
+			if (!Number.isFinite(qty) || (dialog.count_units.whole_stock && !Number.isInteger(qty))) {
+				return frappe.msgprint(__("The converted count must be a whole number in the Stock UOM."));
+			}
+			if (row.serial_no && qty !== 0 && qty !== 1) {
+				return frappe.msgprint(__("A serial number must be counted as 0 or 1."));
+			}
+			await frappe.model.set_value(row.doctype, row.name, "counted_qty", qty);
+			await frappe.model.set_value(row.doctype, row.name, "stock_uom", dialog.count_units.stock_uom);
+			frm.refresh_field("items");
+			dialog.hide();
+		},
+	});
+	dialog.show();
+};
+
+// Existing counts predate the displayed unit field; load it without changing their quantities.
+erpnext.stock_count.fill_stock_uoms = async (frm) => {
+	const items = [...new Set((frm.doc.items || []).filter((row) => !row.stock_uom).map((row) => row.item_code))];
+	for (const item_code of items) {
+		const item = (await frappe.db.get_value("Item", item_code, "stock_uom")).message;
+		if (!item?.stock_uom) continue;
+		for (const row of frm.doc.items || []) {
+			if (row.item_code === item_code && !row.stock_uom) row.stock_uom = item.stock_uom;
+		}
+	}
+	if (items.length) frm.refresh_field("items");
 };

@@ -56,7 +56,7 @@ For Quotation, Sales Order, Delivery Note and Sales Invoice:
 * returns, consolidated POS invoices and non-Required Sales Invoice rows already delivered are not checked; purchasing and stock keep their
   own rules (a Purchase Order only warns).
 
-Saving a registration whose product row names an Item with no Product Category sets that Item's category from the registration's (never overwrites an existing category or Not Regulated; the Item gets a comment; the orange warning only names the Items left; Siwat, 6 Nov 2026). Verify and Activate sets Last Verified On. RA classifies one Item with *Regulatory > Classify Item* (Product Category, Medical Device Category in one
+Saving a registration whose product row names an Item with no Product Category sets that Item's category from the registration's (never overwrites an existing category or Not Regulated; the Item gets a comment; the orange warning only names the Items left; Siwat, 6 Nov 2026). Verify and Activate sets Last Verified On. RA classifies one Item with *Actions > Classify Item* (Product Category, Medical Device Category in one
 dialog; `item.classify_item`) and many with the Item list *Actions > Classify as ...* (`item.classify_items`); the report
 *Regulatory Unclassified Items* counts and lists the sales Items still unclassified (filter by Item Group). Only a regulated
 Item shows the *Current Regulatory Coverage* section with the read-only coverage fields (`current_regulatory_registration`,
@@ -365,7 +365,7 @@ so with the default **Block** policies an expired or suspended legacy registrati
 * Product lines of a live registration can still be edited by an Operator (history is kept by version tracking); the issue/expiry
   dates cannot.
 * Product Category permission: see the section of that name; the Regulatory roles cannot edit other Item fields, so they change the
-  category with the *Regulatory > Classify Item* dialog (Product Category, Medical Device Category in one step).
+  category with the *Actions > Classify Item* dialog (Product Category, Medical Device Category in one step).
 * The new code assumes `bench migrate` has run: submitting a guarded document on a site where the Settings DocType and the Item
   columns do not exist yet fails, like any other schema-dependent ERPNext change.
 * **Not verified end to end.** The DocTypes, patches and reports are checked by unit tests with mocks; run the dry run and

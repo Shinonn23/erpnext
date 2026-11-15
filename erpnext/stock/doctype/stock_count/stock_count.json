@@ -236,7 +236,8 @@
    "fieldtype": "Data",
    "label": "Scan Item, Batch, or Serial No",
    "print_hide": 1,
-   "options": "Barcode"
+   "options": "Barcode",
+   "description": "Each scan adds one Stock UOM. For a box, pack, or bottle, use Count in UOM."
   },
   {
    "fieldname": "items_section",
