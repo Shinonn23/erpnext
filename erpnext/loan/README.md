@@ -22,12 +22,17 @@ customer for a demo has it converted to a Demo Asset without returning it first:
 - The Stock to Asset Conversion names the loan and its row (`custody_loan`, `custody_loan_item`, read only, hidden
   while empty) and never a Material Request (a conversion that names both is refused). It converts one loan row, from
   the loan's Loan warehouse, and only units the borrower still holds: the quantity is within
-  `loan_item_available_to_adjust` (excluding itself) and the serial numbers are open and not reserved.
+  `loan_item_available_to_adjust` (excluding itself) and the serial numbers are open and not reserved. Only a loan row
+  issued in its stock unit (issue Delivery Note conversion factor 1, `loan_issue_factor`) converts, so the conversion's
+  stock quantity and the loan's quantity are the same unit.
 - `custody_loan_core.loan_conversion_rows` reads these conversions: a Draft that is not Rejected reserves the units
-  (`get_loan_item_reserved_qty`, `get_reserved_serials`), so they cannot be returned, written off or converted twice;
+  (`get_loan_item_reserved_qty`, `get_reserved_serials`), so they cannot be returned, written off or converted twice
+  (the tracking table shows "Pending Conversion");
   a submitted conversion settles them like an adjustment (`get_loan_item_balances`, `get_adjusted_serials`; the
   tracking table shows "Converted to Asset"); a cancelled or deleted one counts for nothing. Submitting or cancelling
   the conversion refreshes the loan's status.
+- `Custody Loan.material_request_type` (hidden, fetched from the request) lets the form tell a Borrow loan from a
+  Customer Demo loan.
 - `warehouse_policy.conversion_matches_loan` makes such a conversion a loan movement, the only way stock leaves a Loan
   warehouse into an Asset.
 - The generated Assets get the borrower (Employee) as custodian, so the Asset's own receipt places them with her; the

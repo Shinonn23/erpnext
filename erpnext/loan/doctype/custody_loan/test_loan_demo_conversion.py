@@ -177,8 +177,14 @@ class TrackingTest(unittest.TestCase):
 			balances = tracking.get_balances(loan)
 		self.assertEqual(balances[("CLI-1", None, "SN-1")].status, "Converted to Asset")
 		self.assertEqual(balances[("CLI-1", None, "SN-1")].outstanding_qty, 0)
-		self.assertEqual(balances[("CLI-1", None, "SN-2")].status, "Pending Return")
+		self.assertEqual(balances[("CLI-1", None, "SN-2")].status, "Pending Conversion")
 		self.assertEqual(balances[("CLI-1", None, "SN-2")].open_qty, 0)
+
+	def test_a_pending_return_stays_pending_return(self):
+		entry = frappe._dict(issued_qty=1, returned_qty=0, pending_return_qty=1, adjusted_qty=0, outstanding_qty=1)
+		self.assertEqual(tracking.tracking_status(entry), "Pending Return")
+		entry.pending_conversion_qty = 1
+		self.assertEqual(tracking.tracking_status(entry), "Pending Conversion")
 
 	def test_a_write_off_stays_written_off(self):
 		entry = frappe._dict(issued_qty=1, returned_qty=0, pending_return_qty=0, adjusted_qty=1, outstanding_qty=0)
@@ -288,6 +294,29 @@ class ConversionCancelTest(unittest.TestCase):
 		with patch.object(frappe, "throw", side_effect=_throw):
 			with self.assertRaises(Thrown):
 				self.doc(material_request="MR-1").validate_custody_loan_source()
+
+	def test_a_row_issued_in_another_unit_cannot_convert(self):
+		loan = Doc(docstatus=1, loan_type="Stock", company="CD", customer_loan_warehouse="LOAN - CD",
+			items=[frappe._dict(name="CLI-1", item_code="ITEM-1")])
+		row = frappe._dict(idx=1, item_code="ITEM-1", warehouse="LOAN - CD", qty=1, serial_and_batch_bundle=None)
+		db = MagicMock()
+		db.get_value.return_value = 12
+		with (
+			patch.object(frappe, "get_doc", return_value=loan),
+			patch.object(frappe, "db", db),
+			patch.object(frappe, "throw", side_effect=_throw),
+			patch.object(core, "loan_item_available_to_adjust", return_value=5) as available,
+		):
+			with self.assertRaises(Thrown) as raised:
+				self.doc(stock_items=[row]).validate_custody_loan_source()
+		self.assertIn("conversion factor 1", str(raised.exception))
+		available.assert_not_called()
+
+	def test_the_issue_factor_defaults_to_one(self):
+		db = MagicMock()
+		db.get_value.return_value = None
+		with patch.object(frappe, "db", db):
+			self.assertEqual(core.loan_issue_factor("CLI-1"), 1)
 
 
 if __name__ == "__main__":

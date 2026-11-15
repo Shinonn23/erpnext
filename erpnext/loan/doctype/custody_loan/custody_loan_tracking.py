@@ -178,17 +178,25 @@ def get_balances(loan, *, exclude=None, attribute=True):
 			continue
 		item_code = items[row.custody_loan_item].item_code
 		serials = _serials(row.serial_no)
-		converted = kind == "adjusted" and "serial_and_batch_bundle" in row
+		conversion = "serial_and_batch_bundle" in row
+		converted = kind == "adjusted" and conversion
+		pending_conversion = kind == "pending" and conversion
 		if serials:
 			for serial in serials:
 				entry = balance(_key(row.custody_loan_item, None, serial), item_code)
 				entry[field[kind]] += 1
 				entry.converted_qty = entry.get("converted_qty", 0) + (1 if converted else 0)
+				entry.pending_conversion_qty = entry.get("pending_conversion_qty", 0) + (
+					1 if pending_conversion else 0
+				)
 		else:
 			qty = flt(row.qty) * factors.get(row.custody_loan_item, 1)
 			entry = balance(_key(row.custody_loan_item, row.batch_no, None), item_code)
 			entry[field[kind]] += qty
 			entry.converted_qty = entry.get("converted_qty", 0) + (qty if converted else 0)
+			entry.pending_conversion_qty = entry.get("pending_conversion_qty", 0) + (
+				qty if pending_conversion else 0
+			)
 
 	for entry in balances.values():
 		if entry.serial_no:
@@ -245,6 +253,10 @@ def tracking_status(entry):
 			else "Not Issued"
 		)
 	if entry.pending_return_qty > 0:
+		# a draft Stock to Asset Conversion holds the unit, it is not coming back (Siwat, 16 Nov 2026)
+		pending_conversion = flt(entry.get("pending_conversion_qty"))
+		if pending_conversion and pending_conversion >= entry.pending_return_qty:
+			return "Pending Conversion"
 		return "Pending Return"
 	if entry.outstanding_qty <= 0:
 		if entry.adjusted_qty and not entry.returned_qty:

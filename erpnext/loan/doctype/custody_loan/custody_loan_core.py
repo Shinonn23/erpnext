@@ -2829,6 +2829,20 @@ def loan_item_available_to_receive(loan_name, loan_item, *, exclude_return=None)
 	return max(flt(loan_item.qty) - returned - adjusted - sold - reserved, 0)
 
 
+def loan_issue_factor(loan_item_name):
+	"""The UOM conversion factor of the submitted issue Delivery Note row of a loan row (1 when none)."""
+	return (
+		flt(
+			frappe.db.get_value(
+				"Delivery Note Item",
+				{"custody_loan_item": loan_item_name, "docstatus": 1},
+				"conversion_factor",
+			)
+		)
+		or 1
+	)
+
+
 def loan_item_available_to_adjust(loan_name, loan_item, *, exclude_adjustment=None, exclude_conversion=None):
 	returned, adjusted, sold = get_loan_item_balances(loan_name, loan_item.name)
 	reserved = get_loan_item_reserved_qty(

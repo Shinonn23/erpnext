@@ -738,6 +738,7 @@ class StocktoAssetConversion(StockController):
 		from erpnext.loan.doctype.custody_loan.custody_loan_core import (
 			get_open_issued_serials,
 			get_reserved_serials,
+			loan_issue_factor,
 			loan_item_available_to_adjust,
 		)
 		from erpnext.loan.doctype.custody_loan.custody_loan_tracking import transaction_row_entries
@@ -761,6 +762,13 @@ class StocktoAssetConversion(StockController):
 			frappe.throw(
 				_("Row {0}: Warehouse must be the loan's Loan warehouse {1}.").format(
 					row.idx, loan.customer_loan_warehouse
+				)
+			)
+		# the conversion counts stock units, the loan counts loan units: only a row issued one to one may convert
+		if flt(loan_issue_factor(loan_item.name)) != 1:
+			frappe.throw(
+				_("Row {0}: only a loan row issued in its stock unit (conversion factor 1) can convert.").format(
+					row.idx
 				)
 			)
 		available = loan_item_available_to_adjust(loan.name, loan_item, exclude_conversion=self.name)
