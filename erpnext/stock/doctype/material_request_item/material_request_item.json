@@ -788,6 +788,7 @@
    "depends_on": "eval:parent.material_request_type == 'Material Transfer'",
    "fieldname": "from_storage_location",
    "fieldtype": "Link",
+   "hidden": 1,
    "label": "Source Storage Location",
    "options": "Storage Location"
   },
@@ -795,6 +796,7 @@
    "depends_on": "eval:in_list(['Purchase', 'Material Transfer', 'Material Issue'], parent.material_request_type)",
    "fieldname": "storage_location",
    "fieldtype": "Link",
+   "hidden": 1,
    "label": "Target Storage Location",
    "options": "Storage Location"
   },

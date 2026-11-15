@@ -55,18 +55,14 @@ test("asset transfers hide cost and unit and row dates follow the header", () =>
 	assert.equal(columns("Purchase").required.uom, true);
 });
 
-test("Material Issue uses the selected source warehouse for the only storage location column", () => {
-	const issue = columns("Material Issue");
-	assert.equal(issue.visibility.storage_location, true);
-	assert.equal(issue.visibility.from_storage_location, false);
-	assert.equal(issue.labels.storage_location, "Source Storage Location");
-	const query = issue.queries.storage_location({ material_request_type: "Material Issue" }, "Material Request Item", "ROW");
-	assert.equal(query.filters.warehouse, "SOURCE");
-	assert.equal(query.filters.only_stock, 1);
-	assert.equal(query.filters.batch_no, "BATCH");
-	const transfer = columns("Material Transfer");
-	assert.equal(transfer.visibility.from_storage_location, true);
-	assert.equal(transfer.labels.storage_location, "Target Storage Location");
+test("the requester is never asked for a storage location, for any purpose", () => {
+	for (const purpose of ["Asset Transfer", "Purchase", "Material Transfer", "Material Issue", "Customer Demo",
+		"Customer Borrow / Loan"]) {
+		const { visibility, queries } = columns(purpose);
+		assert.equal(visibility.storage_location, false, `${purpose}: storage_location`);
+		assert.equal(visibility.from_storage_location, false, `${purpose}: from_storage_location`);
+		assert.equal(queries.storage_location, undefined, `${purpose}: no storage location query`);
+	}
 });
 
 test("switching to Material Issue labels warehouse as the issue source", () => {
