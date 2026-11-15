@@ -438,19 +438,6 @@ function configure_material_request_item_columns(frm) {
 
 	const purpose = frm.doc.material_request_type;
 	const is_loan = ["Customer Demo", "Customer Borrow / Loan"].includes(purpose);
-	grid.update_docfield_property("storage_location", "label",
-		__(purpose === "Material Issue" ? "Source Storage Location" : "Target Storage Location"));
-	frm.set_query("storage_location", "items", (doc, cdt, cdn) => {
-		const row = locals[cdt][cdn];
-		const query = erpnext.queries.storage_location(row.warehouse, row.item_code);
-		Object.assign(query.filters, {
-			serial_no: row.serial_no || "",
-			serial_and_batch_bundle: row.serial_and_batch_bundle || "",
-			batch_no: row.batch_no || "",
-			only_stock: doc.material_request_type === "Material Issue" ? 1 : 0,
-		});
-		return query;
-	});
 	const visible_columns = new Set();
 	visible_columns.add("item_code");
 
@@ -459,13 +446,13 @@ function configure_material_request_item_columns(frm) {
 		visible_columns.add("source_location");
 		visible_columns.add("target_location");
 	} else {
+		// the requester never chooses a Storage Location (Siwat, 16 Nov 2026): the Stock team decides it on the Stock
+		// Entry / Purchase Receipt, so storage_location and from_storage_location are not columns
 		// a Demo / Borrow request asks for the Item and the Qty only; the Assets are chosen by the Stock team
 		visible_columns.add("qty");
 		if (!is_loan && ["Purchase", "Material Transfer", "Material Issue"].includes(purpose)) visible_columns.add("warehouse");
-		if (!is_loan && ["Purchase", "Material Transfer", "Material Issue"].includes(purpose)) visible_columns.add("storage_location");
 		if (purpose === "Material Transfer") {
 			visible_columns.add("from_warehouse");
-			visible_columns.add("from_storage_location");
 		}
 		visible_columns.add("uom");
 		if (purpose === "Purchase") visible_columns.add("rate");
