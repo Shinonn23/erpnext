@@ -226,6 +226,17 @@ def add_packed_item_row(doc, packing_item, main_item_row, packed_items_table, re
 	return pi_row
 
 
+def part_conversion_factor(packing_item):
+	"""Stock UOM per unit of the bundle part's UOM; 1 when the part is stated in its stock UOM."""
+	if not packing_item.get("uom"):
+		return 1.0
+	from erpnext.stock.get_item_details import get_conversion_factor
+
+	return (
+		flt(get_conversion_factor(packing_item.item_code, packing_item.uom).get("conversion_factor")) or 1.0
+	)
+
+
 def get_packed_item_details(item_code, company):
 	item = frappe.qb.DocType("Item")
 	item_default = frappe.qb.DocType("Item Default")
@@ -252,7 +263,8 @@ def update_packed_item_basic_data(main_item_row, pi_row, packing_item, item_data
 	pi_row.item_code = packing_item.item_code
 	pi_row.item_name = item_data.item_name
 	pi_row.uom = item_data.stock_uom
-	pi_row.qty = flt(packing_item.qty) * flt(main_item_row.stock_qty)
+	# the bundle states each part in its own UOM (e.g. 1 Test of a reagent stocked in Bottles): deliver it in stock UOM
+	pi_row.qty = flt(packing_item.qty) * part_conversion_factor(packing_item) * flt(main_item_row.stock_qty)
 	pi_row.conversion_factor = main_item_row.conversion_factor
 	pi_row.delivered_by_supplier = main_item_row.get("delivered_by_supplier")
 
@@ -472,7 +484,7 @@ def get_items_from_product_bundle(row):
 		row.update(
 			{
 				"item_code": item.item_code,
-				"qty": flt(row["quantity"]) * flt(item.qty),
+				"qty": flt(row["quantity"]) * flt(item.qty) * part_conversion_factor(item),
 				"conversion_rate": 1,
 				"currency": frappe.defaults.get_defaults().currency,
 			}

@@ -34,6 +34,7 @@ class ProductBundle(Document):
 		self.validate_main_item()
 		self.validate_child_items()
 		self.validate_child_items_qty_non_zero()
+		self.validate_child_items_uom()
 		from erpnext.utilities.transaction_base import validate_uom_is_integer
 
 		validate_uom_is_integer(self, "uom", "qty")
@@ -88,6 +89,27 @@ class ProductBundle(Document):
 					_(
 						"Row #{0}: Child Item should not be a Product Bundle. Please remove Item {1} and Save"
 					).format(item.idx, frappe.bold(item.item_code))
+				)
+
+	def validate_child_items_uom(self):
+		"""A part stated in another UOM than its stock UOM needs that UOM's conversion on the Item: it is delivered
+		as qty x conversion factor in stock UOM (packed_item.part_conversion_factor)."""
+		for item in self.items:
+			stock_uom = frappe.get_cached_value("Item", item.item_code, "stock_uom")
+			if not item.uom:
+				item.uom = stock_uom
+			if item.uom == stock_uom:
+				continue
+			if not frappe.db.exists(
+				"UOM Conversion Detail",
+				{"parent": item.item_code, "uom": item.uom, "conversion_factor": [">", 0]},
+			):
+				frappe.throw(
+					_(
+						"Row #{0}: Item {1} has no conversion for UOM {2}. Add it on the Item or use {3}."
+					).format(
+						item.idx, frappe.bold(item.item_code), frappe.bold(item.uom), frappe.bold(stock_uom)
+					)
 				)
 
 	def validate_child_items_qty_non_zero(self):
