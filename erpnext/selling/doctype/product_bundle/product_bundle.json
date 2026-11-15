@@ -11,6 +11,7 @@
   "new_item_code",
   "description",
   "column_break_eonk",
+  "item_name",
   "disabled",
   "item_section",
   "items",
@@ -25,8 +26,6 @@
   {
    "fieldname": "new_item_code",
    "fieldtype": "Link",
-   "in_global_search": 1,
-   "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Parent Item",
    "no_copy": 1,
@@ -34,6 +33,15 @@
    "oldfieldtype": "Data",
    "options": "Item",
    "reqd": 1
+  },
+  {
+   "fieldname": "item_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Parent Item Name",
+   "width": "350",
+   "fetch_from": "new_item_code.item_name",
+   "read_only": 1
   },
   {
    "fieldname": "description",

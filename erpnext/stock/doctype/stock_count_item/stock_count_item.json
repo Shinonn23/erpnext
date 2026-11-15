@@ -13,6 +13,7 @@
   "expiry_date",
   "serial_no",
   "quantity_section",
+  "stock_uom",
   "counted_qty",
   "is_counted",
   "quantity_column",
@@ -81,7 +82,8 @@
    "fieldname": "counted_qty",
    "fieldtype": "Float",
    "in_list_view": 1,
-   "label": "Counted Qty"
+   "label": "Counted Qty",
+   "description": "Total counted quantity in Stock UOM. Use Count in UOM to enter boxes, packs, bottles, or other configured units."
   },
   {
    "default": "0",
@@ -124,6 +126,15 @@
    "label": "Storage Location",
    "options": "Storage Location",
    "read_only": 1
+  },
+  {
+   "fieldname": "stock_uom",
+   "fieldtype": "Link",
+   "options": "UOM",
+   "label": "Stock UOM",
+   "fetch_from": "item_code.stock_uom",
+   "read_only": 1,
+   "in_list_view": 1
   }
  ],
  "istable": 1,

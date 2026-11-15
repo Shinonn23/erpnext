@@ -15,4 +15,13 @@ frappe.ui.form.on("Product Bundle", {
 			};
 		});
 	},
+	new_item_code: function (frm) {
+		if (!frm.doc.item_name && frm.doc.new_item_code) {
+			frappe.db.get_value("Item", frm.doc.new_item_code, "item_name").then(({ message }) => {
+				if (message?.item_name && !frm.doc.item_name) {
+					frm.set_value("item_name", message.item_name);
+				}
+			});
+		}
+	},
 });

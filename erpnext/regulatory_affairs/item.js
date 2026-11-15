@@ -112,6 +112,6 @@ function add_category_button(frm) {
 			});
 			dialog.show();
 		},
-		__("Regulatory")
+		__("Actions")
 	);
 }

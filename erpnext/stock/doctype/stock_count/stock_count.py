@@ -2,6 +2,7 @@
 # License: GNU General Public License v3. See license.txt
 
 import json
+import math
 from collections import defaultdict
 from contextlib import contextmanager
 from typing import TYPE_CHECKING
@@ -342,6 +343,7 @@ class StockCount(Document):
 			if not row.item_code:
 				frappe.throw(_("Row {0}: Item Code is required.").format(row.idx))
 			item = frappe.get_cached_doc("Item", row.item_code)
+			row.stock_uom = item.stock_uom
 			if not item.is_stock_item:
 				frappe.throw(_("Row {0}: Item must be a stock item.").format(row.idx))
 			if row.storage_location:
@@ -363,8 +365,12 @@ class StockCount(Document):
 				if batch_item and batch_item != row.item_code:
 					frappe.throw(_("Row {0}: Batch No belongs to another Item.").format(row.idx))
 			if item.has_serial_no and row.serial_no:
-				serial = frappe.db.get_value("Serial No", row.serial_no, ["item_code", "batch_no"], as_dict=True)
-				if serial and (serial.item_code != row.item_code or (serial.batch_no and serial.batch_no != row.batch_no)):
+				serial = frappe.db.get_value(
+					"Serial No", row.serial_no, ["item_code", "batch_no"], as_dict=True
+				)
+				if serial and (
+					serial.item_code != row.item_code or (serial.batch_no and serial.batch_no != row.batch_no)
+				):
 					frappe.throw(_("Row {0}: Serial No belongs to another Item or Batch.").format(row.idx))
 			if row.serial_no and row.serial_no in seen_serials:
 				frappe.throw(
@@ -381,6 +387,17 @@ class StockCount(Document):
 			if row.serial_no and flt(row.counted_qty) not in (0, 1):
 				frappe.throw(
 					_("Row {0}: a serial number is counted as 1 (found) or 0 (not found).").format(row.idx)
+				)
+			if not math.isfinite(flt(row.counted_qty)):
+				frappe.throw(_("Row {0}: enter a finite counted quantity.").format(row.idx))
+			if (
+				frappe.get_cached_value("UOM", item.stock_uom, "must_be_whole_number")
+				and not flt(row.counted_qty).is_integer()
+			):
+				frappe.throw(
+					_("Row {0}: counted quantity in {1} must be a whole number.").format(
+						row.idx, item.stock_uom
+					)
 				)
 			row.difference_qty = flt(row.counted_qty) - flt(row.system_qty)
 
@@ -419,9 +436,7 @@ class StockCount(Document):
 		self.snapshot_datetime = snapshot
 		self.posts_variance_snapshot = 0
 		self.variance_account_snapshot = None
-		variance_account = (
-			count_variance_account(self.warehouse) if self.count_type == "Monthly" else None
-		)
+		variance_account = count_variance_account(self.warehouse) if self.count_type == "Monthly" else None
 		if variance_account:
 			validate_variance_account(variance_account, self.company)
 			self.posts_variance_snapshot = 1
@@ -637,6 +652,7 @@ class StockCount(Document):
 				"expiry_date": frappe.get_cached_value("Batch", group.batch_no, "expiry_date")
 				if group.batch_no
 				else None,
+				"stock_uom": item.stock_uom,
 				"system_qty": flt(group.qty),
 				"counted_qty": 0,
 				**row_values,
@@ -1564,3 +1580,24 @@ def allow_generated_stock_count_cancellation(doc):
 	):
 		# Cancel the generated voucher first; Stock Count still enforces this order on cancellation.
 		doc.ignore_linked_doctypes = tuple(set(doc.get("ignore_linked_doctypes") or ()) | {"Stock Count"})
+
+
+@frappe.whitelist()
+def get_count_uoms(item_code):
+	"""Only expose units configured for the item being counted."""
+	frappe.has_permission("Stock Count", "write", throw=True)
+	item = frappe.get_doc("Item", item_code)
+	item.check_permission("read")
+	return {
+		"stock_uom": item.stock_uom,
+		"serialised": item.has_serial_no,
+		"whole_stock": bool(frappe.get_cached_value("UOM", item.stock_uom, "must_be_whole_number")),
+		"uoms": [{"uom": item.stock_uom, "factor": 1}]
+		+ [
+			{"uom": row.uom, "factor": row.conversion_factor}
+			for row in item.uoms
+			if row.uom != item.stock_uom
+			and math.isfinite(flt(row.conversion_factor))
+			and flt(row.conversion_factor) > 0
+		],
+	}

@@ -22,6 +22,7 @@ class StockCountItem(Document):
 		parenttype: DF.Data
 		serial_no: DF.Data | None
 		storage_location: DF.Link | None
+		stock_uom: DF.Link | None
 		system_qty: DF.Float
 
 	pass

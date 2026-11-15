@@ -22,7 +22,8 @@
    "oldfieldname": "item_code",
    "oldfieldtype": "Link",
    "options": "Item",
-   "reqd": 1
+   "reqd": 1,
+   "width": "140"
   },
   {
    "fieldname": "qty",
@@ -31,7 +32,8 @@
    "label": "Qty",
    "oldfieldname": "qty",
    "oldfieldtype": "Currency",
-   "reqd": 1
+   "reqd": 1,
+   "width": "100"
   },
   {
    "fetch_from": "item_code.description",
@@ -42,7 +44,8 @@
    "label": "Description",
    "oldfieldname": "description",
    "oldfieldtype": "Text",
-   "print_width": "300px"
+   "print_width": "300px",
+   "width": "350"
   },
   {
    "fieldname": "rate",
@@ -63,7 +66,7 @@
    "oldfieldname": "uom",
    "oldfieldtype": "Link",
    "options": "UOM",
-   "read_only": 1
+   "width": "150"
   }
  ],
  "idx": 1,

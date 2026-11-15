@@ -24,6 +24,7 @@ class ProductBundle(Document):
 		disabled: DF.Check
 		items: DF.Table[ProductBundleItem]
 		new_item_code: DF.Link
+		item_name: DF.Data | None
 	# end: auto-generated types
 
 	def autoname(self):
