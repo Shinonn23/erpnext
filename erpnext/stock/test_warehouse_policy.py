@@ -438,6 +438,7 @@ class TestWarehousePolicy(unittest.TestCase):
 			"validate_storage_locations",
 			"set_missing_values",
 			"validate_stock_items",
+			"validate_custody_loan_source",
 			"build_asset_preview",
 			"validate_accounting_treatments",
 			"calculate_totals",
