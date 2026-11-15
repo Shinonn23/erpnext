@@ -68,6 +68,12 @@ New entry is just an update to the last entry which is found by looking at last
 row in the filter ledger.
 
 
+### Serial and Batch Bundle ownership
+
+Submitting an inward or outward bundle requires its voucher type, voucher number and detail row
+to identify the same posted Stock Ledger Entry. POS Invoice Item and Packed Item references must
+belong to the named voucher. Existing maintenance and picking exceptions remain unchanged.
+
 ### Serial nos
 
 Serial numbers do not follow any valuation method configuration and they are
