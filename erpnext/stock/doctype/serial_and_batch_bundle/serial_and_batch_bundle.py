@@ -187,16 +187,27 @@ class SerialandBatchBundle(Document):
 			return
 
 		if self.voucher_type == "POS Invoice":
-			if not frappe.db.exists("POS Invoice Item", self.voucher_detail_no):
+			if not frappe.db.exists(
+				"POS Invoice Item",
+				{"name": self.voucher_detail_no, "parent": self.voucher_no, "parenttype": self.voucher_type},
+			):
 				frappe.throw(
 					_("The serial and batch bundle {0} not linked to {1} {2}").format(
 						bold(self.name), self.voucher_type, bold(self.voucher_no)
 					)
 				)
 
-		elif not frappe.db.exists("Stock Ledger Entry", {"voucher_detail_no": self.voucher_detail_no}):
+		elif not frappe.db.exists(
+			"Stock Ledger Entry",
+			{
+				"voucher_type": self.voucher_type,
+				"voucher_no": self.voucher_no,
+				"voucher_detail_no": self.voucher_detail_no,
+			},
+		):
 			if self.voucher_type in ["Delivery Note", "Sales Invoice"] and frappe.db.exists(
-				"Packed Item", self.voucher_detail_no
+				"Packed Item",
+				{"name": self.voucher_detail_no, "parent": self.voucher_no, "parenttype": self.voucher_type},
 			):
 				return
 
