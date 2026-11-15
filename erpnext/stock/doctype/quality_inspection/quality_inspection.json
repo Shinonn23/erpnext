@@ -39,6 +39,10 @@
   "specification_details",
   "quality_inspection_template",
   "manual_inspection",
+  "purchase_dispatch_id",
+  "purchase_dispatch_warehouse",
+  "purchase_dispatch_location",
+  "purchase_dispatch_serials",
   "readings",
   "section_break_14",
   "inspected_by",
@@ -61,7 +65,8 @@
   },
   {
    "fieldname": "inspection_header_section",
-   "fieldtype": "Section Break"
+   "fieldtype": "Section Break",
+   "label": "Inspection"
   },
   {
    "default": "Today",
@@ -93,7 +98,7 @@
    "fieldname": "reference_type",
    "fieldtype": "Select",
    "label": "Reference Type",
-   "options": "\nPurchase Receipt\nPurchase Invoice\nSubcontracting Receipt\nPick List\nDelivery Note\nSales Invoice\nStock Entry\nJob Card",
+   "options": "\nPurchase Receipt\nPurchase Invoice\nSubcontracting Receipt\nPick List\nDelivery Note\nSales Invoice\nStock Entry\nJob Card\nQuality Treatment Step",
    "reqd": 1
   },
   {
@@ -110,7 +115,8 @@
   },
   {
    "fieldname": "section_break_7",
-   "fieldtype": "Section Break"
+   "fieldtype": "Section Break",
+   "label": "Item"
   },
   {
    "fieldname": "item_code",
@@ -128,7 +134,8 @@
   {
    "fieldname": "item_serial_no",
    "fieldtype": "Link",
-   "label": "Item Serial No",
+   "in_standard_filter": 1,
+   "label": "Serial Number",
    "oldfieldname": "item_serial_no",
    "oldfieldtype": "Link",
    "options": "Serial No"
@@ -175,7 +182,8 @@
   },
   {
    "fieldname": "section_break_14",
-   "fieldtype": "Section Break"
+   "fieldtype": "Section Break",
+   "label": "Inspection Review"
   },
   {
    "default": "__user",
@@ -230,6 +238,7 @@
   {
    "fieldname": "specification_details",
    "fieldtype": "Section Break",
+   "label": "Readings",
    "oldfieldtype": "Section Break",
    "options": "Simple"
   },
@@ -302,12 +311,6 @@
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "purchase_serials_section",
-   "fieldtype": "Section Break",
-   "label": "Serial Number Results",
-   "depends_on": "eval:doc.purchase_unit_qty > 0"
-  },
-  {
    "fieldname": "purchase_unit_qty",
    "fieldtype": "Float",
    "label": "Received Unit Quantity",
@@ -333,11 +336,47 @@
    "hidden": 1
   },
   {
+   "fieldname": "purchase_dispatch_id",
+   "fieldtype": "Data",
+   "label": "Dispatch ID",
+   "hidden": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "purchase_dispatch_warehouse",
+   "fieldtype": "Link",
+   "label": "Dispatch Warehouse",
+   "hidden": 1,
+   "read_only": 1,
+   "options": "Warehouse"
+  },
+  {
+   "fieldname": "purchase_dispatch_location",
+   "fieldtype": "Link",
+   "label": "Dispatch Storage Location",
+   "hidden": 1,
+   "read_only": 1,
+   "options": "Storage Location"
+  },
+  {
+   "fieldname": "purchase_dispatch_serials",
+   "fieldtype": "Small Text",
+   "label": "Dispatch Serial Numbers",
+   "hidden": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "purchase_serials_section",
+   "fieldtype": "Section Break",
+   "label": "Serial Number Results",
+   "depends_on": "eval:doc.purchase_serial_results && doc.purchase_serial_results.length"
+  },
+  {
    "fieldname": "purchase_serial_results",
    "fieldtype": "Table",
    "label": "Inspected Serial Numbers",
    "options": "Purchase Inspection Serial",
-   "depends_on": "eval:doc.purchase_unit_qty > 0"
+   "depends_on": "eval:doc.purchase_serial_results && doc.purchase_serial_results.length"
   }
  ],
  "icon": "clipboard-check",
@@ -408,7 +447,7 @@
   }
  ],
  "row_format": "Dynamic",
- "search_fields": "item_code, report_date, reference_name",
+ "search_fields": "item_code, report_date, reference_name, item_serial_no, batch_no",
  "show_name_in_global_search": 1,
  "sort_field": "creation",
  "sort_order": "ASC",

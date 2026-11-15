@@ -214,7 +214,14 @@ frappe.ui.form.on("Serial and Batch Bundle", {
 			};
 		});
 
-		frm.set_query("serial_no", "entries", () => {
+		frm.set_query("serial_no", "entries", (doc, cdt, cdn) => {
+			if (doc.voucher_type === "Pick List" && doc.type_of_transaction === "Outward") {
+				return { query: "connect_diagnostics_setup.stock.pick_stock.selector_serial_query", filters: {
+					item_code: doc.item_code, warehouse: doc.warehouse,
+					storage_location: locals[cdt][cdn].storage_location || "", batch_no: locals[cdt][cdn].batch_no || "",
+					pick_list: doc.voucher_no || "",
+				} };
+			}
 			return {
 				filters: {
 					item_code: frm.doc.item_code,
@@ -222,7 +229,13 @@ frappe.ui.form.on("Serial and Batch Bundle", {
 			};
 		});
 
-		frm.set_query("batch_no", "entries", (doc) => {
+		frm.set_query("batch_no", "entries", (doc, cdt, cdn) => {
+			if (doc.voucher_type === "Pick List" && doc.type_of_transaction === "Outward") {
+				return { query: "connect_diagnostics_setup.stock.pick_stock.batch_query", filters: {
+					item_code: doc.item_code, warehouse: doc.warehouse,
+					storage_location: locals[cdt][cdn].storage_location || "", pick_list: doc.voucher_no || "",
+				} };
+			}
 			if (doc.type_of_transaction === "Outward") {
 				return {
 					query: "erpnext.controllers.queries.get_batch_no",

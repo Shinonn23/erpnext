@@ -15,8 +15,6 @@ frappe.ui.form.on("Quality Inspection", {
 	},
 
 	setup: function (frm) {
-		frm.fields_dict.purchase_serial_results.grid.df.cannot_add_rows = 1;
-		frm.fields_dict.purchase_serial_results.grid.df.cannot_delete_rows = 1;
 		frm.fields_dict.readings.grid.set_column_disp_in_list_view(
 			["specification", "parameter_group", "acceptance_display", "manual_inspection", "reading_value", ...Array.from({ length: 10 }, (_, i) => `reading_${i + 1}`), "status"],
 			true, true
@@ -71,6 +69,24 @@ frappe.ui.form.on("Quality Inspection", {
 		// Ignore cancellation of reference doctype on cancel all.
 		frm.ignore_doctypes_on_cancel_all = [frm.doc.reference_type, "Serial and Batch Bundle"];
 		show_reading_criteria(frm);
+		if (frm.doc.docstatus === 0 && !frm.read_only && frm.perm?.[0]?.write &&
+			(frm.doc.readings || []).some(can_fill_expected_text)) {
+			frm.add_custom_button(__("Fill Expected Text"), () => {
+				frappe.confirm(__("Fill empty text readings with the expected values? Check them against the actual inspection before submitting."), () => {
+					let changed = false;
+					for (const row of frm.doc.readings || []) {
+						if (can_fill_expected_text(row)) {
+							row.reading_value = row.value;
+							changed = true;
+						}
+					}
+					if (changed) {
+						frm.dirty();
+						frm.refresh_field("readings");
+					}
+				});
+			});
+		}
 		const grid = frm.fields_dict.readings.grid;
 		const label = __("Use automatic where available");
 		if (frm.doc.docstatus === 0 && frm.doc.purchase_unit_qty) {
@@ -95,27 +111,12 @@ frappe.ui.form.on("Quality Inspection", {
 		const purchase_unit = Number(frm.doc.purchase_unit_qty) > 0;
 		const serial_unit = purchase_unit && Boolean(frm.doc.item_serial_no);
 		frm.set_df_property("item_serial_no", "hidden", purchase_unit && !serial_unit);
-		frm.set_df_property("batch_no", "hidden", purchase_unit && (serial_unit || !frm.doc.batch_no));
-		let has_serial = false;
-		if (purchase_unit && !serial_unit && frm.doc.item_code) {
-			const { message } = await frappe.db.get_value("Item", frm.doc.item_code, "has_serial_no");
-			has_serial = Boolean(message?.has_serial_no);
-		}
-		frm.set_df_property("purchase_rejected_serials", "hidden", 1);
-		frm.set_df_property("purchase_serials_section", "hidden", !has_serial);
-		frm.set_df_property("purchase_accepted_qty", "read_only", has_serial || serial_unit);
-		frm.set_df_property("purchase_rejected_qty", "read_only", has_serial || serial_unit);
-		if (has_serial && !frm.is_new() && frm.doc.docstatus === 0 && !(frm.doc.purchase_serial_results || []).length) {
-			const { message } = await frappe.call({
-				method: "erpnext.stock.doctype.quality_inspection.purchase_inspection_units.inspection_serial_results",
-				args: { name: frm.doc.name },
-			});
-			for (const row of message || []) frm.add_child("purchase_serial_results", row);
-			frm.refresh_field("purchase_serial_results");
-		}
-		if (has_serial && frm.doc.docstatus === 0 && (frm.doc.purchase_serial_results || []).length) {
-			await update_serial_quantities(frm);
-		}
+		frm.set_df_property("batch_no", "hidden", purchase_unit && !frm.doc.batch_no);
+		frm.set_df_property("purchase_rejected_serials", "hidden", !frm.doc.purchase_rejected_serials);
+		frm.set_df_property("purchase_serials_section", "hidden", !frm.doc.purchase_serial_results?.length);
+		frm.set_df_property("purchase_serial_results", "hidden", !frm.doc.purchase_serial_results?.length);
+		frm.set_df_property("purchase_accepted_qty", "read_only", serial_unit);
+		frm.set_df_property("purchase_rejected_qty", "read_only", serial_unit);
 	},
 
 	item_code: function (frm) {
@@ -165,6 +166,11 @@ function has_automatic_criteria(row) {
 	return Boolean((row.value || "").trim());
 }
 
+function can_fill_expected_text(row) {
+	return !Number(row.numeric) && !Number(row.formula_based_criteria) &&
+		Boolean(String(row.value || "").trim()) && !String(row.reading_value || "").trim();
+}
+
 function apply_manual_to_readings(frm, manual) {
 	let changed = false;
 	for (const row of frm.doc.readings || []) {
@@ -193,17 +199,5 @@ frappe.ui.form.on("Quality Inspection Reading", {
 			try { await frm.set_value("manual_inspection", 0); }
 			finally { frm.__manual_row_sync = false; }
 		}
-	},
-});
-
-async function update_serial_quantities(frm) {
-	const rows = frm.doc.purchase_serial_results || [];
-	await frm.set_value("purchase_accepted_qty", rows.filter((row) => row.result === "Accepted").length);
-	await frm.set_value("purchase_rejected_qty", rows.filter((row) => row.result === "Rejected").length);
-}
-
-frappe.ui.form.on("Purchase Inspection Serial", {
-	result(frm) {
-		return update_serial_quantities(frm);
 	},
 });

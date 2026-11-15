@@ -312,8 +312,9 @@ class TestCoverageDate(unittest.TestCase):
 class ValidationHarness:
 	"""Runs the entry points with the database, the policy settings and the messages replaced."""
 
-	def __init__(self, mappings, settings=None, in_scope=None, unclassified=()):
+	def __init__(self, mappings, settings=None, in_scope=None, unclassified=(), required=()):
 		self.unclassified = set(unclassified)
+		self.required = set(required)
 		self.mappings = mappings
 		self.settings = settings or make_settings()
 		self.in_scope = in_scope
@@ -327,6 +328,9 @@ class ValidationHarness:
 	@contextmanager
 	def patched(self):
 		with ExitStack() as stack:
+			stack.enter_context(patch.object(
+				transactions, "get_registration_required_items", side_effect=lambda codes: set(codes) & self.required
+			))
 			self.get_settings = stack.enter_context(
 				patch.object(transactions, "get_settings", return_value=self.settings)
 			)
@@ -981,6 +985,59 @@ class TestBlockedRows(unittest.TestCase):
 class TestClassification(unittest.TestCase):
 	"""Siwat, 5 Nov 2026: an Item RA has not classified is not sold; a regulated one needs a registration."""
 
+	def test_required_items_block_administrator_despite_disabled_checks_and_relaxed_policies(self):
+		settings = make_settings(**dict.fromkeys(transactions.POLICY_DEFAULTS, "Ignore"))
+		for doctype in transactions.SALE_DOCTYPES:
+			settings[f"validate_on_{frappe.scrub(doctype)}"] = 0
+			for mapping in (
+				None,
+				make_mapping(official_status="Suspended", in_force=False),
+				make_mapping(official_status="Revoked", in_force=False),
+				make_mapping(expiry_date=date(2026, 1, 1), in_force=False),
+			):
+				with self.subTest(doctype=doctype, mapping=mapping), patch.object(
+					transactions, "_is_administrator", return_value=True
+				):
+					harness = ValidationHarness(
+						{"DEVICE-1": mapping}, settings, required={"DEVICE-1"}
+					).run_with(make_doc(doctype, transaction_date="2026-08-09"))
+					self.assertTrue(harness.raised)
+
+	def test_required_items_with_valid_registration_pass(self):
+		for doctype in transactions.SALE_DOCTYPES:
+			with self.subTest(doctype=doctype):
+				harness = ValidationHarness(
+					{"DEVICE-1": make_mapping()}, required={"DEVICE-1"}
+				).run_with(make_doc(doctype, transaction_date="2026-08-09"))
+				self.assertFalse(harness.raised)
+
+	def test_required_invoice_rows_are_checked_even_when_delivery_linked(self):
+		for linked in ({"dn_detail": "DNI-1"}, {"delivery_note": "DN-1"}):
+			doc = make_doc("Sales Invoice", rows=[make_row(**linked)])
+			harness = ValidationHarness({}, required={"DEVICE-1"}).run_with(doc)
+			self.assertTrue(harness.raised)
+			with harness.patched():
+				self.assertEqual(transactions.blocked_rows(doc)[0]["item_code"], "DEVICE-1")
+
+	def test_sales_selector_filters_administrator_too(self):
+		import inspect
+
+		from erpnext.controllers import queries
+
+		db = MagicMock(estimate_count=lambda doctype: 0)
+		with (
+			patch.object(frappe, "db", db),
+			patch.object(frappe, "session", frappe._dict(user="Administrator")),
+			patch.object(frappe, "get_meta", return_value=MagicMock(get_search_fields=lambda: ["name"])),
+			patch.object(transactions, "sellable_items_condition", return_value="and required_coverage"),
+			patch.object(queries, "get_filters_cond", return_value=""),
+			patch.object(queries, "get_match_cond", return_value=""),
+			patch.object(queries, "get_item_search_candidates", return_value=None),
+			patch.object(queries, "nowdate", return_value="2026-08-09"),
+		):
+			inspect.unwrap(queries.item_query)("Item", "", "name", 0, 20, {"regulatory_sale": 1})
+		self.assertIn("and required_coverage", db.sql.call_args.args[0])
+
 	def test_an_unclassified_item_is_refused_on_save_of_every_sale_document(self):
 		for doctype in ("Quotation", "Sales Order", "Delivery Note", "Sales Invoice"):
 			with self.subTest(doctype=doctype):
@@ -1024,13 +1081,71 @@ class TestClassification(unittest.TestCase):
 		self.assertIn("not been classified", found[0]["reason"])
 
 	def test_the_link_list_condition_offers_not_regulated_or_covered_items_only(self):
-		with patch.object(frappe, "db", new=MagicMock(escape=lambda v: f"'{v}'")):
+		with (
+			patch.object(frappe, "db", new=MagicMock(escape=lambda v: f"'{v}'")),
+			patch.object(frappe, "get_meta", return_value=MagicMock(has_field=lambda field: False)),
+		):
 			condition = transactions.sellable_items_condition("2026-08-09")
 		self.assertIn("= 'Not Regulated'", condition)
 		self.assertIn("reg.official_status in ('Active', 'Expired', 'Superseded')", condition)
 		self.assertIn("rp.effective_from <= '2026-08-09'", condition)
 		self.assertIn("reg.expiry_date >= '2026-08-09'", condition)
+		self.assertNotIn("registration_requirement", condition)
+
+	def test_required_items_cannot_use_either_not_regulated_selector_branch(self):
+		with (
+			patch.object(frappe, "db", new=MagicMock(escape=lambda v: f"'{v}'")),
+			patch.object(frappe, "get_meta", return_value=MagicMock(has_field=lambda field: True)),
+		):
+			condition = transactions.sellable_items_condition("2026-08-09")
+		self.assertIn("= 'Not Regulated' and ifnull(tabItem.registration_requirement, '') != 'Required'", condition)
+		self.assertIn("not in ('', 'Not Regulated') and exists", condition)
 
 	def test_get_unclassified_items_lists_items_without_a_category(self):
-		with patch.object(frappe, "get_all", return_value=["B"]):
+		with (
+			patch.object(frappe, "get_all", return_value=["B"]),
+			patch.object(frappe, "get_meta", return_value=MagicMock(has_field=lambda field: False)),
+		):
 			self.assertEqual(transactions.get_unclassified_items(["A", "B", ""]), {"A"})
+
+	def test_required_not_regulated_items_need_classification_before_sales(self):
+		lookup = transactions.get_unclassified_items
+		for doctype in transactions.SALE_DOCTYPES:
+			with (
+				self.subTest(doctype=doctype),
+				ValidationHarness(
+					{"DEVICE-1": make_mapping()}, in_scope=set(), required={"DEVICE-1"}
+				).patched(),
+				patch.object(transactions, "_is_administrator", return_value=True),
+				patch.object(transactions, "get_unclassified_items", side_effect=lookup),
+				patch.object(frappe, "get_meta", return_value=MagicMock(has_field=lambda field: True)),
+				patch.object(frappe, "get_all", side_effect=[["DEVICE-1"], ["DEVICE-1"]]) as get_all,
+			):
+				with self.assertRaises(frappe.ValidationError):
+					transactions.validate_transaction(make_doc(doctype))
+				self.assertEqual(
+					get_all.call_args.kwargs["filters"][-2:],
+					[
+						["Item", "regulatory_product_category", "=", "Not Regulated"],
+						["Item", "registration_requirement", "=", "Required"],
+					],
+				)
+
+	def test_required_regulated_and_not_required_items_remain_classified(self):
+		with (
+			patch.object(frappe, "get_meta", return_value=MagicMock(has_field=lambda field: True)),
+			patch.object(frappe, "get_all", side_effect=[["REGULATED", "EXEMPT", "CONFLICT"], ["CONFLICT"]]),
+		):
+			self.assertEqual(
+				transactions.get_unclassified_items(["BLANK", "REGULATED", "EXEMPT", "CONFLICT"]),
+				{"BLANK", "CONFLICT"},
+			)
+
+	def test_registration_assessment_is_visible_for_not_regulated_items(self):
+		import json
+		from pathlib import Path
+
+		item_path = Path(__file__).resolve().parents[2] / "stock/doctype/item/item.json"
+		fields = json.loads(item_path.read_text())["fields"]
+		assessment = next(field for field in fields if field["fieldname"] == "registration_requirement")
+		self.assertFalse(assessment.get("depends_on"))

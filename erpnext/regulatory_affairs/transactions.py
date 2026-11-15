@@ -138,16 +138,17 @@ def _validate(doc, *, warn_only):
 		return
 
 	settings = get_settings()
-	if not validation_enabled(doc.doctype, settings):
-		return
-
 	reported = []
 	problem_items = set()
+	required_problems = set()
 
+	rows = [row for row in doc.get("items") or [] if row.get("item_code")]
+	codes = {row.get("item_code") for row in rows}
+	required = get_registration_required_items(codes) if doc.doctype in SALE_DOCTYPES else set()
+	enabled = validation_enabled(doc.doctype, settings)
 	rows = [
-		row
-		for row in doc.get("items") or []
-		if row.get("item_code") and not is_delivery_linked(doc.doctype, row)
+		row for row in rows
+		if row.get("item_code") in required or (enabled and not is_delivery_linked(doc.doctype, row))
 	]
 	codes = {row.get("item_code") for row in rows}
 	unclassified = get_unclassified_items(codes) if doc.doctype in SALE_DOCTYPES else set()
@@ -161,6 +162,8 @@ def _validate(doc, *, warn_only):
 		if item_code in unclassified:
 			reported.append(build_message(unclassified_text(row), BLOCK))
 			problem_items.add(item_code)
+			if item_code in required:
+				required_problems.add(item_code)
 			continue
 		if item_code not in in_scope:
 			continue
@@ -172,13 +175,20 @@ def _validate(doc, *, warn_only):
 		if mappings[key] is AMBIGUOUS:
 			continue
 
-		messages = evaluate_row(doc.doctype, row, mappings[key], coverage_date, settings)
+		messages = evaluate_row(
+			doc.doctype, row, mappings[key], coverage_date, settings, registration_required=item_code in required
+		)
 		if not messages:
 			continue
 		reported.extend(messages)
 		problem_items.add(item_code)
+		if item_code in required and has_blocking_message(messages):
+			required_problems.add(item_code)
 
-	report_messages(reported, warn_only=warn_only, doc=doc, item_codes=sorted(problem_items))
+	report_messages(
+		reported, warn_only=warn_only, doc=doc, item_codes=sorted(problem_items),
+		force_block=bool(required_problems),
+	)
 
 
 def unclassified_text(row):
@@ -222,14 +232,14 @@ def _is_administrator():
 	return not (job and job.get("method") == _SCHEDULED_JOB)
 
 
-def report_messages(reported, *, warn_only, doc=None, item_codes=()):
+def report_messages(reported, *, warn_only, doc=None, item_codes=(), force_block=False):
 	"""Show warning messages; raise when a message blocks. The text is plain English: which Item, why, what to do."""
 	if not reported:
 		return
 
 	body = "<br>".join(display_message(message) for message in reported)
-	# Administrator does everything (Siwat, 6 Nov 2026, for his testing): he is told, never stopped.
-	blocking = not warn_only and has_blocking_message(reported) and not _is_administrator()
+	# Administrator's testing exemption does not apply to Items explicitly assessed Required.
+	blocking = not warn_only and has_blocking_message(reported) and (force_block or not _is_administrator())
 	advice = what_to_do(doc, blocking=blocking, warn_only=warn_only)
 	if advice:
 		body += "<br><br>" + advice
@@ -293,12 +303,13 @@ def blocked_rows(doc):
 	if not is_guarded_document(doc) or doc.get("is_return") or doc.get("is_consolidated"):
 		return []
 	settings = get_settings()
-	if not validation_enabled(doc.doctype, settings):
-		return []
+	rows = [row for row in doc.get("items") or [] if row.get("item_code")]
+	codes = {row.get("item_code") for row in rows}
+	required = get_registration_required_items(codes) if doc.doctype in SALE_DOCTYPES else set()
+	enabled = validation_enabled(doc.doctype, settings)
 	rows = [
-		row
-		for row in doc.get("items") or []
-		if row.get("item_code") and not is_delivery_linked(doc.doctype, row)
+		row for row in rows
+		if row.get("item_code") in required or (enabled and not is_delivery_linked(doc.doctype, row))
 	]
 	codes = {row.get("item_code") for row in rows}
 	unclassified = get_unclassified_items(codes) if doc.doctype in SALE_DOCTYPES else set()
@@ -318,7 +329,9 @@ def blocked_rows(doc):
 		except frappe.ValidationError:
 			frappe.clear_last_message()
 			continue
-		messages = evaluate_row(doc.doctype, row, mapping, coverage_date, settings)
+		messages = evaluate_row(
+			doc.doctype, row, mapping, coverage_date, settings, registration_required=item_code in required
+		)
 		blocking = [m for m in messages if m.startswith(BLOCK_PREFIX)]
 		if blocking:
 			reason = "; ".join(display_message(m)[len("&bull; ") :] for m in blocking)
@@ -383,8 +396,13 @@ def sellable_items_condition(on_date=None):
 	list. A date is a plain `YYYY-MM-DD` value (escaped here); without one it is today."""
 	day = frappe.db.escape(str(getdate(on_date or today())))
 	statuses = ", ".join(frappe.db.escape(status) for status in IN_FORCE_STATUSES)
-	return f"""and (tabItem.{ITEM_CATEGORY_FIELD} = {frappe.db.escape(NOT_REGULATED)}
-		or (ifnull(tabItem.{ITEM_CATEGORY_FIELD}, '') != '' and exists (
+	assessment = (
+		"and ifnull(tabItem.registration_requirement, '') != 'Required'"
+		if frappe.get_meta("Item").has_field("registration_requirement")
+		else ""
+	)
+	return f"""and ((tabItem.{ITEM_CATEGORY_FIELD} = {frappe.db.escape(NOT_REGULATED)} {assessment})
+		or (ifnull(tabItem.{ITEM_CATEGORY_FIELD}, '') not in ('', {frappe.db.escape(NOT_REGULATED)}) and exists (
 			select 1 from `tabRegulatory Registered Product` rp
 			inner join `tabRegulatory Product Registration` reg on reg.name = rp.parent
 			where rp.parenttype = 'Regulatory Product Registration'
@@ -453,7 +471,7 @@ def get_items_in_scope(item_codes):
 
 
 def get_unclassified_items(item_codes):
-	"""Item codes RA has not classified yet (no Product Category and not Not Regulated): they are not sold."""
+	"""Blank categories and Items assessed Required but still Not Regulated cannot be sold."""
 	item_codes = sorted({item_code for item_code in item_codes if item_code})
 	if not item_codes:
 		return set()
@@ -464,7 +482,29 @@ def get_unclassified_items(item_codes):
 			pluck="name",
 		)
 	)
+	if frappe.get_meta("Item").has_field("registration_requirement"):
+		classified.difference_update(
+			frappe.get_all(
+				"Item",
+				filters=[
+					["Item", "name", "in", item_codes],
+					["Item", ITEM_CATEGORY_FIELD, "=", NOT_REGULATED],
+					["Item", "registration_requirement", "=", "Required"],
+				],
+				pluck="name",
+			)
+		)
 	return {code for code in item_codes if code not in classified}
+
+
+def get_registration_required_items(item_codes):
+	"""Purchasing's Required assessment is enforced even for Administrator and relaxed site policies."""
+	if not item_codes or not frappe.get_meta("Item").has_field("registration_requirement"):
+		return set()
+	return set(frappe.get_all(
+		"Item", filters={"name": ["in", sorted(item_codes)], "registration_requirement": "Required"},
+		pluck="name",
+	))
 
 
 def get_coverage_date(doc, row):
@@ -481,8 +521,13 @@ def get_coverage_date(doc, row):
 # Row evaluation
 
 
-def evaluate_row(doctype, row, mapping, coverage_date, settings):
+def evaluate_row(doctype, row, mapping, coverage_date, settings, *, registration_required=False):
 	"""Policy messages for one row, each prefixed `Block:` or `Warning:`; ignored checks add nothing."""
+	if registration_required:
+		settings = {**settings, **dict.fromkeys((
+			"missing_registration_action", "expired_registration_action", "suspended_registration_action",
+			"revoked_registration_action", "expired_registration_existing_stock_policy",
+		), BLOCK)}
 	item_code = row.get("item_code") or ""
 	coverage_date = getdate(coverage_date)
 	prefix = _("Item {1} (row {0})").format(row.get("idx") or "?", frappe.bold(escape_html(item_code)))

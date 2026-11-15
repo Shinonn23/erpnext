@@ -117,7 +117,7 @@
    "link_to": "Asset Movement",
    "link_type": "DocType",
    "type": "Link",
-   "route_options": "{\"Asset Movement Item.service_equipment\": [\"is\", \"set\"]}"
+   "route_options": "{\"assets.service_equipment\": [\"is\", \"set\"]}"
   },
   {
    "child": 1,

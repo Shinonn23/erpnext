@@ -10,14 +10,6 @@
  "field_order": [
   "barcode",
   "has_item_scanned",
-  "section_break_2",
-  "s_warehouse",
-  "col_break1",
-  "t_warehouse",
-  "inventory_dimension",
-  "storage_location",
-  "inventory_dimension_col_break",
-  "to_storage_location",
   "sec_break1",
   "item_code",
   "item_name",
@@ -28,12 +20,14 @@
   "quality_inspection",
   "subcontracted_item",
   "against_fg",
-  "section_break_8",
-  "description",
-  "column_break_10",
-  "item_group",
-  "image",
-  "image_view",
+  "section_break_2",
+  "s_warehouse",
+  "storage_location",
+  "col_break1",
+  "t_warehouse",
+  "to_storage_location",
+  "inventory_dimension",
+  "inventory_dimension_col_break",
   "quantity_section",
   "qty",
   "transfer_qty",
@@ -43,6 +37,12 @@
   "stock_uom",
   "conversion_factor",
   "sample_quantity",
+  "section_break_8",
+  "description",
+  "column_break_10",
+  "item_group",
+  "image",
+  "image_view",
   "rates_section",
   "basic_rate",
   "customer_provided_item_cost",
@@ -111,7 +111,8 @@
   },
   {
    "fieldname": "section_break_2",
-   "fieldtype": "Section Break"
+   "fieldtype": "Section Break",
+   "label": "Warehouses and Locations"
   },
   {
    "fieldname": "s_warehouse",
@@ -139,7 +140,8 @@
   },
   {
    "fieldname": "sec_break1",
-   "fieldtype": "Section Break"
+   "fieldtype": "Section Break",
+   "label": "Item"
   },
   {
    "bold": 1,

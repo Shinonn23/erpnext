@@ -327,7 +327,7 @@
    "label": "Equipment Movements",
    "link_to": "Asset Movement",
    "type": "DocType",
-   "stats_filter": "{\"Asset Movement Item.service_equipment\": [\"is\", \"set\"]}"
+   "stats_filter": "{\"assets.service_equipment\": [\"is\", \"set\"]}"
   },
   {
    "color": "Grey",

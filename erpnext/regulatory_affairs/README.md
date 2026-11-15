@@ -41,13 +41,19 @@ registration in force) or **Not Regulated** (sales, purchases and receipts need 
 New and legacy blank Items take the default when saved; an existing classification cannot be cleared. Only
 Regulatory Affairs may change a classified Item to a different category. Purchasing or an Item Manager assesses
 **Registration Requirement for Sale** in Item Details; its visibility does not depend on enabling Quality Inspection.
+It also remains visible when Product Category is **Not Regulated**. Choosing **Required** keeps such an Item
+out of sales selectors and blocks sales saves, including API saves, until Regulatory Affairs assigns a regulated
+category and the Item has valid registration coverage. A Not Regulated Item assessed **Not Required** keeps its exemption.
+Every **Required** Item needs valid registration coverage even for Administrator, when a document's validation
+switch is off, or when a registration policy otherwise allows a warning. Required Sales Invoice rows are checked
+again even when linked to a Delivery Note. Sales selectors apply the same classification filter for Administrator.
 For Quotation, Sales Order, Delivery Note and Sales Invoice:
 
 * the Item link (`sales_common.js` -> `item_query` filter `regulatory_sale`) offers only Items that are classified and, when
   regulated, covered by a registration in force on the document's date (`transactions.sellable_items_condition`);
 * saving (`validate`, not only submit) a row with an unclassified, unregistered or expired Item is refused in plain words, with
   the button *Notify Regulatory Affairs* (a task for each Item for the Regulatory Operators, also for a draft not saved yet);
-* returns, consolidated POS invoices and Sales Invoice rows already delivered are not checked; purchasing and stock keep their
+* returns, consolidated POS invoices and non-Required Sales Invoice rows already delivered are not checked; purchasing and stock keep their
   own rules (a Purchase Order only warns).
 
 Saving a registration whose product row names an Item with no Product Category sets that Item's category from the registration's (never overwrites an existing category or Not Regulated; the Item gets a comment; the orange warning only names the Items left; Siwat, 6 Nov 2026). Verify and Activate sets Last Verified On. RA classifies one Item with *Regulatory > Classify Item* (Product Category, Medical Device Category in one

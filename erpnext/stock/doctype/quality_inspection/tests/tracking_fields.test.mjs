@@ -19,14 +19,17 @@ async function visibility(doc, hasSerial) {
 test('purchase inspection shows tracking fields for its actual unit', async () => {
  const batch = await visibility({ purchase_unit_qty: 5, item_code: 'A', batch_no: 'B' }, 0);
  assert.equal(batch.item_serial_no, true); assert.equal(batch.batch_no, false);
- assert.equal(batch.purchase_rejected_serials, 1); assert.equal(batch.purchase_serials_section, true);
+ assert.equal(batch.purchase_rejected_serials, true); assert.equal(batch.purchase_serials_section, true);
  const batchSerial = await visibility({ purchase_unit_qty: 5, item_code: 'A', batch_no: 'B' }, 1);
- assert.equal(batchSerial.purchase_rejected_serials, 1); assert.equal(batchSerial.purchase_serials_section, false);
+ assert.equal(batchSerial.purchase_rejected_serials, true); assert.equal(batchSerial.purchase_serials_section, true);
  const serial = await visibility({ purchase_unit_qty: 1, item_serial_no: 'S', batch_no: 'B' }, 1);
- assert.equal(serial.item_serial_no, false); assert.equal(serial.batch_no, true);
- assert.equal(serial.purchase_rejected_serials, 1); assert.equal(serial.purchase_serials_section, true);
+ assert.equal(serial.item_serial_no, false); assert.equal(serial.batch_no, false);
+ assert.equal(serial.purchase_rejected_serials, true); assert.equal(serial.purchase_serials_section, true);
  const row = await visibility({ purchase_unit_qty: 5, item_code: 'A' }, 1);
- assert.equal(row.batch_no, true); assert.equal(row.item_serial_no, true); assert.equal(row.purchase_rejected_serials, 1);
+ assert.equal(row.batch_no, true); assert.equal(row.item_serial_no, true); assert.equal(row.purchase_rejected_serials, true);
+ const history = await visibility({ purchase_unit_qty: 2, purchase_serial_results: [{ serial_no: 'S1' }], purchase_rejected_serials: 'S1' }, 1);
+ assert.equal(history.purchase_serials_section, false); assert.equal(history.purchase_serial_results, false);
+ assert.equal(history.purchase_rejected_serials, false);
  const legacy = await visibility({ purchase_unit_qty: 0 }, 0);
  assert.equal(legacy.item_serial_no, false); assert.equal(legacy.batch_no, false);
 });

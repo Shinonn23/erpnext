@@ -103,6 +103,7 @@ def _get_protected_doctypes_internal():
 	for doctype in PROTECTED_CORE_DOCTYPES:
 		if frappe.db.exists("DocType", doctype):
 			protected.append(doctype)
+	protected.extend(frappe.get_hooks("company_data_to_be_ignored") or [])
 
 	singles = frappe.get_all("DocType", filters={"issingle": 1}, pluck="name")
 	protected.extend(singles)
@@ -1124,7 +1125,7 @@ def check_for_running_deletion_job(doc, method=None):
 	if doc.doctype in LEDGER_ENTRY_DOCTYPES:
 		return
 
-	if doc.doctype in PROTECTED_CORE_DOCTYPES:
+	if doc.doctype in PROTECTED_CORE_DOCTYPES or doc.doctype in (frappe.get_hooks("company_data_to_be_ignored") or []):
 		return
 
 	deletion_name = frappe.cache.get_value(f"deletion_running_doctype:{doc.doctype}")
