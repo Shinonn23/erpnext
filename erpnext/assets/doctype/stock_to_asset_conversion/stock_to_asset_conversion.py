@@ -1028,7 +1028,7 @@ class StocktoAssetConversion(StockController):
 			asset.source_batch_no = output.source_batch_no
 			asset.material_request = self.material_request
 			# a unit converted from a Borrow loan stays with its borrower (Siwat, 16 Nov 2026)
-			if self.custody_loan:
+			if getattr(self, "custody_loan", None):
 				asset.custodian = self.loan_custodian()
 			expensed = output.accounting_treatment == "Expense Immediately"
 			asset.net_purchase_amount = 0 if expensed else output.asset_value
