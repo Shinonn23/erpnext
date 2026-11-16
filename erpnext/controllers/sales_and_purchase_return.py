@@ -307,9 +307,15 @@ def validate_quantity(doc, key, args, ref, valid_items, already_returned_items):
 					_("Item {0} has already been returned").format(args.item_code), StockOverReturnError
 				)
 			elif abs(flt(current_stock_qty, field_precision)) > max_returnable_qty:
+				# said in the unit of the document row (packs), not in stock units
+				# (the qty column is already in it; every other column is counted in stock units)
+				factor = 1.0 if column == "qty" else flt(args.get("conversion_factor")) or 1.0
 				frappe.throw(
-					_("Row # {0}: Cannot return more than {1} for Item {2}").format(
-						args.idx, max_returnable_qty, args.item_code
+					_("Row # {0}: Cannot return more than {1} {2} for Item {3}").format(
+						args.idx,
+						flt(max_returnable_qty / factor, field_precision),
+						args.get("uom") or args.get("stock_uom") or "",
+						args.item_code,
 					),
 					StockOverReturnError,
 				)
