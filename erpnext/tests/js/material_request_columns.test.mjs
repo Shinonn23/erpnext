@@ -29,7 +29,7 @@ test("each purpose displays its relevant asset or quantity and warehouse columns
 		["Material Transfer", ["qty", "warehouse", "from_warehouse"]],
 		["Material Issue", ["qty", "warehouse"]],
 		["Customer Demo", ["qty"]],
-		["Customer Borrow / Loan", ["qty"]],
+		["Customer Borrow", ["qty"]],
 	]) {
 		const { visibility, required } = columns(purpose);
 		assert.equal(visibility.item_code, true, `${purpose}: item_code`);
@@ -50,14 +50,14 @@ test("asset transfers hide cost and unit and row dates follow the header", () =>
 	assert.equal(columns("Customer Demo").visibility.rate, false);
 	assert.equal(columns("Customer Demo").visibility.uom, true);
 	assert.equal(columns("Customer Demo").required.uom, true);
-	assert.equal(columns("Customer Borrow / Loan").visibility.uom, true);
-	assert.equal(columns("Customer Borrow / Loan").required.uom, true);
+	assert.equal(columns("Customer Borrow").visibility.uom, true);
+	assert.equal(columns("Customer Borrow").required.uom, true);
 	assert.equal(columns("Purchase").required.uom, true);
 });
 
 test("the requester is never asked for a storage location, for any purpose", () => {
 	for (const purpose of ["Asset Transfer", "Purchase", "Material Transfer", "Material Issue", "Customer Demo",
-		"Customer Borrow / Loan"]) {
+		"Borrow", "Customer Borrow"]) {
 		const { visibility, queries } = columns(purpose);
 		assert.equal(visibility.storage_location, false, `${purpose}: storage_location`);
 		assert.equal(visibility.from_storage_location, false, `${purpose}: from_storage_location`);

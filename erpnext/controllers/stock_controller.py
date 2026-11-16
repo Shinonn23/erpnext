@@ -1832,7 +1832,7 @@ class StockController(AccountsController):
 			return False
 		if not row.get("warehouse"):
 			return False
-		from erpnext.loan.doctype.custody_loan.custody_loan_core import is_quarantine_warehouse
+		from erpnext.borrowing.doctype.borrowing.borrowing_core import is_quarantine_warehouse
 
 		return is_quarantine_warehouse(row.warehouse, self.company)
 
@@ -1841,7 +1841,7 @@ class StockController(AccountsController):
 		Diagnostics, Siwat, 5 Nov 2026): a sales return row received there is not refused for its rejection."""
 		if self.doctype not in ("Delivery Note", "Sales Invoice") or not cint(self.get("is_return")):
 			return False
-		from erpnext.loan.doctype.custody_loan.custody_loan_core import is_quarantine_warehouse
+		from erpnext.borrowing.doctype.borrowing.borrowing_core import is_quarantine_warehouse
 
 		return bool(row.get("warehouse")) and is_quarantine_warehouse(row.warehouse, self.company)
 

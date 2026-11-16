@@ -27,8 +27,8 @@ class Shipment(Document):
 		amended_from: DF.Link | None
 		material_request: DF.Link | None
 		material_request_direction: DF.Literal["Delivery", "Pickup"] | None
-		custody_loan: DF.Link | None
-		custody_loan_direction: DF.Literal["Delivery", "Pickup"] | None
+		borrowing: DF.Link | None
+		borrowing_direction: DF.Literal["Delivery", "Pickup"] | None
 		awb_number: DF.Data | None
 		carrier: DF.Data | None
 		carrier_service: DF.Data | None
@@ -100,7 +100,7 @@ class Shipment(Document):
 
 	def sync_material_request_snapshots(self):
 		sources = []
-		custody_loan_sources = []
+		borrowing_sources = []
 		for row in self.get("shipment_documents"):
 			if not row.reference_name:
 				continue
@@ -108,10 +108,10 @@ class Shipment(Document):
 				stock_entry = frappe.get_doc("Stock Entry", row.reference_name)
 				if stock_entry.get("outgoing_stock_entry"):
 					continue
-				if stock_entry.get("is_custody_loan_transaction"):
-					loan = frappe.get_doc("Custody Loan", stock_entry.custody_loan)
-					custody_loan_sources.append(
-						(loan.name, get_custody_loan_stock_direction(stock_entry, loan), stock_entry)
+				if stock_entry.get("is_borrowing_transaction"):
+					loan = frappe.get_doc("Borrowing", stock_entry.borrowing)
+					borrowing_sources.append(
+						(loan.name, get_borrowing_stock_direction(stock_entry, loan), stock_entry)
 					)
 					continue
 				request_names = get_stock_entry_material_requests(stock_entry)
@@ -120,7 +120,7 @@ class Shipment(Document):
 				if request_names:
 					request_name = next(iter(request_names))
 					request = frappe.get_doc("Material Request", request_name)
-					if request.material_request_type != "Customer Borrow / Loan":
+					if request.material_request_type not in ("Borrow", "Customer Borrow"):
 						continue
 					loan_warehouse = request.customer_loan_warehouse
 					directions = set()
@@ -135,29 +135,29 @@ class Shipment(Document):
 						elif item.s_warehouse == loan_warehouse:
 							directions.add("Pickup")
 					if len(directions) != 1:
-						frappe.throw(_("A Customer Loan Stock Entry Shipment must move in one direction."))
+						frappe.throw(_("A Customer Borrowing Stock Entry Shipment must move in one direction."))
 					sources.append((request_name, directions.pop(), stock_entry))
 			elif row.reference_doctype == "Delivery Note":
 				delivery_note = frappe.get_doc("Delivery Note", row.reference_name)
-				if delivery_note.get("is_custody_loan_transaction"):
-					loan = frappe.get_doc("Custody Loan", delivery_note.custody_loan)
-					custody_loan_sources.append(
+				if delivery_note.get("is_borrowing_transaction"):
+					loan = frappe.get_doc("Borrowing", delivery_note.borrowing)
+					borrowing_sources.append(
 						(
 							loan.name,
-							get_custody_loan_delivery_note_direction(delivery_note),
+							get_borrowing_delivery_note_direction(delivery_note),
 							delivery_note,
 						)
 					)
-		if custody_loan_sources:
+		if borrowing_sources:
 			if sources:
-				frappe.throw(_("A Shipment cannot combine Custody Loan transactions with other source documents"))
-			loan_names = {source[0] for source in custody_loan_sources}
-			directions = {source[1] for source in custody_loan_sources}
+				frappe.throw(_("A Shipment cannot combine Borrowing transactions with other source documents"))
+			loan_names = {source[0] for source in borrowing_sources}
+			directions = {source[1] for source in borrowing_sources}
 			if len(loan_names) != 1 or len(directions) != 1:
-				frappe.throw(_("A Shipment can contain documents for one Custody Loan and one direction"))
-			loan_name, direction, source = custody_loan_sources[0]
-			loan = frappe.get_doc("Custody Loan", loan_name)
-			set_custody_loan_shipment_party(self, loan, direction, source)
+				frappe.throw(_("A Shipment can contain documents for one Borrowing and one direction"))
+			loan_name, direction, source = borrowing_sources[0]
+			loan = frappe.get_doc("Borrowing", loan_name)
+			set_borrowing_shipment_party(self, loan, direction, source)
 			return
 		if not sources:
 			return
@@ -167,7 +167,7 @@ class Shipment(Document):
 		if self.material_request and request_names and self.material_request not in request_names:
 			frappe.throw(_("A Shipment cannot combine different Material Requests"))
 		if len(request_names) > 1 or len(directions) > 1:
-			frappe.throw(_("A Shipment can contain documents for one Customer Demo / Loan Material Request and one direction."))
+			frappe.throw(_("A Shipment can contain documents for one Customer Demo / Borrowing Material Request and one direction."))
 		request_name, direction, source = sources[0]
 		from erpnext.assets.doctype.material_request.material_request import (
 			get_customer_delivery_snapshot,
@@ -176,7 +176,7 @@ class Shipment(Document):
 		request = frappe.get_doc("Material Request", request_name)
 		customer = request.customer
 		if (
-			request.material_request_type == "Customer Borrow / Loan"
+			request.material_request_type in ("Borrow", "Customer Borrow")
 			and request.loan_recipient_type == "Customer"
 		):
 			customer = customer or request.loan_recipient
@@ -240,8 +240,8 @@ class Shipment(Document):
 		if has_transit_stock:
 			self.tracking_status = "In Progress"
 			self.db_set("tracking_status", "In Progress")
-		if self.get("custody_loan"):
-			frappe.get_doc("Custody Loan", self.custody_loan).update_status()
+		if self.get("borrowing"):
+			frappe.get_doc("Borrowing", self.borrowing).update_status()
 
 	def on_update_after_submit(self):
 		if self.tracking_status != "Delivered" or self.flags.get("receiving_stock_for_shipment"):
@@ -281,15 +281,15 @@ class Shipment(Document):
 		if new_receipts:
 			self.flags.receiving_stock_for_shipment = True
 			self.save(ignore_permissions=True)
-		if self.get("custody_loan"):
-			frappe.get_doc("Custody Loan", self.custody_loan).update_status()
+		if self.get("borrowing"):
+			frappe.get_doc("Borrowing", self.borrowing).update_status()
 
 	def on_cancel(self):
 		for entry in self.get("shipment_documents"):
 			if entry.reference_doctype == "Delivery Note":
 				# a Shipment of a Delivery Note can be cancelled whatever the note's state: it changes nothing in it
-				if frappe.db.get_value("Delivery Note", entry.reference_name, "custody_loan_shipment") == self.name:
-					frappe.db.set_value("Delivery Note", entry.reference_name, "custody_loan_shipment", None)
+				if frappe.db.get_value("Delivery Note", entry.reference_name, "borrowing_shipment") == self.name:
+					frappe.db.set_value("Delivery Note", entry.reference_name, "borrowing_shipment", None)
 				continue
 			if entry.reference_doctype != "Stock Entry":
 				continue
@@ -301,8 +301,8 @@ class Shipment(Document):
 			if stock_entry.requires_shipment and stock_entry.shipment == self.name:
 				stock_entry.db_set("shipment", None)
 		self.db_set("status", "Cancelled")
-		if self.get("custody_loan"):
-			frappe.get_doc("Custody Loan", self.custody_loan).update_status()
+		if self.get("borrowing"):
+			frappe.get_doc("Borrowing", self.borrowing).update_status()
 
 	def validate_weight(self):
 		for parcel in self.shipment_parcel:
@@ -368,8 +368,8 @@ class Shipment(Document):
 					row.reference_doctype == "Delivery Note"
 					and docstatus == 0
 					and frappe.db.get_value("Delivery Note", row.reference_name, "requires_shipment")
-					and frappe.db.get_value("Delivery Note", row.reference_name, "custody_loan_shipment") == self.name
-					and frappe.db.get_value("Delivery Note", row.reference_name, "is_custody_loan_transaction")
+					and frappe.db.get_value("Delivery Note", row.reference_name, "borrowing_shipment") == self.name
+					and frappe.db.get_value("Delivery Note", row.reference_name, "is_borrowing_transaction")
 				)
 				if not (can_link_stock_entry_draft or can_link_delivery_note_draft):
 					frappe.throw(_("Only submitted documents can be linked to a Shipment: {0} {1}").format(*key))
@@ -390,7 +390,7 @@ def get_stock_entry_material_requests(stock_entry):
 	return request_names
 
 
-def get_custody_loan_stock_direction(stock_entry, loan):
+def get_borrowing_stock_direction(stock_entry, loan):
 	if stock_entry.purpose == "Material Receipt":
 		return "Pickup"
 	directions = set()
@@ -405,19 +405,19 @@ def get_custody_loan_stock_direction(stock_entry, loan):
 		elif row.s_warehouse == loan.customer_loan_warehouse:
 			directions.add("Pickup")
 		else:
-			frappe.throw(_("Custody Loan Stock Entry must move to or from the Custody Warehouse"))
+			frappe.throw(_("Borrowing Stock Entry must move to or from the Custody Warehouse"))
 	if len(directions) != 1:
-		frappe.throw(_("A Custody Loan Stock Entry Shipment must move in one direction"))
+		frappe.throw(_("A Borrowing Stock Entry Shipment must move in one direction"))
 	return directions.pop()
 
 
-def get_custody_loan_delivery_note_direction(delivery_note):
+def get_borrowing_delivery_note_direction(delivery_note):
 	return "Pickup" if delivery_note.is_return else "Delivery"
 
 
-def set_custody_loan_shipment_party(shipment, loan, direction, source):
-	shipment.custody_loan = loan.name
-	shipment.custody_loan_direction = direction
+def set_borrowing_shipment_party(shipment, loan, direction, source):
+	shipment.borrowing = loan.name
+	shipment.borrowing_direction = direction
 	shipment.material_request = loan.material_request
 	shipment.material_request_direction = direction
 	request = frappe.get_cached_doc("Material Request", loan.material_request)
@@ -501,11 +501,11 @@ def set_custody_loan_shipment_party(shipment, loan, direction, source):
 		shipment.delivery_address_name = get_party_shipping_address("Warehouse", warehouse) or company_address
 
 
-def append_custody_loan_return_documents(shipment, source):
-	if source.get("custody_loan_source_doctype") != "Custody Loan Return":
+def append_borrowing_return_documents(shipment, source):
+	if source.get("borrowing_source_doctype") != "Borrowing Return":
 		return
 
-	return_doc = frappe.get_doc("Custody Loan Return", source.custody_loan_source_name)
+	return_doc = frappe.get_doc("Borrowing Return", source.borrowing_source_name)
 	if not return_doc.requires_shipment:
 		return
 
@@ -575,28 +575,28 @@ def make_shipment_from_document(source_doctype, source_name):
 		source = frappe.get_doc(source_doctype, source_name)
 		is_replacement_receipt = (
 			source.purpose == "Material Receipt"
-			and source.get("is_custody_loan_transaction")
-			and source.get("custody_loan_source_doctype") == "Custody Loan Return"
+			and source.get("is_borrowing_transaction")
+			and source.get("borrowing_source_doctype") == "Borrowing Return"
 		)
-		if source.get("is_custody_loan_transaction"):
+		if source.get("is_borrowing_transaction"):
 			if not source.requires_shipment or (source.purpose != "Material Transfer" and not is_replacement_receipt):
-				frappe.throw(_("Only a draft Custody Loan transfer or replacement receipt marked Ship via Shipment can create a Shipment."))
+				frappe.throw(_("Only a draft Borrowing transfer or replacement receipt marked Ship via Shipment can create a Shipment."))
 			if source.shipment and frappe.db.exists("Shipment", source.shipment):
 				return frappe.get_doc("Shipment", source.shipment).as_dict()
 			source.check_permission("write")
-			loan = frappe.get_doc("Custody Loan", source.custody_loan)
-			direction = get_custody_loan_stock_direction(source, loan)
+			loan = frappe.get_doc("Borrowing", source.borrowing)
+			direction = get_borrowing_stock_direction(source, loan)
 			shipment = frappe.new_doc("Shipment")
 			shipment.set_new_name()
-			set_custody_loan_shipment_party(shipment, loan, direction, source)
+			set_borrowing_shipment_party(shipment, loan, direction, source)
 			shipment.description_of_content = (
-				_("Custody Loan return from {0}").format(loan.borrower)
+				_("Borrowing return from {0}").format(loan.borrower)
 				if direction == "Pickup"
-				else _("Custody Loan delivery to {0}").format(loan.borrower)
+				else _("Borrowing delivery to {0}").format(loan.borrower)
 			)
 			shipment.append("shipment_documents", {"reference_doctype": "Stock Entry", "reference_name": source.name})
 			source.db_set("shipment", shipment.name)
-			append_custody_loan_return_documents(shipment, source)
+			append_borrowing_return_documents(shipment, source)
 			shipment.insert(ignore_permissions=True, ignore_mandatory=True)
 			return shipment.as_dict()
 

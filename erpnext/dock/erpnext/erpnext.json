@@ -73,9 +73,9 @@
    "added": 1,
    "hidden": 0,
    "icon": "handshake",
-   "link_to": "Loan",
+   "link_to": "Borrowings",
    "link_type": "Sidebar",
-   "title": "Loan"
+   "title": "Borrowings"
   },
   {
    "added": 1,
@@ -110,7 +110,7 @@
    "title": "Support"
   }
  ],
- "modified": "2026-11-12 00:29:37.511040",
+ "modified": "2026-11-16 12:00:00.000000",
  "modified_by": "Administrator",
  "name": "erpnext",
  "owner": "Administrator",

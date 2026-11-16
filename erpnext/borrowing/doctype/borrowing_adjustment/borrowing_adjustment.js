@@ -1,0 +1,243 @@
+frappe.ui.form.on("Borrowing Adjustment", {
+	setup(frm) {
+		// before_cancel reverses the adjustment's Stock Entry itself; without this the form asks the user to cancel it
+		// first ("Cancel All Documents") and stops when the user may not cancel it.
+		frm.ignore_doctypes_on_cancel_all = ["Stock Entry"];
+		frm.set_query("borrowing", () => ({
+			filters: {
+				docstatus: 1,
+				loan_type: "Stock",
+				status: ["in", ["Active", "Partially Returned"]],
+			},
+		}));
+		frm.set_query("borrowing_item", "items", () => ({
+			query: "erpnext.borrowing.doctype.borrowing.borrowing_core.borrowing_item_query",
+			filters: { parent: frm.doc.borrowing },
+		}));
+		set_open_batch_query(frm);
+		set_loan_item_query(frm);
+	},
+	onload(frm) {
+		load_loan_rows(frm);
+	},
+	borrowing(frm) {
+		load_loan_rows(frm);
+	},
+	refresh(frm) {
+		frm.set_intro("");
+		show_draft_guidance(
+			frm,
+			__(
+				"The items still out are listed. Remove what is coming back, write one Reason for the whole write-off (a row may give its own), then Save and Submit."
+			)
+		);
+		if (frm.doc.docstatus === 0 && frm.doc.borrowing) {
+			frm.add_custom_button(__("Select Serial / Batch"), () => select_open_serial_batches(frm, "qty"), __("Actions"));
+		}
+		if (frm.doc.docstatus === 1 && frm.doc.borrower_type === "Customer" &&
+			frm.doc.reason === "Consumed by the borrower" && frappe.model.can_create("Sales Invoice")) {
+			frm.add_custom_button(__("Consumption Invoice"), async () => {
+				const { message: invoice } = await frappe.call({
+					method: "erpnext.borrowing.doctype.borrowing.borrowing_set.create_consumption_invoice",
+					args: { adjustment: frm.doc.name },
+					freeze: true,
+				});
+				frappe.model.sync(invoice);
+				frappe.set_route("Form", "Sales Invoice", invoice.name);
+			}, __("Create"));
+		}
+		if (frm.doc.docstatus === 1 && !frm.doc.stock_entry && frappe.model.can_create("Stock Entry")) {
+			frm.add_custom_button(__("Stock Entry"), () => frm.call("prepare_stock_entry").then((r) => {
+				const doc = r.message;
+				if (!doc?.doctype) return;
+				frappe.model.sync(doc);
+				frappe.set_route("Form", doc.doctype, doc.name);
+			}), __("Create"));
+		}
+		if (frm.doc.docstatus !== 1 || !frm.doc.stock_entry || !frappe.model.can_read("Stock Entry")) return;
+		frm.add_custom_button(__("Open Stock Entry"), () =>
+			frappe.set_route("Form", "Stock Entry", frm.doc.stock_entry), __("View")
+		);
+	},
+});
+
+frappe.ui.form.on("Borrowing Adjustment Item", {
+	item_code(frm, cdt, cdn) {
+		link_loan_row(frm, cdt, cdn);
+	},
+	borrowing_item(frm, cdt, cdn) {
+		const row = locals[cdt][cdn];
+		if (!row.borrowing_item) return;
+		frappe.db
+			.get_value(
+				"Borrowing Item",
+				row.borrowing_item,
+				["item_code", "batch_no", "serial_no"],
+				null,
+				"Borrowing"
+			)
+			.then(({ message }) => {
+				if (!message) return;
+				frappe.model.set_value(cdt, cdn, { item_code: message.item_code });
+				fill_open_serial_batch(frm, cdt, cdn, "qty");
+			});
+	},
+});
+
+// Serial / batch picker (borrowing_tracking.get_open_serial_batches): lists what is still with the borrower and
+// fills one row per loan item and batch, like the Serial / Batch selector of a stock transaction.
+function select_open_serial_batches(frm, qty_field) {
+	if (!frm.doc.borrowing) {
+		frappe.msgprint(__("Select the Borrowing first"));
+		return;
+	}
+	frappe
+		.xcall("erpnext.borrowing.doctype.borrowing.borrowing_tracking.get_open_serial_batches", {
+			borrowing: frm.doc.borrowing,
+		})
+		.then((entries) => {
+			if (!entries?.length) {
+				frappe.msgprint(__("No batch or serial number of this borrowing is still with the borrower"));
+				return;
+			}
+			const dialog = new frappe.ui.Dialog({
+				title: __("Select Serial / Batch"),
+				size: "extra-large",
+				fields: [
+					{
+						fieldname: "entries",
+						fieldtype: "Table",
+						cannot_add_rows: true,
+						in_place_edit: true,
+						data: entries.map((entry) => ({ ...entry, qty: entry.open_qty })),
+						fields: [
+							{ fieldname: "borrowing_item", fieldtype: "Data", label: __("Borrowing Item"), read_only: 1, hidden: 1 },
+							{ fieldname: "item_code", fieldtype: "Link", options: "Item", label: __("Item"), read_only: 1, in_list_view: 1 },
+							{ fieldname: "batch_no", fieldtype: "Link", options: "Batch", label: __("Batch No"), read_only: 1, in_list_view: 1 },
+							{ fieldname: "serial_no", fieldtype: "Link", options: "Serial No", label: __("Serial No"), read_only: 1, in_list_view: 1 },
+							{ fieldname: "open_qty", fieldtype: "Float", label: __("Open Qty"), read_only: 1, in_list_view: 1 },
+							{ fieldname: "qty", fieldtype: "Float", label: __("Qty"), in_list_view: 1 },
+						],
+					},
+				],
+				primary_action_label: __("Use Selected"),
+				primary_action() {
+					const selected = dialog.fields_dict.entries.grid.get_selected_children();
+					if (!selected.length) {
+						frappe.msgprint(__("Tick the serial numbers or batches to use"));
+						return;
+					}
+					const groups = {};
+					selected.forEach((entry) => {
+						const key = `${entry.borrowing_item}::${entry.batch_no || ""}`;
+						const group = (groups[key] ||= {
+							borrowing_item: entry.borrowing_item,
+							item_code: entry.item_code,
+							batch_no: entry.batch_no || null,
+							serials: [],
+							qty: 0,
+						});
+						if (entry.serial_no) {
+							group.serials.push(entry.serial_no);
+							group.qty += 1;
+						} else {
+							group.qty += Math.min(flt(entry.qty), flt(entry.open_qty));
+						}
+					});
+					const chosen = new Set(selected.map((entry) => entry.borrowing_item));
+					// rows of the picked loan items are replaced; other rows stay
+					frm.doc.items = (frm.doc.items || []).filter((row) => !chosen.has(row.borrowing_item));
+					Object.values(groups).forEach((group) => {
+						if (group.qty <= 0) return;
+						const row = frm.add_child("items", {
+							borrowing_item: group.borrowing_item,
+							item_code: group.item_code,
+							batch_no: group.batch_no,
+							serial_no: group.serials.join("\n") || null,
+						});
+						row[qty_field] = group.qty;
+					});
+					frm.refresh_field("items");
+					frm.dirty();
+					dialog.hide();
+				},
+			});
+			dialog.show();
+		});
+}
+
+// Draft guidance and the grid columns that fit the loan type.
+function show_draft_guidance(frm, message) {
+	const stock = frm.doc.loan_type !== "Asset";
+	const grid = frm.fields_dict.items.grid;
+	grid.toggle_display("batch_no", stock);
+	grid.toggle_display("serial_no", stock);
+	if (frm.fields_dict.items.grid.get_docfield("asset")) grid.toggle_display("asset", !stock);
+	if (frm.doc.docstatus === 0 && stock && frm.doc.borrowing) frm.set_intro(message, "blue");
+}
+
+function set_open_batch_query(frm) {
+	frm.set_query("batch_no", "items", (doc, cdt, cdn) => {
+		const row = locals[cdt][cdn];
+		return {
+			query: "erpnext.borrowing.doctype.borrowing.borrowing_tracking.borrowing_batch_query",
+			filters: { borrowing: doc.borrowing, borrowing_item: row.borrowing_item },
+		};
+	});
+}
+
+// A picked loan item starts with its first open batch and that batch's serial numbers.
+function fill_open_serial_batch(frm, cdt, cdn, qty_field) {
+	const row = locals[cdt][cdn];
+	if (!row.borrowing_item || !frm.doc.borrowing) return;
+	frappe
+		.xcall("erpnext.borrowing.doctype.borrowing.borrowing_tracking.get_open_serial_batches", {
+			borrowing: frm.doc.borrowing,
+			borrowing_item: row.borrowing_item,
+		})
+		.then((entries) => {
+			if (!entries?.length) return;
+			const batch = entries[0].batch_no || null;
+			const same = entries.filter((entry) => (entry.batch_no || null) === batch);
+			const serials = same.filter((entry) => entry.serial_no).map((entry) => entry.serial_no);
+			const qty = serials.length || same.reduce((total, entry) => total + flt(entry.open_qty), 0);
+			frappe.model.set_value(cdt, cdn, {
+				batch_no: batch,
+				serial_no: serials.join("\n") || null,
+				[qty_field]: qty,
+			});
+		});
+}
+
+// The user chooses the Item; the hidden loan row link follows (as ERPNext links a Delivery Note row to its Sales
+// Order row). borrowing_tracking.get_loan_item_rows lists the loan's rows.
+function load_loan_rows(frm) {
+	frm._loan_rows = [];
+	if (!frm.doc.borrowing) return Promise.resolve([]);
+	return frappe
+		.xcall("erpnext.borrowing.doctype.borrowing.borrowing_tracking.get_loan_item_rows", {
+			borrowing: frm.doc.borrowing,
+		})
+		.then((rows) => (frm._loan_rows = rows || []));
+}
+
+function set_loan_item_query(frm) {
+	frm.set_query("item_code", "items", () => ({
+		filters: { name: ["in", [...new Set((frm._loan_rows || []).map((row) => row.item_code))]] },
+	}));
+}
+
+function link_loan_row(frm, cdt, cdn) {
+	const row = locals[cdt][cdn];
+	if (!row.item_code) return;
+	const current = (frm._loan_rows || []).find((loan_row) => loan_row.name === row.borrowing_item);
+	if (current && current.item_code === row.item_code) return;
+	const candidates = (frm._loan_rows || []).filter((loan_row) => loan_row.item_code === row.item_code);
+	if (!candidates.length) {
+		frappe.msgprint(__("Item {0} is not on Borrowing {1}", [row.item_code, frm.doc.borrowing]));
+		frappe.model.set_value(cdt, cdn, "item_code", null);
+		return;
+	}
+	const chosen = candidates.find((loan_row) => flt(loan_row.outstanding_qty) > 0) || candidates[0];
+	frappe.model.set_value(cdt, cdn, "borrowing_item", chosen.name);
+}

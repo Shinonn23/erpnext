@@ -141,11 +141,11 @@ def remove_legacy_storage_location_custom_field():
 
 
 def remove_loan_inventory_dimension_custom_fields():
-	"""Remove generated Inventory Dimension fields from loan item rows, preserving their columns."""
+	"""Remove generated Inventory Dimension fields from borrowing item rows, preserving their columns."""
 	loan_item_doctypes = [
-		"Custody Loan Adjustment Item",
-		"Custody Loan Item",
-		"Custody Loan Return Item",
+		"Borrowing Adjustment Item",
+		"Borrowing Item",
+		"Borrowing Return Item",
 	]
 	dimensions = frappe.get_all(
 		"Inventory Dimension",

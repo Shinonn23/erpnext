@@ -29,7 +29,7 @@
   "service_previous_movement",
   "service_previous_placed_on",
   "request_item",
-  "custody_loan_item",
+  "borrowing_item",
   "asset_item_code",
   "demo_asset_required"
  ],
@@ -87,7 +87,7 @@
    "fetch_from": "asset.demo_loan_status",
    "fieldname": "demo_loan_status",
    "fieldtype": "Data",
-   "label": "Demo / Loan Status",
+   "label": "Demo / Borrowing Status",
    "read_only": 1
   },
   {
@@ -218,12 +218,12 @@
    "read_only": 1
   },
   {
-   "fieldname": "custody_loan_item",
+   "fieldname": "borrowing_item",
    "fieldtype": "Link",
    "hidden": 1,
-   "label": "Custody Loan Item",
+   "label": "Borrowing Item",
    "no_copy": 1,
-   "options": "Custody Loan Item",
+   "options": "Borrowing Item",
    "read_only": 1
   },
   {

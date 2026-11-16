@@ -56,7 +56,7 @@ class TestWarehousePolicy(unittest.TestCase):
 	def test_restricted_type_matrix(self):
 		for name, allowed in {
 			"Transit": {"transfer"},
-			"Loan": {"loan"},
+			"Borrowed": {"loan"},
 			"Quarantine": {"receipt", "transfer"},
 			"Write-Off": {"receipt", "transfer", "reconciliation"},
 		}.items():
@@ -129,7 +129,7 @@ class TestWarehousePolicy(unittest.TestCase):
 		doc.get = lambda key, default=None: getattr(doc, key, default)
 		with (
 			patch(
-				"erpnext.loan.doctype.custody_loan.custody_loan_core.is_quarantine_warehouse",
+				"erpnext.borrowing.doctype.borrowing.borrowing_core.is_quarantine_warehouse",
 				return_value=True,
 			),
 			patch.object(frappe, "get_cached_value", return_value=1),
@@ -438,7 +438,7 @@ class TestWarehousePolicy(unittest.TestCase):
 			"validate_storage_locations",
 			"set_missing_values",
 			"validate_stock_items",
-			"validate_custody_loan_source",
+			"validate_borrowing_source",
 			"build_asset_preview",
 			"validate_accounting_treatments",
 			"calculate_totals",
@@ -486,20 +486,20 @@ class TestWarehousePolicy(unittest.TestCase):
 
 	def test_loan_and_internal_transfers_do_not_become_sales(self):
 		doc = frappe._dict(doctype="Delivery Note", is_internal_customer=1)
-		row = frappe._dict(target_warehouse="Loan WH")
+		row = frappe._dict(target_warehouse="Borrowing WH")
 		self.assertEqual(warehouse_policy.movement_operation(doc, True, loan=True, row=row), "loan")
 		self.assertEqual(warehouse_policy.movement_operation(doc, True, row=row), "transfer")
 		doc.is_internal_customer = 0
 		self.assertEqual(warehouse_policy.movement_operation(doc, True, row=row), "sales")
 
 	def test_loan_marker_alone_does_not_qualify(self):
-		doc = frappe._dict(doctype="Delivery Note", is_custody_loan_transaction=1)
+		doc = frappe._dict(doctype="Delivery Note", is_borrowing_transaction=1)
 		self.assertFalse(warehouse_policy.is_loan_movement(doc))
-		doc.custody_loan = "Loan"
+		doc.borrowing = "Borrowing"
 		core = SimpleNamespace(
 			validate_generated_transaction=Mock(side_effect=frappe.ValidationError("invalid link"))
 		)
-		with patch.dict(sys.modules, {"erpnext.loan.doctype.custody_loan.custody_loan_core": core}):
+		with patch.dict(sys.modules, {"erpnext.borrowing.doctype.borrowing.borrowing_core": core}):
 			with self.assertRaises(frappe.ValidationError):
 				warehouse_policy.is_loan_movement(doc)
 
@@ -528,16 +528,16 @@ class TestWarehousePolicy(unittest.TestCase):
 		doc = frappe._dict(
 			doctype="Stock Entry",
 			purpose="Material Issue",
-			custody_loan="Loan",
-			custody_loan_source_doctype="Custody Loan Adjustment",
-			custody_loan_source_name="Adjustment",
-			items=[frappe._dict(custody_loan_item="Item", qty=2, s_warehouse="Loan WH", t_warehouse=None)],
+			borrowing="Borrowing",
+			borrowing_source_doctype="Borrowing Adjustment",
+			borrowing_source_name="Adjustment",
+			items=[frappe._dict(borrowing_item="Item", qty=2, s_warehouse="Borrowing WH", t_warehouse=None)],
 		)
-		loan = frappe._dict(customer_loan_warehouse="Loan WH")
-		adjustment = frappe._dict(docstatus=1, items=[frappe._dict(custody_loan_item="Item", qty=2)])
+		loan = frappe._dict(customer_loan_warehouse="Borrowing WH")
+		adjustment = frappe._dict(docstatus=1, items=[frappe._dict(borrowing_item="Item", qty=2)])
 		core = SimpleNamespace(validate_generated_transaction=Mock())
 		with (
-			patch.dict(sys.modules, {"erpnext.loan.doctype.custody_loan.custody_loan_core": core}),
+			patch.dict(sys.modules, {"erpnext.borrowing.doctype.borrowing.borrowing_core": core}),
 			patch.object(frappe, "get_doc", side_effect=[loan, adjustment, loan, adjustment]),
 		):
 			self.assertTrue(warehouse_policy.is_loan_movement(doc))
@@ -550,22 +550,22 @@ class TestWarehousePolicy(unittest.TestCase):
 			doc = frappe._dict(
 				doctype="Stock Entry",
 				purpose="Repack",
-				custody_loan="Loan",
-				custody_loan_source_doctype="Custody Loan Return",
-				custody_loan_source_name="Return",
+				borrowing="Borrowing",
+				borrowing_source_doctype="Borrowing Return",
+				borrowing_source_name="Return",
 				items=[
-					frappe._dict(item_code="I", qty=2, s_warehouse="Loan WH", t_warehouse=None),
-					frappe._dict(item_code="I", qty=2, s_warehouse=None, t_warehouse="Loan WH"),
+					frappe._dict(item_code="I", qty=2, s_warehouse="Borrowing WH", t_warehouse=None),
+					frappe._dict(item_code="I", qty=2, s_warehouse=None, t_warehouse="Borrowing WH"),
 				],
 			)
 			doc.update(extra)
 			return doc
 
-		loan = frappe._dict(name="Loan", customer_loan_warehouse="Loan WH")
+		loan = frappe._dict(name="Borrowing", customer_loan_warehouse="Borrowing WH")
 		core = SimpleNamespace(validate_generated_transaction=Mock())
-		state = frappe._dict(docstatus=1, custody_loan="Loan")
+		state = frappe._dict(docstatus=1, borrowing="Borrowing")
 		with (
-			patch.dict(sys.modules, {"erpnext.loan.doctype.custody_loan.custody_loan_core": core}),
+			patch.dict(sys.modules, {"erpnext.borrowing.doctype.borrowing.borrowing_core": core}),
 			patch.object(frappe, "get_doc", return_value=loan),
 			patch.object(frappe, "db", SimpleNamespace(get_value=lambda *args, **kw: state)),
 		):
@@ -694,7 +694,7 @@ class TestWarehousePolicy(unittest.TestCase):
 
 	def test_reloaded_loan_voucher_has_server_posting_action_and_validates_its_source(self):
 		with patch.object(frappe, "logger", return_value=logging.getLogger("offline")):
-			from erpnext.loan.doctype.custody_loan import custody_loan_core as core
+			from erpnext.borrowing.doctype.borrowing import borrowing_core as core
 		doc = SimpleNamespace(
 			doctype="Delivery Note",
 			name="DN",
@@ -702,10 +702,10 @@ class TestWarehousePolicy(unittest.TestCase):
 			company="Co",
 			flags=frappe._dict(),
 			is_system_generated=1,
-			is_custody_loan_transaction=1,
-			custody_loan="Loan",
-			custody_loan_source_doctype="Custody Loan",
-			custody_loan_source_name="Loan",
+			is_borrowing_transaction=1,
+			borrowing="Borrowing",
+			borrowing_source_doctype="Borrowing",
+			borrowing_source_name="Borrowing",
 			items=[],
 			is_internal_customer=1,
 			represents_company="Co",
@@ -714,12 +714,12 @@ class TestWarehousePolicy(unittest.TestCase):
 			is_new=lambda: False,
 		)
 		doc.get = lambda field, default=None: getattr(doc, field, default)
-		loan = SimpleNamespace(name="Loan", docstatus=1, company="Co", loan_type="Stock")
+		loan = SimpleNamespace(name="Borrowing", docstatus=1, company="Co", loan_type="Stock")
 		stored = frappe._dict(
-			is_custody_loan_transaction=1,
-			custody_loan="Loan",
-			custody_loan_source_doctype="Custody Loan",
-			custody_loan_source_name="Loan",
+			is_borrowing_transaction=1,
+			borrowing="Borrowing",
+			borrowing_source_doctype="Borrowing",
+			borrowing_source_name="Borrowing",
 		)
 
 		def db_value(doctype, name, fields, **kwargs):
@@ -737,7 +737,7 @@ class TestWarehousePolicy(unittest.TestCase):
 					doc
 					if doctype == "Delivery Note"
 					else loan
-					if doctype == "Custody Loan"
+					if doctype == "Borrowing"
 					else self.warehouse
 					if doctype == "Warehouse"
 					else self.policy
@@ -746,13 +746,13 @@ class TestWarehousePolicy(unittest.TestCase):
 			patch.object(core, "_", side_effect=lambda text: text),
 			patch.object(
 				core,
-				"validate_custody_loan_delivery_note",
-				side_effect=frappe.ValidationError("Loan Delivery Note source is invalid"),
+				"validate_borrowing_delivery_note",
+				side_effect=frappe.ValidationError("Borrowing Delivery Note source is invalid"),
 			) as validate_source,
 		):
-			with self.assertRaisesRegex(frappe.ValidationError, "Loan Delivery Note source is invalid"):
+			with self.assertRaisesRegex(frappe.ValidationError, "Borrowing Delivery Note source is invalid"):
 				warehouse_policy.validate_stock_ledger_policy([entry])
-			validate_source.assert_called_once_with(doc, loan, "Custody Loan", "Loan")
+			validate_source.assert_called_once_with(doc, loan, "Borrowing", "Borrowing")
 			self.assertEqual(doc._action, "submit")
 
 	def test_verified_pos_consolidation_skips_changed_dispatch_policy(self):
@@ -799,7 +799,7 @@ class TestWarehousePolicy(unittest.TestCase):
 
 
 class TestRejectedLoanReturnIntoQuarantine(unittest.TestCase):
-	"""Goods of a Custody Loan return that failed inspection are received into quarantine (Siwat, 4 Nov 2026): that
+	"""Goods of a Borrowing return that failed inspection are received into quarantine (Siwat, 4 Nov 2026): that
 	incoming leg is a receipt, which a Quarantine type allows, not a loan movement, which it does not."""
 
 	def setUp(self):
@@ -807,8 +807,8 @@ class TestRejectedLoanReturnIntoQuarantine(unittest.TestCase):
 			doctype="Delivery Note",
 			company="CD",
 			is_return=1,
-			is_custody_loan_transaction=1,
-			custody_loan_source_doctype="Custody Loan Return",
+			is_borrowing_transaction=1,
+			borrowing_source_doctype="Borrowing Return",
 		)
 		# the return of a stock loan is an internal-customer Delivery Note leaving the customer's loan warehouse
 		self.doc.is_internal_customer = 1
@@ -817,13 +817,13 @@ class TestRejectedLoanReturnIntoQuarantine(unittest.TestCase):
 		)
 
 	def operation(self, inspection, quarantine=True, outgoing=False, row=None):
-		from erpnext.loan.doctype.custody_loan import custody_loan_core
+		from erpnext.borrowing.doctype.borrowing import borrowing_core
 
 		db = Mock()
 		db.get_value.return_value = inspection
 		with (
 			patch.object(warehouse_policy.frappe, "db", db),
-			patch.object(custody_loan_core, "is_quarantine_warehouse", return_value=quarantine),
+			patch.object(borrowing_core, "is_quarantine_warehouse", return_value=quarantine),
 		):
 			return warehouse_policy.movement_operation(self.doc, outgoing, loan=True, row=row or self.row)
 
@@ -936,7 +936,7 @@ class TestWarehouseTypeSummary(unittest.TestCase):
 				frappe, "db", Mock(get_value=Mock(return_value=frappe._dict(docstatus=1, status="Rejected")))
 			),
 			patch(
-				"erpnext.loan.doctype.custody_loan.custody_loan_core.is_quarantine_warehouse",
+				"erpnext.borrowing.doctype.borrowing.borrowing_core.is_quarantine_warehouse",
 				side_effect=lambda warehouse, company: warehouse in quarantine,
 			),
 		):
@@ -954,7 +954,7 @@ class TestWarehouseTypeSummary(unittest.TestCase):
 				frappe, "db", Mock(get_value=Mock(return_value=frappe._dict(docstatus=1, status="Accepted")))
 			),
 			patch(
-				"erpnext.loan.doctype.custody_loan.custody_loan_core.is_quarantine_warehouse",
+				"erpnext.borrowing.doctype.borrowing.borrowing_core.is_quarantine_warehouse",
 				return_value=True,
 			),
 		):

@@ -50,8 +50,9 @@ class MaterialRequest(BuyingController):
 	from typing import TYPE_CHECKING
 
 	if TYPE_CHECKING:
-		from erpnext.stock.doctype.material_request_item.material_request_item import MaterialRequestItem
 		from frappe.types import DF
+
+		from erpnext.stock.doctype.material_request_item.material_request_item import MaterialRequestItem
 
 		amended_from: DF.Link | None
 		asset_item_filter: DF.Link | None
@@ -78,8 +79,10 @@ class MaterialRequest(BuyingController):
 		loan_recipient_contact_display: DF.TextEditor | None
 		loan_recipient_contact_email: DF.Data | None
 		loan_recipient_location: DF.Link | None
-		loan_recipient_type: DF.Literal["Employee", "Customer", "Supplier", "Contact"]
-		material_request_type: DF.Literal["Purchase", "Material Transfer", "Asset Transfer", "Customer Demo", "Customer Borrow / Loan"]
+		loan_recipient_type: DF.Literal["Employee", "Customer"]
+		material_request_type: DF.Literal[
+			"Purchase", "Material Transfer", "Material Issue", "Asset Transfer", "Customer Demo", "Borrow", "Customer Borrow"
+		]
 		naming_series: DF.Literal["MAT-MR-.YYYY.-"]
 		per_ordered: DF.Percent
 		per_received: DF.Percent

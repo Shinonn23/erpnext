@@ -1,4 +1,4 @@
-"""A Delivery Note row with a Target Warehouse (a custody loan's delivery) moves serials into that warehouse with a
+"""A Delivery Note row with a Target Warehouse (a borrowing's delivery) moves serials into that warehouse with a
 bundle of its own; cancelling the note reverses that bundle, not the source warehouse's (D-LOAN-02: "Serial and
 Batch Bundle ... does not belong to the cancelled stock ledger entry").
 Offline: ERPNext's own get_sle_for_target_warehouse; the ledger lookups are stand-ins."""

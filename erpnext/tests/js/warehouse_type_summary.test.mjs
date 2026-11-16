@@ -77,7 +77,7 @@ test("summary lists allowed and blocked operations and the outgoing role", () =>
   assert.equal(f.calls[0].args.warehouse_type, "Lab");
   const line = f.descriptions["warehouse_type:description"];
   assert.match(line, /Allowed: Receipt, Issue/);
-  assert.match(line, /Not allowed: Transfer, Sales, Loan, Reconciliation/);
+  assert.match(line, /Not allowed: Transfer, Sales, Borrowing, Reconciliation/);
   assert.match(line, /Stock &lt;Manager>/);
   // one plain line: no list of document names
   assert.doesNotMatch(f.intros.at(-1)[0], /Doc receipt|<ul/);
@@ -114,7 +114,7 @@ test("a stale response is ignored", () => {
   assert.equal(f.descriptions["warehouse_type:description"], undefined);
 });
 
-test("Transit states that loan counts as transfer", () => {
+test("Transit states that borrowing counts as transfer", () => {
   const f = fixture(
     { name: "WH", warehouse_type: "Transit" },
     {
@@ -126,7 +126,7 @@ test("Transit states that loan counts as transfer", () => {
   f.handlers.Warehouse.warehouse_type(f.frm);
   assert.match(
     f.descriptions["warehouse_type:description"],
-    /Loan documents count as Transfer/
+    /Borrowing documents count as Transfer/
   );
 });
 

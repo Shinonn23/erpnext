@@ -9,13 +9,13 @@ def prepare_stock_entry_for_shipment(doc, method=None):
 	if not doc.get("requires_shipment"):
 		return
 
-	if doc.purpose == "Material Receipt" and doc.get("is_custody_loan_transaction"):
-		if doc.get("custody_loan_source_doctype") != "Custody Loan Return":
-			frappe.throw(_("Only a Custody Loan Return can receive replacement stock through a Shipment."))
+	if doc.purpose == "Material Receipt" and doc.get("is_borrowing_transaction"):
+		if doc.get("borrowing_source_doctype") != "Borrowing Return":
+			frappe.throw(_("Only a Borrowing Return can receive replacement stock through a Shipment."))
 		destinations = {row.t_warehouse for row in doc.items if row.t_warehouse}
 		destination = doc.shipment_destination_warehouse or doc.to_warehouse or next(iter(destinations), None)
 		if not destination or destinations != {destination}:
-			frappe.throw(_("A shipped Custody Loan replacement receipt must use one final Destination Warehouse."))
+			frappe.throw(_("A shipped Borrowing replacement receipt must use one final Destination Warehouse."))
 		warehouse = frappe.db.get_value(
 			"Warehouse", destination, ["company", "is_group", "warehouse_type"], as_dict=True
 		)
@@ -25,7 +25,7 @@ def prepare_stock_entry_for_shipment(doc, method=None):
 		return
 
 	if doc.purpose != "Material Transfer":
-		frappe.throw(_("Shipment tracking is available for Material Transfer and Custody Loan replacement receipts only."))
+		frappe.throw(_("Shipment tracking is available for Material Transfer and Borrowing replacement receipts only."))
 
 	if not doc.shipment_destination_warehouse:
 		doc.shipment_destination_warehouse = doc.to_warehouse
@@ -101,7 +101,7 @@ def validate_stock_entry_shipment(doc, method=None):
 	if doc.purpose == "Material Receipt" and frappe.db.get_value(
 		"Shipment", doc.shipment, "tracking_status"
 	) != "Delivered":
-		frappe.throw(_("A Custody Loan replacement receipt can only be submitted after the Shipment is delivered."))
+		frappe.throw(_("A Borrowing replacement receipt can only be submitted after the Shipment is delivered."))
 
 
 def validate_stock_entry_shipment_cancel(doc, method=None):
@@ -142,15 +142,15 @@ def make_transit_receipt(stock_entry_name, shipment_name):
 	receipt.to_warehouse = source.shipment_destination_warehouse
 	for field in (
 		"is_system_generated",
-		"is_custody_loan_transaction",
-		"custody_loan",
-		"custody_loan_source_doctype",
-		"custody_loan_source_name",
+		"is_borrowing_transaction",
+		"borrowing",
+		"borrowing_source_doctype",
+		"borrowing_source_name",
 	):
 		if source.get(field):
 			setattr(receipt, field, source.get(field))
-	if source.get("is_custody_loan_transaction"):
-		receipt.flags.custody_loan_generated = True
+	if source.get("is_borrowing_transaction"):
+		receipt.flags.borrowing_generated = True
 	for field in (
 		"customer_address",
 		"customer_address_display",
@@ -167,8 +167,8 @@ def make_transit_receipt(stock_entry_name, shipment_name):
 			row.material_request_item = frappe.db.get_value(
 				"Stock Entry Detail", row.ste_detail, "material_request_item"
 			)
-			row.custody_loan_item = frappe.db.get_value(
-				"Stock Entry Detail", row.ste_detail, "custody_loan_item"
+			row.borrowing_item = frappe.db.get_value(
+				"Stock Entry Detail", row.ste_detail, "borrowing_item"
 			)
 
 	receipt.flags.ignore_permissions = True

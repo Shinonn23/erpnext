@@ -9,7 +9,7 @@ Stock
 Support
 Utilities
 Assets
-Loan
+Borrowing
 Portal
 Maintenance
 Regional

@@ -131,7 +131,7 @@ const OPERATION_LABELS = {
 	issue: "Issue",
 	transfer: "Transfer",
 	sales: "Sales",
-	loan: "Loan",
+	loan: "Borrowing",
 	reconciliation: "Reconciliation",
 };
 
@@ -155,7 +155,7 @@ function render_warehouse_type_summary(summary) {
 		);
 	}
 	if (summary.loan_counts_as_transfer) {
-		parts.push(__("Loan documents count as Transfer"));
+		parts.push(__("Borrowing documents count as Transfer"));
 	}
 	return parts.join(". ");
 }

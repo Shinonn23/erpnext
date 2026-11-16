@@ -57,8 +57,8 @@ class StocktoAssetConversion(StockController):
 		asset_location: DF.Link | None
 		assets: DF.Table[StocktoAssetConversionAsset]
 		company: DF.Link
-		custody_loan: DF.Link | None
-		custody_loan_item: DF.Data | None
+		borrowing: DF.Link | None
+		borrowing_item: DF.Data | None
 		demo_customer: DF.Link | None
 		department: DF.Link | None
 		material_request: DF.Link | None
@@ -82,7 +82,7 @@ class StocktoAssetConversion(StockController):
 		self.validate_storage_locations()
 		self.set_missing_values()
 		self.validate_stock_items()
-		self.validate_custody_loan_source()
+		self.validate_borrowing_source()
 		self.build_asset_preview()
 		self.validate_accounting_treatments()
 		self.calculate_totals()
@@ -517,7 +517,7 @@ class StocktoAssetConversion(StockController):
 			if output.accounting_treatment != "Expense Immediately":
 				continue
 			# a Borrow loan unit converted to a Demo Asset is a Demo conversion too
-			if not self.custody_loan and (
+			if not self.borrowing and (
 				not self.material_request
 				or frappe.db.get_value("Material Request", self.material_request, "material_request_type")
 				!= "Customer Demo"
@@ -649,11 +649,11 @@ class StocktoAssetConversion(StockController):
 				)
 		if self.material_request:
 			self.lock_material_request_items()
-		if self.custody_loan:
-			from erpnext.loan.doctype.custody_loan.custody_loan_core import lock_custody_loan
+		if self.borrowing:
+			from erpnext.borrowing.doctype.borrowing.borrowing_core import lock_borrowing
 
-			lock_custody_loan(self.custody_loan)
-			self.validate_custody_loan_source()
+			lock_borrowing(self.borrowing)
+			self.validate_borrowing_source()
 		if any(not output.asset for output in self.assets):
 			frappe.throw(_("Use Create > Assets to generate the approved Assets before submitting."))
 		self.sync_draft_assets()
@@ -720,7 +720,7 @@ class StocktoAssetConversion(StockController):
 		self.db_set("status", self.status)
 		if self.pick_list:
 			frappe.db.set_value("Pick List", self.pick_list, "status", "Completed")
-		self.update_custody_loan_status()
+		self.update_borrowing_status()
 
 	def on_cancel(self):
 		self.ignore_linked_doctypes = ("GL Entry", "Stock Ledger Entry", "Serial and Batch Bundle", "Asset")
@@ -741,42 +741,42 @@ class StocktoAssetConversion(StockController):
 		if self.pick_list and frappe.db.get_value("Pick List", self.pick_list, "docstatus") == 1:
 			frappe.get_doc("Pick List", self.pick_list).cancel()
 		self.db_set("status", "Cancelled")
-		self.update_custody_loan_status()
+		self.update_borrowing_status()
 
-	def validate_custody_loan_source(self):
+	def validate_borrowing_source(self):
 		"""A conversion of a unit an employee holds on a Borrow stock loan (Connect Diagnostics, Siwat 16 Nov 2026): it
 		names the loan and the loan row, never a Material Request, takes the unit out of the loan's Loan warehouse and only
 		what the borrower still holds and nothing else has reserved."""
-		if not self.custody_loan:
-			if self.custody_loan_item:
-				frappe.throw(_("A Custody Loan Item needs its Custody Loan."))
+		if not self.borrowing:
+			if self.borrowing_item:
+				frappe.throw(_("A Borrowing Item needs its Borrowing."))
 			return
-		from erpnext.loan.doctype.custody_loan.custody_loan_core import (
+		from erpnext.borrowing.doctype.borrowing.borrowing_core import (
 			get_open_issued_serials,
 			get_reserved_serials,
 			loan_issue_factor,
 			loan_item_available_to_adjust,
 		)
-		from erpnext.loan.doctype.custody_loan.custody_loan_tracking import transaction_row_entries
+		from erpnext.borrowing.doctype.borrowing.borrowing_tracking import transaction_row_entries
 
 		if self.material_request:
-			frappe.throw(_("A conversion of a Custody Loan cannot also name a Material Request."))
+			frappe.throw(_("A conversion of a Borrowing cannot also name a Material Request."))
 		if self.pick_list:
-			frappe.throw(_("A conversion of a Custody Loan cannot use a Pick List."))
-		loan = frappe.get_doc("Custody Loan", self.custody_loan)
+			frappe.throw(_("A conversion of a Borrowing cannot use a Pick List."))
+		loan = frappe.get_doc("Borrowing", self.borrowing)
 		if loan.docstatus != 1 or loan.loan_type != "Stock" or loan.company != self.company:
-			frappe.throw(_("Convert only from a submitted Stock Custody Loan of the same Company."))
-		loan_item = next((row for row in loan.items if row.name == self.custody_loan_item), None)
+			frappe.throw(_("Convert only from a submitted Stock Borrowing of the same Company."))
+		loan_item = next((row for row in loan.items if row.name == self.borrowing_item), None)
 		if not loan_item:
-			frappe.throw(_("Select a row of Custody Loan {0}.").format(self.custody_loan))
+			frappe.throw(_("Select a row of Borrowing {0}.").format(self.borrowing))
 		if len(self.stock_items) != 1:
-			frappe.throw(_("A conversion of a Custody Loan converts one loan row."))
+			frappe.throw(_("A conversion of a Borrowing converts one borrowing row."))
 		row = self.stock_items[0]
 		if row.item_code != loan_item.item_code:
-			frappe.throw(_("Row {0}: Item must be the Item of the loan row.").format(row.idx))
+			frappe.throw(_("Row {0}: Item must be the Item of the borrowing row.").format(row.idx))
 		if not loan.customer_loan_warehouse or row.warehouse != loan.customer_loan_warehouse:
 			frappe.throw(
-				_("Row {0}: Warehouse must be the loan's Loan warehouse {1}.").format(
+				_("Row {0}: Warehouse must be the borrowing's Borrowed warehouse {1}.").format(
 					row.idx, loan.customer_loan_warehouse
 				)
 			)
@@ -804,23 +804,21 @@ class StocktoAssetConversion(StockController):
 
 	def loan_custodian(self):
 		"""The Employee who holds the converted unit: the borrower of the loan."""
-		if not self.custody_loan:
+		if not self.borrowing:
 			return None
-		loan = frappe.db.get_value(
-			"Custody Loan", self.custody_loan, ["borrower_type", "borrower"], as_dict=True
-		)
+		loan = frappe.db.get_value("Borrowing", self.borrowing, ["borrower_type", "borrower"], as_dict=True)
 		return loan.borrower if loan and loan.borrower_type == "Employee" else None
 
-	def update_custody_loan_status(self):
-		if self.custody_loan and frappe.db.exists("Custody Loan", self.custody_loan):
-			frappe.get_doc("Custody Loan", self.custody_loan).update_status()
+	def update_borrowing_status(self):
+		if self.borrowing and frappe.db.exists("Borrowing", self.borrowing):
+			frappe.get_doc("Borrowing", self.borrowing).update_status()
 
 	def validate_no_active_asset_loan(self):
-		if not self.custody_loan:
+		if not self.borrowing:
 			return
-		loan = frappe.db.get_value("Custody Loan", {"source_conversion": self.name, "docstatus": 1}, "name")
+		loan = frappe.db.get_value("Borrowing", {"source_conversion": self.name, "docstatus": 1}, "name")
 		if loan:
-			frappe.throw(_("Cancel Asset Custody Loan {0} before cancelling this conversion.").format(loan))
+			frappe.throw(_("Cancel Asset Borrowing {0} before cancelling this conversion.").format(loan))
 
 	def validate_asset_has_no_follow_up_transactions(self, asset):
 		checks = (
@@ -866,9 +864,9 @@ class StocktoAssetConversion(StockController):
 		checks = (
 			*checks,
 			(
-				"""select 1 from `tabCustody Loan Item` item join `tabCustody Loan` loan on loan.name=item.parent
+				"""select 1 from `tabBorrowing Item` item join `tabBorrowing` loan on loan.name=item.parent
 				where item.asset=%s and loan.docstatus=1 limit 1""",
-				_("Asset {0} is on a submitted Custody Loan; cancel it before cancelling this conversion"),
+				_("Asset {0} is on a submitted Borrowing; cancel it before cancelling this conversion"),
 			),
 		)
 		for index, (query, message) in enumerate(checks):
@@ -1056,7 +1054,7 @@ class StocktoAssetConversion(StockController):
 			asset.source_batch_no = output.source_batch_no
 			asset.material_request = self.material_request
 			# a unit converted from a Borrow loan stays with its borrower (Siwat, 16 Nov 2026)
-			if getattr(self, "custody_loan", None):
+			if getattr(self, "borrowing", None):
 				asset.custodian = self.loan_custodian()
 			expensed = output.accounting_treatment == "Expense Immediately"
 			asset.net_purchase_amount = 0 if expensed else output.asset_value

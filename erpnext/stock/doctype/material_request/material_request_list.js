@@ -20,7 +20,7 @@ frappe.listview_settings["Material Request"] = {
 			return get_request_status_indicator("asset_transfer_status", doc.asset_transfer_status);
 		}
 
-		if (["Customer Demo", "Customer Borrow / Loan"].includes(doc.material_request_type)) {
+		if (["Customer Demo", "Borrow", "Customer Borrow"].includes(doc.material_request_type)) {
 			if (doc.request_progress_status) {
 				return get_request_status_indicator("request_progress_status", doc.request_progress_status);
 			}

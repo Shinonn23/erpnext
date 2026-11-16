@@ -1,0 +1,310 @@
+from types import SimpleNamespace
+from unittest import TestCase
+from unittest.mock import Mock, patch
+
+import frappe
+
+from erpnext.borrowing.doctype.borrowing import borrowing_core as core
+from erpnext.borrowing.doctype.borrowing import borrowing_set as loan_set
+from erpnext.patches.v16_0 import release_loans_waiting_for_shipment as shipment_patch
+
+
+class Document(SimpleNamespace):
+	def get(self, field, default=None):
+		return getattr(self, field, default)
+
+
+class TestExplicitDelivery(TestCase):
+	def setUp(self):
+		self.database = Mock()
+		self.db_patch = patch.object(frappe, "db", self.database)
+		self.db_patch.start()
+		self.addCleanup(self.db_patch.stop)
+		settings = patch.object(frappe, "get_system_settings", return_value="Banker's Rounding")
+		settings.start()
+		self.addCleanup(settings.stop)
+
+	def loan(self, kind="Asset"):
+		return Document(
+			name=f"LOAN-{kind}",
+			material_request="MR-1",
+			loan_type=kind,
+			docstatus=1,
+			pick_list="PICK-1" if kind == "Stock" else None,
+			asset_movement=None,
+			reload=Mock(),
+			check_permission=Mock(),
+			validate_material_request=Mock(),
+			validate_items=Mock(),
+			run_method=Mock(),
+			release_assets=Mock(),
+			make_pick_list=Mock(),
+			update_status=Mock(),
+			refresh_balances=Mock(),
+		)
+
+	def test_submitting_a_loan_never_picks_or_moves_goods(self):
+		for kind in ("Asset", "Stock"):
+			loan = self.loan(kind)
+			core.Borrowing.on_submit(loan)
+			loan.make_pick_list.assert_not_called()
+			loan.release_assets.assert_not_called()
+			loan.update_status.assert_called_once()
+
+	def test_picking_never_creates_or_submits_a_delivery_note(self):
+		loan = self.loan("Stock")
+		loan.delivery_note = None
+		with (
+			patch.object(frappe, "get_doc", return_value=loan),
+			patch.object(core, "follow_picked_warehouses"),
+		):
+			core.update_borrowing_pick_list_status(Document(borrowing=loan.name, docstatus=1))
+		loan.update_status.assert_called_once()
+		loan.release_assets.assert_not_called()
+
+	def test_shipment_patch_keeps_outgoing_delivery_explicit_but_processes_returns_and_status(self):
+		loan = self.loan("Stock")
+		loan.requires_shipment = 1
+		loan.delivery_note = "DN-OUT"
+		loan.confirm_delivery = Mock()
+		outgoing = Document(docstatus=0, submit=Mock())
+		returned = Document(docstatus=0)
+		return_doc = Document(
+			delivery_note="DN-BACK",
+			update_status=Mock(),
+			receive_returned_goods=Mock(side_effect=lambda note: setattr(note, "docstatus", 1)),
+		)
+		documents = {
+			("Borrowing", loan.name): loan,
+			("Borrowing Return", "RETURN-1"): return_doc,
+			("Delivery Note", "DN-OUT"): outgoing,
+			("Delivery Note", "DN-BACK"): returned,
+		}
+		self.database.table_exists.return_value = True
+		self.database.has_column.return_value = True
+		self.database.sql_list.return_value = [loan.name]
+		self.database.get_value.side_effect = lambda doctype, name, field: (
+			1 if doctype == "Pick List" else documents[(doctype, name)].docstatus
+		)
+		with (
+			patch.object(frappe, "get_doc", side_effect=lambda doctype, name: documents[(doctype, name)]),
+			patch.object(frappe, "get_all", return_value=["RETURN-1"]) as get_all,
+			patch.object(frappe, "log_error") as log_error,
+		):
+			shipment_patch.execute()
+			shipment_patch.execute()
+		outgoing.submit.assert_not_called()
+		self.assertEqual(outgoing.docstatus, 0)
+		loan.confirm_delivery.assert_not_called()
+		return_doc.receive_returned_goods.assert_called_once_with(returned)
+		self.assertEqual(return_doc.update_status.call_count, 2)
+		self.assertEqual(loan.update_status.call_count, 2)
+		get_all.assert_called_with(
+			"Borrowing Return", filters={"borrowing": loan.name, "docstatus": 1}, pluck="name"
+		)
+		self.assertEqual(self.database.savepoint.call_count, 2)
+		self.database.rollback.assert_not_called()
+		log_error.assert_not_called()
+
+	def test_an_asset_loan_without_movement_waits_for_explicit_handover(self):
+		self.assertEqual(core.Borrowing.get_submitted_status(self.loan()), "Pending Delivery")
+
+	def test_legacy_confirm_cannot_post_documents(self):
+		loan = self.loan()
+		with (
+			patch.object(frappe, "throw", side_effect=frappe.ValidationError),
+			self.assertRaises(frappe.ValidationError),
+		):
+			core.Borrowing.confirm_delivery(loan)
+		loan.release_assets.assert_not_called()
+		self.database.savepoint.assert_not_called()
+
+	def test_return_submission_only_records_pending_receipt(self):
+		loan = self.loan()
+		returned = Document(
+			borrowing=loan.name,
+			update_status=Mock(),
+			make_stock_return_delivery_note=Mock(),
+			make_asset_receipt=Mock(),
+		)
+		with patch.object(frappe, "get_doc", return_value=loan):
+			core.BorrowingReturn.on_submit(returned)
+		returned.make_stock_return_delivery_note.assert_not_called()
+		returned.make_asset_receipt.assert_not_called()
+		returned.update_status.assert_called_once()
+
+	def test_submitting_stock_does_not_automatically_release_assets(self):
+		loan = self.loan("Stock")
+		loan.capture_delivery_note_details = Mock()
+		doc = Document(
+			doctype="Delivery Note",
+			borrowing_source_doctype="Borrowing",
+			borrowing_source_name=loan.name,
+		)
+		with (
+			patch.object(frappe, "get_doc", return_value=loan),
+			patch.object(core, "release_held_assets") as release,
+		):
+			core.update_borrowing_status(doc, "on_submit")
+			release.assert_not_called()
+		loan.capture_delivery_note_details.assert_called_once_with(doc)
+
+	def test_duplicate_active_movement_is_rejected_under_loan_lock(self):
+		source = Document(name="LOAN-1", doctype="Borrowing", db_set=Mock())
+		transaction = Document(name="DN-NEW", doctype="Delivery Note")
+		self.database.get_value.side_effect = ["DN-OTHER", 0]
+		with (
+			patch.object(frappe, "throw", side_effect=frappe.ValidationError),
+			self.assertRaises(frappe.ValidationError),
+		):
+			core.link_manual_loan_transaction(source, "delivery_note", transaction)
+		self.database.sql.assert_called_once()
+		source.db_set.assert_not_called()
+
+	def test_first_save_links_the_movement_to_its_source(self):
+		source = Document(name="LOAN-1", doctype="Borrowing", db_set=Mock())
+		self.database.get_value.return_value = None
+		core.link_manual_loan_transaction(
+			source, "delivery_note", Document(name="DN-1", doctype="Delivery Note")
+		)
+		source.db_set.assert_called_once_with("delivery_note", "DN-1", update_modified=False)
+
+	def test_mixed_request_without_stock_loan_cannot_deliver_asset(self):
+		loan = self.loan()
+		request = Document(check_permission=Mock())
+		with (
+			patch.object(frappe, "get_doc", side_effect=[request, loan]),
+			patch.object(frappe, "get_all", return_value=[loan.name]),
+			patch.object(core, "request_loan_types", return_value=["Asset", "Stock"]),
+			patch.object(frappe, "throw", side_effect=frappe.ValidationError),
+			self.assertRaises(frappe.ValidationError),
+		):
+			core.delivery_loans(loan)
+
+	def test_stock_must_be_picked_before_any_part_of_set_is_delivered(self):
+		asset, stock = self.loan(), self.loan("Stock")
+		self.database.get_value.return_value = 0
+		with (
+			patch.object(core, "delivery_loans", return_value=[asset, stock]),
+			patch.object(frappe, "throw", side_effect=frappe.ValidationError),
+			self.assertRaises(frappe.ValidationError),
+		):
+			core.Borrowing.confirm_delivery(asset)
+		asset.release_assets.assert_not_called()
+
+	def test_native_loan_api_cannot_lend_stock_waiting_for_conversion(self):
+		loan = self.loan("Stock")
+		loan.company = "CD"
+		request = Document(
+			docstatus=1,
+			material_request_type="Customer Demo",
+			company="CD",
+			items=[frappe._dict(demo_acquisition_method="Convert Stock", asset=None)],
+		)
+		with (
+			patch.object(frappe, "get_doc", return_value=request),
+			patch.object(frappe, "throw", side_effect=frappe.ValidationError),
+			self.assertRaises(frappe.ValidationError),
+		):
+			core.Borrowing.validate_material_request(loan)
+
+	def test_pick_preparation_reuses_existing_draft(self):
+		self.database.get_value.return_value = 0
+		pick_list = Mock(name="EXISTING-PICK")
+		with patch.object(frappe, "get_doc", return_value=pick_list):
+			self.assertIs(core.Borrowing.make_pick_list(self.loan("Stock")), pick_list)
+		pick_list.check_permission.assert_called_once_with("read")
+
+	def test_consumption_invoice_reuses_immutable_source_link(self):
+		source = Document(
+			name="ADJ-1",
+			doctype="Borrowing Adjustment",
+			borrowing="LOAN-Stock",
+			docstatus=1,
+			reason="Consumed by the borrower",
+			check_permission=Mock(),
+		)
+		loan = self.loan("Stock")
+		loan.borrower_type = "Customer"
+		invoice = Document(check_permission=Mock(), as_dict=lambda: {"name": "SI-1"})
+		self.database.get_value.side_effect = ["Customer Borrow", "SI-1"]
+		with (
+			patch.object(frappe, "has_permission", return_value=True),
+			patch.object(frappe, "get_doc", side_effect=[source, loan, invoice]),
+		):
+			self.assertEqual(loan_set.create_consumption_invoice("ADJ-1"), {"name": "SI-1"})
+		self.assertEqual(self.database.get_value.call_args.args[1]["borrowing_source_name"], "ADJ-1")
+
+	def test_consumption_invoice_checks_create_permission(self):
+		with (
+			patch.object(frappe, "has_permission", side_effect=frappe.PermissionError),
+			self.assertRaises(frappe.PermissionError),
+		):
+			loan_set.create_consumption_invoice("ADJ-1")
+		self.database.sql.assert_not_called()
+
+	def consumption(self):
+		source = Document(
+			name="ADJ-1",
+			docstatus=1,
+			borrowing="LOAN-Stock",
+			reason="Consumed by the borrower",
+			stock_entry="STE-1",
+			items=[Document(borrowing_item="ROW-1", qty=2)],
+		)
+		loan = self.loan("Stock")
+		loan.company, loan.borrower_type, loan.borrower = "CD", "Customer", "CUST-1"
+		invoice = Document(
+			name="SI-1",
+			company="CD",
+			customer="CUST-1",
+			is_return=0,
+			update_stock=0,
+			items=[
+				Document(
+					borrowing_item="ROW-1", item_code="ITEM-1", qty=2, uom="Unit", conversion_factor=1
+				)
+			],
+		)
+		return source, loan, invoice
+
+	def test_consumption_invoice_cannot_increase_quantity_or_move_stock(self):
+		source, loan, invoice = self.consumption()
+		self.database.get_value.side_effect = lambda doctype, *args, **kwargs: (
+			1 if doctype == "Stock Entry" else "Customer Borrow"
+		)
+		self.database.exists.return_value = False
+		with (
+			patch.object(frappe, "get_doc", return_value=source),
+			patch.object(frappe, "get_cached_value", return_value="Unit"),
+			patch.object(frappe, "throw", side_effect=frappe.ValidationError),
+		):
+			core.validate_consumption_invoice(invoice, loan, source.name)
+			invoice.items[0].qty = 3
+			with self.assertRaises(frappe.ValidationError):
+				core.validate_consumption_invoice(invoice, loan, source.name)
+			invoice.items[0].qty = 2
+			invoice.update_stock = 1
+			with self.assertRaises(frappe.ValidationError):
+				core.validate_consumption_invoice(invoice, loan, source.name)
+
+	def test_consumption_invoice_refuses_a_second_active_invoice(self):
+		source, loan, invoice = self.consumption()
+		self.database.get_value.side_effect = lambda doctype, *args, **kwargs: (
+			1 if doctype == "Stock Entry" else "Customer Borrow"
+		)
+		self.database.exists.return_value = True
+		with (
+			patch.object(frappe, "get_doc", return_value=source),
+			patch.object(frappe, "throw", side_effect=frappe.ValidationError),
+			self.assertRaises(frappe.ValidationError),
+		):
+			core.validate_consumption_invoice(invoice, loan, source.name)
+
+	def test_consumption_adjustment_cannot_cancel_before_its_invoice(self):
+		self.database.exists.return_value = True
+		with (
+			patch.object(frappe, "throw", side_effect=frappe.ValidationError),
+			self.assertRaises(frappe.ValidationError),
+		):
+			core.BorrowingAdjustment.before_cancel(Document(name="ADJ-1"))

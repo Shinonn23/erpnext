@@ -313,7 +313,7 @@
    "fieldname": "demo_loan_status",
    "fieldtype": "Select",
    "in_list_view": 1,
-   "label": "Demo / Loan Status",
+   "label": "Demo / Borrowing Status",
    "options": "Available\nWith Customer",
    "read_only": 1
   },

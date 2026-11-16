@@ -117,7 +117,7 @@
   "column_break_82",
   "purchase_order_item",
   "material_request_item",
-  "custody_loan_item",
+  "borrowing_item",
   "section_break_72",
   "page_break",
   "regulatory_snapshot_section",
@@ -851,11 +851,11 @@
    "label": "Material Request Item"
   },
   {
-   "fieldname": "custody_loan_item",
+   "fieldname": "borrowing_item",
    "fieldtype": "Link",
    "hidden": 1,
-   "label": "Custody Loan Item",
-   "options": "Custody Loan Item",
+   "label": "Borrowing Item",
+   "options": "Borrowing Item",
    "read_only": 1
   },
   {

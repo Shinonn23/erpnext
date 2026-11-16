@@ -96,7 +96,7 @@
   "returned_qty",
   "outstanding_qty",
   "status",
-  "custody_loan",
+  "borrowing",
   "delivery_note",
   "stock_entry",
   "asset_movement"
@@ -220,8 +220,8 @@
    "fieldtype": "Link",
    "in_list_view": 1,
    "label": "UOM",
-   "mandatory_depends_on": "eval:!in_list(['Asset Transfer', 'Customer Demo', 'Customer Borrow / Loan'], parent.material_request_type)",
-   "read_only_depends_on": "eval:in_list(['Customer Demo', 'Customer Borrow / Loan'], parent.material_request_type)",
+   "mandatory_depends_on": "eval:!in_list(['Asset Transfer', 'Customer Demo', 'Borrow', 'Customer Borrow'], parent.material_request_type)",
+   "read_only_depends_on": "eval:in_list(['Customer Demo', 'Borrow', 'Customer Borrow'], parent.material_request_type)",
    "oldfieldname": "uom",
    "oldfieldtype": "Link",
    "options": "UOM",
@@ -232,7 +232,7 @@
    "fieldname": "conversion_factor",
    "fieldtype": "Float",
    "label": "UOM Conversion Factor",
-   "mandatory_depends_on": "eval:!in_list(['Asset Transfer', 'Customer Demo', 'Customer Borrow / Loan'], parent.material_request_type)",
+   "mandatory_depends_on": "eval:!in_list(['Asset Transfer', 'Customer Demo', 'Borrow', 'Customer Borrow'], parent.material_request_type)",
    "precision": "9",
    "print_hide": 1
   },
@@ -240,7 +240,7 @@
    "fieldname": "stock_uom",
    "fieldtype": "Link",
    "label": "Stock UOM",
-   "mandatory_depends_on": "eval:!in_list(['Asset Transfer', 'Customer Demo', 'Customer Borrow / Loan'], parent.material_request_type)",
+   "mandatory_depends_on": "eval:!in_list(['Asset Transfer', 'Customer Demo', 'Borrow', 'Customer Borrow'], parent.material_request_type)",
    "options": "UOM",
    "print_hide": 1,
    "read_only": 1
@@ -275,7 +275,7 @@
    "oldfieldtype": "Date",
    "print_width": "100px",
    "width": "100px",
-   "mandatory_depends_on": "eval:!in_list(['Customer Demo', 'Customer Borrow / Loan'], parent.material_request_type)"
+   "mandatory_depends_on": "eval:!in_list(['Customer Demo', 'Borrow', 'Customer Borrow'], parent.material_request_type)"
   },
   {
    "fieldname": "rate",
@@ -737,18 +737,18 @@
    "read_only": 1
   },
   {
-   "fieldname": "custody_loan",
+   "fieldname": "borrowing",
    "fieldtype": "Link",
    "hidden": 1,
-   "label": "Custody Loan",
-   "options": "Custody Loan",
+   "label": "Borrowing",
+   "options": "Borrowing",
    "read_only": 1
   },
   {
    "fieldname": "delivery_note",
    "fieldtype": "Link",
    "hidden": 1,
-   "label": "Latest Loan Delivery Note",
+   "label": "Latest Borrowing Delivery Note",
    "options": "Delivery Note",
    "read_only": 1
   },

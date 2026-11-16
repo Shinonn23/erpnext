@@ -34,7 +34,7 @@ class DeliveryNoteItem(Document):
 		company_total_stock: DF.Float
 		conversion_factor: DF.Float
 		cost_center: DF.Link | None
-		custody_loan_item: DF.Link | None
+		borrowing_item: DF.Link | None
 		customer_item_code: DF.Data | None
 		description: DF.TextEditor | None
 		discount_amount: DF.Currency

@@ -64301,6 +64301,9 @@ msgstr "อนุญาตโอนสินค้า"
 msgid "Allow Loan"
 msgstr "อนุญาตยืมสินค้า"
 
+msgid "Allow Borrowing"
+msgstr "อนุญาตยืมสินค้า"
+
 msgid "Allow Reconciliation"
 msgstr "อนุญาตปรับยอดสต็อก"
 
