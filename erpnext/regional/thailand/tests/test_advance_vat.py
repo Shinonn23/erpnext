@@ -354,6 +354,10 @@ class TestValidateAdvanceFor(unittest.TestCase):
 			advance_vat.validate_advance_vat(self._doc(unallocated_amount=0))
 			# neither a receipt from a customer nor a payment to a supplier
 			advance_vat.validate_advance_vat(self._doc(payment_type="Pay"))
+			# a payment to a supplier defaults to Goods instead of asking
+			paid = self._doc(payment_type="Pay", party_type="Supplier")
+			advance_vat.validate_advance_vat(paid)
+			self.assertEqual(paid.thai_advance_for, "Goods")
 			# a submitted entry is not asked again
 			advance_vat.validate_advance_vat(self._doc(docstatus=1))
 

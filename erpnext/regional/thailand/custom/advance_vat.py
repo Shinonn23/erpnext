@@ -142,6 +142,11 @@ def validate_advance_vat(doc):
 	if flt(doc.get("unallocated_amount")) <= 0:
 		return
 	advance_for = doc.get(ADVANCE_FOR)
+	if not advance_for and advance_side(doc) == PURCHASE:
+		# Siwat, 16 Nov 2026: Accounts Payable pays a supplier an advance with no order or invoice (an agent
+		# paying import charges); no VAT falls due with it, so Goods is the default and no question is asked
+		doc.update({ADVANCE_FOR: GOODS})
+		return
 	if not advance_for:
 		frappe.throw(
 			_("Choose Advance For (Goods or Services) for the amount not allocated to an invoice."),
