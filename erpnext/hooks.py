@@ -53,7 +53,7 @@ app_include_js = [
 	"/assets/erpnext/js/storage_location.js?v=20261111-2",
 	"/assets/erpnext/js/regulatory_notify.js",
 	"/assets/erpnext/js/item_uom.js",
-	"/assets/erpnext/js/thailand/address.js",
+	"/assets/erpnext/js/thailand/address.js?v=20261116-1",
 	"/assets/erpnext/js/thailand/print_format.js",
 	"/assets/erpnext/js/thailand/deposit_utils.js",
 	"/assets/erpnext/js/thailand/party_branches.js",
