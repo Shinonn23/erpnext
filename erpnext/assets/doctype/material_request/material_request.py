@@ -830,12 +830,14 @@ class CustomerMaterialRequest(MaterialRequest):
 				self.asset_transfer_status = "Pending"
 
 	def update_custody_loan_progress(self):
+		# an Asset loan of units converted from the stock loan (source_conversion) records custody, not fulfilment
 		loan_items = frappe.db.sql(
 			"""select cli.name, cli.material_request_item, cli.qty, cli.returned_qty,
 				cli.outstanding_qty, l.status, l.delivery_note, l.asset_movement, l.name as custody_loan
 				from `tabCustody Loan Item` cli
 			join `tabCustody Loan` l on l.name = cli.parent
-			where l.material_request = %s and l.docstatus = 1""",
+			where l.material_request = %s and l.docstatus = 1
+			and coalesce(l.source_conversion, '') = ''""",
 			self.name,
 			as_dict=True,
 		)

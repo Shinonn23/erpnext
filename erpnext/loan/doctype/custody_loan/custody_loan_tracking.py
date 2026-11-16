@@ -100,7 +100,7 @@ def conversion_factors(loan):
 
 
 def _movement_rows(loan_name, *, exclude=None):
-	"""Return and adjustment rows of the loan with what they move, split by state."""
+	"""Return, adjustment and conversion rows of the loan with what they move, split by state."""
 	rows = []
 	for doctype, child, qty_field in (
 		("Custody Loan Return", "Custody Loan Return Item", "returned_qty"),
@@ -123,6 +123,12 @@ def _movement_rows(loan_name, *, exclude=None):
 			else:
 				kind = "returned" if state[row.parent] == "Received" else "pending"
 			rows.append((kind, row))
+	# a unit converted to a Demo Asset (Siwat, 16 Nov 2026): a draft reserves it, a submitted conversion settles it
+	from erpnext.loan.doctype.custody_loan.custody_loan_core import loan_conversion_rows
+
+	skip = exclude[1] if exclude and exclude[0] == "Stock to Asset Conversion" else None
+	for row in loan_conversion_rows(loan_name, exclude=skip):
+		rows.append(("adjusted" if row.docstatus == 1 else "pending", row))
 	return rows
 
 
@@ -172,12 +178,25 @@ def get_balances(loan, *, exclude=None, attribute=True):
 			continue
 		item_code = items[row.custody_loan_item].item_code
 		serials = _serials(row.serial_no)
+		conversion = "serial_and_batch_bundle" in row
+		converted = kind == "adjusted" and conversion
+		pending_conversion = kind == "pending" and conversion
 		if serials:
 			for serial in serials:
-				balance(_key(row.custody_loan_item, None, serial), item_code)[field[kind]] += 1
+				entry = balance(_key(row.custody_loan_item, None, serial), item_code)
+				entry[field[kind]] += 1
+				entry.converted_qty = entry.get("converted_qty", 0) + (1 if converted else 0)
+				entry.pending_conversion_qty = entry.get("pending_conversion_qty", 0) + (
+					1 if pending_conversion else 0
+				)
 		else:
 			qty = flt(row.qty) * factors.get(row.custody_loan_item, 1)
-			balance(_key(row.custody_loan_item, row.batch_no, None), item_code)[field[kind]] += qty
+			entry = balance(_key(row.custody_loan_item, row.batch_no, None), item_code)
+			entry[field[kind]] += qty
+			entry.converted_qty = entry.get("converted_qty", 0) + (qty if converted else 0)
+			entry.pending_conversion_qty = entry.get("pending_conversion_qty", 0) + (
+				qty if pending_conversion else 0
+			)
 
 	for entry in balances.values():
 		if entry.serial_no:
@@ -234,9 +253,16 @@ def tracking_status(entry):
 			else "Not Issued"
 		)
 	if entry.pending_return_qty > 0:
+		# a draft Stock to Asset Conversion holds the unit, it is not coming back (Siwat, 16 Nov 2026)
+		pending_conversion = flt(entry.get("pending_conversion_qty"))
+		if pending_conversion and pending_conversion >= entry.pending_return_qty:
+			return "Pending Conversion"
 		return "Pending Return"
 	if entry.outstanding_qty <= 0:
-		return "Written Off" if entry.adjusted_qty and not entry.returned_qty else "Returned"
+		if entry.adjusted_qty and not entry.returned_qty:
+			converted = flt(entry.get("converted_qty"))
+			return "Converted to Asset" if converted and converted >= entry.adjusted_qty else "Written Off"
+		return "Returned"
 	return "With Borrower"
 
 

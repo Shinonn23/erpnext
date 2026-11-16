@@ -7,8 +7,10 @@
   "details_tab",
   "loan_details_section",
   "material_request",
+  "material_request_type",
   "loan_type",
   "status",
+  "source_conversion",
   "loan_details_column",
   "borrower_type",
   "borrower",
@@ -36,6 +38,7 @@
   "demo_extension_decided_on",
   "address_and_contact_tab",
   "section_break_recipient",
+  "recipient_customer",
   "recipient_address",
   "recipient_address_display",
   "recipient_contact_column",
@@ -80,6 +83,15 @@
    "in_list_view": 1
   },
   {
+   "fieldname": "material_request_type",
+   "fieldtype": "Data",
+   "label": "Material Request Type",
+   "fetch_from": "material_request.material_request_type",
+   "read_only": 1,
+   "hidden": 1,
+   "no_copy": 1
+  },
+  {
    "fieldname": "loan_type",
    "fieldtype": "Select",
    "label": "Loan Type",
@@ -98,6 +110,16 @@
    "read_only": 1,
    "in_list_view": 1,
    "in_standard_filter": 1
+  },
+  {
+   "fieldname": "source_conversion",
+   "fieldtype": "Link",
+   "label": "Source Conversion",
+   "options": "Stock to Asset Conversion",
+   "read_only": 1,
+   "no_copy": 1,
+   "depends_on": "eval:doc.source_conversion",
+   "description": "The Demo Asset was converted from this borrower's stock loan and is already with the borrower: no outgoing Asset Movement."
   },
   {
    "fieldname": "loan_details_column",
@@ -300,6 +322,14 @@
    "label": "Recipient"
   },
   {
+   "description": "The demo customer who receives the Assets of a conversion to Demo Asset.",
+   "fieldname": "recipient_customer",
+   "fieldtype": "Link",
+   "label": "Recipient Customer",
+   "no_copy": 1,
+   "options": "Customer"
+  },
+  {
    "fieldname": "recipient_address",
    "fieldtype": "Link",
    "label": "Recipient Address",
@@ -492,5 +522,6 @@
   }
  ],
  "sort_field": "modified",
- "sort_order": "DESC"
+ "sort_order": "DESC",
+ "modified": "2026-11-16 12:00:00.000000"
 }

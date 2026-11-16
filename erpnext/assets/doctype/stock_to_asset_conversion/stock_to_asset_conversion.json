@@ -27,6 +27,9 @@
   "status",
   "column_break_ktod",
   "material_request",
+  "custody_loan",
+  "custody_loan_item",
+  "demo_customer",
   "amended_from"
  ],
  "fields": [
@@ -66,6 +69,34 @@
    "fieldtype": "Link",
    "label": "Material Request",
    "options": "Material Request"
+  },
+  {
+   "fieldname": "custody_loan",
+   "fieldtype": "Link",
+   "label": "Custody Loan",
+   "options": "Custody Loan",
+   "read_only": 1,
+   "no_copy": 1,
+   "depends_on": "eval:doc.custody_loan",
+   "description": "The employee's Borrow stock loan whose unit becomes a Demo Asset."
+  },
+  {
+   "depends_on": "eval:doc.custody_loan",
+   "description": "The demo customer who receives the Assets: the recipient of the Asset Custody Loan.",
+   "fieldname": "demo_customer",
+   "fieldtype": "Link",
+   "label": "Demo Customer",
+   "no_copy": 1,
+   "options": "Customer",
+   "read_only": 1
+  },
+  {
+   "fieldname": "custody_loan_item",
+   "fieldtype": "Data",
+   "label": "Custody Loan Item",
+   "read_only": 1,
+   "no_copy": 1,
+   "depends_on": "eval:doc.custody_loan"
   },
   {
    "depends_on": "eval:!!doc.pick_list",
@@ -188,7 +219,7 @@
    "link_fieldname": "stock_to_asset_conversion"
   }
  ],
- "modified": "2026-11-07 16:00:00.000000",
+ "modified": "2026-11-16 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Assets",
  "name": "Stock to Asset Conversion",

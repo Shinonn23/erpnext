@@ -90,8 +90,8 @@ OPERATION_RULES = (
 	("sales", "Pick List for Delivery", {"doctype": "Pick List", "purpose": "Delivery", "outgoing": True}),
 	(
 		"loan",
-		"Custody Loan documents: loan, return and loan adjustment (a Transit warehouse treats these as"
-		" Transfer)",
+		"Custody Loan documents: loan, return, loan adjustment and the Stock to Asset Conversion of a loan unit"
+		" (a Transit warehouse treats these as Transfer)",
 		{"doctype": "Stock Entry", "purpose": "Material Issue", "loan": True},
 	),
 	(
@@ -256,6 +256,8 @@ def is_loan_movement(doc):
 
 		validate_custody_loan_pick_list(doc)
 		return True
+	if doc.doctype == "Stock to Asset Conversion" and doc.get("custody_loan"):
+		return conversion_matches_loan(doc)
 	if doc.doctype not in ("Stock Entry", "Delivery Note") or not doc.get("custody_loan"):
 		return False
 	from erpnext.loan.doctype.custody_loan.custody_loan_core import validate_generated_transaction
@@ -288,6 +290,33 @@ def is_loan_movement(doc):
 					"Loan warehouse adjustments must match the loan adjustment document and the customer's loan warehouse."
 				)
 			)
+	return True
+
+
+def conversion_matches_loan(doc):
+	"""A Stock to Asset Conversion of a Borrow loan unit (Connect Diagnostics, Siwat 16 Nov 2026) takes the unit out of
+	the Loan warehouse of the loan it names, from the row it names, and nothing else: it is a loan movement there."""
+	loan = frappe.db.get_value(
+		"Custody Loan",
+		doc.custody_loan,
+		["docstatus", "loan_type", "customer_loan_warehouse", "company"],
+		as_dict=True,
+	)
+	if (
+		not loan
+		or loan.docstatus != 1
+		or loan.loan_type != "Stock"
+		or loan.company != doc.company
+		or not doc.get("custody_loan_item")
+		or frappe.db.get_value("Custody Loan Item", doc.custody_loan_item, "parent") != doc.custody_loan
+		or doc.get("material_request")
+		or any(row.get("warehouse") != loan.customer_loan_warehouse for row in doc.get("stock_items") or [])
+	):
+		frappe.throw(
+			_(
+				"A conversion from a Loan warehouse must name the loan and row it converts and take only from its Loan warehouse."
+			)
+		)
 	return True
 
 

@@ -141,7 +141,7 @@ class CustodyLoan(Document):
 			frappe.throw(_("Complete Asset selection or conversion before preparing the loans."))
 		if self.loan_type not in ("Stock", "Asset"):
 			frappe.throw(_("Select Stock or Asset as the Loan Type"))
-		if self.loan_type not in request_loan_types(request):
+		if self.loan_type not in request_loan_types(request) and not self.get("source_conversion"):
 			frappe.throw(_("Custody Loan Type must match the Material Request Borrow Item Type"))
 
 		# The borrower and delivery snapshot are owned by the submitted request.
@@ -159,13 +159,17 @@ class CustodyLoan(Document):
 		):
 			frappe.throw(_("Expected Return Date must be on or after the Material Request date"))
 
-		self.recipient_address = request.recipient_address
-		self.recipient_address_display = request.recipient_address_display
-		self.recipient_contact = request.loan_recipient_contact or request.contact_person
-		self.recipient_contact_display = (
-			request.loan_recipient_contact_display or request.customer_contact_display
-		)
-		self.recipient_contact_email = request.loan_recipient_contact_email or request.customer_contact_email
+		# an Asset loan of converted Demo Assets keeps the address and contact of its demo customer (Siwat, 16 Nov 2026)
+		if not (self.get("source_conversion") and self.get("recipient_customer")):
+			self.recipient_address = request.recipient_address
+			self.recipient_address_display = request.recipient_address_display
+			self.recipient_contact = request.loan_recipient_contact or request.contact_person
+			self.recipient_contact_display = (
+				request.loan_recipient_contact_display or request.customer_contact_display
+			)
+			self.recipient_contact_email = (
+				request.loan_recipient_contact_email or request.customer_contact_email
+			)
 		self.recipient_location = request.loan_recipient_location or request.customer_location
 		if self.loan_type == "Stock":
 			self.customer_loan_warehouse = frappe.db.get_value(
@@ -211,6 +215,8 @@ class CustodyLoan(Document):
 	def validate_items(self, require_allocation=False, require_source_warehouse=False):
 		if not self.items:
 			frappe.throw(_("Add at least one item to the Custody Loan"))
+		if self.get("source_conversion"):
+			return self.validate_converted_asset_items()
 
 		request = frappe.get_cached_doc("Material Request", self.material_request)
 		request_rows = {row.name: row for row in request.items}
@@ -349,6 +355,9 @@ class CustodyLoan(Document):
 		for asset_name in sorted({row.asset for row in self.items if row.asset}):
 			lock_asset(asset_name)
 		self.validate_items(require_allocation=False, require_source_warehouse=True)
+		if self.get("source_conversion"):
+			self.status = "Active"
+			return
 		if frappe.db.exists(
 			"Custody Loan",
 			{"material_request": self.material_request, "loan_type": self.loan_type, "docstatus": 1},
@@ -362,6 +371,65 @@ class CustodyLoan(Document):
 
 	def on_submit(self):
 		self.update_status()
+
+	def validate_converted_asset_items(self):
+		"""An Asset loan that records the Demo Assets converted from the borrower's own Borrow stock loan (Connect
+		Diagnostics, Siwat 16 Nov 2026): the Assets are already with the borrower (the conversion made them with the
+		borrower as custodian), so the loan names exactly those Assets, starts Active and needs no outgoing movement."""
+		conversion = frappe.db.get_value(
+			"Stock to Asset Conversion",
+			self.source_conversion,
+			["docstatus", "custody_loan", "custody_loan_item", "company"],
+			as_dict=True,
+		)
+		if not conversion or conversion.docstatus != 1 or not conversion.custody_loan:
+			frappe.throw(_("Source Conversion must be a submitted conversion of a Custody Loan."))
+		stock_loan = frappe.db.get_value(
+			"Custody Loan",
+			conversion.custody_loan,
+			["material_request", "borrower_type", "borrower", "company"],
+			as_dict=True,
+		)
+		if (
+			self.loan_type != "Asset"
+			or stock_loan.company != self.company
+			or stock_loan.material_request != self.material_request
+			or stock_loan.borrower_type != self.borrower_type
+			or stock_loan.borrower != self.borrower
+		):
+			frappe.throw(_("The Asset loan must be for the same borrower and request as the stock loan."))
+		other = frappe.db.get_value(
+			"Custody Loan",
+			{"source_conversion": self.source_conversion, "docstatus": 1, "name": ["!=", self.name or ""]},
+			"name",
+		)
+		if other:
+			frappe.throw(_("Custody Loan {0} already records the Assets of this conversion.").format(other))
+		request_item = frappe.db.get_value(
+			"Custody Loan Item", conversion.custody_loan_item, "material_request_item"
+		)
+		assets = set(
+			frappe.get_all(
+				"Stock to Asset Conversion Asset",
+				filters={"parent": self.source_conversion, "parenttype": "Stock to Asset Conversion"},
+				pluck="asset",
+			)
+		)
+		if {row.asset for row in self.items} != assets or len(self.items) != len(assets):
+			frappe.throw(_("The Asset loan must list every Asset of the conversion exactly once."))
+		for row in self.items:
+			asset = frappe.db.get_value(
+				"Asset", row.asset, ["item_code", "docstatus", "custodian", "location"], as_dict=True
+			)
+			if not asset or asset.docstatus != 1:
+				frappe.throw(_("Row {0}: Asset must be submitted").format(row.idx))
+			if self.borrower_type == "Employee" and asset.custodian != self.borrower:
+				frappe.throw(_("Row {0}: Asset is not with the borrower").format(row.idx))
+			row.item_code = asset.item_code
+			row.qty = 1
+			row.material_request_item = request_item
+			row.source_location = asset.location
+			row.target_location = None
 
 	@frappe.whitelist(methods=["POST"])
 	def prepare_pick_list(self):
@@ -383,7 +451,7 @@ class CustodyLoan(Document):
 		"""An Asset loan of a set (the request also lends stock) moves its Assets when the stock loan's goods leave: the
 		Delivery Note is submitted (Siwat, 5 Nov 2026, relayed by the user: a set is delivered together). An Asset-only
 		request moves at once."""
-		if self.loan_type != "Asset" or self.asset_movement:
+		if self.loan_type != "Asset" or self.asset_movement or self.get("source_conversion"):
 			return False
 		stock = frappe.db.get_value(
 			"Custody Loan",
@@ -405,6 +473,10 @@ class CustodyLoan(Document):
 	def prepare_asset_movement(self):
 		self.reload()
 		self.check_permission("read")
+		if self.get("source_conversion"):
+			frappe.throw(
+				_("The Assets of this loan are already with the borrower: no Asset Movement is needed.")
+			)
 		frappe.has_permission("Asset Movement", "create", throw=True)
 		if self.docstatus != 1 or self.loan_type != "Asset":
 			frappe.throw(_("Create an Asset Movement from a submitted Asset Custody Loan."))
@@ -586,6 +658,8 @@ class CustodyLoan(Document):
 					issued_by_item[row.custody_loan_item] = issued_by_item.get(
 						row.custody_loan_item, 0
 					) + abs(flt(row.qty))
+		elif self.loan_type == "Asset" and self.get("source_conversion") and self.docstatus == 1:
+			issued_by_item = {row.name: 1 for row in self.items}
 		elif is_received and self.loan_type == "Asset" and self.asset_movement:
 			movement = frappe.get_doc("Asset Movement", self.asset_movement)
 			for row in movement.assets:
@@ -686,9 +760,13 @@ class CustodyLoan(Document):
 
 	def get_submitted_status(self):
 		self.refresh_balances()
-		if self.loan_type == "Asset" and (
-			not self.asset_movement
-			or frappe.db.get_value("Asset Movement", self.asset_movement, "docstatus") != 1
+		if (
+			self.loan_type == "Asset"
+			and not self.get("source_conversion")
+			and (
+				not self.asset_movement
+				or frappe.db.get_value("Asset Movement", self.asset_movement, "docstatus") != 1
+			)
 		):
 			return "Pending Delivery"
 		if self.loan_type == "Stock" and (
@@ -734,6 +812,9 @@ class CustodyLoan(Document):
 			frappe.get_doc("Custody Loan Return", return_name).update_status()
 
 	def update_material_request_status(self):
+		# an Asset loan of converted units records custody only: the request's fulfilment was the stock loan's
+		if self.get("source_conversion"):
+			return
 		if not self.material_request or not frappe.db.exists("Material Request", self.material_request):
 			return
 		request = frappe.get_doc("Material Request", self.material_request)
@@ -797,7 +878,8 @@ class CustodyLoan(Document):
 		if (
 			self.docstatus != 1
 			or self.loan_type != "Stock"
-			or self.status not in ("Active", "Partially Returned", "Pending Quality Inspection", "Pending Receipt")
+			or self.status
+			not in ("Active", "Partially Returned", "Pending Quality Inspection", "Pending Receipt")
 		):
 			frappe.throw(_("Loan Adjustments are available for submitted Stock Loans only"))
 		self.refresh_balances()
@@ -1725,11 +1807,25 @@ class CustodyLoanAdjustment(Document):
 		self.company = loan.company
 		set_loan_parties(self, loan)
 		previous = self.get_doc_before_save()
-		if previous and any(previous.get(field) != self.get(field) for field in ("demo_consumption", "demo_customer", "demo_confirmed_by", "demo_request_token", "demo_request_hash")):
+		if previous and any(
+			previous.get(field) != self.get(field)
+			for field in (
+				"demo_consumption",
+				"demo_customer",
+				"demo_confirmed_by",
+				"demo_request_token",
+				"demo_request_hash",
+			)
+		):
 			frappe.throw(_("Demo consumption identity cannot be changed after creation."))
 		if self.get("demo_consumption"):
 			from connect_diagnostics_setup.stock.loan_consumables import expense_account
-			if loan.borrower_type != "Employee" or frappe.db.get_value("Employee", loan.borrower, "user_id") != self.get("demo_confirmed_by") or not self.get("demo_customer"):
+
+			if (
+				loan.borrower_type != "Employee"
+				or frappe.db.get_value("Employee", loan.borrower, "user_id") != self.get("demo_confirmed_by")
+				or not self.get("demo_customer")
+			):
 				frappe.throw(_("Demo consumption must identify the loan holder and the Customer."))
 			if self.is_new() and frappe.session.user != "Administrator":
 				frappe.throw(_("Create demo consumption from the employee's loan."), frappe.PermissionError)
@@ -1737,9 +1833,7 @@ class CustodyLoanAdjustment(Document):
 		else:
 			account = frappe.db.get_value("Company", loan.company, "stock_adjustment_account")
 		if not account or self.adjustment_account != account:
-			frappe.throw(
-				_("Loan Adjustment must use the configured account {0}").format(account or "")
-			)
+			frappe.throw(_("Loan Adjustment must use the configured account {0}").format(account or ""))
 		return loan
 
 	def validate_items(self, loan):
@@ -2756,13 +2850,106 @@ def loan_item_available_to_receive(loan_name, loan_item, *, exclude_return=None)
 	return max(flt(loan_item.qty) - returned - adjusted - sold - reserved, 0)
 
 
-def loan_item_available_to_adjust(loan_name, loan_item, *, exclude_adjustment=None):
+def loan_issue_factor(loan_item_name):
+	"""The UOM conversion factor of the submitted issue Delivery Note row of a loan row (1 when none)."""
+	return (
+		flt(
+			frappe.db.get_value(
+				"Delivery Note Item",
+				{"custody_loan_item": loan_item_name, "docstatus": 1},
+				"conversion_factor",
+			)
+		)
+		or 1
+	)
+
+
+def loan_item_available_to_adjust(loan_name, loan_item, *, exclude_adjustment=None, exclude_conversion=None):
 	returned, adjusted, sold = get_loan_item_balances(loan_name, loan_item.name)
-	reserved = get_loan_item_reserved_qty(loan_name, loan_item.name, exclude_adjustment=exclude_adjustment)
+	reserved = get_loan_item_reserved_qty(
+		loan_name,
+		loan_item.name,
+		exclude_adjustment=exclude_adjustment,
+		exclude_conversion=exclude_conversion,
+	)
 	return max(flt(loan_item.qty) - returned - adjusted - sold - reserved, 0)
 
 
-def get_loan_item_reserved_qty(loan_name, loan_item_name, *, exclude_return=None, exclude_adjustment=None):
+CONVERSION_REJECTED_STATE = "Stock to Asset Conversion Rejected"
+
+
+def loan_conversion_rows(loan_name, loan_item_name=None, *, submitted=None, exclude=None):
+	"""The Stock to Asset Conversions of a loan's units (Connect Diagnostics, Siwat 16 Nov 2026: a Borrow unit becomes a
+	Demo Asset). A Draft that is not Rejected reserves the unit, a submitted one settles it like an adjustment, a
+	cancelled or deleted one counts for nothing. ``submitted``: None both, True submitted only, False drafts only.
+	Returns frappe._dict(name, docstatus, custody_loan_item, qty, serial_and_batch_bundle, batch_no, serial_no), the
+	quantity in loan units."""
+	if not frappe.db.has_column("Stock to Asset Conversion", "custody_loan"):
+		return []
+	docstatus = [1] if submitted else [0] if submitted is False else [0, 1]
+	filters = {"custody_loan": loan_name, "docstatus": ["in", docstatus]}
+	if loan_item_name:
+		filters["custody_loan_item"] = loan_item_name
+	if exclude:
+		filters["name"] = ["!=", exclude]
+	rows = []
+	for parent in frappe.get_all(
+		"Stock to Asset Conversion",
+		filters=filters,
+		fields=["name", "docstatus", "custody_loan_item", "workflow_state"],
+	):
+		if parent.docstatus == 0 and parent.workflow_state == CONVERSION_REJECTED_STATE:
+			continue
+		factor = (
+			flt(
+				frappe.db.get_value(
+					"Delivery Note Item",
+					{"custody_loan_item": parent.custody_loan_item, "docstatus": 1},
+					"conversion_factor",
+				)
+			)
+			or 1
+		)
+		for item in frappe.get_all(
+			"Stock to Asset Conversion Item",
+			filters={"parent": parent.name, "parenttype": "Stock to Asset Conversion"},
+			fields=["qty", "serial_and_batch_bundle"],
+		):
+			serials, batch = [], None
+			if item.serial_and_batch_bundle:
+				for entry in frappe.get_all(
+					"Serial and Batch Entry",
+					filters={"parent": item.serial_and_batch_bundle},
+					fields=["serial_no", "batch_no"],
+				):
+					if entry.serial_no:
+						serials.append(entry.serial_no)
+					batch = batch or entry.batch_no
+			rows.append(
+				frappe._dict(
+					name=parent.name,
+					docstatus=parent.docstatus,
+					custody_loan_item=parent.custody_loan_item,
+					qty=flt(item.qty) / factor,
+					serial_and_batch_bundle=item.serial_and_batch_bundle,
+					batch_no=batch,
+					serial_no="\n".join(serials),
+				)
+			)
+	return rows
+
+
+def loan_conversion_serials(loan_name, loan_item_name, *, submitted=None, exclude=None):
+	return [
+		serial
+		for row in loan_conversion_rows(loan_name, loan_item_name, submitted=submitted, exclude=exclude)
+		for serial in normalize_serials(row.serial_no)
+	]
+
+
+def get_loan_item_reserved_qty(
+	loan_name, loan_item_name, *, exclude_return=None, exclude_adjustment=None, exclude_conversion=None
+):
 	filters = {"custody_loan": loan_name, "docstatus": 1, "status": ["!=", "Received"]}
 	if exclude_return:
 		filters["name"] = ["!=", exclude_return]
@@ -2794,6 +2981,12 @@ def get_loan_item_reserved_qty(loan_name, loan_item_name, *, exclude_return=None
 				pluck="qty",
 			)
 		)
+	reserved += sum(
+		row.qty
+		for row in loan_conversion_rows(
+			loan_name, loan_item_name, submitted=False, exclude=exclude_conversion
+		)
+	)
 	return reserved
 
 
@@ -2862,6 +3055,8 @@ def get_loan_item_balances(loan_name, loan_item_name):
 			pluck="qty",
 		)
 		adjusted = sum(flt(qty) for qty in adjustment_rows)
+	# a unit converted to a Demo Asset has left the loan: settled like a write-off
+	adjusted += sum(row.qty for row in loan_conversion_rows(loan_name, loan_item_name, submitted=True))
 	invoice_rows = frappe.db.sql(
 		"""select sum(sii.qty) from `tabSales Invoice Item` sii
 		join `tabSales Invoice` si on si.name=sii.parent
@@ -2920,20 +3115,21 @@ def get_received_serials(loan_name, loan_item_name):
 	return [serial for row in rows for serial in normalize_serials(row)]
 
 
-def get_reserved_serials(loan_name, loan_item_name):
+def get_reserved_serials(loan_name, loan_item_name, *, exclude_conversion=None):
 	return_names = frappe.get_all(
 		"Custody Loan Return",
 		filters={"custody_loan": loan_name, "docstatus": 1, "status": ["!=", "Received"]},
 		pluck="name",
 	)
+	reserved = loan_conversion_serials(loan_name, loan_item_name, submitted=False, exclude=exclude_conversion)
 	if not return_names:
-		return []
+		return reserved
 	rows = frappe.get_all(
 		"Custody Loan Return Item",
 		filters={"parent": ["in", return_names], "custody_loan_item": loan_item_name},
 		pluck="serial_no",
 	)
-	return [serial for row in rows for serial in normalize_serials(row)]
+	return [*(serial for row in rows for serial in normalize_serials(row)), *reserved]
 
 
 def get_adjusted_serials(loan_name, loan_item_name):
@@ -2942,14 +3138,15 @@ def get_adjusted_serials(loan_name, loan_item_name):
 		filters={"custody_loan": loan_name, "docstatus": 1, "status": "Submitted"},
 		pluck="name",
 	)
+	converted = loan_conversion_serials(loan_name, loan_item_name, submitted=True)
 	if not adjustment_names:
-		return []
+		return converted
 	rows = frappe.get_all(
 		"Custody Loan Adjustment Item",
 		filters={"parent": ["in", adjustment_names], "custody_loan_item": loan_item_name},
 		pluck="serial_no",
 	)
-	return [serial for row in rows for serial in normalize_serials(row)]
+	return [*(serial for row in rows for serial in normalize_serials(row)), *converted]
 
 
 def get_open_issued_serials(loan_name, loan_item):

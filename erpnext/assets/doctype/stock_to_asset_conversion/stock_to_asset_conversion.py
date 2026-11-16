@@ -57,6 +57,9 @@ class StocktoAssetConversion(StockController):
 		asset_location: DF.Link | None
 		assets: DF.Table[StocktoAssetConversionAsset]
 		company: DF.Link
+		custody_loan: DF.Link | None
+		custody_loan_item: DF.Data | None
+		demo_customer: DF.Link | None
 		department: DF.Link | None
 		material_request: DF.Link | None
 		naming_series: DF.Literal["ACC-STAC-.YYYY.-"]
@@ -79,6 +82,7 @@ class StocktoAssetConversion(StockController):
 		self.validate_storage_locations()
 		self.set_missing_values()
 		self.validate_stock_items()
+		self.validate_custody_loan_source()
 		self.build_asset_preview()
 		self.validate_accounting_treatments()
 		self.calculate_totals()
@@ -467,7 +471,9 @@ class StocktoAssetConversion(StockController):
 					frappe.throw(_("Asset conversion requires whole unit quantities"))
 				for _asset_index in range(unit_count):
 					source_unit_index += 1
-					asset_value = flt(rates.get(entry.serial_no)) if entry.serial_no else flt(row.valuation_rate)
+					asset_value = (
+						flt(rates.get(entry.serial_no)) if entry.serial_no else flt(row.valuation_rate)
+					)
 					asset_location = existing_locations.get(
 						(row.name, source_unit_index), warehouse_location or self.asset_location
 					)
@@ -510,7 +516,8 @@ class StocktoAssetConversion(StockController):
 				frappe.throw(_("Row {0}: Invalid accounting treatment.").format(output.idx))
 			if output.accounting_treatment != "Expense Immediately":
 				continue
-			if (
+			# a Borrow loan unit converted to a Demo Asset is a Demo conversion too
+			if not self.custody_loan and (
 				not self.material_request
 				or frappe.db.get_value("Material Request", self.material_request, "material_request_type")
 				!= "Customer Demo"
@@ -617,18 +624,36 @@ class StocktoAssetConversion(StockController):
 		for row in self.stock_items:
 			item = frappe.get_cached_doc("Item", row.item_code)
 			if not item.has_serial_no or not item.use_serial_no_wise_valuation:
-				frappe.throw(_("Row {0}: Conversion requires a serialized Item with serial number wise valuation enabled").format(row.idx))
-			serials = frappe.get_all(
-				"Serial and Batch Entry", filters={"parent": row.serial_and_batch_bundle, "is_cancelled": 0},
-				pluck="serial_no",
-			) if row.serial_and_batch_bundle else []
+				frappe.throw(
+					_(
+						"Row {0}: Conversion requires a serialized Item with serial number wise valuation enabled"
+					).format(row.idx)
+				)
+			serials = (
+				frappe.get_all(
+					"Serial and Batch Entry",
+					filters={"parent": row.serial_and_batch_bundle, "is_cancelled": 0},
+					pluck="serial_no",
+				)
+				if row.serial_and_batch_bundle
+				else []
+			)
 			if not serials or any(not serial for serial in serials):
 				frappe.throw(_("Row {0}: Select a Serial Number for every unit").format(row.idx))
 			rates = self.get_serial_costs(row, serials)
 			if any(serial not in rates for serial in serials):
-				frappe.throw(_("Row {0}: Serial Number valuation history is missing in the selected Warehouse").format(row.idx))
+				frappe.throw(
+					_("Row {0}: Serial Number valuation history is missing in the selected Warehouse").format(
+						row.idx
+					)
+				)
 		if self.material_request:
 			self.lock_material_request_items()
+		if self.custody_loan:
+			from erpnext.loan.doctype.custody_loan.custody_loan_core import lock_custody_loan
+
+			lock_custody_loan(self.custody_loan)
+			self.validate_custody_loan_source()
 		if any(not output.asset for output in self.assets):
 			frappe.throw(_("Use Create > Assets to generate the approved Assets before submitting."))
 		self.sync_draft_assets()
@@ -695,9 +720,11 @@ class StocktoAssetConversion(StockController):
 		self.db_set("status", self.status)
 		if self.pick_list:
 			frappe.db.set_value("Pick List", self.pick_list, "status", "Completed")
+		self.update_custody_loan_status()
 
 	def on_cancel(self):
 		self.ignore_linked_doctypes = ("GL Entry", "Stock Ledger Entry", "Serial and Batch Bundle", "Asset")
+		self.validate_no_active_asset_loan()
 		for row in self.assets:
 			if row.asset and frappe.db.get_value("Asset", row.asset, "docstatus") == 1:
 				self.validate_asset_has_no_follow_up_transactions(row.asset)
@@ -714,6 +741,86 @@ class StocktoAssetConversion(StockController):
 		if self.pick_list and frappe.db.get_value("Pick List", self.pick_list, "docstatus") == 1:
 			frappe.get_doc("Pick List", self.pick_list).cancel()
 		self.db_set("status", "Cancelled")
+		self.update_custody_loan_status()
+
+	def validate_custody_loan_source(self):
+		"""A conversion of a unit an employee holds on a Borrow stock loan (Connect Diagnostics, Siwat 16 Nov 2026): it
+		names the loan and the loan row, never a Material Request, takes the unit out of the loan's Loan warehouse and only
+		what the borrower still holds and nothing else has reserved."""
+		if not self.custody_loan:
+			if self.custody_loan_item:
+				frappe.throw(_("A Custody Loan Item needs its Custody Loan."))
+			return
+		from erpnext.loan.doctype.custody_loan.custody_loan_core import (
+			get_open_issued_serials,
+			get_reserved_serials,
+			loan_issue_factor,
+			loan_item_available_to_adjust,
+		)
+		from erpnext.loan.doctype.custody_loan.custody_loan_tracking import transaction_row_entries
+
+		if self.material_request:
+			frappe.throw(_("A conversion of a Custody Loan cannot also name a Material Request."))
+		if self.pick_list:
+			frappe.throw(_("A conversion of a Custody Loan cannot use a Pick List."))
+		loan = frappe.get_doc("Custody Loan", self.custody_loan)
+		if loan.docstatus != 1 or loan.loan_type != "Stock" or loan.company != self.company:
+			frappe.throw(_("Convert only from a submitted Stock Custody Loan of the same Company."))
+		loan_item = next((row for row in loan.items if row.name == self.custody_loan_item), None)
+		if not loan_item:
+			frappe.throw(_("Select a row of Custody Loan {0}.").format(self.custody_loan))
+		if len(self.stock_items) != 1:
+			frappe.throw(_("A conversion of a Custody Loan converts one loan row."))
+		row = self.stock_items[0]
+		if row.item_code != loan_item.item_code:
+			frappe.throw(_("Row {0}: Item must be the Item of the loan row.").format(row.idx))
+		if not loan.customer_loan_warehouse or row.warehouse != loan.customer_loan_warehouse:
+			frappe.throw(
+				_("Row {0}: Warehouse must be the loan's Loan warehouse {1}.").format(
+					row.idx, loan.customer_loan_warehouse
+				)
+			)
+		# the conversion counts stock units, the loan counts loan units: only a row issued one to one may convert
+		if flt(loan_issue_factor(loan_item.name)) != 1:
+			frappe.throw(
+				_(
+					"Row {0}: only a loan row issued in its stock unit (conversion factor 1) can convert."
+				).format(row.idx)
+			)
+		available = loan_item_available_to_adjust(loan.name, loan_item, exclude_conversion=self.name)
+		if flt(row.qty) > available:
+			frappe.throw(
+				_("Row {0}: Qty exceeds what the borrower still holds ({1}).").format(row.idx, available)
+			)
+		entries = transaction_row_entries(row) if row.serial_and_batch_bundle else ()
+		serials = [serial for _batch, serial, _qty in entries if serial]
+		if serials:
+			open_serials = set(get_open_issued_serials(loan.name, loan_item))
+			open_serials -= set(get_reserved_serials(loan.name, loan_item.name, exclude_conversion=self.name))
+			if not open_serials.issuperset(serials):
+				frappe.throw(
+					_("Row {0}: Serial Numbers must be units the borrower still holds.").format(row.idx)
+				)
+
+	def loan_custodian(self):
+		"""The Employee who holds the converted unit: the borrower of the loan."""
+		if not self.custody_loan:
+			return None
+		loan = frappe.db.get_value(
+			"Custody Loan", self.custody_loan, ["borrower_type", "borrower"], as_dict=True
+		)
+		return loan.borrower if loan and loan.borrower_type == "Employee" else None
+
+	def update_custody_loan_status(self):
+		if self.custody_loan and frappe.db.exists("Custody Loan", self.custody_loan):
+			frappe.get_doc("Custody Loan", self.custody_loan).update_status()
+
+	def validate_no_active_asset_loan(self):
+		if not self.custody_loan:
+			return
+		loan = frappe.db.get_value("Custody Loan", {"source_conversion": self.name, "docstatus": 1}, "name")
+		if loan:
+			frappe.throw(_("Cancel Asset Custody Loan {0} before cancelling this conversion.").format(loan))
 
 	def validate_asset_has_no_follow_up_transactions(self, asset):
 		checks = (
@@ -754,6 +861,14 @@ class StocktoAssetConversion(StockController):
 				_(
 					"Asset {0} has been used in a submitted Sales Invoice; cancel it before cancelling this conversion"
 				),
+			),
+		)
+		checks = (
+			*checks,
+			(
+				"""select 1 from `tabCustody Loan Item` item join `tabCustody Loan` loan on loan.name=item.parent
+				where item.asset=%s and loan.docstatus=1 limit 1""",
+				_("Asset {0} is on a submitted Custody Loan; cancel it before cancelling this conversion"),
 			),
 		)
 		for index, (query, message) in enumerate(checks):
@@ -815,7 +930,11 @@ class StocktoAssetConversion(StockController):
 					flt(output.asset_value, self.precision("total_value")) for output in outputs
 				)
 				if flt(stock_value_by_row[source_row.name] - assigned_value, self.precision("total_value")):
-					frappe.throw(_("Row {0}: Serial Number costs do not match the stock ledger value. Please check valuation before submitting.").format(source_row.idx))
+					frappe.throw(
+						_(
+							"Row {0}: Serial Number costs do not match the stock ledger value. Please check valuation before submitting."
+						).format(source_row.idx)
+					)
 
 		for row in self.stock_items:
 			stock_value = stock_value_by_row[row.name]
@@ -936,6 +1055,9 @@ class StocktoAssetConversion(StockController):
 			asset.source_serial_no = output.source_serial_no
 			asset.source_batch_no = output.source_batch_no
 			asset.material_request = self.material_request
+			# a unit converted from a Borrow loan stays with its borrower (Siwat, 16 Nov 2026)
+			if getattr(self, "custody_loan", None):
+				asset.custodian = self.loan_custodian()
 			expensed = output.accounting_treatment == "Expense Immediately"
 			asset.net_purchase_amount = 0 if expensed else output.asset_value
 			asset.purchase_date = self.posting_date

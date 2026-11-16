@@ -10,6 +10,9 @@ frappe.ui.form.on("Custody Loan", {
 				material_request_type: ["in", ["Customer Demo", "Customer Borrow / Loan"]],
 			},
 		}));
+		// the recipient's address and contact are the ones of the Recipient Customer when it is set
+		frm.set_query("recipient_address", () => recipient_link_filters(frm));
+		frm.set_query("recipient_contact", () => recipient_link_filters(frm));
 		frm.set_query("source_warehouse", "items", () => ({
 			filters: { company: frm.doc.company, is_group: 0 },
 		}));
@@ -194,3 +197,13 @@ frappe.ui.form.on("Custody Loan Item", {
 		});
 	},
 });
+
+function recipient_link_filters(frm) {
+	if (!frm.doc.recipient_customer) return {};
+	return {
+		filters: [
+			["Dynamic Link", "link_doctype", "=", "Customer"],
+			["Dynamic Link", "link_name", "=", frm.doc.recipient_customer],
+		],
+	};
+}
