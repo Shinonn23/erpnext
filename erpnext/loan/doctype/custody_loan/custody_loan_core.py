@@ -756,9 +756,13 @@ class CustodyLoan(Document):
 
 	def get_submitted_status(self):
 		self.refresh_balances()
-		if self.loan_type == "Asset" and not self.get("source_conversion") and (
-			not self.asset_movement
-			or frappe.db.get_value("Asset Movement", self.asset_movement, "docstatus") != 1
+		if (
+			self.loan_type == "Asset"
+			and not self.get("source_conversion")
+			and (
+				not self.asset_movement
+				or frappe.db.get_value("Asset Movement", self.asset_movement, "docstatus") != 1
+			)
 		):
 			return "Pending Delivery"
 		if self.loan_type == "Stock" and (
@@ -870,7 +874,8 @@ class CustodyLoan(Document):
 		if (
 			self.docstatus != 1
 			or self.loan_type != "Stock"
-			or self.status not in ("Active", "Partially Returned", "Pending Quality Inspection", "Pending Receipt")
+			or self.status
+			not in ("Active", "Partially Returned", "Pending Quality Inspection", "Pending Receipt")
 		):
 			frappe.throw(_("Loan Adjustments are available for submitted Stock Loans only"))
 		self.refresh_balances()
@@ -1798,11 +1803,25 @@ class CustodyLoanAdjustment(Document):
 		self.company = loan.company
 		set_loan_parties(self, loan)
 		previous = self.get_doc_before_save()
-		if previous and any(previous.get(field) != self.get(field) for field in ("demo_consumption", "demo_customer", "demo_confirmed_by", "demo_request_token", "demo_request_hash")):
+		if previous and any(
+			previous.get(field) != self.get(field)
+			for field in (
+				"demo_consumption",
+				"demo_customer",
+				"demo_confirmed_by",
+				"demo_request_token",
+				"demo_request_hash",
+			)
+		):
 			frappe.throw(_("Demo consumption identity cannot be changed after creation."))
 		if self.get("demo_consumption"):
 			from connect_diagnostics_setup.stock.loan_consumables import expense_account
-			if loan.borrower_type != "Employee" or frappe.db.get_value("Employee", loan.borrower, "user_id") != self.get("demo_confirmed_by") or not self.get("demo_customer"):
+
+			if (
+				loan.borrower_type != "Employee"
+				or frappe.db.get_value("Employee", loan.borrower, "user_id") != self.get("demo_confirmed_by")
+				or not self.get("demo_customer")
+			):
 				frappe.throw(_("Demo consumption must identify the loan holder and the Customer."))
 			if self.is_new() and frappe.session.user != "Administrator":
 				frappe.throw(_("Create demo consumption from the employee's loan."), frappe.PermissionError)
@@ -1810,9 +1829,7 @@ class CustodyLoanAdjustment(Document):
 		else:
 			account = frappe.db.get_value("Company", loan.company, "stock_adjustment_account")
 		if not account or self.adjustment_account != account:
-			frappe.throw(
-				_("Loan Adjustment must use the configured account {0}").format(account or "")
-			)
+			frappe.throw(_("Loan Adjustment must use the configured account {0}").format(account or ""))
 		return loan
 
 	def validate_items(self, loan):
@@ -2962,7 +2979,9 @@ def get_loan_item_reserved_qty(
 		)
 	reserved += sum(
 		row.qty
-		for row in loan_conversion_rows(loan_name, loan_item_name, submitted=False, exclude=exclude_conversion)
+		for row in loan_conversion_rows(
+			loan_name, loan_item_name, submitted=False, exclude=exclude_conversion
+		)
 	)
 	return reserved
 

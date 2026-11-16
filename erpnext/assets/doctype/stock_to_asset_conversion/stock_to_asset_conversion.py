@@ -470,7 +470,9 @@ class StocktoAssetConversion(StockController):
 					frappe.throw(_("Asset conversion requires whole unit quantities"))
 				for _asset_index in range(unit_count):
 					source_unit_index += 1
-					asset_value = flt(rates.get(entry.serial_no)) if entry.serial_no else flt(row.valuation_rate)
+					asset_value = (
+						flt(rates.get(entry.serial_no)) if entry.serial_no else flt(row.valuation_rate)
+					)
 					asset_location = existing_locations.get(
 						(row.name, source_unit_index), warehouse_location or self.asset_location
 					)
@@ -621,16 +623,29 @@ class StocktoAssetConversion(StockController):
 		for row in self.stock_items:
 			item = frappe.get_cached_doc("Item", row.item_code)
 			if not item.has_serial_no or not item.use_serial_no_wise_valuation:
-				frappe.throw(_("Row {0}: Conversion requires a serialized Item with serial number wise valuation enabled").format(row.idx))
-			serials = frappe.get_all(
-				"Serial and Batch Entry", filters={"parent": row.serial_and_batch_bundle, "is_cancelled": 0},
-				pluck="serial_no",
-			) if row.serial_and_batch_bundle else []
+				frappe.throw(
+					_(
+						"Row {0}: Conversion requires a serialized Item with serial number wise valuation enabled"
+					).format(row.idx)
+				)
+			serials = (
+				frappe.get_all(
+					"Serial and Batch Entry",
+					filters={"parent": row.serial_and_batch_bundle, "is_cancelled": 0},
+					pluck="serial_no",
+				)
+				if row.serial_and_batch_bundle
+				else []
+			)
 			if not serials or any(not serial for serial in serials):
 				frappe.throw(_("Row {0}: Select a Serial Number for every unit").format(row.idx))
 			rates = self.get_serial_costs(row, serials)
 			if any(serial not in rates for serial in serials):
-				frappe.throw(_("Row {0}: Serial Number valuation history is missing in the selected Warehouse").format(row.idx))
+				frappe.throw(
+					_("Row {0}: Serial Number valuation history is missing in the selected Warehouse").format(
+						row.idx
+					)
+				)
 		if self.material_request:
 			self.lock_material_request_items()
 		if self.custody_loan:
@@ -767,9 +782,9 @@ class StocktoAssetConversion(StockController):
 		# the conversion counts stock units, the loan counts loan units: only a row issued one to one may convert
 		if flt(loan_issue_factor(loan_item.name)) != 1:
 			frappe.throw(
-				_("Row {0}: only a loan row issued in its stock unit (conversion factor 1) can convert.").format(
-					row.idx
-				)
+				_(
+					"Row {0}: only a loan row issued in its stock unit (conversion factor 1) can convert."
+				).format(row.idx)
 			)
 		available = loan_item_available_to_adjust(loan.name, loan_item, exclude_conversion=self.name)
 		if flt(row.qty) > available:
@@ -914,7 +929,11 @@ class StocktoAssetConversion(StockController):
 					flt(output.asset_value, self.precision("total_value")) for output in outputs
 				)
 				if flt(stock_value_by_row[source_row.name] - assigned_value, self.precision("total_value")):
-					frappe.throw(_("Row {0}: Serial Number costs do not match the stock ledger value. Please check valuation before submitting.").format(source_row.idx))
+					frappe.throw(
+						_(
+							"Row {0}: Serial Number costs do not match the stock ledger value. Please check valuation before submitting."
+						).format(source_row.idx)
+					)
 
 		for row in self.stock_items:
 			stock_value = stock_value_by_row[row.name]
