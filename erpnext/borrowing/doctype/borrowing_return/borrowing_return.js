@@ -58,7 +58,8 @@ frappe.ui.form.on("Borrowing Return", {
 			frm.add_custom_button(
 				__(frm.doc.loan_type === "Stock" ? "Receiving Delivery Note" : "Asset Movement"),
 				() => frm.call("prepare_receipt").then((r) => open_generated_doc(r.message)),
-				__("Create")
+				__("Create"),
+				receipt_type
 			);
 		}
 

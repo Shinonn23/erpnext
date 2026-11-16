@@ -70,8 +70,14 @@ class BorrowingQualityInspectionMixin:
 		)
 
 	def validate(self):
-		result = super().validate()
 		delivery_note_name = get_borrowing_return_delivery_note(self)
+		if delivery_note_name:
+			# A returned unit is judged by hand; the system records that itself and never asks for the tick
+			# (Connect Diagnostics: no forced ticks).
+			self.manual_inspection = 1
+			for reading in self.get("readings") or []:
+				reading.manual_inspection = 1
+		result = super().validate()
 		if delivery_note_name:
 			validate_borrowing_return_quality_inspection(self, delivery_note_name)
 		return result
@@ -1667,8 +1673,8 @@ def validate_borrowing_return_quality_inspection(quality_inspection, delivery_no
 		or row.borrowing_item not in {item.borrowing_item for item in return_doc.items}
 	):
 		frappe.throw(_("Quality Inspection must reference a Borrowing Return item on this Delivery Note"))
-	if quality_inspection.inspection_type != "Incoming" or not quality_inspection.manual_inspection:
-		frappe.throw(_("Borrowing Return Quality Inspections must record a manual incoming inspection"))
+	if quality_inspection.inspection_type != "Incoming":
+		frappe.throw(_("Borrowing Return Quality Inspections must be incoming inspections"))
 	if flt(quality_inspection.sample_size) <= 0 or flt(quality_inspection.sample_size) > abs(flt(row.qty)):
 		frappe.throw(_("Quality Inspection sample size must be within the returned quantity"))
 	if row.batch_no and quality_inspection.batch_no != row.batch_no:
