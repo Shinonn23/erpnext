@@ -22,7 +22,7 @@ test("a Borrowing document never takes the Company's in-transit warehouse", () =
 
 test("the Quality Inspection dialog counts the units of a return row", () => {
 	assert.match(transaction, /qty: Math\.abs\(item\.qty\),/);
-	assert.match(transaction, /sample_size: item\.sample_quantity \|\| Math\.abs\(item\.qty\),/);
+	assert.match(transaction, /sample_size: item\.sample_quantity \|\| \(item\.qty < 0 \? Math\.abs\(item\.qty\) : undefined\),/);
 	const controller = read("../../../controllers/stock_controller.py");
 	assert.match(controller, /flt\(item\.get\("sample_size"\)\) > abs\(flt\(item\.get\("qty"\)\)\)/);
 });
@@ -39,4 +39,11 @@ test("Create > Receiving Delivery Note / Asset Movement names the DocType it cre
 		source,
 		/open_generated_doc\(r\.message\)\),\s*__\("Create"\),\s*receipt_type\s*\)/
 	);
+});
+
+test("Borrowing Create buttons whose label is not a DocType name say which DocType they create", () => {
+	const ret = read("../borrowing_return/borrowing_return.js");
+	assert.match(ret, /__\("Batch Exchange"\)[\s\S]*?__\("Create"\), "Stock Entry"\)/);
+	const adj = read("../borrowing_adjustment/borrowing_adjustment.js");
+	assert.match(adj, /__\("Consumption Invoice"\)[\s\S]*?\}, __\("Create"\), "Sales Invoice"\);/);
 });

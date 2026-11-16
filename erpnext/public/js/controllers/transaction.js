@@ -2891,7 +2891,7 @@ erpnext.TransactionController = class TransactionController extends erpnext.taxe
 							description: item.description,
 							serial_no: item.serial_no,
 							batch_no: item.batch_no,
-							sample_size: item.sample_quantity || Math.abs(item.qty),
+							sample_size: item.sample_quantity || (item.qty < 0 ? Math.abs(item.qty) : undefined),
 							child_row_reference: item.name,
 						});
 						dialog_items.grid.refresh();

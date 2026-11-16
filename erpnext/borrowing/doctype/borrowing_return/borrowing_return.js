@@ -50,7 +50,7 @@ frappe.ui.form.on("Borrowing Return", {
 		}
 		if (frm.doc.docstatus !== 1) return;
 		if (frm.doc.loan_type === "Stock" && frm.doc.status === "Pending Receipt" && frappe.model.can_create("Stock Entry")) {
-			frm.add_custom_button(__("Batch Exchange"), () => frm.call("prepare_batch_exchange").then((r) => open_generated_doc(r.message)), __("Create"));
+			frm.add_custom_button(__("Batch Exchange"), () => frm.call("prepare_batch_exchange").then((r) => open_generated_doc(r.message)), __("Create"), "Stock Entry");
 		}
 		const receipt_type = frm.doc.loan_type === "Stock" ? "Delivery Note" : "Asset Movement";
 		const receipt_name = frm.doc.loan_type === "Stock" ? frm.doc.delivery_note : frm.doc.asset_movement;

@@ -44,7 +44,7 @@ frappe.ui.form.on("Borrowing Adjustment", {
 				});
 				frappe.model.sync(invoice);
 				frappe.set_route("Form", "Sales Invoice", invoice.name);
-			}, __("Create"));
+			}, __("Create"), "Sales Invoice");
 		}
 		if (frm.doc.docstatus === 1 && !frm.doc.stock_entry && frappe.model.can_create("Stock Entry")) {
 			frm.add_custom_button(__("Stock Entry"), () => frm.call("prepare_stock_entry").then((r) => {
