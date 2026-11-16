@@ -237,8 +237,7 @@ _thailand_doc_events = {
 		"on_trash": "erpnext.regional.thailand.custom.deposit_utils.cancel_deposit_invoice",
 	},
 	"Purchase Invoice": {
-		"after_insert": "erpnext.regional.thailand.custom.custom_api.validate_tax_invoice",
-		"on_update": "erpnext.regional.thailand.custom.custom_api.validate_tax_invoice",
+		"before_submit": "erpnext.regional.thailand.custom.custom_api.validate_tax_invoice",
 		"before_cancel": "erpnext.regional.thailand.custom.custom_api.cancel_related_tax_invoice",
 		"before_validate": [
 			"erpnext.regional.thailand.custom.deposit_utils.validate_invoice",
@@ -249,8 +248,7 @@ _thailand_doc_events = {
 		"on_trash": "erpnext.regional.thailand.custom.deposit_utils.cancel_deposit_invoice",
 	},
 	"Expense Claim": {
-		"after_insert": "erpnext.regional.thailand.custom.custom_api.validate_tax_invoice",
-		"on_update": "erpnext.regional.thailand.custom.custom_api.validate_tax_invoice",
+		"before_submit": "erpnext.regional.thailand.custom.custom_api.validate_tax_invoice",
 	},
 	"Journal Entry": {
 		"on_update": "erpnext.regional.thailand.custom.custom_api.prepare_journal_entry_tax_invoice_detail",

@@ -465,25 +465,27 @@ def copy_supplier_invoice_to_tax_invoice(doc, method=None):
 		doc.tax_invoice_date = doc.get("bill_date") or doc.get("posting_date")
 
 
-def validate_tax_invoice(doc, method):
+def validate_tax_invoice(doc, method=None):
+	"""Purchase Invoice and Expense Claim (before_submit): input VAT needs the supplier's tax invoice number.
+	It is a posting requirement, not a draft one: a Draft (e.g. mapped from a Purchase Receipt) may be saved
+	without it and the person completes it before submitting. Reads the taxes of the document being submitted."""
 	# If taxes contain tax account, tax invoice is required.
 	setting = get_thai_tax_settings(doc.company)
 	tax_account = setting.purchase_tax_account
-	voucher = frappe.get_doc(doc.doctype, doc.name)
 	has_vat = False
-	for tax in voucher.taxes:
+	for tax in doc.get("taxes") or []:
 		if tax.account_head == tax_account:
 			has_vat = True
 			break
-	if not doc.split_tax_invoice:
-		if has_vat and not doc.tax_invoice_number:
+	if not doc.get("split_tax_invoice"):
+		if has_vat and not doc.get("tax_invoice_number"):
 			frappe.throw(_("This document require Tax Invoice Number"))
-		if not has_vat and doc.tax_invoice_number:
+		if not has_vat and doc.get("tax_invoice_number"):
 			frappe.throw(_("This document has no due VAT, please remove Tax Invoice Number"))
 	else:
-		if has_vat and not doc.splitted_tax_invoices:
+		if has_vat and not doc.get("splitted_tax_invoices"):
 			frappe.throw(_("This document require Tax Invoice Number(s)"))
-		if not has_vat and doc.splitted_tax_invoices:
+		if not has_vat and doc.get("splitted_tax_invoices"):
 			frappe.throw(_("This document has no due VAT, please remove Tax Invoice Number(s)"))
 
 
