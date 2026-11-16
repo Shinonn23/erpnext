@@ -186,9 +186,9 @@ class TestInventoryDimension(ERPNextTestSuite):
 			self.assertEqual(field_order[section_index:], ["inventory_dimension", "storage_location"], doctype)
 
 		loan_item_doctypes = {
-			"Custody Loan Adjustment Item",
-			"Custody Loan Item",
-			"Custody Loan Return Item",
+			"Borrowing Adjustment Item",
+			"Borrowing Item",
+			"Borrowing Return Item",
 		}
 		self.assertTrue(loan_item_doctypes.isdisjoint(frappe.get_hooks("inventory_dimension_doctypes")))
 		for doctype in loan_item_doctypes:

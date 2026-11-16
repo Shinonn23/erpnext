@@ -78,7 +78,7 @@
   "col_break6",
   "material_request",
   "material_request_item",
-  "custody_loan_item",
+  "borrowing_item",
   "pick_list_item",
   "original_item",
   "reference_section",
@@ -444,12 +444,12 @@
    "read_only": 1
   },
   {
-   "fieldname": "custody_loan_item",
+   "fieldname": "borrowing_item",
    "fieldtype": "Link",
    "hidden": 1,
-   "label": "Custody Loan Item",
+   "label": "Borrowing Item",
    "no_copy": 1,
-   "options": "Custody Loan Item",
+   "options": "Borrowing Item",
    "print_hide": 1,
    "read_only": 1
   },

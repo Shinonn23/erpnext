@@ -80,7 +80,7 @@ frappe.ui.form.on("Material Request", {
 				expected_return_date: null,
 			});
 		}
-		if (purpose !== "Customer Borrow / Loan") {
+		if (!["Borrow", "Customer Borrow"].includes(purpose)) {
 			Object.assign(values, {
 				borrow_item_type: null,
 				loan_recipient_type: null,
@@ -90,18 +90,23 @@ frappe.ui.form.on("Material Request", {
 				loan_recipient_contact_display: null,
 				loan_recipient_contact_email: null,
 			});
-		} else if (previous !== purpose) {
-			values.loan_recipient_type = "Customer";
+		} else if (frm.doc.loan_recipient_type !== borrower_type_of(purpose)) {
+			// the request type names the borrower: Borrow lends to an Employee, Customer Borrow to a Customer
+			Object.assign(values, {
+				loan_recipient_type: borrower_type_of(purpose),
+				loan_recipient: null,
+				loan_recipient_contact: null,
+			});
 		}
 		if (purpose !== "Material Transfer") values.set_from_warehouse = null;
 		if (purpose !== "Asset Transfer") values.asset_source_location = null;
 		if (purpose !== "Asset Transfer") values.asset_transfer_status = null;
-		if (purpose !== "Customer Demo" && purpose !== "Customer Borrow / Loan") {
+		if (purpose !== "Customer Demo" && !["Borrow", "Customer Borrow"].includes(purpose)) {
 			values.request_progress_status = null;
 			values.request_remarks = null;
 		}
 		if (purpose !== "Asset Transfer") values.asset_item_filter = null;
-		const is_loan = purpose === "Customer Demo" || purpose === "Customer Borrow / Loan";
+		const is_loan = purpose === "Customer Demo" || ["Borrow", "Customer Borrow"].includes(purpose);
 		return frm.set_value(values).then(() => {
 			if (is_loan && !frm.doc.responsible_employee) set_responsible_employee(frm);
 			set_stock_item_query(frm);
@@ -283,7 +288,8 @@ frappe.ui.form.on("Material Request", {
 		const request_name = frm.doc.name;
 		const is_special_request_type = [
 			"Customer Demo",
-			"Customer Borrow / Loan",
+			"Borrow",
+			"Customer Borrow",
 			"Asset Transfer",
 		].includes(frm.doc.material_request_type);
 		const remove_standard_status_actions = () => {
@@ -387,7 +393,7 @@ frappe.ui.form.on("Material Request Item", {
 					target_location:
 						frm.doc.material_request_type === "Customer Demo"
 							? frm.doc.customer_location
-							: frm.doc.material_request_type === "Customer Borrow / Loan"
+							: ["Borrow", "Customer Borrow"].includes(frm.doc.material_request_type)
 							? frm.doc.loan_recipient_location
 							: row.target_location,
 					qty: 1,
@@ -422,7 +428,7 @@ function set_stock_item_query(frm) {
 		query: "erpnext.controllers.queries.item_query",
 		filters:
 			// A Demo or Borrow request names any Item (Stock or Fixed Asset); the Stock team decides how it is supplied.
-			["Customer Demo", "Customer Borrow / Loan"].includes(doc.material_request_type)
+			["Customer Demo", "Borrow", "Customer Borrow"].includes(doc.material_request_type)
 				? { disabled: 0, has_variants: 0 }
 				: doc.material_request_type === "Asset Transfer"
 				? { is_fixed_asset: 1, disabled: 0 }
@@ -501,4 +507,8 @@ function set_responsible_employee(frm) {
 				frm.set_value("responsible_employee", message.name);
 			}
 		});
+}
+
+function borrower_type_of(purpose) {
+	return purpose === "Borrow" ? "Employee" : "Customer";
 }

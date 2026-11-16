@@ -915,12 +915,12 @@
   {
    "fieldname": "customer_demo_loan_section",
    "fieldtype": "Section Break",
-   "label": "Customer Demo / Loan Settings"
+   "label": "Customer Demo / Borrowing Settings"
   },
   {
    "fieldname": "customer_loan_warehouse",
    "fieldtype": "Link",
-   "label": "Customer Loan Warehouse",
+   "label": "Borrowing Warehouse",
    "options": "Warehouse"
   },
   {

@@ -39,7 +39,7 @@ class SalesInvoiceItem(Document):
 		company_total_stock: DF.Float
 		conversion_factor: DF.Float
 		cost_center: DF.Link
-		custody_loan_item: DF.Link | None
+		borrowing_item: DF.Link | None
 		customer_item_code: DF.Data | None
 		deferred_revenue_account: DF.Link | None
 		delivered_by_supplier: DF.Check

@@ -1,4 +1,4 @@
-const helper = "erpnext.loan.doctype.custody_loan.custody_loan_ui_test_helpers";
+const helper = "erpnext.borrowing.doctype.borrowing.borrowing_ui_test_helpers";
 export const api = (method, args, raw = false) =>
 	cy
 		.window({ log: false })
@@ -48,8 +48,8 @@ export const field = (name, value, type = "Data") => {
 		"batch_no",
 		"pickup_address_name",
 		"delivery_address_name",
-		"custody_loan",
-		"custody_loan_item",
+		"borrowing",
+		"borrowing_item",
 		"pickup_contact_name",
 		"delivery_contact_name",
 		"contact_person",
@@ -79,21 +79,21 @@ export const action = (name, group) => {
 		.should("be.visible")
 		.click();
 	const target = {
-		"Loan Order": "Custody Loan",
+		"Borrowing Order": "Borrowing",
 		"Open Pick List": "Pick List",
-		"Create Loan Delivery Note": "Delivery Note",
-		"Open Loan Delivery Note": "Delivery Note",
-		Return: "Custody Loan Return",
-		Adjustment: "Custody Loan Adjustment",
+		"Create Borrowing Delivery Note": "Delivery Note",
+		"Open Borrowing Delivery Note": "Delivery Note",
+		Return: "Borrowing Return",
+		Adjustment: "Borrowing Adjustment",
 		"Asset Sale Invoice": "Sales Invoice",
 		"Open Asset Sale Invoice": "Sales Invoice",
-		"Loan Receive": "Delivery Note",
+		"Borrowing Receive": "Delivery Note",
 		"Open Asset Movement": "Asset Movement",
 		"Open Stock Entry": "Stock Entry",
-		"Create Loan Shipment": "Shipment",
-		"Create Loan Return Shipment": "Shipment",
-		"Open Loan Shipment": "Shipment",
-		"Open Loan Return Shipment": "Shipment",
+		"Create Borrowing Shipment": "Shipment",
+		"Create Borrowing Return Shipment": "Shipment",
+		"Open Borrowing Shipment": "Shipment",
+		"Open Borrowing Return Shipment": "Shipment",
 	}[name];
 	if (target) waitForm(target);
 };
@@ -132,7 +132,7 @@ const recordStep = () => {
 					])
 						expect(after[key], `Reload preserves ${key}`).to.deep.eq(before[key]);
 				});
-				for (const loan of after.documents["Custody Loan"] || [])
+				for (const loan of after.documents["Borrowing"] || [])
 					api("verify", { run_id: runId, loan_name: loan.name, expected: "{}" });
 			});
 		});
@@ -168,9 +168,9 @@ export const cancel = (message) => {
 export const checkpoint = (run, loan, label, expected) => {
 	const visibleState = () =>
 		current().then((doc) => {
-			if (doc.doctype === "Custody Loan" && doc.name === loan && expected?.status)
+			if (doc.doctype === "Borrowing" && doc.name === loan && expected?.status)
 				expect(doc.status).to.eq(expected.status);
-			if (["Custody Loan", "Custody Loan Return", "Custody Loan Adjustment"].includes(doc.doctype)) {
+			if (["Borrowing", "Borrowing Return", "Borrowing Adjustment"].includes(doc.doctype)) {
 				cy.get(
 					'.page-container:visible .frappe-control[data-fieldname="status"] .control-value:visible'
 				).should("contain.text", doc.status);
@@ -194,7 +194,7 @@ export const checkpoint = (run, loan, label, expected) => {
 export const requestLoan = (run, asset = false, shipment = false) => {
 	cy.new_form("Material Request");
 	field("company", run.company);
-	field("material_request_type", "Customer Borrow / Loan", "Select");
+	field("material_request_type", "Customer Borrow", "Select");
 	field("borrow_item_type", asset ? "Asset" : "Stock Item", "Select");
 	field("loan_recipient_type", run.recipient_type || "Customer", "Select");
 	field("loan_recipient", run.recipient || run.customer);
@@ -210,21 +210,21 @@ export const requestLoan = (run, asset = false, shipment = false) => {
 	});
 	cy.get('[data-fieldname="items"] .grid-add-row').click();
 	row("items", asset ? { asset: run.asset } : { item_code: run.item, qty: run.qty });
-	absent("Loan Order");
+	absent("Borrowing Order");
 	submit();
-	present("Loan Order");
-	action("Loan Order", "Create");
-	current().its("doctype").should("eq", "Custody Loan");
+	present("Borrowing Order");
+	action("Borrowing Order", "Create");
+	current().its("doctype").should("eq", "Borrowing");
 	cy.get('[data-fieldname="material_request"] input:visible').should("not.exist");
 	if (!asset) row("items", { source_warehouse: run.source_warehouse });
 	if (!asset && shipment) field("requires_shipment", true, "Check");
 	submit();
-	childConditions("Custody Loan", asset);
+	childConditions("Borrowing", asset);
 	return current().then((doc) => doc.name);
 };
 export const issueStock = (loan) => {
 	absent("Return");
-	absent("Create Loan Delivery Note");
+	absent("Create Borrowing Delivery Note");
 	action("Open Pick List");
 	pickQueries();
 	cy.intercept("POST", "**/api/method/run_doc_method", (request) => {
@@ -239,13 +239,13 @@ export const issueStock = (loan) => {
 	current().its("locations").should("have.length", 1);
 	row("locations", { picked_qty: 2 });
 	submit();
-	open("Custody Loan", loan);
-	present("Create Loan Delivery Note");
-	action("Create Loan Delivery Note", "Create");
+	open("Borrowing", loan);
+	present("Create Borrowing Delivery Note");
+	action("Create Borrowing Delivery Note", "Create");
 	current().its("doctype").should("eq", "Delivery Note");
 };
 export const inspectReceive = (run, receive, result = "Accepted") => {
-	action("Inspect Loan Return Items");
+	action("Inspect Borrowing Return Items");
 	cy.get(".modal:visible a").first().click();
 	cy.get(".modal:visible .btn-modal-close").click();
 	waitForm("Quality Inspection");
@@ -255,17 +255,17 @@ export const inspectReceive = (run, receive, result = "Accepted") => {
 	open("Delivery Note", receive);
 };
 export const receiveReturn = (run, loan, qty, options = {}) => {
-	open("Custody Loan", loan);
+	open("Borrowing", loan);
 	action("Return", "Create");
-	field("custody_loan", loan);
+	field("borrowing", loan);
 	queryConditions(run, loan);
-	childConditions("Custody Loan Return");
+	childConditions("Borrowing Return");
 	row("items", { returned_qty: qty, ...(options.serial ? { serial_no: options.serial } : {}) });
 	if (options.shipment) field("requires_shipment", true, "Check");
 	submit();
 	return current().then((ret) => {
 		const name = ret.name;
-		action("Loan Receive");
+		action("Borrowing Receive");
 		current().then((dn) => {
 			noEffects(run, loan, () => rejectSubmit("Quality Inspection"));
 			inspectReceive(run, dn.name);
@@ -279,7 +279,7 @@ export const childConditions = (doctype, asset = false, scenario = "stock") => {
 	cy.get('[data-fieldname="items"] .grid-row[data-idx="1"] .btn-open-row').first().click();
 	cy.get(".grid-row-open:visible").within(() => {
 		const wrapper = (name) => cy.get(`.frappe-control[data-fieldname="${name}"]`).first();
-		if (doctype === "Custody Loan") {
+		if (doctype === "Borrowing") {
 			for (const name of [
 				"item_code",
 				"source_warehouse",
@@ -292,13 +292,13 @@ export const childConditions = (doctype, asset = false, scenario = "stock") => {
 			wrapper("source_warehouse").should(asset ? "not.be.visible" : "be.visible");
 			wrapper("asset").should(asset ? "be.visible" : "not.be.visible");
 			for (const name of ["batch_no", "serial_no"]) wrapper(name).should("not.be.visible");
-		} else if (doctype === "Custody Loan Return") {
+		} else if (doctype === "Borrowing Return") {
 			wrapper("item_code").find("input:visible").should("not.exist");
 			for (const name of ["batch_no", "serial_no"])
 				wrapper(name).should(asset ? "not.be.visible" : "be.visible");
 			for (const name of ["asset", "target_location"])
 				wrapper(name).should(asset ? "be.visible" : "not.be.visible");
-		} else if (doctype === "Custody Loan Adjustment") {
+		} else if (doctype === "Borrowing Adjustment") {
 			wrapper("batch_no").should(scenario === "batch" ? "be.visible" : "not.be.visible");
 			wrapper("serial_no").should(scenario === "serial" ? "be.visible" : "not.be.visible");
 			wrapper("reason").find(".control-label").should("have.class", "reqd");
@@ -332,10 +332,10 @@ export const queryConditions = (run, loan) =>
 		const query = (name) =>
 			frm.fields_dict.items.grid.get_field(name).get_query(doc, item.doctype, item.name);
 		// These links are read-only on generated forms; inspect the handlers installed by UI setup.
-		if (doc.doctype === "Custody Loan") {
+		if (doc.doctype === "Borrowing") {
 			expect(frm.fields_dict.material_request.get_query().filters).to.deep.eq({
 				docstatus: 1,
-				material_request_type: ["in", ["Customer Demo", "Customer Borrow / Loan"]],
+				material_request_type: ["in", ["Customer Demo", "Borrow", "Customer Borrow"]],
 			});
 			expect(query("source_warehouse").filters).to.deep.eq({ company: run.company, is_group: 0 });
 			expect(query("asset").filters).to.deep.eq({
@@ -354,11 +354,11 @@ export const queryConditions = (run, loan) =>
 				include_expired_batches: 1,
 			});
 		} else {
-			expect(query("custody_loan_item").filters).to.deep.eq({ parent: loan });
-			const filters = frm.fields_dict.custody_loan.get_query().filters;
+			expect(query("borrowing_item").filters).to.deep.eq({ parent: loan });
+			const filters = frm.fields_dict.borrowing.get_query().filters;
 			expect(filters.docstatus).to.eq(1);
 			expect(filters.status).to.deep.eq(["in", ["Active", "Partially Returned"]]);
-			if (doc.doctype === "Custody Loan Adjustment") expect(filters.loan_type).to.eq("Stock");
+			if (doc.doctype === "Borrowing Adjustment") expect(filters.loan_type).to.eq("Stock");
 		}
 	});
 

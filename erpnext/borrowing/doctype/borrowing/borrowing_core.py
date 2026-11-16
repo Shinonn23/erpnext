@@ -1,0 +1,3397 @@
+from __future__ import annotations
+
+from collections import Counter
+
+import frappe
+from frappe import _
+from frappe.model.document import Document
+from frappe.model.workflow import set_workflow_state_on_action
+from frappe.utils import cint, flt, getdate
+
+from erpnext.borrowing.doctype.borrowing.borrowing_tracking import (
+	conversion_factors,
+	get_balances,
+	grouped_open_rows,
+	is_tracked,
+	sync_tracking_table,
+	transaction_row_entries,
+	validate_tracked_rows,
+)
+from erpnext.stock.doctype.serial_no.serial_no import get_serial_nos
+from erpnext.stock.doctype.storage_location.storage_location import get_default_storage_location
+from erpnext.stock.get_item_details import get_item_details
+from erpnext.stock.serial_batch_bundle import get_serial_nos_from_bundle
+
+BORROWER_TYPES = {"Employee", "Customer"}
+# Siwat, 16 Nov 2026: the request type names the borrower (Customer Demo lends to its Customer)
+BORROWER_TYPE_OF = {"Borrow": "Employee", "Customer Borrow": "Customer"}
+LOAN_SOURCE_DOCTYPES = {"Borrowing", "Borrowing Return", "Borrowing Adjustment"}
+_CUSTODY_OPERATION_TOKEN = object()
+
+
+def is_trusted_custody_operation(doc):
+	"""Distinguish native generation/reversal from client-supplied transaction markers."""
+	return doc.flags.get("custody_operation_token") is _CUSTODY_OPERATION_TOKEN
+
+
+def get_borrowing_return_delivery_note(quality_inspection):
+	if quality_inspection.reference_type != "Delivery Note" or not quality_inspection.reference_name:
+		return None
+	delivery_note = frappe.db.get_value(
+		"Delivery Note",
+		quality_inspection.reference_name,
+		["is_return", "is_borrowing_transaction", "borrowing_source_doctype"],
+		as_dict=True,
+	)
+	if (
+		delivery_note
+		and delivery_note.is_return
+		and delivery_note.is_borrowing_transaction
+		and delivery_note.borrowing_source_doctype == "Borrowing Return"
+	):
+		return quality_inspection.reference_name
+	return None
+
+
+class BorrowingQualityInspectionMixin:
+	def update_qc_reference(self, remove_reference=False):
+		delivery_note_name = get_borrowing_return_delivery_note(self)
+		if not delivery_note_name:
+			return super().update_qc_reference(remove_reference)
+
+		# A loan return inspection belongs to one exact row. ERPNext's default
+		# implementation links every row with the same item code to this inspection.
+		frappe.db.set_value(
+			"Delivery Note Item",
+			self.child_row_reference,
+			"quality_inspection",
+			self.name if self.docstatus < 2 and not remove_reference else "",
+			update_modified=False,
+		)
+
+	def validate(self):
+		result = super().validate()
+		delivery_note_name = get_borrowing_return_delivery_note(self)
+		if delivery_note_name:
+			validate_borrowing_return_quality_inspection(self, delivery_note_name)
+		return result
+
+	def validate_inspection_required(self):
+		if get_borrowing_return_delivery_note(self):
+			return
+		return super().validate_inspection_required()
+
+	def before_submit(self):
+		if get_borrowing_return_delivery_note(self) and self.manual_inspection:
+			if self.status not in ("Accepted", "Rejected"):
+				frappe.throw(
+					_("Set the Borrowing Return inspection result before submitting this Quality Inspection")
+				)
+			# Remarks are optional (Connect Diagnostics, Siwat, 5 Nov 2026, relayed by the user)
+		return super().before_submit()
+
+	def before_cancel(self):
+		delivery_note_name = get_borrowing_return_delivery_note(self)
+		if delivery_note_name and frappe.db.get_value("Delivery Note", delivery_note_name, "docstatus") == 1:
+			frappe.throw(_("Cancel the Borrowing Return Delivery Note before cancelling its Quality Inspection"))
+		before_cancel = getattr(super(), "before_cancel", None)
+		if before_cancel:
+			return before_cancel()
+
+	def on_submit(self):
+		result = super().on_submit()
+		update_borrowing_return_status_from_quality_inspection(self)
+		return result
+
+	def on_cancel(self):
+		result = super().on_cancel()
+		update_borrowing_return_status_from_quality_inspection(self)
+		return result
+
+
+class Borrowing(Document):
+	@frappe.whitelist()
+	def submit(self):
+		lock_material_request(self.material_request)
+		return super().submit()
+
+	@frappe.whitelist()
+	def cancel(self):
+		lock_material_request(self.material_request)
+		return super().cancel()
+
+	def validate(self):
+		self.validate_material_request()
+		self.validate_items()
+		self.refresh_balances()
+
+	def validate_material_request(self):
+		request = frappe.get_doc("Material Request", self.material_request)
+		if request.docstatus != 1 or request.material_request_type not in (
+			"Customer Demo",
+			"Borrow",
+			"Customer Borrow",
+		):
+			frappe.throw(
+				_("Borrowings can only be created from a submitted Demo or Borrow Material Request")
+			)
+		if request.company != self.company:
+			frappe.throw(_("Borrowing and Material Request must use the same Company"))
+		if any(
+			row.get("demo_acquisition_method") in ("Convert Stock", "Ready Asset") and not row.get("asset")
+			for row in request.items
+		):
+			frappe.throw(_("Complete Asset selection or conversion before preparing the borrowings."))
+		if self.loan_type not in ("Stock", "Asset"):
+			frappe.throw(_("Select Stock or Asset as the Loan Type"))
+		if self.loan_type not in request_loan_types(request) and not self.get("source_conversion"):
+			frappe.throw(_("Custody Loan Type must match the Material Request Borrow Item Type"))
+
+		# The borrower and delivery snapshot are owned by the submitted request.
+		self.borrower_type = request.loan_recipient_type or ("Customer" if request.customer else None)
+		self.borrower = request.loan_recipient or request.customer
+		if self.borrower_type not in BORROWER_TYPES or not self.borrower:
+			frappe.throw(_("Select an Employee or a Customer on the Material Request"))
+		expected = BORROWER_TYPE_OF.get(request.material_request_type)
+		if expected and self.borrower_type != expected:
+			frappe.throw(
+				_("A Borrow request lends to an Employee")
+				if expected == "Employee"
+				else _("A Customer Borrow request lends to a Customer")
+			)
+		if not frappe.db.exists(self.borrower_type, self.borrower):
+			frappe.throw(_("Borrower {0} does not exist as a {1}").format(self.borrower, self.borrower_type))
+		self.set_requester(request)
+		if not self.expected_return_date:
+			self.expected_return_date = request.expected_return_date
+		if not self.expected_return_date or getdate(self.expected_return_date) < getdate(
+			request.transaction_date
+		):
+			frappe.throw(_("Expected Return Date must be on or after the Material Request date"))
+
+		# an Asset loan of converted Demo Assets keeps the address and contact of its demo customer (Siwat, 16 Nov 2026)
+		if not (self.get("source_conversion") and self.get("recipient_customer")):
+			self.recipient_address = request.recipient_address
+			self.recipient_address_display = request.recipient_address_display
+			self.recipient_contact = request.loan_recipient_contact or request.contact_person
+			self.recipient_contact_display = (
+				request.loan_recipient_contact_display or request.customer_contact_display
+			)
+			self.recipient_contact_email = (
+				request.loan_recipient_contact_email or request.customer_contact_email
+			)
+		self.recipient_location = request.loan_recipient_location or request.customer_location
+		if self.loan_type == "Stock":
+			self.customer_loan_warehouse = frappe.db.get_value(
+				"Company", self.company, "customer_loan_warehouse"
+			)
+			if not self.customer_loan_warehouse:
+				frappe.throw(_("Set Borrowing Warehouse on Company {0}").format(self.company))
+			if frappe.db.get_value("Warehouse", self.customer_loan_warehouse, "company") != self.company:
+				frappe.throw(_("Borrowing Warehouse must belong to Company {0}").format(self.company))
+		else:
+			self.customer_loan_warehouse = None
+
+	def set_requester(self, request=None):
+		"""The Responsible Employee of the request answers for the items until they come back (Connect Diagnostics,
+		Siwat, 5 Nov 2026, relayed by the user): the one named on the Material Request (the requester by default),
+		else the Employee of the user who raised it."""
+		request = request or frappe.get_cached_doc("Material Request", self.material_request)
+		employee = (
+			request.get("responsible_employee")
+			or request.get("requesting_employee")
+			or frappe.db.get_value("Employee", {"user_id": request.owner, "company": self.company}, "name")
+		)
+		self.requested_by = employee or None
+		self.requested_by_name = (
+			frappe.db.get_value("Employee", employee, "employee_name") if employee else None
+		)
+		self.requested_by_user = request.owner
+
+	def backfill_requester(self):
+		"""Borrowings submitted before the requester fields existed get them the first time their status is refreshed."""
+		if self.docstatus != 1 or self.get("requested_by_user") or not self.material_request:
+			return
+		self.set_requester(frappe.get_doc("Material Request", self.material_request))
+		self.db_set(
+			{
+				"requested_by": self.requested_by,
+				"requested_by_name": self.requested_by_name,
+				"requested_by_user": self.requested_by_user,
+			},
+			update_modified=False,
+		)
+
+	def validate_items(self, require_allocation=False, require_source_warehouse=False):
+		if not self.items:
+			frappe.throw(_("Add at least one item to the Custody Loan"))
+		if self.get("source_conversion"):
+			return self.validate_converted_asset_items()
+
+		request = frappe.get_cached_doc("Material Request", self.material_request)
+		request_rows = {row.name: row for row in request.items}
+		request_link_field = "material_request_item"
+		qty_by_request_item = {}
+		assets_seen = set()
+		serials_seen = set()
+		for row in self.items:
+			request_item = request_rows.get(row.get(request_link_field))
+			if not request_item or request_item.parent != request.name:
+				frappe.throw(_("Row {0}: Select an item from the linked Material Request").format(row.idx))
+			if row.item_code != request_item.item_code:
+				frappe.throw(_("Row {0}: Item must match the linked Material Request row").format(row.idx))
+			if flt(row.qty) <= 0:
+				frappe.throw(_("Row {0}: Borrowed Qty must be greater than zero").format(row.idx))
+			if self.loan_type == "Stock":
+				if request_item.item_type != "Stock Item":
+					frappe.throw(
+						_("Row {0}: Stock Borrowing rows must match a Stock Item on the request").format(row.idx)
+					)
+				if require_source_warehouse and not row.source_warehouse:
+					frappe.throw(
+						_("Row {0}: Select a Source Warehouse for this Stock Borrowing Item").format(row.idx)
+					)
+				if (
+					row.source_warehouse
+					and frappe.db.get_value("Warehouse", row.source_warehouse, "company") != self.company
+				):
+					frappe.throw(
+						_("Row {0}: Source Warehouse must belong to Company {1}").format(
+							row.idx, self.company
+						)
+					)
+				item = frappe.get_cached_value(
+					"Item", row.item_code, ["has_batch_no", "has_serial_no"], as_dict=True
+				)
+				if require_allocation and item.has_batch_no and not row.batch_no:
+					frappe.throw(_("Row {0}: Select the Batch to issue").format(row.idx))
+				if item.has_serial_no:
+					if flt(row.qty) % 1:
+						frappe.throw(
+							_("Row {0}: Serial controlled items must have a whole number quantity").format(
+								row.idx
+							)
+						)
+					serials = normalize_serials(row.serial_no)
+					if require_allocation and len(serials) != cint(row.qty):
+						frappe.throw(_("Row {0}: Select one Serial No for each whole item").format(row.idx))
+					if len(serials) != len(set(serials)):
+						frappe.throw(_("Row {0}: A Serial No can only be issued once").format(row.idx))
+					if serials_seen.intersection(serials):
+						frappe.throw(_("A Serial No can only be issued once per Borrowing"))
+					serials_seen.update(serials)
+					row.serial_no = "\n".join(serials)
+			else:
+				if flt(row.qty) != 1:
+					frappe.throw(_("Row {0}: Asset Borrowings require one Fixed Asset per row"))
+				if not request_item.get("asset") or row.asset != request_item.asset:
+					frappe.throw(
+						_("Row {0}: Asset must match the Asset selected on the Material Request Item").format(
+							row.idx
+						)
+					)
+				if row.asset in assets_seen:
+					frappe.throw(_("Asset {0} can only be listed once per Borrowing").format(row.asset))
+				assets_seen.add(row.asset)
+				asset = frappe.db.get_value(
+					"Asset",
+					row.asset,
+					["item_code", "company", "status", "location", "custodian"],
+					as_dict=True,
+					for_update=True,
+				)
+				if not asset or asset.company != self.company or asset.item_code != row.item_code:
+					frappe.throw(
+						_("Row {0}: Asset must match the requested item and Company").format(row.idx)
+					)
+				if (
+					asset.status
+					in (
+						"Draft",
+						"Cancelled",
+						"Scrapped",
+						"Sold",
+						"Capitalized",
+						"In Maintenance",
+						"Out of Order",
+						"Work In Progress",
+					)
+					or asset.custodian
+				):
+					frappe.throw(_("Row {0}: Asset is not available to borrowing").format(row.idx))
+				if asset_awaiting_inspection(row.asset):
+					frappe.throw(
+						_("Row {0}: Asset {1} is waiting for the inspection of its return").format(
+							row.idx, row.asset
+						)
+					)
+				if asset_has_unreturned_borrowing(row.asset, exclude_loan=self.name):
+					frappe.throw(
+						_("Row {0}: Asset is already assigned to an active Borrowing").format(row.idx)
+					)
+				if not asset.location:
+					frappe.throw(_("Row {0}: Asset must have a current Location").format(row.idx))
+				if asset.location != request_item.source_location:
+					frappe.throw(
+						_("Row {0}: Asset has moved since the Material Request was submitted").format(row.idx)
+					)
+				row.source_location = asset.location
+				row.target_location = row.target_location or self.recipient_location
+				if self.borrower_type != "Employee":
+					if not row.target_location:
+						frappe.throw(
+							_("Row {0}: Select the recipient Location for this Asset").format(row.idx)
+						)
+				if row.target_location and row.target_location == row.source_location:
+					frappe.throw(
+						_("Row {0}: Recipient Location must differ from the current Location").format(row.idx)
+					)
+			request_row_name = request_item.name
+			qty_by_request_item[request_row_name] = qty_by_request_item.get(request_row_name, 0) + flt(
+				row.qty
+			)
+
+		for request_item_name, qty in qty_by_request_item.items():
+			if qty > flt(request_rows[request_item_name].qty):
+				frappe.throw(
+					_("Borrowed Qty exceeds the requested quantity for Material Request row {0}").format(
+						request_item_name
+					)
+				)
+
+	def before_submit(self):
+		lock_material_request(self.material_request)
+		self.validate_material_request()
+		for asset_name in sorted({row.asset for row in self.items if row.asset}):
+			lock_asset(asset_name)
+		self.validate_items(require_allocation=False, require_source_warehouse=True)
+		if self.get("source_conversion"):
+			self.status = "Active"
+			return
+		if frappe.db.exists(
+			"Borrowing",
+			{"material_request": self.material_request, "loan_type": self.loan_type, "docstatus": 1},
+		):
+			frappe.throw(
+				_("A submitted {0} Borrowing already exists for this Material Request").format(
+					self.loan_type
+				)
+			)
+		self.status = "Pending Pick" if self.loan_type == "Stock" else "Pending Delivery"
+
+	def on_submit(self):
+		self.update_status()
+
+	def validate_converted_asset_items(self):
+		"""An Asset loan that records the Demo Assets converted from the borrower's own Borrow stock loan (Connect
+		Diagnostics, Siwat 16 Nov 2026): the Assets are already with the borrower (the conversion made them with the
+		borrower as custodian), so the loan names exactly those Assets, starts Active and needs no outgoing movement."""
+		conversion = frappe.db.get_value(
+			"Stock to Asset Conversion",
+			self.source_conversion,
+			["docstatus", "custody_loan", "custody_loan_item", "company"],
+			as_dict=True,
+		)
+		if not conversion or conversion.docstatus != 1 or not conversion.custody_loan:
+			frappe.throw(_("Source Conversion must be a submitted conversion of a Custody Loan."))
+		stock_loan = frappe.db.get_value(
+			"Custody Loan",
+			conversion.custody_loan,
+			["material_request", "borrower_type", "borrower", "company"],
+			as_dict=True,
+		)
+		if (
+			self.loan_type != "Asset"
+			or stock_loan.company != self.company
+			or stock_loan.material_request != self.material_request
+			or stock_loan.borrower_type != self.borrower_type
+			or stock_loan.borrower != self.borrower
+		):
+			frappe.throw(_("The Asset loan must be for the same borrower and request as the stock loan."))
+		other = frappe.db.get_value(
+			"Custody Loan",
+			{"source_conversion": self.source_conversion, "docstatus": 1, "name": ["!=", self.name or ""]},
+			"name",
+		)
+		if other:
+			frappe.throw(_("Custody Loan {0} already records the Assets of this conversion.").format(other))
+		request_item = frappe.db.get_value(
+			"Custody Loan Item", conversion.custody_loan_item, "material_request_item"
+		)
+		assets = set(
+			frappe.get_all(
+				"Stock to Asset Conversion Asset",
+				filters={"parent": self.source_conversion, "parenttype": "Stock to Asset Conversion"},
+				pluck="asset",
+			)
+		)
+		if {row.asset for row in self.items} != assets or len(self.items) != len(assets):
+			frappe.throw(_("The Asset loan must list every Asset of the conversion exactly once."))
+		for row in self.items:
+			asset = frappe.db.get_value(
+				"Asset", row.asset, ["item_code", "docstatus", "custodian", "location"], as_dict=True
+			)
+			if not asset or asset.docstatus != 1:
+				frappe.throw(_("Row {0}: Asset must be submitted").format(row.idx))
+			if self.borrower_type == "Employee" and asset.custodian != self.borrower:
+				frappe.throw(_("Row {0}: Asset is not with the borrower").format(row.idx))
+			row.item_code = asset.item_code
+			row.qty = 1
+			row.material_request_item = request_item
+			row.source_location = asset.location
+			row.target_location = None
+
+	@frappe.whitelist(methods=["POST"])
+	def prepare_pick_list(self):
+		"""The warehouse starts picking explicitly; preparing a borrowing does not send anything out."""
+		lock_material_request(self.material_request)
+		lock_borrowing(self.name)
+		self.reload()
+		self.check_permission("submit")
+		frappe.has_permission("Pick List", "create", throw=True)
+		if self.docstatus != 1 or self.loan_type != "Stock":
+			frappe.throw(_("Prepare picking from a submitted Stock Borrowing."))
+		return self.make_pick_list().as_dict()
+
+	@frappe.whitelist(methods=["POST"])
+	def confirm_delivery(self):
+		frappe.throw(_("Open Create → Delivery Note or Asset Movement, then save and submit that document."))
+
+	def waits_for_stock_delivery(self):
+		"""An Asset loan of a set (the request also lends stock) moves its Assets when the stock loan's goods leave: the
+		Delivery Note is submitted (Siwat, 5 Nov 2026, relayed by the user: a set is delivered together). An Asset-only
+		request moves at once."""
+		if self.loan_type != "Asset" or self.asset_movement or self.get("source_conversion"):
+			return False
+		stock = frappe.db.get_value(
+			"Borrowing",
+			{"material_request": self.material_request, "loan_type": "Stock", "docstatus": 1},
+			["name", "delivery_note"],
+			as_dict=True,
+		)
+		if not stock:
+			return False
+		return (
+			not stock.delivery_note
+			or frappe.db.get_value("Delivery Note", stock.delivery_note, "docstatus") != 1
+		)
+
+	def release_assets(self):
+		frappe.throw(_("Create and submit the outgoing Asset Movement from the Borrowing."))
+
+	@frappe.whitelist()
+	def prepare_asset_movement(self):
+		self.reload()
+		self.check_permission("read")
+		if self.get("source_conversion"):
+			frappe.throw(
+				_("The Assets of this loan are already with the borrower: no Asset Movement is needed.")
+			)
+		frappe.has_permission("Asset Movement", "create", throw=True)
+		if self.docstatus != 1 or self.loan_type != "Asset":
+			frappe.throw(_("Create an Asset Movement from a submitted Asset Borrowing."))
+		if self.asset_movement and frappe.db.get_value(
+			"Asset Movement", self.asset_movement, "docstatus"
+		) in (0, 1):
+			movement = frappe.get_doc("Asset Movement", self.asset_movement)
+			movement.check_permission("read")
+			return movement.as_dict()
+		self.validate_items()
+		return self.make_asset_issue().as_dict()
+
+	def make_pick_list(self):
+		if self.pick_list and frappe.db.get_value("Pick List", self.pick_list, "docstatus") in (0, 1):
+			pick_list = frappe.get_doc("Pick List", self.pick_list)
+			pick_list.check_permission("read")
+			return pick_list
+		internal_customer = get_internal_loan_customer(self.company)
+		if not internal_customer:
+			frappe.throw(
+				_("Create an Internal Customer representing Company {0} before issuing a Stock Borrowing").format(
+					self.company
+				)
+			)
+		request = frappe.get_cached_doc("Material Request", self.material_request)
+		request_items = {row.name: row for row in request.items}
+		pick_list = frappe.new_doc("Pick List")
+		pick_list.company = self.company
+		pick_list.purpose = "Delivery"
+		pick_list.pick_list_type = "Standard"
+		pick_list.pick_manually = 1
+		pick_list.customer = internal_customer
+		pick_list.material_request = self.material_request
+		pick_list.borrowing = self.name
+		for row in self.items:
+			request_item = request_items[row.material_request_item]
+			pick_list.append(
+				"locations",
+				{
+					"item_code": row.item_code,
+					"warehouse": row.source_warehouse,
+					"qty": row.qty,
+					"stock_qty": row.qty * flt(request_item.conversion_factor or 1),
+					"picked_qty": 0,
+					"uom": request_item.uom,
+					"stock_uom": request_item.stock_uom,
+					"conversion_factor": request_item.conversion_factor or 1,
+					"material_request": self.material_request,
+					"material_request_item": row.material_request_item,
+					"borrowing_item": row.name,
+					"batch_no": row.batch_no,
+					"serial_no": row.serial_no,
+					"use_serial_batch_fields": 1,
+				},
+			)
+		return pick_list
+
+	@frappe.whitelist()
+	def make_delivery_note(self):
+		"""Create the standard Borrowing Delivery Note from the submitted native Pick List."""
+		self.reload()
+		self.check_permission("read")
+		frappe.has_permission("Delivery Note", "create", throw=True)
+		return self._make_delivery_note()
+
+	def _make_delivery_note(self):
+		if self.docstatus != 1 or self.loan_type != "Stock":
+			frappe.throw(_("Create a Borrowing Delivery Note from a submitted Stock Borrowing"))
+
+		lock_borrowing(self.name)
+		self.reload()
+		if self.delivery_note:
+			delivery_note_status = frappe.db.get_value("Delivery Note", self.delivery_note, "docstatus")
+			if delivery_note_status in (0, 1):
+				delivery_note = frappe.get_doc("Delivery Note", self.delivery_note)
+				delivery_note.check_permission("read")
+				return delivery_note.as_dict()
+
+		if not self.pick_list or frappe.db.get_value("Pick List", self.pick_list, "docstatus") != 1:
+			frappe.throw(_("Submit the Borrowing Pick List before creating a Borrowing Delivery Note"))
+		pick_list = frappe.get_doc("Pick List", self.pick_list)
+		validate_borrowing_pick_list(pick_list, require_picked_qty=True)
+
+		existing = frappe.db.get_value(
+			"Delivery Note",
+			{
+				"borrowing": self.name,
+				"borrowing_source_doctype": self.doctype,
+				"borrowing_source_name": self.name,
+				"docstatus": ["<", 2],
+			},
+			"name",
+		)
+		if existing:
+			delivery_note = frappe.get_doc("Delivery Note", existing)
+			delivery_note.check_permission("read")
+			return delivery_note.as_dict()
+
+		from erpnext.stock.doctype.pick_list.pick_list import map_pl_locations
+
+		delivery_note = frappe.new_doc("Delivery Note")
+		delivery_note.company = self.company
+		delivery_note.customer = pick_list.customer
+		delivery_note.is_internal_customer = 1
+		delivery_note.represents_company = self.company
+		delivery_note.set_target_warehouse = self.customer_loan_warehouse
+		delivery_note.borrowing = self.name
+		map_pl_locations(
+			pick_list,
+			{"doctype": "Delivery Note Item", "field_map": {"rate": "rate", "name": "name", "parent": ""}},
+			delivery_note,
+		)
+		# Internal stock transfers must be valued in the Company currency even if
+		# the internal Customer has an unrelated selling currency configured.
+		company_currency = frappe.get_cached_value("Company", self.company, "default_currency")
+		delivery_note.currency = company_currency
+		delivery_note.conversion_rate = 1
+		delivery_note.price_list_currency = company_currency
+		delivery_note.plc_conversion_rate = 1
+		pick_list_rows = {row.name: row for row in pick_list.locations}
+		for row in delivery_note.items:
+			pick_list_row = pick_list_rows.get(row.pick_list_item)
+			if not pick_list_row:
+				frappe.throw(_("Every Borrowing Delivery Note row must come from the submitted Pick List"))
+			row.borrowing_item = pick_list_row.borrowing_item
+		loan_items = {row.name: row for row in self.items}
+		for row in delivery_note.items:
+			loan_item = loan_items.get(row.borrowing_item)
+			if not loan_item:
+				frappe.throw(_("Every Borrowing Delivery Note row must come from a Borrowing Item"))
+			row.material_request = self.material_request
+			row.material_request_item = loan_item.material_request_item
+			row.target_warehouse = self.customer_loan_warehouse
+		set_loan_transaction_source(delivery_note, self, self)
+		return delivery_note.as_dict()
+
+	def capture_delivery_note_details(self, delivery_note=None):
+		delivery_note = delivery_note or frappe.get_doc("Delivery Note", self.delivery_note)
+		# a loan row may be delivered from several locations and batches: its rows are read together
+		rows_by_item = {}
+		for row in delivery_note.items:
+			if row.borrowing_item:
+				rows_by_item.setdefault(row.borrowing_item, []).append(row)
+		for loan_item in self.items:
+			rows = rows_by_item.get(loan_item.name)
+			if not rows:
+				continue
+			# every batch and serial is kept in the Serial / Batch Tracking table; the row keeps its batch only
+			# when it was picked from one batch
+			entries = [entry for row in rows for entry in transaction_row_entries(row)]
+			batches = {batch for batch, _serial, _qty in entries if batch}
+			loan_item.batch_no = next(iter(batches)) if len(batches) == 1 else None
+			serials = [serial for _batch, serial, _qty in entries if serial]
+			if not serials:
+				serials = [
+					serial
+					for row in rows
+					for serial in (
+						normalize_serials(row.serial_no)
+						or (
+							get_serial_nos_from_bundle(row.serial_and_batch_bundle)
+							if row.serial_and_batch_bundle
+							else []
+						)
+					)
+				]
+			if serials:
+				loan_item.serial_no = "\n".join(serials)
+			loan_item.valuation_rate = rows[0].incoming_rate or rows[0].rate
+			loan_item.db_update()
+
+	def update_issued_quantities(self):
+		is_received = transaction_is_received(self.delivery_note, self.asset_movement)
+		issued_by_item = {}
+		if is_received and self.loan_type == "Stock" and self.delivery_note:
+			delivery_note = frappe.get_doc("Delivery Note", self.delivery_note)
+			for row in delivery_note.items:
+				if row.borrowing_item:
+					issued_by_item[row.borrowing_item] = issued_by_item.get(
+						row.borrowing_item, 0
+					) + abs(flt(row.qty))
+		elif self.loan_type == "Asset" and self.get("source_conversion") and self.docstatus == 1:
+			issued_by_item = {row.name: 1 for row in self.items}
+		elif is_received and self.loan_type == "Asset" and self.asset_movement:
+			movement = frappe.get_doc("Asset Movement", self.asset_movement)
+			for row in movement.assets:
+				if row.borrowing_item:
+					issued_by_item[row.borrowing_item] = 1
+
+		for row in self.items:
+			issued_qty = issued_by_item.get(row.name, 0)
+			row.issued_qty = issued_qty
+			if row.name and self.docstatus == 1:
+				frappe.db.set_value("Borrowing Item", row.name, "issued_qty", issued_qty)
+
+	def make_asset_issue(self):
+		movement = frappe.new_doc("Asset Movement")
+		movement.company = self.company
+		movement.purpose = "Transfer" if self.borrower_type != "Employee" else "Issue"
+		movement.reference_doctype = "Material Request"
+		movement.reference_name = self.material_request
+		movement.expected_return_date = self.expected_return_date
+		movement.customer = self.borrower if self.borrower_type == "Customer" else None
+		movement.customer_contact = self.recipient_contact
+		movement.customer_address = self.recipient_address
+		movement.customer_address_display = self.recipient_address_display
+		movement.customer_contact_display = self.recipient_contact_display
+		movement.customer_contact_email = self.recipient_contact_email
+		set_loan_transaction_source(movement, self, self)
+		for row in self.items:
+			movement.append(
+				"assets",
+				{
+					"asset": row.asset,
+					"asset_item_code": row.item_code,
+					"request_item": row.material_request_item,
+					"source_location": row.source_location,
+					"target_location": row.target_location,
+					"to_employee": self.borrower if self.borrower_type == "Employee" else None,
+					"borrowing_item": row.name,
+				},
+			)
+		return movement
+
+	def before_cancel(self):
+		if frappe.db.exists("Borrowing Return", {"borrowing": self.name, "docstatus": 1}):
+			frappe.throw(_("Cancel submitted Borrowing Returns before cancelling the Borrowing"))
+		if frappe.db.exists("Borrowing Adjustment", {"borrowing": self.name, "docstatus": 1}):
+			frappe.throw(_("Cancel submitted Borrowing Adjustments before cancelling the Borrowing"))
+		if self.sales_invoice and frappe.db.get_value("Sales Invoice", self.sales_invoice, "docstatus") == 1:
+			frappe.throw(_("Cancel the linked Asset Sale Invoice before cancelling the Borrowing"))
+		self.cancel_generated_transaction("delivery_note")
+		self.cancel_generated_transaction("asset_movement")
+		self.cancel_generated_transaction("pick_list")
+
+	def cancel_generated_transaction(self, fieldname):
+		cancel_source_transaction(self, fieldname)
+
+	def on_cancel(self):
+		self.status = "Cancelled"
+		self.db_set("status", "Cancelled")
+		self.update_material_request_status()
+
+	def refresh_balances(self):
+		self.update_issued_quantities()
+		for row in self.items:
+			returned, adjusted, sold = get_loan_item_balances(self.name, row.name)
+			row.returned_qty = returned
+			row.adjusted_qty = adjusted
+			row.sold_qty = sold
+			row.outstanding_qty = max(flt(row.issued_qty) - returned - adjusted - sold, 0)
+			if row.name and self.docstatus == 1:
+				frappe.db.set_value(
+					"Borrowing Item",
+					row.name,
+					{
+						"returned_qty": returned,
+						"adjusted_qty": adjusted,
+						"sold_qty": sold,
+						"outstanding_qty": row.outstanding_qty,
+					},
+				)
+		sync_tracking_table(self)
+
+	def update_status(self):
+		if self.docstatus == 2:
+			status = "Cancelled"
+		elif self.docstatus != 1:
+			status = "Draft"
+		else:
+			self.backfill_requester()
+			self.update_submitted_return_statuses()
+			status = self.get_submitted_status()
+			# the pending statuses return before refresh_balances: keep the tracking table current anyway
+			sync_tracking_table(self)
+		if status != self.status:
+			self.status = status
+			self.db_set("status", status)
+		self.update_material_request_status()
+		return status
+
+	def get_submitted_status(self):
+		self.refresh_balances()
+		if (
+			self.loan_type == "Asset"
+			and not self.get("source_conversion")
+			and (
+				not self.asset_movement
+				or frappe.db.get_value("Asset Movement", self.asset_movement, "docstatus") != 1
+			)
+		):
+			return "Pending Delivery"
+		if self.loan_type == "Stock" and (
+			not self.pick_list or frappe.db.get_value("Pick List", self.pick_list, "docstatus") != 1
+		):
+			return "Pending Pick"
+		if self.loan_type == "Stock" and (
+			not self.delivery_note
+			or frappe.db.get_value("Delivery Note", self.delivery_note, "docstatus") != 1
+		):
+			return "Pending Delivery"
+		return_statuses = frappe.get_all(
+			"Borrowing Return",
+			filters={"borrowing": self.name, "docstatus": 1},
+			pluck="status",
+		)
+		for pending_status in (
+			"Pending Quality Inspection",
+			"Pending Receipt",
+		):
+			if pending_status in return_statuses:
+				return pending_status
+		issued = sum(flt(row.issued_qty) for row in self.items)
+		returned = sum(flt(row.returned_qty) for row in self.items)
+		adjusted = sum(flt(row.adjusted_qty) for row in self.items)
+		sold = sum(flt(row.sold_qty) for row in self.items)
+		outstanding = sum(flt(row.outstanding_qty) for row in self.items)
+		if outstanding <= 0 and (adjusted or sold):
+			return "Closed"
+		if outstanding <= 0 and returned >= issued:
+			return "Returned"
+		if returned or adjusted or sold:
+			return "Partially Returned"
+		return "Active"
+
+	def update_submitted_return_statuses(self):
+		return_names = frappe.get_all(
+			"Borrowing Return",
+			filters={"borrowing": self.name, "docstatus": 1},
+			pluck="name",
+		)
+		for return_name in return_names:
+			frappe.get_doc("Borrowing Return", return_name).update_status()
+
+	def update_material_request_status(self):
+		# an Asset loan of converted units records custody only: the request's fulfilment was the stock loan's
+		if self.get("source_conversion"):
+			return
+		if not self.material_request or not frappe.db.exists("Material Request", self.material_request):
+			return
+		request = frappe.get_doc("Material Request", self.material_request)
+		request.update_progress()
+		request.db_set("request_progress_status", request.request_progress_status)
+
+	@frappe.whitelist()
+	def make_return(self):
+		self.check_permission("read")
+		frappe.has_permission("Borrowing Return", "create", throw=True)
+		if self.docstatus != 1 or self.status not in ("Active", "Partially Returned"):
+			frappe.throw(_("Only an active submitted Borrowing can be returned"))
+		self.refresh_balances()
+		return_doc = frappe.new_doc("Borrowing Return")
+		return_doc.company = self.company
+		return_doc.borrowing = self.name
+		return_doc.loan_type = self.loan_type
+		# the form says whose items come back before it is saved
+		set_loan_parties(return_doc, self)
+		for row in self.items:
+			available_to_receive = loan_item_available_to_receive(self.name, row)
+			if available_to_receive <= 0:
+				continue
+			item = frappe.get_cached_value("Item", row.item_code, ["has_serial_no"], as_dict=True)
+			values = {
+				"borrowing_item": row.name,
+				"item_code": row.item_code,
+				"returned_qty": available_to_receive,
+			}
+			if self.loan_type == "Stock" and is_tracked(row.item_code):
+				# one row per batch, with the serials and quantity still with the borrower
+				for group in grouped_open_rows(self, row):
+					return_doc.append(
+						"items",
+						dict(
+							values,
+							batch_no=group["batch_no"],
+							serial_no="\n".join(group["serials"]) or None,
+							returned_qty=flt(group["qty"], 6),
+						),
+					)
+				continue
+			if self.loan_type == "Stock":
+				values["batch_no"] = row.batch_no
+				if item.has_serial_no:
+					open_serials = get_open_issued_serials(self.name, row)
+					values["serial_no"] = "\n".join(open_serials[: cint(available_to_receive)])
+				else:
+					values["serial_no"] = row.serial_no
+			else:
+				values.update(asset=row.asset, target_location=row.source_location)
+			return_doc.append("items", values)
+		if not return_doc.items:
+			frappe.throw(_("There is no outstanding quantity available to return"))
+		return return_doc
+
+	@frappe.whitelist()
+	def make_adjustment(self):
+		self.check_permission("read")
+		frappe.has_permission("Borrowing Adjustment", "create", throw=True)
+		if (
+			self.docstatus != 1
+			or self.loan_type != "Stock"
+			or self.status
+			not in ("Active", "Partially Returned", "Pending Quality Inspection", "Pending Receipt")
+		):
+			frappe.throw(_("Borrowing Adjustments are available for submitted Stock Borrowings only"))
+		self.refresh_balances()
+		account = frappe.db.get_value("Company", self.company, "stock_adjustment_account")
+		if not account:
+			frappe.throw(_("Set Company Stock Adjustment Account before creating a Borrowing Adjustment"))
+		adjustment = frappe.new_doc("Borrowing Adjustment")
+		adjustment.company = self.company
+		adjustment.borrowing = self.name
+		adjustment.adjustment_account = account
+		set_loan_parties(adjustment, self)
+		for row in self.items:
+			if row.outstanding_qty <= 0:
+				continue
+			if is_tracked(row.item_code):
+				for group in grouped_open_rows(self, row):
+					adjustment.append(
+						"items",
+						{
+							"borrowing_item": row.name,
+							"item_code": row.item_code,
+							"qty": flt(group["qty"], 6),
+							"batch_no": group["batch_no"],
+							"serial_no": "\n".join(group["serials"]) or None,
+						},
+					)
+				continue
+			open_serials = get_open_issued_serials(self.name, row)
+			adjustment.append(
+				"items",
+				{
+					"borrowing_item": row.name,
+					"item_code": row.item_code,
+					"qty": row.outstanding_qty,
+					"batch_no": row.batch_no,
+					"serial_no": "\n".join(open_serials) if open_serials else None,
+				},
+			)
+		if not adjustment.items:
+			frappe.throw(_("There is no outstanding quantity to adjust"))
+		return adjustment
+
+	@frappe.whitelist()
+	def make_asset_sale_invoice(self):
+		self.reload()
+		self.check_permission("read")
+		frappe.has_permission("Sales Invoice", "create", throw=True)
+		if (
+			self.docstatus != 1
+			or self.loan_type != "Asset"
+			or self.borrower_type != "Customer"
+			or self.status not in ("Active", "Partially Returned")
+		):
+			frappe.throw(_("Asset sale invoices are available for active Customer Asset Borrowings only"))
+
+		lock_borrowing(self.name)
+		existing = frappe.db.get_value(
+			"Sales Invoice",
+			{"borrowing": self.name, "docstatus": ["<", 2], "is_return": 0},
+			"name",
+		)
+		if existing:
+			invoice = frappe.get_doc("Sales Invoice", existing)
+			invoice.check_permission("read")
+			return invoice.as_dict()
+
+		self.refresh_balances()
+		available_items = [row for row in self.items if flt(row.outstanding_qty) > 0]
+		if not available_items:
+			frappe.throw(_("There are no outstanding Assets to sell"))
+
+		invoice = frappe.new_doc("Sales Invoice")
+		invoice.company = self.company
+		invoice.customer = self.borrower
+		invoice.set_missing_values()
+		invoice.customer_address = self.recipient_address
+		invoice.shipping_address_name = self.recipient_address
+		invoice.contact_person = self.recipient_contact
+		for loan_item in available_items:
+			if not loan_item.asset:
+				frappe.throw(_("Borrowing Item {0} does not reference an Asset").format(loan_item.name))
+			item = frappe.get_cached_value("Item", loan_item.item_code, ["stock_uom"], as_dict=True)
+			item_details = get_item_details(
+				frappe._dict(
+					doctype="Sales Invoice",
+					item_code=loan_item.item_code,
+					customer=self.borrower,
+					company=self.company,
+					qty=1,
+					uom=item.stock_uom,
+					conversion_rate=invoice.conversion_rate or 1,
+					currency=invoice.currency,
+					selling_price_list=invoice.selling_price_list,
+					price_list=invoice.selling_price_list,
+					price_list_currency=invoice.price_list_currency,
+					plc_conversion_rate=invoice.plc_conversion_rate or 1,
+					transaction_date=invoice.posting_date,
+				),
+				doc=invoice,
+			)
+			invoice.append(
+				"items",
+				{
+					**item_details,
+					"item_code": loan_item.item_code,
+					"is_fixed_asset": 1,
+					"qty": 1,
+					"uom": item.stock_uom,
+					"conversion_factor": 1,
+					"asset": loan_item.asset,
+					"borrowing_item": loan_item.name,
+				},
+			)
+		invoice.borrowing = self.name
+		set_loan_transaction_source(invoice, self, self)
+		invoice.set_income_account_for_fixed_assets()
+		invoice.flags.custody_operation_token = None
+		return invoice.as_dict()
+
+	@frappe.whitelist()
+	def cancel_asset_sale_invoice(self):
+		self.reload()
+		self.check_permission("write")
+		if not self.sales_invoice:
+			frappe.throw(_("This Borrowing has no linked Asset Sale Invoice"))
+		invoice = frappe.get_doc("Sales Invoice", self.sales_invoice)
+		if invoice.borrowing != self.name:
+			frappe.throw(_("The linked Asset Sale Invoice does not belong to this Borrowing"))
+		if invoice.docstatus == 0:
+			invoice.check_permission("delete")
+			self.db_set("sales_invoice", None)
+			frappe.delete_doc("Sales Invoice", invoice.name, ignore_permissions=True, force=True)
+			return invoice.name
+		if invoice.docstatus != 1:
+			frappe.throw(_("The linked Asset Sale Invoice is already cancelled"))
+		invoice.check_permission("cancel")
+		invoice.flags.borrowing_cancellation = True
+		invoice.flags.custody_operation_token = _CUSTODY_OPERATION_TOKEN
+		invoice.cancel()
+		self.update_status()
+		return invoice.name
+
+
+class BorrowingReturn(Document):
+	def validate(self):
+		self.set_loan_details()
+		self.validate_items()
+
+	def set_loan_details(self):
+		loan = frappe.get_doc("Borrowing", self.borrowing)
+		if loan.docstatus != 1 or loan.status not in ("Active", "Partially Returned"):
+			frappe.throw(_("Select an active submitted Borrowing"))
+		if self.company and self.company != loan.company:
+			frappe.throw(_("Borrowing Return and Borrowing must use the same Company"))
+		self.company = loan.company
+		self.loan_type = loan.loan_type
+		set_loan_parties(self, loan)
+
+	def validate_items(self):
+		if not self.items:
+			frappe.throw(_("Add at least one item to return"))
+		loan = frappe.get_doc("Borrowing", self.borrowing)
+		resolve_loan_item_rows(self, loan)
+		loan_items = {row.name: row for row in loan.items}
+		qty_by_loan_item = {}
+		seen_loan_items = set()
+		for row in self.items:
+			loan_item = loan_items.get(row.borrowing_item)
+			if not loan_item:
+				frappe.throw(_("Row {0}: Borrowing Item must belong to the linked Borrowing").format(row.idx))
+			tracked = self.loan_type == "Stock" and is_tracked(loan_item.item_code)
+			if loan_item.name in seen_loan_items and not tracked:
+				# a batch or serial item may come back on one row per batch (validate_tracked_rows)
+				frappe.throw(_("Row {0}: A Borrowing Item can only appear once per Borrowing Return").format(row.idx))
+			seen_loan_items.add(loan_item.name)
+			if flt(row.returned_qty) <= 0:
+				frappe.throw(_("Row {0}: Received Qty must be greater than zero").format(row.idx))
+			qty_by_loan_item[row.borrowing_item] = qty_by_loan_item.get(row.borrowing_item, 0) + flt(
+				row.returned_qty
+			)
+			row.item_code = loan_item.item_code
+			if self.loan_type == "Asset":
+				if flt(row.returned_qty) != 1 or row.asset != loan_item.asset:
+					frappe.throw(_("Row {0}: Return the same Fixed Asset that was issued").format(row.idx))
+				if flt(row.returned_qty) > loan_item_available_to_receive(
+					self.borrowing, loan_item, exclude_return=self.name
+				):
+					frappe.throw(
+						_("Row {0}: This Asset has already been returned or adjusted").format(row.idx)
+					)
+				row.target_location = row.target_location or loan_item.source_location
+				if not row.target_location:
+					frappe.throw(_("Row {0}: Select the Location receiving the Asset").format(row.idx))
+				continue
+
+			if tracked:
+				continue
+			# an item without batch or serial carries neither
+			row.batch_no = row.serial_no = None
+		if self.loan_type == "Stock":
+			validate_tracked_rows(self, loan, "returned_qty", allow_other_lots=True)
+			require_quarantine_warehouse(self)
+		for loan_item_name, qty in qty_by_loan_item.items():
+			available = loan_item_available_to_receive(
+				self.borrowing, loan_items[loan_item_name], exclude_return=self.name
+			)
+			if qty > available:
+				frappe.throw(
+					_("Received Qty exceeds the remaining quantity for Borrowing Item {0}").format(loan_item_name)
+				)
+
+	def before_submit(self):
+		lock_borrowing(self.borrowing)
+		self.validate_items()
+
+	def on_submit(self):
+		self.update_status()
+		frappe.get_doc("Borrowing", self.borrowing).update_status()
+
+	@frappe.whitelist()
+	def prepare_receipt(self):
+		self.reload()
+		self.check_permission("read")
+		if self.docstatus != 1:
+			frappe.throw(_("Submit the Borrowing Return before creating its receiving document."))
+		doctype = "Delivery Note" if self.loan_type == "Stock" else "Asset Movement"
+		frappe.has_permission(doctype, "create", throw=True)
+		field = "delivery_note" if self.loan_type == "Stock" else "asset_movement"
+		if self.get(field) and frappe.db.get_value(doctype, self.get(field), "docstatus") in (0, 1):
+			transaction = frappe.get_doc(doctype, self.get(field))
+			transaction.check_permission("read")
+			return transaction.as_dict()
+		self.validate_items()
+		transaction = (
+			self.make_stock_return_delivery_note() if self.loan_type == "Stock" else self.make_asset_receipt()
+		)
+		return transaction.as_dict()
+
+	@frappe.whitelist()
+	def prepare_batch_exchange(self):
+		self.reload()
+		self.check_permission("read")
+		frappe.has_permission("Stock Entry", "create", throw=True)
+		if self.docstatus != 1 or self.loan_type != "Stock" or self.status == "Received":
+			frappe.throw(_("Prepare batch exchanges from a submitted Stock Return awaiting receipt."))
+		lock_borrowing(self.borrowing)
+		loan = frappe.get_doc("Borrowing", self.borrowing)
+		for row, lent_batch, qty in other_lot_swaps(self):
+			existing = find_batch_exchange(self, row, lent_batch)
+			if existing:
+				if existing.docstatus == 0:
+					existing.check_permission("read")
+					return existing.as_dict()
+				continue
+			entry = new_stock_entry(self.company, "Repack")
+			set_loan_transaction_source(entry, loan, self)
+			location = get_default_storage_location(loan.customer_loan_warehouse, row.item_code)
+			stock_uom = frappe.get_cached_value("Item", row.item_code, "stock_uom")
+			common = {
+				"uom": stock_uom,
+				"stock_uom": stock_uom,
+				"conversion_factor": 1,
+				"transfer_qty": qty,
+				"item_code": row.item_code,
+				"qty": qty,
+				"borrowing_item": row.borrowing_item,
+				"use_serial_batch_fields": 1,
+			}
+			entry.append(
+				"items",
+				{
+					**common,
+					"s_warehouse": loan.customer_loan_warehouse,
+					"storage_location": location,
+					"batch_no": lent_batch,
+				},
+			)
+			entry.append(
+				"items",
+				{
+					**common,
+					"t_warehouse": loan.customer_loan_warehouse,
+					"to_storage_location": location,
+					"batch_no": row.batch_no,
+					"is_finished_item": 1,
+				},
+			)
+			return entry.as_dict()
+		frappe.throw(
+			_("All required batch exchanges have been submitted. Create the receiving Delivery Note.")
+		)
+
+	def swap_returned_lots(self):
+		frappe.throw(
+			_("Use Create → Batch Exchange and submit each Stock Entry before receiving different batches.")
+		)
+
+	def receive_returned_goods(self, delivery_note, prepare=None):
+		frappe.throw(_("Open the receiving Delivery Note, then save and submit it to receive the goods."))
+
+	def make_stock_return_delivery_note(self):
+		loan = frappe.get_doc("Borrowing", self.borrowing)
+		if (
+			not loan.delivery_note
+			or frappe.db.get_value("Delivery Note", loan.delivery_note, "docstatus") != 1
+		):
+			frappe.throw(_("Submit the original Borrowing Delivery Note before receiving stock"))
+		from erpnext.controllers.sales_and_purchase_return import make_return_doc
+
+		delivery_note = make_return_doc("Delivery Note", loan.delivery_note)
+		# one receiving row per return row: a loan item may come back from several batches, each to the warehouse
+		# and location it was picked from
+		original_doc = frappe.get_doc("Delivery Note", loan.delivery_note)
+		templates = {}
+		for row in delivery_note.items:
+			templates.setdefault(row.borrowing_item, []).append(row.as_dict())
+		original_rows = {row.name: row for row in original_doc.items}
+		delivery_note.set("items", [])
+		return_rows = []
+		for return_item in self.items:
+			candidates = templates[return_item.borrowing_item]
+			template = _original_return_template(candidates, original_rows, return_item)
+			values = frappe._dict(template)
+			for field in ("name", "idx", "parent", "parentfield", "parenttype", "doctype"):
+				values.pop(field, None)
+			delivery_note.append("items", values)
+			return_rows.append((return_item, original_rows.get(template.get("dn_detail"))))
+		loan_item_by_name = {row.name: row for row in loan.items}
+		delivery_note.is_internal_customer = 1
+		delivery_note.represents_company = loan.company
+		delivery_note.set_target_warehouse = loan.customer_loan_warehouse
+		for row, (return_item, original_row) in zip(delivery_note.items, return_rows, strict=True):
+			loan_item = loan_item_by_name[row.borrowing_item]
+			original_row = original_row or next(
+				r for r in original_doc.items if r.borrowing_item == row.borrowing_item
+			)
+			row.qty = -flt(return_item.returned_qty)
+			row.stock_qty = -flt(return_item.returned_qty) * flt(original_row.conversion_factor or 1)
+			row.warehouse = original_row.warehouse or loan_item.source_warehouse
+			if borrowing_return_row_requires_inspection(row):
+				# received first, inspected after: into the Quarantine warehouse of the warehouse it was lent from
+				receive_row_into_quarantine(row, self.company, row.warehouse)
+			row.target_warehouse = loan.customer_loan_warehouse
+			row.batch_no = return_item.batch_no or None
+			row.serial_no = return_item.serial_no or None
+			row.quality_inspection = None
+			row.serial_and_batch_bundle = None
+			row.against_pick_list = None
+			row.pick_list_item = None
+			row.use_serial_batch_fields = 1
+			row.material_request = loan.material_request
+			row.material_request_item = loan_item.material_request_item
+		delivery_note.borrowing = loan.name
+		delivery_note.is_borrowing_transaction = 1
+		delivery_note.borrowing_source_doctype = self.doctype
+		delivery_note.borrowing_source_name = self.name
+		delivery_note.flags.borrowing_generated = True
+		delivery_note.flags.ignore_permissions = True
+		set_loan_transaction_source(delivery_note, loan, self)
+		return delivery_note
+
+	def make_asset_receipt(self):
+		loan = frappe.get_doc("Borrowing", self.borrowing)
+		movement = frappe.new_doc("Asset Movement")
+		movement.company = self.company
+		movement.purpose = "Receipt"
+		movement.reference_doctype = "Material Request"
+		movement.reference_name = loan.material_request
+		movement.expected_return_date = loan.expected_return_date
+		movement.customer = loan.borrower if loan.borrower_type == "Customer" else None
+		movement.customer_contact = loan.recipient_contact
+		movement.customer_address = loan.recipient_address
+		movement.customer_address_display = loan.recipient_address_display
+		movement.customer_contact_display = loan.recipient_contact_display
+		movement.customer_contact_email = loan.recipient_contact_email
+		set_loan_transaction_source(movement, loan, self)
+		for row in self.items:
+			loan_item = frappe.get_doc("Borrowing Item", row.borrowing_item)
+			movement.append(
+				"assets",
+				{
+					"asset": loan_item.asset,
+					"asset_item_code": loan_item.item_code,
+					"request_item": loan_item.material_request_item,
+					"source_location": frappe.db.get_value("Asset", loan_item.asset, "location"),
+					"target_location": row.target_location,
+					"from_employee": loan.borrower if loan.borrower_type == "Employee" else None,
+					"borrowing_item": row.borrowing_item,
+				},
+			)
+		return movement
+
+	def update_status(self):
+		status = update_return_status_on_transaction(self)
+		if status != self.status:
+			self.status = status
+			self.db_set("status", status)
+		return status
+
+	def before_cancel(self):
+		previous = self.get_doc_before_save()
+		if (
+			not previous
+			or previous.docstatus != 1
+			or any(
+				(self.get(field) or None) != (previous.get(field) or None)
+				for field in ("company", "borrowing", "loan_type", "delivery_note", "asset_movement")
+			)
+		):
+			frappe.throw(_("Borrowing Return references cannot be changed while cancelling."))
+		delivery_note = frappe.get_doc("Delivery Note", self.delivery_note) if self.delivery_note else None
+		inspections = []
+		if delivery_note:
+			if (
+				not is_borrowing_return_delivery_note(delivery_note)
+				or delivery_note.borrowing_source_name != self.name
+				or delivery_note.borrowing != self.borrowing
+				or delivery_note.company != self.company
+			):
+				frappe.throw(_("Borrowing Return Delivery Note must belong to this return and Company."))
+			rows = {row.name: row for row in delivery_note.items}
+			for name in frappe.get_all(
+				"Quality Inspection",
+				filters={"reference_type": "Delivery Note", "reference_name": delivery_note.name},
+				pluck="name",
+			):
+				inspection = frappe.get_doc("Quality Inspection", name)
+				if inspection.docstatus == 2:
+					continue
+				row = rows.get(inspection.child_row_reference)
+				if (
+					inspection.company != self.company
+					or not row
+					or row.item_code != inspection.item_code
+					or row.borrowing_item not in {item.borrowing_item for item in previous.items}
+				):
+					frappe.throw(_("Quality Inspection must belong to a returned item in this Company."))
+				inspections.append(inspection)
+		# Draft receipts must remain available to inspection cancellation/deletion callbacks.
+		for fieldname in ("delivery_note", "asset_movement"):
+			if fieldname == "delivery_note" and delivery_note and delivery_note.docstatus == 0:
+				continue
+			cancel_source_transaction(self, fieldname)
+		cancel_lot_swaps(self)
+		for inspection in inspections:
+			if inspection.docstatus == 1:
+				# Cancelling the authorized return also reverses only its own inspections.
+				inspection.flags.ignore_permissions = True
+				inspection.docstatus = 2
+				if workflow := inspection.meta.get_workflow():
+					set_workflow_state_on_action(inspection, workflow, "cancel")
+				inspection.cancel()
+			elif inspection.docstatus == 0:
+				frappe.delete_doc("Quality Inspection", inspection.name, force=True, ignore_permissions=True)
+		if delivery_note and delivery_note.docstatus == 0:
+			cancel_source_transaction(self, "delivery_note")
+
+	def on_cancel(self):
+		self.status = "Cancelled"
+		self.db_set("status", "Cancelled")
+		if frappe.db.exists("Borrowing", self.borrowing):
+			frappe.get_doc("Borrowing", self.borrowing).update_status()
+
+
+def other_lot_swaps(return_doc):
+	"""[(return row, lent batch, stock qty)] for the rows of a Stock return that come back in a batch the loan did not
+	lend, taken from the lent batches of the same loan item that are still out, earliest batch first."""
+	loan = frappe.get_doc("Borrowing", return_doc.borrowing)
+	balances = get_balances(loan, exclude=(return_doc.doctype, return_doc.name))
+	factors = conversion_factors(loan)
+	room = {
+		key: flt(entry.open_qty)
+		for key, entry in balances.items()
+		if entry.issued_qty > 0 and not entry.serial_no and key[1]
+	}
+	swaps = []
+	for row in return_doc.items:
+		if not row.batch_no or row.serial_no:
+			continue
+		entry = balances.get((row.borrowing_item, row.batch_no, None))
+		if entry and entry.issued_qty > 0:
+			continue
+		left = flt(row.returned_qty) * factors.get(row.borrowing_item, 1)
+		for key in sorted(room, key=lambda k: k[1]):
+			if left <= 0:
+				break
+			if key[0] != row.borrowing_item:
+				continue
+			take = min(room[key], left)
+			if take <= 0:
+				continue
+			room[key] -= take
+			left -= take
+			swaps.append((row, key[1], take))
+	return swaps
+
+
+def find_batch_exchange(source, return_row, lent_batch):
+	for name in frappe.get_all(
+		"Stock Entry",
+		filters={
+			"borrowing_source_doctype": source.doctype,
+			"borrowing_source_name": source.name,
+			"docstatus": ["<", 2],
+		},
+		pluck="name",
+		order_by="name",
+	):
+		entry = frappe.get_doc("Stock Entry", name)
+		if len(entry.items) == 2 and (
+			entry.items[0].borrowing_item == return_row.borrowing_item
+			and entry.items[0].batch_no == lent_batch
+			and entry.items[1].batch_no == return_row.batch_no
+		):
+			return entry
+
+
+def validate_loan_stock_entry_unit(row):
+	stock_uom = frappe.get_cached_value("Item", row.item_code, "stock_uom")
+	if (
+		row.get("uom") != stock_uom
+		or row.get("stock_uom") != stock_uom
+		or flt(row.get("conversion_factor")) != 1
+		or flt(row.get("transfer_qty")) != flt(row.qty)
+		or row.get("set_basic_rate_manually")
+		or row.get("allow_zero_valuation_rate")
+		or row.get("valuation_type")
+		or row.get("secondary_item_type")
+		or row.get("bom_secondary_item")
+	):
+		frappe.throw(_("Borrowing stock movements must use the Stock UOM, unit conversion and native valuation."))
+
+
+def validate_manual_adjustment_issue(doc, loan):
+	source = frappe.get_doc("Borrowing Adjustment", doc.borrowing_source_name)
+	source.check_permission("read")
+	lock_borrowing(loan.name)
+	if source.docstatus != 1 or doc.purpose != "Material Issue" or len(doc.items) != len(source.items):
+		frappe.throw(_("Write-off Stock Entry must match a submitted Borrowing Adjustment."))
+	if doc.get("additional_costs"):
+		frappe.throw(_("Write-off Stock Entries cannot add costs."))
+	factors = conversion_factors(loan)
+	expected = Counter(
+		(
+			row.borrowing_item,
+			row.item_code,
+			row.batch_no or None,
+			tuple(sorted(normalize_serials(row.serial_no))),
+			flt(flt(row.qty) * factors.get(row.borrowing_item, 1), 9),
+		)
+		for row in source.items
+	)
+	actual = Counter()
+	for row in doc.items:
+		validate_loan_stock_entry_unit(row)
+		if (
+			row.s_warehouse != loan.customer_loan_warehouse
+			or row.t_warehouse
+			or row.expense_account != source.adjustment_account
+		):
+			frappe.throw(_("Write-off rows must use the Borrowing warehouse and adjustment account."))
+		actual[
+			(
+				row.borrowing_item,
+				row.item_code,
+				row.get("batch_no") or None,
+				tuple(sorted(normalize_serials(row.get("serial_no")))),
+				flt(row.qty, 9),
+			)
+		] += 1
+	if actual != expected:
+		frappe.throw(_("Write-off rows must exactly match every source row, batch, serial and quantity."))
+	if doc.docstatus == 1:
+		source.validate_items(loan)
+
+
+def validate_manual_batch_exchange(doc, loan):
+	source = frappe.get_doc("Borrowing Return", doc.borrowing_source_name)
+	source.check_permission("read")
+	lock_borrowing(loan.name)
+	if source.docstatus != 1 or source.status == "Received" or doc.purpose != "Repack" or len(doc.items) != 2:
+		frappe.throw(_("Batch Exchange must be a two-row Repack for a submitted Return awaiting receipt."))
+	if (
+		doc.get("additional_costs")
+		or doc.get("from_bom")
+		or doc.get("bom_no")
+		or doc.get("work_order")
+		or flt(doc.get("process_loss_qty"))
+	):
+		frappe.throw(_("Batch Exchange must preserve the value of the returned Item."))
+	for entry in doc.items:
+		validate_loan_stock_entry_unit(entry)
+
+	outgoing, incoming = doc.items
+	for row, lent_batch, qty in other_lot_swaps(source):
+		if (
+			outgoing.batch_no != lent_batch
+			or incoming.batch_no != row.batch_no
+			or outgoing.borrowing_item != row.borrowing_item
+		):
+			continue
+		if any(
+			entry.item_code != row.item_code
+			or entry.borrowing_item != row.borrowing_item
+			or flt(entry.qty) != qty
+			or entry.get("serial_no")
+			for entry in doc.items
+		):
+			continue
+		if (
+			outgoing.s_warehouse != loan.customer_loan_warehouse
+			or outgoing.t_warehouse
+			or incoming.t_warehouse != loan.customer_loan_warehouse
+			or incoming.s_warehouse
+			or outgoing.is_finished_item
+			or not incoming.is_finished_item
+		):
+			continue
+		existing = find_batch_exchange(source, row, lent_batch)
+		if existing and existing.name != doc.name:
+			frappe.throw(_("A Batch Exchange already exists for these batches: {0}").format(existing.name))
+		return
+	frappe.throw(_("Batch Exchange rows must exactly match one required return batch exchange."))
+
+
+def cancel_lot_swaps(return_doc):
+	"""Cancel the exchange of batches a return made (after its Delivery Note is cancelled)."""
+	for name in frappe.get_all(
+		"Stock Entry",
+		filters={
+			"borrowing_source_doctype": return_doc.doctype,
+			"borrowing_source_name": return_doc.name,
+			"docstatus": 1,
+		},
+		pluck="name",
+	):
+		doc = frappe.get_doc("Stock Entry", name)
+		doc.flags.borrowing_cancellation = True
+		doc.flags.custody_operation_token = _CUSTODY_OPERATION_TOKEN
+		doc.ignore_linked_doctypes = tuple(
+			set(doc.get("ignore_linked_doctypes") or ()) | LOAN_SOURCE_DOCTYPES | {"Material Request"}
+		)
+		doc.cancel()
+
+
+def borrowing_return_row_requires_inspection(row):
+	"""A returned stock row is inspected when its Item is inspected on receipt ('before Purchase'): goods coming back
+	are a receipt (Connect Diagnostics, 5 Nov 2026: only goods received are inspected)."""
+	return bool(cint(frappe.get_cached_value("Item", row.item_code, "inspection_required_before_purchase")))
+
+
+def _original_return_template(candidates, original_rows, return_item):
+	"""The row of the borrowing's Delivery Note a returned row reverses: the one that held its serial number or batch."""
+	serials = set(normalize_serials(return_item.serial_no))
+	if serials:
+		for candidate in candidates:
+			original = original_rows.get(candidate.get("dn_detail"))
+			if original and serials & set(normalize_serials(original.serial_no)):
+				return candidate
+	if return_item.batch_no:
+		for candidate in candidates:
+			original = original_rows.get(candidate.get("dn_detail"))
+			if original and original.batch_no == return_item.batch_no:
+				return candidate
+	return candidates[0]
+
+
+def require_quarantine_warehouse(return_doc):
+	"""Goods whose Item is inspected on receipt are received into the Quarantine warehouse, so a return with an
+	inspected Item needs one: say so plainly when the return is saved, never leave the goods unreceived."""
+	if return_doc.docstatus != 0:
+		return
+	inspected = [
+		row.item_code
+		for row in return_doc.items
+		if borrowing_return_row_requires_inspection(row)
+		and not quarantine_warehouse_for(return_doc.company, getattr(row, "warehouse", None))
+	]
+	if inspected:
+		frappe.throw(
+			_(
+				"{0} is inspected when it comes back and is received into the Quarantine warehouse, but {1} has none. "
+				"Ask the Stock team to add a warehouse of type Quarantine, then return again."
+			).format(", ".join(sorted(set(inspected))), return_doc.company),
+			title=_("No Quarantine Warehouse"),
+		)
+
+
+def asset_awaiting_inspection(asset):
+	"""Whether a returned Asset is held for the inspection of its return (Connect Diagnostics, Siwat, 9 Nov 2026): the
+	Asset field ``awaiting_inspection`` is made by that app (a Custom Field), so a site without it holds no Asset."""
+	if not asset or not frappe.get_meta("Asset").has_field("awaiting_inspection"):
+		return False
+	return bool(cint(frappe.db.get_value("Asset", asset, "awaiting_inspection")))
+
+
+def is_quarantine_warehouse(warehouse, company):
+	"""A Quarantine (or QA) warehouse of the company: returned goods that fail inspection are received there."""
+	values = frappe.db.get_value(
+		"Warehouse", warehouse, ["warehouse_type", "warehouse_name", "company"], as_dict=True
+	)
+	return bool(
+		values
+		and values.company == company
+		and (
+			values.warehouse_type in ("Quarantine", "QA")
+			or (values.warehouse_name or "").casefold() in ("qa", "quarantine")
+		)
+	)
+
+
+def receive_row_into(row, warehouse):
+	"""Receive a stock row into ``warehouse``. A return copies the original delivery's Storage Location (a location of
+	the warehouse the goods were picked from), which another warehouse refuses and the stock ledger needs: a location of
+	another warehouse (or none) becomes the new warehouse's default (``get_default_storage_location``, which also
+	honours the Item's Storage Condition: its STAGING location). The one place that moves a receiving row."""
+	row.warehouse = warehouse
+	location = row.get("storage_location")
+	if location and frappe.db.get_value("Storage Location", location, "warehouse") == warehouse:
+		return
+	row.storage_location = get_default_storage_location(warehouse, row.get("item_code"))
+
+
+def receive_row_into_quarantine(row, company, near=None):
+	"""Receive the row into the Quarantine warehouse that holds the goods of warehouse ``near`` (default: the row's own),
+	at its default Storage Location. Returns the quarantine warehouse, or None when the company has none (the row is
+	not changed). A row already in a Quarantine warehouse is left as it is."""
+	current = row.get("warehouse")
+	if current and is_quarantine_warehouse(current, company):
+		return current
+	quarantine = quarantine_warehouse_for(company, near or current)
+	if quarantine:
+		receive_row_into(row, quarantine)
+	return quarantine
+
+
+def is_borrowing_return_delivery_note(doc):
+	return bool(
+		doc.is_return
+		and doc.get("is_borrowing_transaction")
+		and doc.get("borrowing_source_doctype") == "Borrowing Return"
+	)
+
+
+def validate_borrowing_return_quality_inspection(quality_inspection, delivery_note_name):
+	delivery_note = frappe.get_doc("Delivery Note", delivery_note_name)
+	if not is_borrowing_return_delivery_note(delivery_note):
+		frappe.throw(_("Quality Inspection must reference a Borrowing Return Delivery Note"))
+	return_doc = frappe.get_doc("Borrowing Return", delivery_note.borrowing_source_name)
+	if return_doc.docstatus != 1 or return_doc.loan_type != "Stock":
+		frappe.throw(_("Quality Inspection must reference a submitted Stock Borrowing Return"))
+	if (
+		quality_inspection.reference_type != "Delivery Note"
+		or quality_inspection.reference_name != delivery_note.name
+	):
+		frappe.throw(_("Quality Inspection must reference the Borrowing Return Delivery Note"))
+	row = frappe.db.get_value(
+		"Delivery Note Item",
+		quality_inspection.child_row_reference,
+		["parent", "item_code", "qty", "batch_no", "serial_no", "borrowing_item"],
+		as_dict=True,
+	)
+	if (
+		not row
+		or row.parent != delivery_note.name
+		or row.item_code != quality_inspection.item_code
+		or row.borrowing_item not in {item.borrowing_item for item in return_doc.items}
+	):
+		frappe.throw(_("Quality Inspection must reference a Borrowing Return item on this Delivery Note"))
+	if quality_inspection.inspection_type != "Incoming" or not quality_inspection.manual_inspection:
+		frappe.throw(_("Borrowing Return Quality Inspections must record a manual incoming inspection"))
+	if flt(quality_inspection.sample_size) <= 0 or flt(quality_inspection.sample_size) > abs(flt(row.qty)):
+		frappe.throw(_("Quality Inspection sample size must be within the returned quantity"))
+	if row.batch_no and quality_inspection.batch_no != row.batch_no:
+		frappe.throw(_("Quality Inspection Batch No must match the returned Batch No"))
+	serials = set(normalize_serials(row.serial_no))
+	if quality_inspection.item_serial_no and quality_inspection.item_serial_no not in serials:
+		frappe.throw(_("Quality Inspection Serial No must match a returned Serial No"))
+
+
+def validate_borrowing_return_receipt(delivery_note, method=None):
+	if not is_borrowing_return_delivery_note(delivery_note):
+		return
+	return_doc = frappe.get_doc("Borrowing Return", delivery_note.borrowing_source_name)
+	if return_doc.loan_type != "Stock" or return_doc.docstatus != 1:
+		frappe.throw(_("Only a submitted Stock Borrowing Return can be received through a Delivery Note"))
+	lock_borrowing(return_doc.borrowing)
+	return_doc.validate_items()
+	for row, lent_batch, _qty in other_lot_swaps(return_doc):
+		exchange = find_batch_exchange(return_doc, row, lent_batch)
+		if not exchange or exchange.docstatus != 1:
+			frappe.throw(_("Submit every required Batch Exchange before receiving this return."))
+	return_items = {(row.borrowing_item, row.batch_no or None) for row in return_doc.items}
+	seen_items = set()
+	for row in delivery_note.items:
+		pair = (row.borrowing_item, row.batch_no or None)
+		if pair not in return_items or pair in seen_items:
+			frappe.throw(
+				_("Delivery Note row {0} does not match one unique Borrowing Return item").format(row.idx)
+			)
+		seen_items.add(pair)
+	if seen_items != return_items:
+		frappe.throw(_("Borrowing Return Delivery Note must include every returned item exactly once"))
+
+
+def update_borrowing_return_status_from_quality_inspection(quality_inspection):
+	"""A loan return is received before it is inspected, so an inspection no longer changes its status; the return and
+	its loan are only refreshed."""
+	delivery_note_name = get_borrowing_return_delivery_note(quality_inspection)
+	if not delivery_note_name:
+		return
+	source_name = frappe.db.get_value("Delivery Note", delivery_note_name, "borrowing_source_name")
+	if not source_name or not frappe.db.exists("Borrowing Return", source_name):
+		return
+	return_doc = frappe.get_doc("Borrowing Return", source_name)
+	if return_doc.docstatus != 1:
+		return
+	return_doc.update_status()
+	frappe.get_doc("Borrowing", return_doc.borrowing).update_status()
+
+
+def is_quarantine_row(row):
+	"""Whether a Warehouse row (warehouse_type, warehouse_name) is a Quarantine (or QA) warehouse."""
+	return row.warehouse_type in ("Quarantine", "QA") or (row.warehouse_name or "").casefold() in (
+		"qa",
+		"quarantine",
+	)
+
+
+def own_quarantine_warehouse(warehouse):
+	"""The Quarantine warehouse a warehouse names itself (``Warehouse.quarantine_warehouse``, Connect Diagnostics,
+	7 Nov 2026: goods are held in the quarantine of the warehouse they belong to), or None. A site that has not
+	migrated to the field has none."""
+	if not warehouse or not frappe.db.has_column("Warehouse", "quarantine_warehouse"):
+		return None
+	return frappe.db.get_value("Warehouse", warehouse, "quarantine_warehouse") or None
+
+
+def quarantine_warehouse_for(company, near=None):
+	"""The Quarantine warehouse that holds the goods of warehouse ``near``: its own ``quarantine_warehouse`` when it
+	names an enabled leaf of the company, else the company's one (an enabled leaf of type Quarantine or QA, or named so,
+	that no warehouse names as its own; the one beside ``near`` first). Without ``near`` the company's one, else any
+	enabled quarantine leaf of the company. None when there is none."""
+	if not company:
+		return None
+	own = own_quarantine_warehouse(near)
+	if own:
+		values = frappe.db.get_value("Warehouse", own, ["company", "is_group", "disabled"], as_dict=True)
+		if values and values.company == company and not values.is_group and not values.disabled:
+			return own
+	rows = [
+		row
+		for row in frappe.get_all(
+			"Warehouse",
+			filters={"company": company, "is_group": 0, "disabled": 0},
+			fields=["name", "parent_warehouse", "warehouse_type", "warehouse_name"],
+			order_by="name",
+		)
+		if is_quarantine_row(row)
+	]
+	owned = set()
+	if rows and frappe.db.has_column("Warehouse", "quarantine_warehouse"):
+		owned = set(
+			frappe.get_all(
+				"Warehouse", filters={"quarantine_warehouse": ["is", "set"]}, pluck="quarantine_warehouse"
+			)
+		)
+	shared = [row for row in rows if row.name not in owned]
+	if not near:
+		shared = shared or rows
+	parent = frappe.db.get_value("Warehouse", near, "parent_warehouse") if near else None
+	for row in shared:
+		if parent and row.parent_warehouse == parent:
+			return row.name
+	return shared[0].name if shared else None
+
+
+def receive_return_delivery_note(delivery_note_name, prepare=None):
+	"""Submit a loan return Delivery Note for the system; a failure leaves the draft and says why (a comment on the
+	return and an Error Log). ``prepare`` (the lot swap) runs inside the same savepoint, so a failed receipt undoes it."""
+	delivery_note = frappe.get_doc("Delivery Note", delivery_note_name)
+	if delivery_note.docstatus != 0:
+		return
+	savepoint = "borrowing_auto_receipt"
+	frappe.db.savepoint(savepoint)
+	try:
+		if prepare:
+			prepare()
+		# the state is left as it is: Frappe sets the submitted state; a sales return's approval steps do not apply
+		# to a loan coming back
+		delivery_note.flags.ignore_permissions = True
+		delivery_note.submit()
+	except Exception as error:
+		frappe.db.rollback(save_point=savepoint)
+		frappe.clear_last_message()
+		source = delivery_note.get("borrowing_source_name")
+		frappe.log_error(
+			title=_("Borrowing return {0} could not be received").format(source or delivery_note_name)[:140],
+			message=frappe.get_traceback(),
+		)
+		if source and frappe.db.exists("Borrowing Return", source):
+			frappe.get_doc("Borrowing Return", source).add_comment(
+				"Comment",
+				_("The return could not be received automatically: {0}").format(str(error)[:300]),
+			)
+
+
+class BorrowingAdjustment(Document):
+	def validate(self):
+		loan = self.validate_loan()
+		self.validate_items(loan)
+
+	def validate_loan(self):
+		loan = frappe.get_doc("Borrowing", self.borrowing)
+		if (
+			loan.docstatus != 1
+			or loan.loan_type != "Stock"
+			or loan.status
+			not in ("Active", "Partially Returned", "Pending Quality Inspection", "Pending Receipt")
+		):
+			# a return waiting for its inspection does not stop what the borrower used up from being written off
+			frappe.throw(_("Borrowing Adjustments require a submitted Stock Borrowing"))
+		if self.company and self.company != loan.company:
+			frappe.throw(_("Borrowing Adjustment and Borrowing must use the same Company"))
+		self.company = loan.company
+		set_loan_parties(self, loan)
+		previous = self.get_doc_before_save()
+		if previous and any(
+			previous.get(field) != self.get(field)
+			for field in (
+				"demo_consumption",
+				"demo_customer",
+				"demo_confirmed_by",
+				"demo_request_token",
+				"demo_request_hash",
+			)
+		):
+			frappe.throw(_("Demo consumption identity cannot be changed after creation."))
+		if self.get("demo_consumption"):
+			from connect_diagnostics_setup.stock.loan_consumables import expense_account
+
+			if (
+				loan.borrower_type != "Employee"
+				or frappe.db.get_value("Employee", loan.borrower, "user_id") != self.get("demo_confirmed_by")
+				or not self.get("demo_customer")
+			):
+				frappe.throw(_("Demo consumption must identify the loan holder and the Customer."))
+			if self.is_new() and frappe.session.user != "Administrator":
+				frappe.throw(_("Create demo consumption from the employee's borrowing."), frappe.PermissionError)
+			account = expense_account(loan.company)
+		else:
+			account = frappe.db.get_value("Company", loan.company, "stock_adjustment_account")
+		if not account or self.adjustment_account != account:
+			frappe.throw(_("Loan Adjustment must use the configured account {0}").format(account or ""))
+		return loan
+
+	def validate_items(self, loan):
+		if not self.items:
+			frappe.throw(_("Add at least one Stock Item to adjust"))
+		resolve_loan_item_rows(self, loan)
+		loan_items = {row.name: row for row in loan.items}
+		qty_by_loan_item = {}
+		for row in self.items:
+			loan_item = loan_items.get(row.borrowing_item)
+			if not loan_item:
+				frappe.throw(_("Row {0}: Borrowing Item must belong to the linked Borrowing").format(row.idx))
+			row.item_code = loan_item.item_code
+			if flt(row.qty) <= 0:
+				frappe.throw(_("Row {0}: Adjusted Qty must be positive").format(row.idx))
+			qty_by_loan_item[row.borrowing_item] = qty_by_loan_item.get(row.borrowing_item, 0) + flt(
+				row.qty
+			)
+			# one reason for the whole adjustment; a row may give its own
+			row.reason = (row.reason or "").strip() or (self.get("reason") or "").strip()
+			if not row.reason:
+				frappe.throw(_("Row {0}: give the reason the items will not come back").format(row.idx))
+			if not is_tracked(loan_item.item_code):
+				row.batch_no = row.serial_no = None
+		validate_tracked_rows(self, loan, "qty")
+		for loan_item_name, qty in qty_by_loan_item.items():
+			loan_item = loan_items[loan_item_name]
+			if qty > loan_item_available_to_adjust(
+				self.borrowing, loan_item, exclude_adjustment=self.name
+			):
+				frappe.throw(
+					_("Adjusted Qty exceeds the original outstanding Qty for Borrowing Item {0}").format(
+						loan_item_name
+					)
+				)
+
+	def before_submit(self):
+		lock_borrowing(self.borrowing)
+		self.validate_items(frappe.get_doc("Borrowing", self.borrowing))
+		self.status = "Pending Issue"
+
+	def on_submit(self):
+		self.update_status()
+		frappe.get_doc("Borrowing", self.borrowing).update_status()
+
+	def update_status(self):
+		status = "Cancelled" if self.docstatus == 2 else "Draft"
+		if self.docstatus == 1:
+			status = (
+				"Submitted"
+				if self.stock_entry and frappe.db.get_value("Stock Entry", self.stock_entry, "docstatus") == 1
+				else "Pending Issue"
+			)
+		if self.status != status:
+			self.db_set("status", status)
+			self.status = status
+		return status
+
+	@frappe.whitelist()
+	def prepare_stock_entry(self):
+		self.reload()
+		self.check_permission("read")
+		frappe.has_permission("Stock Entry", "create", throw=True)
+		if self.docstatus != 1:
+			frappe.throw(_("Submit the Borrowing Adjustment before creating its Stock Entry."))
+		if self.stock_entry and frappe.db.get_value("Stock Entry", self.stock_entry, "docstatus") in (0, 1):
+			stock_entry = frappe.get_doc("Stock Entry", self.stock_entry)
+			stock_entry.check_permission("read")
+			return stock_entry.as_dict()
+		loan = frappe.get_doc("Borrowing", self.borrowing)
+		stock_entry = new_stock_entry(self.company, "Material Issue")
+		set_loan_transaction_source(stock_entry, loan, self)
+		factors = conversion_factors(loan)
+		for row in self.items:
+			loan_item = frappe.get_doc("Borrowing Item", row.borrowing_item)
+			stock_uom = frappe.get_cached_value("Item", loan_item.item_code, "stock_uom")
+			qty = flt(row.qty) * factors.get(row.borrowing_item, 1)
+			stock_entry.append(
+				"items",
+				{
+					"item_code": loan_item.item_code,
+					"qty": qty,
+					"uom": stock_uom,
+					"stock_uom": stock_uom,
+					"conversion_factor": 1,
+					"transfer_qty": qty,
+					"s_warehouse": loan.customer_loan_warehouse,
+					# the goods sit in the loan warehouse's own location; the batch ledger of a loan remembers the
+					# location it was picked from, which is not a place of this warehouse
+					"storage_location": get_default_storage_location(
+						loan.customer_loan_warehouse, loan_item.item_code
+					),
+					"borrowing_item": loan_item.name,
+					# the row names its lot: without this the Stock Entry picks the warehouse's batches by itself
+					# and refuses the row ("Serial and Batch Bundle has already created") when they differ
+					"use_serial_batch_fields": 1,
+					"batch_no": row.batch_no,
+					"serial_no": row.serial_no,
+					"expense_account": self.adjustment_account,
+				},
+			)
+		return stock_entry.as_dict()
+
+	def before_cancel(self):
+		frappe.db.sql("select name from `tabBorrowing Adjustment` where name=%s for update", self.name)
+		if frappe.db.exists(
+			"Sales Invoice",
+			{
+				"borrowing_source_doctype": "Borrowing Adjustment",
+				"borrowing_source_name": self.name,
+				"docstatus": ["<", 2],
+			},
+		):
+			frappe.throw(_("Cancel or delete the consumption invoice before cancelling its Borrowing Adjustment."))
+		cancel_source_transaction(self, "stock_entry")
+
+	def on_cancel(self):
+		self.db_set("status", "Cancelled")
+		frappe.get_doc("Borrowing", self.borrowing).update_status()
+
+
+def resolve_loan_item_rows(doc, loan):
+	"""Link each Return/Adjustment row to its loan row from the Item the user chose, as ERPNext links a Delivery
+	Note row to its Sales Order row: the row link stays hidden (Connect Diagnostics, Siwat, 5 Nov 2026, relayed by
+	the user). With the Item on several loan rows, the first one with quantity still out is taken."""
+	loan_items = {row.name: row for row in loan.items}
+	for row in doc.items:
+		current = loan_items.get(row.borrowing_item)
+		if current and (not row.item_code or row.item_code == current.item_code):
+			row.item_code = current.item_code
+			continue
+		if not row.item_code:
+			frappe.throw(_("Row {0}: Select the Item").format(row.idx))
+		candidates = [
+			item
+			for item in loan.items
+			if item.item_code == row.item_code and (not row.get("asset") or item.asset == row.asset)
+		]
+		if not candidates:
+			frappe.throw(
+				_("Row {0}: Item {1} is not on Borrowing {2}").format(row.idx, row.item_code, loan.name)
+			)
+		open_rows = [item for item in candidates if flt(item.outstanding_qty) > 0]
+		row.borrowing_item = (open_rows or candidates)[0].name
+
+
+def set_loan_parties(doc, loan):
+	"""A Return or Adjustment shows who has the items and who requested them, from its borrowing."""
+	doc.borrower_type = loan.borrower_type
+	doc.borrower = loan.borrower
+	doc.requested_by_name = loan.get("requested_by_name")
+
+
+def new_stock_entry(company, purpose):
+	# the standard type first: other types of the same purpose (Stock Write-Off, a Material Issue) are not a loan move
+	stock_entry_type = frappe.db.get_value(
+		"Stock Entry Type", {"purpose": purpose, "is_standard": 1}, "name"
+	) or frappe.db.get_value("Stock Entry Type", {"purpose": purpose}, "name")
+	if not stock_entry_type:
+		frappe.throw(_("A {0} Stock Entry Type is required").format(purpose))
+	stock_entry = frappe.new_doc("Stock Entry")
+	stock_entry.company = company
+	stock_entry.stock_entry_type = stock_entry_type
+	stock_entry.purpose = purpose
+	stock_entry.flags.ignore_permissions = True
+	stock_entry.flags.borrowing_generated = True
+	return stock_entry
+
+
+def set_loan_transaction_source(transaction, loan, source):
+	transaction.is_system_generated = 1
+	transaction.is_borrowing_transaction = 1
+	transaction.borrowing = loan.name
+	transaction.borrowing_source_doctype = source.doctype
+	transaction.borrowing_source_name = source.name
+	transaction.flags.borrowing_generated = True
+	transaction.flags.custody_operation_token = _CUSTODY_OPERATION_TOKEN
+
+
+def link_manual_loan_transaction(source, field, transaction):
+	loan_name = source.name if source.doctype == "Borrowing" else source.borrowing
+	lock_borrowing(loan_name)
+	linked = frappe.db.get_value(source.doctype, source.name, field)
+	if linked and linked != transaction.name:
+		if frappe.db.get_value(transaction.doctype, linked, "docstatus") in (0, 1):
+			frappe.throw(
+				_("An active {0} already exists for this document: {1}").format(transaction.doctype, linked)
+			)
+	if linked != transaction.name:
+		source.db_set(field, transaction.name, update_modified=False)
+
+
+def validate_generated_transaction(doc, method=None):
+	manual_new = (
+		doc.doctype in ("Delivery Note", "Asset Movement", "Stock Entry", "Sales Invoice")
+		and doc.is_new()
+		and doc.get("borrowing_source_doctype") in LOAN_SOURCE_DOCTYPES
+		and bool(doc.get("borrowing"))
+		and (
+			doc.doctype != "Stock Entry"
+			or doc.get("borrowing_source_doctype") in ("Borrowing Return", "Borrowing Adjustment")
+		)
+	)
+	trusted_system_generation = (
+		manual_new or doc.flags.get("borrowing_generated") or doc.flags.get("system_generated")
+	)
+	stored_system_generated = None
+	if doc.name and frappe.db.exists(doc.doctype, doc.name):
+		stored_system_generated = cint(frappe.db.get_value(doc.doctype, doc.name, "is_system_generated"))
+	if not trusted_system_generation and (
+		cint(doc.get("is_system_generated")) != cint(stored_system_generated or 0)
+		or (stored_system_generated is None and cint(doc.get("is_system_generated")))
+	):
+		frappe.throw(_("Is System Generated can only be set by a server-side process"))
+
+	source_doctype = doc.get("borrowing_source_doctype")
+	source_name = doc.get("borrowing_source_name")
+	marked = cint(doc.get("is_borrowing_transaction"))
+	if not source_doctype and not source_name and not marked and not doc.get("borrowing"):
+		return
+	if source_doctype not in LOAN_SOURCE_DOCTYPES or not source_name or not doc.get("borrowing"):
+		frappe.throw(_("Borrowing transaction markers require a valid Borrowing source document"))
+
+	if not manual_new and not doc.flags.get("borrowing_generated"):
+		stored = frappe.db.get_value(
+			doc.doctype,
+			doc.name,
+			[
+				"is_borrowing_transaction",
+				"borrowing",
+				"borrowing_source_doctype",
+				"borrowing_source_name",
+			],
+			as_dict=True,
+		)
+		if (
+			not stored
+			or not stored.is_borrowing_transaction
+			or any(
+				stored.get(field) != doc.get(field)
+				for field in ("borrowing", "borrowing_source_doctype", "borrowing_source_name")
+			)
+		):
+			frappe.throw(_("Borrowing transaction links can only be set by the Borrowing module"))
+
+	loan = frappe.get_doc("Borrowing", doc.borrowing)
+	if loan.docstatus != 1:
+		frappe.throw(_("Generated transaction must reference a submitted Borrowing"))
+	if loan.company != doc.company:
+		frappe.throw(_("Generated transaction must use the Borrowing Company"))
+	if source_doctype == "Borrowing":
+		valid_source = source_name == loan.name
+	else:
+		valid_source = frappe.db.get_value(source_doctype, source_name, "borrowing") == loan.name
+	if not valid_source:
+		frappe.throw(_("Borrowing source document does not belong to the linked Borrowing"))
+	if doc.doctype in ("Stock Entry", "Delivery Note") and loan.loan_type != "Stock":
+		frappe.throw(_("Generated document type does not match the Borrowing Type"))
+	consumption_invoice = doc.doctype == "Sales Invoice" and source_doctype == "Borrowing Adjustment"
+	if (
+		doc.doctype in ("Asset Movement", "Sales Invoice")
+		and loan.loan_type != "Asset"
+		and not consumption_invoice
+	):
+		frappe.throw(_("Generated document type does not match the Borrowing Type"))
+	for row in (
+		doc.get("items", [])
+		if doc.doctype in ("Stock Entry", "Delivery Note", "Sales Invoice")
+		else doc.get("assets", [])
+	):
+		loan_item_name = row.get("borrowing_item")
+		loan_item = (
+			frappe.db.get_value("Borrowing Item", loan_item_name, ["parent", "item_code"], as_dict=True)
+			if loan_item_name
+			else None
+		)
+		item_code = row.get("item_code") if doc.doctype != "Asset Movement" else row.get("asset_item_code")
+		if not loan_item or loan_item.parent != loan.name or item_code != loan_item.item_code:
+			frappe.throw(_("Every generated transaction row must link to an item on the Borrowing"))
+
+	if doc.doctype == "Delivery Note":
+		validate_borrowing_delivery_note(doc, loan, source_doctype, source_name)
+	elif doc.doctype == "Asset Movement":
+		validate_asset_movement_borrowing(doc)
+	elif doc.doctype == "Stock Entry" and source_doctype == "Borrowing Return":
+		validate_manual_batch_exchange(doc, loan)
+	elif doc.doctype == "Stock Entry" and source_doctype == "Borrowing Adjustment":
+		validate_manual_adjustment_issue(doc, loan)
+	elif doc.doctype == "Sales Invoice":
+		if consumption_invoice:
+			validate_consumption_invoice(doc, loan, source_name)
+		else:
+			validate_borrowing_sales_invoice(doc, loan, source_doctype, source_name)
+
+	if doc.doctype in ("Delivery Note", "Asset Movement", "Sales Invoice") or (
+		doc.doctype == "Stock Entry" and source_doctype == "Borrowing Adjustment"
+	):
+		source = frappe.get_doc(source_doctype, source_name)
+		source.check_permission("read")
+		if source.docstatus != 1:
+			frappe.throw(_("Submit the source Borrowing or Return before saving its movement document."))
+		field = {
+			"Delivery Note": "delivery_note",
+			"Asset Movement": "asset_movement",
+			"Sales Invoice": "sales_invoice",
+			"Stock Entry": "stock_entry",
+		}[doc.doctype]
+		if source_doctype != "Borrowing Adjustment" or doc.doctype != "Sales Invoice":
+			link_manual_loan_transaction(source, field, doc)
+		if doc.docstatus == 1 and source_doctype == "Borrowing Return":
+			lock_borrowing(loan.name)
+			source.validate_items()
+	doc.is_system_generated = 1
+	doc.is_borrowing_transaction = 1
+	if doc.doctype != "Sales Invoice":
+		doc.flags.custody_operation_token = _CUSTODY_OPERATION_TOKEN
+
+
+def validate_generated_transaction_cancellation(doc, method=None):
+	if not doc.get("is_borrowing_transaction"):
+		return
+	consumption_invoice = (
+		doc.doctype == "Sales Invoice" and doc.get("borrowing_source_doctype") == "Borrowing Adjustment"
+	)
+	if consumption_invoice:
+		doc.check_permission("cancel")
+	if not doc.flags.get("borrowing_cancellation") and not consumption_invoice:
+		doc.check_permission("cancel")
+		if doc.doctype not in ("Delivery Note", "Asset Movement", "Stock Entry", "Sales Invoice"):
+			frappe.throw(_("Cancel this generated transaction from its Borrowing source."))
+		if (
+			doc.doctype in ("Delivery Note", "Asset Movement")
+			and doc.get("borrowing_source_doctype") == "Borrowing"
+		):
+			for doctype in ("Borrowing Return", "Borrowing Adjustment"):
+				if frappe.db.exists(doctype, {"borrowing": doc.borrowing, "docstatus": 1}):
+					frappe.throw(
+						_(
+							"Cancel submitted Borrowing Returns and Adjustments before cancelling the outgoing document."
+						)
+					)
+
+	source_doctype = doc.get("borrowing_source_doctype")
+	source_name = doc.get("borrowing_source_name")
+	loan_name = doc.get("borrowing")
+	if not check_borrowing_source(source_doctype, source_name, loan_name):
+		frappe.throw(_("Borrowing transaction source does not match the linked Borrowing"))
+
+	if doc.doctype == "Stock Entry" and source_doctype == "Borrowing Adjustment":
+		frappe.db.sql("select name from `tabBorrowing Adjustment` where name=%s for update", source_name)
+		if frappe.db.exists(
+			"Sales Invoice",
+			{
+				"borrowing_source_doctype": source_doctype,
+				"borrowing_source_name": source_name,
+				"docstatus": ["<", 2],
+			},
+		):
+			frappe.throw(_("Cancel or delete the consumption invoice before cancelling its Stock Entry."))
+	source = frappe.get_doc(source_doctype, source_name)
+	if doc.doctype == "Stock Entry" and source_doctype == "Borrowing Return":
+		if (
+			source.delivery_note
+			and frappe.db.get_value("Delivery Note", source.delivery_note, "docstatus") == 1
+		):
+			frappe.throw(_("Cancel the receiving Delivery Note before cancelling its Batch Exchange."))
+	if source.doctype != doc.get("borrowing_source_doctype"):
+		frappe.throw(_("Borrowing transaction source does not match this document"))
+	if source.doctype != "Borrowing" and source.borrowing != loan_name:
+		frappe.throw(_("Borrowing transaction source does not match this document"))
+
+	loan = frappe.get_doc("Borrowing", loan_name)
+	for source_type in LOAN_SOURCE_DOCTYPES:
+		if not frappe.db.table_exists(source_type):
+			continue
+		for field in frappe.get_meta(source_type).fields:
+			if field.fieldtype != "Link" or field.options != doc.doctype:
+				continue
+			linked_names = frappe.get_all(source_type, filters={field.fieldname: doc.name}, pluck="name")
+			if any(name != source_name for name in linked_names):
+				frappe.throw(_("Generated transaction is linked to another active Borrowing document"))
+
+	expected_request_items = {row.material_request_item for row in loan.items if row.material_request_item}
+	link_sources = {
+		"stock_entry": (("Material Request Item", expected_request_items),),
+		"delivery_note": (("Material Request Item", expected_request_items),),
+		"asset_movement": (("Material Request Item", expected_request_items),),
+	}
+	for fieldname, sources in link_sources.items():
+		for child_doctype, expected_names in sources:
+			if not frappe.db.has_column(child_doctype, fieldname):
+				continue
+			linked_rows = frappe.get_all(
+				child_doctype,
+				filters={fieldname: doc.name},
+				fields=["name", "parent"],
+			)
+			if any(
+				row.parent != loan.material_request or row.name not in expected_names for row in linked_rows
+			):
+				frappe.throw(_("Generated transaction is linked to an unrelated Material Request"))
+
+	doc.ignore_linked_doctypes = tuple(LOAN_SOURCE_DOCTYPES | {"Material Request"})
+	if (
+		doc.doctype == "Delivery Note"
+		and is_trusted_custody_operation(doc)
+		and doc.flags.get("borrowing_shipment_cancellation") == doc.get("borrowing_shipment")
+		and doc.get("borrowing_shipment")
+	):
+		doc.ignore_linked_doctypes += ("Shipment",)
+	if (
+		doc.doctype == "Delivery Note"
+		and source_doctype in ("Borrowing Return", "Borrowing")
+		and doc.flags.get("borrowing_cancellation")
+	):
+		# The owning Return (or Loan: cancel_own_inspections) cancels its row inspections after reversing the stock.
+		# Inspections cannot be cancelled while that Delivery Note is still submitted.
+		doc.ignore_linked_doctypes += ("Quality Inspection",)
+
+	doc.flags.custody_operation_token = _CUSTODY_OPERATION_TOKEN
+
+
+def validate_borrowing_delivery_note(doc, loan, source_doctype, source_name):
+	if not doc.is_internal_customer or doc.represents_company != loan.company:
+		frappe.throw(_("Borrowing Delivery Notes must use the Internal Customer for the Borrowing Company"))
+	if doc.customer != frappe.db.get_value(
+		"Customer", {"is_internal_customer": 1, "represents_company": loan.company}, "name"
+	):
+		frappe.throw(_("Borrowing Delivery Note must use the Internal Customer representing its Company"))
+	if source_doctype == "Borrowing":
+		if doc.docstatus == 1:
+			lock_material_request(loan.material_request)
+			for entry in delivery_loans(loan):
+				lock_borrowing(entry.name)
+				entry.reload()
+				entry.check_permission("submit")
+				if entry.loan_type == "Asset" and not entry.asset_movement:
+					entry.validate_items()
+				entry.run_method("before_delivery")
+		if source_name != loan.name or doc.is_return:
+			frappe.throw(
+				_("Borrowing issue Delivery Note must be a non-return Delivery Note linked to the Borrowing")
+			)
+		if not loan.pick_list or frappe.db.get_value("Pick List", loan.pick_list, "docstatus") != 1:
+			frappe.throw(_("Submit the linked Borrowing Pick List before creating its Delivery Note"))
+		pick_list_items = {row.name: row for row in frappe.get_doc("Pick List", loan.pick_list).locations}
+		loan_items = {row.name: row for row in loan.items}
+		seen_pick_rows = set()
+		delivered_by_item = {}
+		for row in doc.items:
+			loan_item = loan_items.get(row.borrowing_item)
+			pick_row = pick_list_items.get(row.pick_list_item)
+			if (
+				not loan_item
+				or not pick_row
+				or pick_row.name in seen_pick_rows
+				or pick_row.borrowing_item != loan_item.name
+				or row.against_pick_list != loan.pick_list
+				or row.warehouse != pick_row.warehouse
+				or row.target_warehouse != loan.customer_loan_warehouse
+				or flt(pick_row.picked_qty, 9) != flt(pick_row.stock_qty, 9)
+				or flt(row.stock_qty, 9) != flt(pick_row.picked_qty, 9)
+			):
+				frappe.throw(
+					_("Borrowing issue Delivery Note row does not match the Borrowing item and warehouses")
+				)
+			seen_pick_rows.add(pick_row.name)
+			delivered_by_item[loan_item.name] = delivered_by_item.get(loan_item.name, 0) + flt(row.qty)
+		if set(delivered_by_item) != set(loan_items) or any(
+			flt(qty, 9) != flt(loan_items[name].qty, 9) for name, qty in delivered_by_item.items()
+		):
+			frappe.throw(_("Borrowing Delivery Note must include every Borrowing Item exactly once"))
+		return
+
+	if (
+		source_doctype != "Borrowing Return"
+		or not doc.is_return
+		or doc.return_against != loan.delivery_note
+	):
+		frappe.throw(_("Borrowing return Delivery Note must return against the original Borrowing Delivery Note"))
+	# one receiving row per return row, matched on loan item and batch
+	return_items = {
+		(row.borrowing_item, row.batch_no or None): row
+		for row in frappe.get_doc("Borrowing Return", source_name).items
+	}
+	loan_items = {row.name: row for row in loan.items}
+	seen_return_items = set()
+	for row in doc.items:
+		pair = (row.borrowing_item, row.batch_no or None)
+		loan_item = loan_items.get(row.borrowing_item)
+		return_item = return_items.get(pair)
+		if not loan_item or not return_item or pair in seen_return_items:
+			frappe.throw(_("Borrowing return Delivery Note row must match a Borrowing Return item"))
+		original_warehouses = {
+			warehouse
+			for warehouse in frappe.get_all(
+				"Delivery Note Item",
+				filters={"parent": loan.delivery_note, "borrowing_item": loan_item.name},
+				pluck="warehouse",
+			)
+		} | {loan_item.source_warehouse}
+		if (
+			flt(row.qty) != -flt(return_item.returned_qty)
+			or (
+				row.warehouse not in original_warehouses
+				and not (
+					# goods whose Item is inspected on receipt are received into quarantine
+					is_quarantine_warehouse(row.warehouse, doc.company)
+					and borrowing_return_row_requires_inspection(row)
+				)
+			)
+			or row.target_warehouse != loan.customer_loan_warehouse
+			or not frappe.db.exists(
+				"Delivery Note Item",
+				{"name": row.dn_detail, "parent": loan.delivery_note, "borrowing_item": loan_item.name},
+			)
+		):
+			frappe.throw(_("Borrowing return Delivery Note row does not reverse the original stock transfer"))
+		seen_return_items.add(pair)
+	if seen_return_items != set(return_items):
+		frappe.throw(_("Borrowing Return Delivery Note must include every returned item exactly once"))
+
+
+def validate_consumption_invoice(doc, loan, adjustment_name):
+	frappe.db.sql("select name from `tabBorrowing Adjustment` where name=%s for update", adjustment_name)
+	source = frappe.get_doc("Borrowing Adjustment", adjustment_name)
+	request_type = frappe.db.get_value("Material Request", loan.material_request, "material_request_type")
+	if (
+		source.docstatus != 1
+		or source.borrowing != loan.name
+		or loan.loan_type != "Stock"
+		or loan.borrower_type != "Customer"
+		or request_type != "Customer Borrow"
+		or source.reason != "Consumed by the borrower"
+		or doc.customer != loan.borrower
+		or doc.company != loan.company
+		or doc.is_return
+		or doc.update_stock
+	):
+		frappe.throw(_("Consumption invoices must bill the borrower for a submitted Stock Borrowing Adjustment."))
+	duplicate = frappe.db.exists(
+		"Sales Invoice",
+		{
+			"borrowing_source_doctype": "Borrowing Adjustment",
+			"borrowing_source_name": source.name,
+			"docstatus": ["<", 2],
+			"name": ["!=", doc.name or ""],
+		},
+	)
+	if duplicate:
+		frappe.throw(_("A consumption invoice already exists for this Borrowing Adjustment."))
+	if not source.stock_entry or frappe.db.get_value("Stock Entry", source.stock_entry, "docstatus") != 1:
+		frappe.throw(_("Submit the write-off Stock Entry before billing its consumption."))
+	factors = conversion_factors(loan)
+	expected = {}
+	for row in source.items:
+		expected[row.borrowing_item] = expected.get(row.borrowing_item, 0) + flt(row.qty) * factors.get(
+			row.borrowing_item, 1
+		)
+	actual = {}
+	for row in doc.items:
+		if (
+			row.get("asset")
+			or row.get("is_fixed_asset")
+			or flt(row.qty) <= 0
+			or flt(row.conversion_factor) != 1
+			or row.uom != frappe.get_cached_value("Item", row.item_code, "stock_uom")
+		):
+			frappe.throw(_("Consumption invoice rows must use the consumed stock quantity and unit."))
+		actual[row.borrowing_item] = actual.get(row.borrowing_item, 0) + flt(row.qty)
+	if actual.keys() != expected.keys() or any(
+		flt(actual[name], 9) != flt(qty, 9) for name, qty in expected.items()
+	):
+		frappe.throw(_("Consumption invoice quantities must match the Borrowing Adjustment."))
+
+
+def validate_borrowing_sales_invoice(doc, loan, source_doctype, source_name):
+	if doc.company != loan.company or loan.loan_type != "Asset":
+		frappe.throw(_("Asset Sale Invoice must use the linked Asset Borrowing Company"))
+	if doc.is_return:
+		original = frappe.get_doc("Sales Invoice", doc.return_against) if doc.return_against else None
+		if (
+			not original
+			or original.docstatus != 1
+			or original.is_return
+			or original.borrowing != loan.name
+		):
+			frappe.throw(
+				_("Borrowing Asset Sale returns must reference a submitted sale invoice for this Borrowing")
+			)
+		if doc._action == "submit":
+			lock_borrowing(loan.name)
+			loan_items = {row.name: row for row in loan.items}
+			original_items = {row.name: row for row in original.items}
+			seen_assets = set()
+			for row in doc.items:
+				loan_item = loan_items.get(row.borrowing_item)
+				original_row = original_items.get(row.sales_invoice_item)
+				if (
+					not loan_item
+					or not original_row
+					or original_row.borrowing_item != loan_item.name
+					or not loan_item.asset
+					or row.asset != loan_item.asset
+					or row.item_code != loan_item.item_code
+					or not row.is_fixed_asset
+					or flt(row.qty) != -1
+					or row.asset in seen_assets
+				):
+					frappe.throw(
+						_("Every credit note row must return one Asset from its original Borrowing sale")
+					)
+				seen_assets.add(row.asset)
+				if loan_item_available_to_receive(loan.name, loan_item) != 0:
+					frappe.throw(_("Asset {0} is not currently sold on this Borrowing").format(row.asset))
+		return
+	else:
+		if (
+			source_doctype != "Borrowing"
+			or source_name != loan.name
+			or loan.borrower_type != "Customer"
+			or doc.customer != loan.borrower
+		):
+			frappe.throw(_("Only the Customer on an Asset Borrowing can be invoiced for its Assets"))
+	if doc.update_stock:
+		frappe.throw(_("Sales Invoices for Assets on a Borrowing must not update Stock"))
+	if doc._action != "submit":
+		return
+
+	lock_borrowing(loan.name)
+	seen_assets = set()
+	loan_items = {row.name: row for row in loan.items}
+	for row in doc.items:
+		loan_item = loan_items.get(row.borrowing_item)
+		if (
+			not loan_item
+			or not loan_item.asset
+			or row.asset != loan_item.asset
+			or row.item_code != loan_item.item_code
+			or not row.is_fixed_asset
+			or flt(row.qty) != 1
+			or row.asset in seen_assets
+		):
+			frappe.throw(_("Every sale row must invoice one available Asset from this Borrowing"))
+		seen_assets.add(row.asset)
+		if loan_item_available_to_receive(loan.name, loan_item) < 1:
+			frappe.throw(_("Asset {0} has already been returned, adjusted or sold").format(row.asset))
+
+
+def validate_asset_movement_borrowing(doc):
+	loan = frappe.get_doc("Borrowing", doc.borrowing)
+	if loan.loan_type != "Asset" or loan.docstatus != 1 or loan.company != doc.company:
+		frappe.throw(_("Asset Movement must reference a submitted Asset Borrowing for the same Company"))
+	if doc.reference_doctype != "Material Request" or doc.reference_name != loan.material_request:
+		frappe.throw(_("Asset Movement must link to the Material Request that created the Borrowing"))
+	request = frappe.get_cached_doc("Material Request", loan.material_request)
+	recipient_address = loan.recipient_address or request.recipient_address
+	recipient_address_display = loan.recipient_address_display or request.recipient_address_display
+	recipient_contact = loan.recipient_contact or request.loan_recipient_contact or request.contact_person
+	recipient_contact_display = (
+		loan.recipient_contact_display
+		or request.loan_recipient_contact_display
+		or request.customer_contact_display
+	)
+	recipient_contact_email = (
+		loan.recipient_contact_email or request.loan_recipient_contact_email or request.customer_contact_email
+	)
+	doc.expected_return_date = loan.expected_return_date
+	doc.customer = loan.borrower if loan.borrower_type == "Customer" else None
+	doc.customer_contact = recipient_contact
+	doc.customer_address = recipient_address
+	doc.customer_address_display = recipient_address_display
+	doc.customer_contact_display = recipient_contact_display
+	doc.customer_contact_email = recipient_contact_email
+	doc.recipient_type = loan.borrower_type
+	doc.recipient = loan.borrower
+	source_type = doc.get("borrowing_source_doctype")
+	if source_type not in ("Borrowing", "Borrowing Return"):
+		frappe.throw(_("Asset Movement must be generated by a Borrowing or Borrowing Return"))
+	items = {row.name: row for row in loan.items}
+	is_return = source_type == "Borrowing Return"
+	expected_purpose = (
+		"Receipt" if is_return else ("Issue" if loan.borrower_type == "Employee" else "Transfer")
+	)
+	if doc.purpose != expected_purpose:
+		frappe.throw(_("Asset Movement Purpose must be {0} for this Borrowing").format(expected_purpose))
+	if is_return:
+		source = frappe.get_doc("Borrowing Return", doc.borrowing_source_name)
+		expected_items = {row.borrowing_item for row in source.items}
+	else:
+		expected_items = set(items)
+		if doc.docstatus == 1:
+			loan.run_method("before_delivery")
+	if (
+		len(doc.assets) != len(expected_items)
+		or {row.borrowing_item for row in doc.assets} != expected_items
+	):
+		frappe.throw(_("Asset Movement must contain every source Asset exactly once."))
+	for row in doc.assets:
+		loan_item = items.get(row.borrowing_item)
+		if (
+			not loan_item
+			or row.asset != loan_item.asset
+			or row.request_item != loan_item.material_request_item
+		):
+			frappe.throw(_("Asset Movement row does not match an Asset on the linked Borrowing"))
+		if is_return:
+			if row.target_location != loan_item.source_location:
+				frappe.throw(_("Returned Asset must go back to its original Location"))
+		elif loan.borrower_type == "Employee":
+			if row.to_employee != loan.borrower:
+				frappe.throw(_("Asset Movement must issue the Asset to the Borrowing Employee"))
+		elif row.target_location != loan_item.target_location:
+			frappe.throw(_("Asset Movement must send the Asset to the recipient Location on the Borrowing"))
+
+
+def update_borrowing_status(doc, method=None):
+	if doc.doctype == "Shipment" and doc.get("borrowing"):
+		frappe.get_doc("Borrowing", doc.borrowing).update_status()
+		return
+	source_doctype = doc.get("borrowing_source_doctype")
+	source_name = doc.get("borrowing_source_name")
+	if not source_doctype or not source_name:
+		return
+	if source_doctype == "Borrowing":
+		loan = frappe.get_doc("Borrowing", source_name)
+		if doc.doctype == "Delivery Note" and method == "on_submit":
+			loan.capture_delivery_note_details(doc)
+		loan.update_status()
+	elif source_doctype == "Borrowing Return":
+		return_doc = frappe.get_doc(source_doctype, source_name)
+		return_doc.update_status()
+		frappe.get_doc("Borrowing", return_doc.borrowing).update_status()
+	elif source_doctype == "Borrowing Adjustment":
+		adjustment = frappe.get_doc(source_doctype, source_name)
+		adjustment.update_status()
+		frappe.get_doc("Borrowing", adjustment.borrowing).update_status()
+
+
+def delivery_loans(loan):
+	"""Every requested type must be prepared before any part of a set can leave."""
+	request = frappe.get_doc("Material Request", loan.material_request)
+	request.check_permission("read")
+	expected = set(request_loan_types(request))
+	names = frappe.get_all(
+		"Borrowing",
+		filters={"material_request": loan.material_request, "docstatus": 1},
+		pluck="name",
+		order_by="name",
+	)
+	loans = [frappe.get_doc("Borrowing", name) for name in names]
+	if {entry.loan_type for entry in loans} != expected or len(loans) != len(expected):
+		frappe.throw(_("Prepare and submit every Stock and Asset Borrowing of this request before delivery."))
+	for entry in loans:
+		entry.check_permission("read")
+	return loans
+
+
+def release_held_assets(stock_loan):
+	"""Asset movements are saved and submitted explicitly from the Asset borrowing."""
+	return
+
+
+def get_internal_loan_customer(company):
+	return frappe.db.get_value(
+		"Customer",
+		{"is_internal_customer": 1, "represents_company": company, "disabled": 0},
+		"name",
+	)
+
+
+def validate_borrowing_pick_list(pick_list, require_picked_qty=False, cancelling=False):
+	loan = frappe.get_doc("Borrowing", pick_list.borrowing)
+	if loan.loan_type != "Stock" or loan.docstatus != 1 or loan.company != pick_list.company:
+		frappe.throw(_("Pick List must reference a submitted Stock Borrowing for the same Company"))
+	loan.check_permission("read")
+	link_manual_loan_transaction(loan, "pick_list", pick_list)
+	if (
+		pick_list.purpose != "Delivery"
+		or pick_list.material_request != loan.material_request
+		or pick_list.customer != get_internal_loan_customer(loan.company)
+	):
+		frappe.throw(_("Borrowing Pick List must use the linked Material Request and Internal Customer"))
+	if cancelling or getattr(pick_list, "_action", None) == "cancel":
+		if loan.delivery_note and frappe.db.get_value("Delivery Note", loan.delivery_note, "docstatus") in (
+			0,
+			1,
+		):
+			frappe.throw(
+				_("Cancel the Borrowing Delivery Note from the Borrowing before cancelling its Pick List")
+			)
+		return
+	if not pick_list.locations:
+		frappe.throw(_("Borrowing Pick List must contain the Stock Items on the Borrowing"))
+
+	loan_items = {row.name: row for row in loan.items}
+	picked_by_item = {}
+	for row in pick_list.locations:
+		loan_item = loan_items.get(row.borrowing_item)
+		if not loan_item:
+			frappe.throw(_("Pick List row {0} must link to a Borrowing Item").format(row.idx))
+		request_item = frappe.db.get_value(
+			"Material Request Item",
+			loan_item.material_request_item,
+			["parent", "item_code", "uom", "stock_uom", "conversion_factor"],
+			as_dict=True,
+		)
+		conversion_factor = flt(request_item.conversion_factor or 1) if request_item else 0
+		if (
+			not request_item
+			or request_item.parent != loan.material_request
+			or request_item.item_code != row.item_code
+			or row.material_request != loan.material_request
+			or row.material_request_item != loan_item.material_request_item
+			or row.uom != request_item.uom
+			or row.stock_uom != request_item.stock_uom
+			or flt(row.conversion_factor, 9) != flt(conversion_factor, 9)
+			or flt(row.stock_qty, 9) != flt(row.qty * conversion_factor, 9)
+		):
+			frappe.throw(_("Pick List row {0} must match the linked Borrowing Item").format(row.idx))
+		# a loan row may be picked from several locations and batches, and from any usable warehouse of the company
+		# when its default has no stock (the loan row follows when the Pick List is submitted)
+		warehouse = frappe.db.get_value(
+			"Warehouse", row.warehouse, ["company", "is_group", "disabled"], as_dict=True
+		)
+		if not warehouse or warehouse.company != loan.company or warehouse.is_group or warehouse.disabled:
+			frappe.throw(
+				_("Pick List row {0}: choose an enabled warehouse of {1}").format(row.idx, loan.company)
+			)
+		if require_picked_qty and flt(row.picked_qty, 9) != flt(row.stock_qty, 9):
+			frappe.throw(_("Pick List row {0}: Pick the full Borrowed Qty before submitting").format(row.idx))
+		picked_by_item[loan_item.name] = picked_by_item.get(loan_item.name, 0) + flt(row.qty)
+
+	if set(picked_by_item) != set(loan_items):
+		frappe.throw(_("Pick List must include every Borrowing Item"))
+	for name, qty in picked_by_item.items():
+		if flt(qty, 9) != flt(loan_items[name].qty, 9):
+			frappe.throw(
+				_("Pick List rows of {0} add up to {1}, but the Borrowed Qty is {2}").format(
+					loan_items[name].item_code, flt(qty), flt(loan_items[name].qty)
+				)
+			)
+
+
+def follow_picked_warehouses(pick_list):
+	"""A submitted loan Pick List: each loan row's Source Warehouse is where most of it was picked (a return goes back
+	to the warehouse each part came from, ``make_stock_return_delivery_note``)."""
+	loan_items = {row.name: row for row in frappe.get_doc("Borrowing", pick_list.borrowing).items}
+	by_item = {}
+	for row in pick_list.locations:
+		if row.borrowing_item in loan_items:
+			by_item.setdefault(row.borrowing_item, {})
+			by_item[row.borrowing_item][row.warehouse] = by_item[row.borrowing_item].get(
+				row.warehouse, 0
+			) + flt(row.picked_qty)
+	for name, warehouses in by_item.items():
+		warehouse = max(warehouses, key=lambda key: warehouses[key])
+		if loan_items[name].source_warehouse != warehouse:
+			frappe.db.set_value("Borrowing Item", name, "source_warehouse", warehouse)
+
+
+def update_borrowing_pick_list_status(pick_list):
+	if not pick_list.borrowing or not frappe.db.exists("Borrowing", pick_list.borrowing):
+		return
+	loan = frappe.get_doc("Borrowing", pick_list.borrowing)
+	if pick_list.docstatus == 1 and not loan.delivery_note:
+		follow_picked_warehouses(pick_list)
+		loan.reload()
+	loan.update_status()
+
+
+def make_borrowing_from_request(request, loan_type, ignore_permissions=False, save=True):
+	"""ignore_permissions: the system issues an approved request itself (Connect Diagnostics, Siwat, 5 Nov 2026,
+	relayed by the user: after approval and the back office's decision the loan is made automatically)."""
+	if not ignore_permissions:
+		request.check_permission("read")
+		frappe.has_permission("Borrowing", "create", throw=True)
+	request.reload()
+	if request.docstatus != 1 or request.material_request_type not in (
+		"Customer Demo",
+		"Borrow",
+		"Customer Borrow",
+	):
+		frappe.throw(_("Submit a Customer Demo or Borrow Material Request first"))
+	if loan_type not in ("Stock", "Asset"):
+		frappe.throw(_("Select Stock or Asset as the Borrowing Type"))
+	allowed_types = request_loan_types(request)
+	if loan_type not in allowed_types:
+		frappe.throw(
+			_("Create a {0} Borrowing to match the Material Request").format(
+				" / ".join(allowed_types) or "-"
+			)
+		)
+	lock_material_request(request.name)
+	existing = frappe.db.get_value(
+		"Borrowing",
+		{"material_request": request.name, "loan_type": loan_type, "docstatus": ["<", 2]},
+		"name",
+	)
+	if existing:
+		loan = frappe.get_doc("Borrowing", existing)
+		if not ignore_permissions:
+			loan.check_permission("read")
+		return loan.as_dict()
+	request_rows = request_rows_for_loan(request, loan_type)
+	if not request_rows:
+		frappe.throw(_("The Material Request has no {0} items").format(loan_type))
+	loan = frappe.new_doc("Borrowing")
+	loan.company = request.company
+	loan.material_request = request.name
+	loan.loan_type = loan_type
+	loan.expected_return_date = request.expected_return_date
+	for request_item in request_rows:
+		if loan_type == "Stock":
+			loan.append(
+				"items",
+				{
+					"material_request_item": request_item.name,
+					"item_code": request_item.item_code,
+					"item_name": request_item.item_name,
+					"qty": request_item.qty,
+					"source_warehouse": request_item.from_warehouse
+					or request.get_default_warehouse(request_item.item_code)
+					or stocked_warehouse(request, request_item.item_code),
+				},
+			)
+		else:
+			loan.append(
+				"items",
+				{
+					"material_request_item": request_item.name,
+					"asset": request_item.asset,
+					"item_code": request_item.item_code,
+					"item_name": request_item.asset_name or request_item.item_name,
+					"qty": 1,
+					"source_location": request_item.source_location,
+					"target_location": request_item.target_location
+					or request.loan_recipient_location
+					or request.customer_location,
+				},
+			)
+	if save:
+		loan.insert(ignore_permissions=ignore_permissions)
+	else:
+		loan.validate_material_request()
+	return loan.as_dict()
+
+
+def stocked_warehouse(request, item_code):
+	"""The warehouse of the company that holds the most of the Item, when the request and the Item name none (the
+	Stock team is not asked to type what the system can read). Not the loan or a quarantine warehouse."""
+	rows = frappe.db.sql(
+		"""select bin.warehouse from `tabBin` bin join `tabWarehouse` wh on wh.name = bin.warehouse
+		where bin.item_code = %(item)s and bin.actual_qty > 0 and wh.company = %(company)s and wh.is_group = 0
+		and wh.disabled = 0 and bin.warehouse != %(loan)s
+		and coalesce(wh.warehouse_type, '') not like %(quarantine)s
+		order by bin.actual_qty desc limit 1""",
+		{
+			"item": item_code,
+			"company": request.company,
+			"loan": request.get("customer_loan_warehouse") or "",
+			"quarantine": "%uarantine%",
+		},
+	)
+	return rows[0][0] if rows else None
+
+
+def request_loan_types(request):
+	"""The Loan types a request can make. A Demo or Borrow request lends each row as Stock or as an Asset, so it can
+	make one of each."""
+	return [loan_type for loan_type in ("Stock", "Asset") if request_rows_for_loan(request, loan_type)]
+
+
+def request_rows_for_loan(request, loan_type):
+	if loan_type == "Stock":
+		return [row for row in request.items if row.item_type == "Stock Item"]
+	return [row for row in request.items if row.item_type != "Stock Item"]
+
+
+def get_borrowing_actions(request):
+	can_create = frappe.has_permission("Borrowing", "create")
+	loan_types = request_loan_types(request)
+
+	def open_for(loan_type):
+		# the button is for a loan that does not exist yet (the system makes it by itself once approved)
+		return (
+			can_create
+			and loan_type in loan_types
+			and not frappe.db.exists(
+				"Borrowing",
+				{"material_request": request.name, "loan_type": loan_type, "docstatus": ["<", 2]},
+			)
+		)
+
+	return frappe._dict(stock_loan=open_for("Stock"), asset_loan=open_for("Asset"))
+
+
+def lock_material_request(request_name):
+	frappe.db.sql("select name from `tabMaterial Request` where name=%s for update", request_name)
+
+
+def lock_borrowing(loan_name):
+	frappe.db.sql("select name from `tabBorrowing` where name=%s for update", loan_name)
+
+
+def normalize_serials(serial_numbers):
+	if not serial_numbers:
+		return []
+	return [serial for serial in get_serial_nos(serial_numbers) if serial]
+
+
+def loan_item_available_to_receive(loan_name, loan_item, *, exclude_return=None):
+	returned, adjusted, sold = get_loan_item_balances(loan_name, loan_item.name)
+	reserved = get_loan_item_reserved_qty(loan_name, loan_item.name, exclude_return=exclude_return)
+	return max(flt(loan_item.qty) - returned - adjusted - sold - reserved, 0)
+
+
+def loan_issue_factor(loan_item_name):
+	"""The UOM conversion factor of the submitted issue Delivery Note row of a loan row (1 when none)."""
+	return (
+		flt(
+			frappe.db.get_value(
+				"Delivery Note Item",
+				{"custody_loan_item": loan_item_name, "docstatus": 1},
+				"conversion_factor",
+			)
+		)
+		or 1
+	)
+
+
+def loan_item_available_to_adjust(loan_name, loan_item, *, exclude_adjustment=None, exclude_conversion=None):
+	returned, adjusted, sold = get_loan_item_balances(loan_name, loan_item.name)
+	reserved = get_loan_item_reserved_qty(
+		loan_name,
+		loan_item.name,
+		exclude_adjustment=exclude_adjustment,
+		exclude_conversion=exclude_conversion,
+	)
+	return max(flt(loan_item.qty) - returned - adjusted - sold - reserved, 0)
+
+
+CONVERSION_REJECTED_STATE = "Stock to Asset Conversion Rejected"
+
+
+def loan_conversion_rows(loan_name, loan_item_name=None, *, submitted=None, exclude=None):
+	"""The Stock to Asset Conversions of a loan's units (Connect Diagnostics, Siwat 16 Nov 2026: a Borrow unit becomes a
+	Demo Asset). A Draft that is not Rejected reserves the unit, a submitted one settles it like an adjustment, a
+	cancelled or deleted one counts for nothing. ``submitted``: None both, True submitted only, False drafts only.
+	Returns frappe._dict(name, docstatus, custody_loan_item, qty, serial_and_batch_bundle, batch_no, serial_no), the
+	quantity in loan units."""
+	if not frappe.db.has_column("Stock to Asset Conversion", "custody_loan"):
+		return []
+	docstatus = [1] if submitted else [0] if submitted is False else [0, 1]
+	filters = {"custody_loan": loan_name, "docstatus": ["in", docstatus]}
+	if loan_item_name:
+		filters["custody_loan_item"] = loan_item_name
+	if exclude:
+		filters["name"] = ["!=", exclude]
+	rows = []
+	for parent in frappe.get_all(
+		"Stock to Asset Conversion",
+		filters=filters,
+		fields=["name", "docstatus", "custody_loan_item", "workflow_state"],
+	):
+		if parent.docstatus == 0 and parent.workflow_state == CONVERSION_REJECTED_STATE:
+			continue
+		factor = (
+			flt(
+				frappe.db.get_value(
+					"Delivery Note Item",
+					{"custody_loan_item": parent.custody_loan_item, "docstatus": 1},
+					"conversion_factor",
+				)
+			)
+			or 1
+		)
+		for item in frappe.get_all(
+			"Stock to Asset Conversion Item",
+			filters={"parent": parent.name, "parenttype": "Stock to Asset Conversion"},
+			fields=["qty", "serial_and_batch_bundle"],
+		):
+			serials, batch = [], None
+			if item.serial_and_batch_bundle:
+				for entry in frappe.get_all(
+					"Serial and Batch Entry",
+					filters={"parent": item.serial_and_batch_bundle},
+					fields=["serial_no", "batch_no"],
+				):
+					if entry.serial_no:
+						serials.append(entry.serial_no)
+					batch = batch or entry.batch_no
+			rows.append(
+				frappe._dict(
+					name=parent.name,
+					docstatus=parent.docstatus,
+					custody_loan_item=parent.custody_loan_item,
+					qty=flt(item.qty) / factor,
+					serial_and_batch_bundle=item.serial_and_batch_bundle,
+					batch_no=batch,
+					serial_no="\n".join(serials),
+				)
+			)
+	return rows
+
+
+def loan_conversion_serials(loan_name, loan_item_name, *, submitted=None, exclude=None):
+	return [
+		serial
+		for row in loan_conversion_rows(loan_name, loan_item_name, submitted=submitted, exclude=exclude)
+		for serial in normalize_serials(row.serial_no)
+	]
+
+
+def get_loan_item_reserved_qty(
+	loan_name, loan_item_name, *, exclude_return=None, exclude_adjustment=None, exclude_conversion=None
+):
+	filters = {"custody_loan": loan_name, "docstatus": 1, "status": ["!=", "Received"]}
+	if exclude_return:
+		filters["name"] = ["!=", exclude_return]
+	return_names = frappe.get_all(
+		"Borrowing Return",
+		filters=filters,
+		pluck="name",
+	)
+	reserved = 0
+	if return_names:
+		reserved += sum(
+			flt(qty)
+			for qty in frappe.get_all(
+				"Borrowing Return Item",
+				filters={"parent": ["in", return_names], "borrowing_item": loan_item_name},
+				pluck="returned_qty",
+			)
+		)
+	filters = {"borrowing": loan_name, "docstatus": 1, "status": "Pending Issue"}
+	if exclude_adjustment:
+		filters["name"] = ["!=", exclude_adjustment]
+	adjustments = frappe.get_all("Borrowing Adjustment", filters=filters, pluck="name")
+	if adjustments:
+		reserved += sum(
+			flt(qty)
+			for qty in frappe.get_all(
+				"Borrowing Adjustment Item",
+				filters={"parent": ["in", adjustments], "borrowing_item": loan_item_name},
+				pluck="qty",
+			)
+		)
+	reserved += sum(
+		row.qty
+		for row in loan_conversion_rows(
+			loan_name, loan_item_name, submitted=False, exclude=exclude_conversion
+		)
+	)
+	return reserved
+
+
+def _received_asset_return_condition(receipt="receipt"):
+	return f"""{receipt}.docstatus = 1 and {receipt}.status = 'Received' and {receipt}.loan_type = 'Asset' and exists (
+		select 1 from `tabAsset Movement` movement where movement.name = {receipt}.asset_movement
+		and movement.docstatus = 1 and movement.purpose = 'Receipt'
+		and movement.borrowing = {receipt}.borrowing
+		and movement.borrowing_source_doctype = 'Borrowing Return'
+		and movement.borrowing_source_name = {receipt}.name
+	)"""
+
+
+def asset_allocation_returned_condition(item="allocation", loan="custody"):
+	"""SQL form of the received-per-object rule for the native MR availability pickers."""
+	return f"""({item}.issued_qty > 0 and {item}.issued_qty >= {item}.qty and (
+		select coalesce(sum(returned.returned_qty), 0) from `tabBorrowing Return Item` returned
+		join `tabBorrowing Return` receipt on receipt.name = returned.parent
+		where receipt.borrowing = {loan}.name and returned.borrowing_item = {item}.name
+		and {_received_asset_return_condition()}
+	) >= {item}.issued_qty)"""
+
+
+def get_loan_item_returned_qty(loan_name, loan_item_name, *, for_update=False):
+	if for_update:
+		rows = frappe.db.sql(
+			f"""select item.returned_qty from `tabBorrowing Return Item` item
+			join `tabBorrowing Return` receipt on receipt.name = item.parent
+			join `tabBorrowing` loan on loan.name = receipt.borrowing and loan.loan_type = receipt.loan_type
+			where receipt.borrowing = %s and item.borrowing_item = %s
+			and receipt.docstatus = 1 and receipt.status = 'Received'
+			and (receipt.loan_type != 'Asset' or ({_received_asset_return_condition()})) for update""",
+			(loan_name, loan_item_name),
+		)
+		return max(sum(flt(row[0]) for row in rows), 0)
+	return_names = frappe.get_all(
+		"Borrowing Return",
+		filters={"borrowing": loan_name, "docstatus": 1, "status": "Received"},
+		pluck="name",
+	)
+	returned = 0
+	if return_names:
+		returned = sum(
+			flt(qty)
+			for qty in frappe.get_all(
+				"Borrowing Return Item",
+				filters={"parent": ["in", return_names], "borrowing_item": loan_item_name},
+				pluck="returned_qty",
+			)
+		)
+	return max(returned, 0)
+
+
+def get_loan_item_balances(loan_name, loan_item_name):
+	returned = get_loan_item_returned_qty(loan_name, loan_item_name)
+	adjusted = sold = 0
+	adjustment_names = frappe.get_all(
+		"Borrowing Adjustment",
+		filters={"borrowing": loan_name, "docstatus": 1, "status": "Submitted"},
+		pluck="name",
+	)
+	if adjustment_names:
+		adjustment_rows = frappe.get_all(
+			"Borrowing Adjustment Item",
+			filters={"parent": ["in", adjustment_names], "borrowing_item": loan_item_name},
+			pluck="qty",
+		)
+		adjusted = sum(flt(qty) for qty in adjustment_rows)
+	# a unit converted to a Demo Asset has left the loan: settled like a write-off
+	adjusted += sum(row.qty for row in loan_conversion_rows(loan_name, loan_item_name, submitted=True))
+	invoice_rows = frappe.db.sql(
+		"""select sum(sii.qty) from `tabSales Invoice Item` sii
+		join `tabSales Invoice` si on si.name=sii.parent
+		where sii.borrowing_item=%s and si.borrowing=%s
+		and si.docstatus=1
+		and coalesce(si.borrowing_source_doctype, '') != 'Borrowing Adjustment'""",
+		(loan_item_name, loan_name),
+	)
+	sold = flt(invoice_rows[0][0] if invoice_rows else 0)
+	return max(returned, 0), adjusted, max(sold, 0)
+
+
+def get_asset_custody_allocations(asset_name, *, exclude_loan=None):
+	"""Current per-object allocations under the same Asset lock used by issue and receipt."""
+	lock_asset(asset_name)
+	return frappe.db.sql(
+		"""select loan.name, loan.material_request, item.name as loan_item, item.material_request_item,
+		item.qty, item.issued_qty from `tabBorrowing Item` item
+		join `tabBorrowing` loan on loan.name = item.parent
+		where item.asset = %s and loan.docstatus = 1 and loan.loan_type = 'Asset' and loan.name != %s
+		order by loan.creation desc for update""",
+		(asset_name, exclude_loan or ""),
+		as_dict=True,
+	)
+
+
+def asset_allocation_is_returned(allocation):
+	issued = flt(allocation.issued_qty)
+	return (
+		issued > 0
+		and issued >= flt(allocation.qty)
+		and get_loan_item_returned_qty(allocation.name, allocation.loan_item, for_update=True) >= issued
+	)
+
+
+def asset_has_unreturned_borrowing(asset_name, *, exclude_loan=None):
+	return any(
+		not asset_allocation_is_returned(row)
+		for row in get_asset_custody_allocations(asset_name, exclude_loan=exclude_loan)
+	)
+
+
+def get_received_serials(loan_name, loan_item_name):
+	return_names = frappe.get_all(
+		"Borrowing Return",
+		filters={"borrowing": loan_name, "docstatus": 1, "status": "Received"},
+		pluck="name",
+	)
+	if not return_names:
+		return []
+	rows = frappe.get_all(
+		"Borrowing Return Item",
+		filters={"parent": ["in", return_names], "borrowing_item": loan_item_name},
+		pluck="serial_no",
+	)
+	return [serial for row in rows for serial in normalize_serials(row)]
+
+
+def get_reserved_serials(loan_name, loan_item_name, *, exclude_conversion=None):
+	return_names = frappe.get_all(
+		"Borrowing Return",
+		filters={"borrowing": loan_name, "docstatus": 1, "status": ["!=", "Received"]},
+		pluck="name",
+	)
+	reserved = loan_conversion_serials(loan_name, loan_item_name, submitted=False, exclude=exclude_conversion)
+	if not return_names:
+		return reserved
+	rows = frappe.get_all(
+		"Borrowing Return Item",
+		filters={"parent": ["in", return_names], "borrowing_item": loan_item_name},
+		pluck="serial_no",
+	)
+	return [*(serial for row in rows for serial in normalize_serials(row)), *reserved]
+
+
+def get_adjusted_serials(loan_name, loan_item_name):
+	adjustment_names = frappe.get_all(
+		"Borrowing Adjustment",
+		filters={"borrowing": loan_name, "docstatus": 1, "status": "Submitted"},
+		pluck="name",
+	)
+	converted = loan_conversion_serials(loan_name, loan_item_name, submitted=True)
+	if not adjustment_names:
+		return converted
+	rows = frappe.get_all(
+		"Borrowing Adjustment Item",
+		filters={"parent": ["in", adjustment_names], "borrowing_item": loan_item_name},
+		pluck="serial_no",
+	)
+	return [*(serial for row in rows for serial in normalize_serials(row)), *converted]
+
+
+def get_open_issued_serials(loan_name, loan_item):
+	issued = normalize_serials(loan_item.serial_no)
+	returned = set()
+	return_names = frappe.get_all(
+		"Borrowing Return",
+		filters={"borrowing": loan_name, "docstatus": 1},
+		pluck="name",
+	)
+	if return_names:
+		rows = frappe.get_all(
+			"Borrowing Return Item",
+			filters={"parent": ["in", return_names], "borrowing_item": loan_item.name},
+			pluck="serial_no",
+		)
+		returned.update(serial for row in rows for serial in normalize_serials(row))
+	returned.update(get_adjusted_serials(loan_name, loan_item.name))
+	return [serial for serial in issued if serial not in returned]
+
+
+def lock_asset(asset_name):
+	frappe.db.sql("select name from `tabAsset` where name=%s for update", asset_name)
+
+
+def transaction_is_received(stock_entry_name, asset_movement_name):
+	"""A borrowing's issue is complete when its Delivery Note (or Asset Movement) is submitted."""
+	if stock_entry_name:
+		return bool(frappe.db.get_value("Delivery Note", stock_entry_name, "docstatus") == 1)
+	if asset_movement_name:
+		return frappe.db.get_value("Asset Movement", asset_movement_name, "docstatus") == 1
+	return False
+
+
+def cancel_own_inspections(doc):
+	"""Cancel the submitted Quality Inspections of a cancelled loan transaction (its own rows only), as the cancellation
+	of the authorized loan; a draft inspection is deleted."""
+	for name in frappe.get_all(
+		"Quality Inspection",
+		filters={"reference_type": doc.doctype, "reference_name": doc.name, "docstatus": ["<", 2]},
+		pluck="name",
+	):
+		inspection = frappe.get_doc("Quality Inspection", name)
+		if inspection.docstatus == 0:
+			frappe.delete_doc("Quality Inspection", name, force=True, ignore_permissions=True)
+			continue
+		inspection.flags.ignore_permissions = True
+		inspection.docstatus = 2
+		if workflow := inspection.meta.get_workflow():
+			set_workflow_state_on_action(inspection, workflow, "cancel")
+		inspection.cancel()
+
+
+def cancel_source_transaction(source, fieldname):
+	stored_source = frappe.get_doc(source.doctype, source.name)
+	if any(source.get(field) != stored_source.get(field) for field in (fieldname, "company", "borrowing")):
+		frappe.throw(_("Borrowing cancellation must use the saved source transaction links"))
+	name = stored_source.get(fieldname)
+	if not name:
+		return
+	doctype = {
+		"asset_movement": "Asset Movement",
+		"delivery_note": "Delivery Note",
+		"pick_list": "Pick List",
+		"stock_entry": "Stock Entry",
+	}.get(fieldname)
+	if not doctype:
+		frappe.throw(_("Unsupported Borrowing transaction field: {0}").format(fieldname))
+	doc = frappe.get_doc(doctype, name)
+	if doc.docstatus == 2:
+		return
+	shipment_field = "borrowing_shipment" if doctype == "Delivery Note" else "shipment"
+	shipment_name = doc.get(shipment_field)
+	shipment_status = frappe.db.get_value("Shipment", shipment_name, "docstatus") if shipment_name else None
+	shipment = None
+	if doctype == "Delivery Note":
+		loan_name = stored_source.name if source.doctype == "Borrowing" else stored_source.borrowing
+		loan = frappe.get_doc("Borrowing", loan_name)
+		if (
+			source.doctype not in LOAN_SOURCE_DOCTYPES
+			or stored_source.docstatus != 1
+			or loan.company != stored_source.company
+			or doc.company != stored_source.company
+			or not doc.get("is_borrowing_transaction")
+			or doc.get("borrowing") != loan_name
+			or doc.get("borrowing_source_doctype") != source.doctype
+			or doc.get("borrowing_source_name") != source.name
+		):
+			frappe.throw(_("Delivery Note must belong to the saved Borrowing source and Company"))
+		if shipment_status in (0, 1):
+			shipment = frappe.get_doc("Shipment", shipment_name)
+			references = shipment.get("shipment_documents") or []
+			if (
+				shipment.get("borrowing") != loan_name
+				or len(references) != 1
+				or references[0].reference_doctype != doctype
+				or references[0].reference_name != name
+				or any(row.delivery_note != name for row in shipment.get("shipment_delivery_note") or [])
+				or any(
+					parent != shipment_name
+					for child_doctype, filters in (
+						("Shipment Document", {"reference_doctype": doctype, "reference_name": name}),
+						("Shipment Delivery Note", {"delivery_note": name}),
+					)
+					for parent in frappe.get_all(
+						child_doctype,
+						filters={**filters, "docstatus": ["!=", 2]},
+						pluck="parent",
+					)
+				)
+			):
+				frappe.throw(
+					_(
+						"Only the Shipment exclusively linked to this Borrowing transaction can be cancelled"
+					)
+				)
+			stored_source.check_permission("cancel")
+			doc.flags.ignore_permissions = True
+			doc.flags.borrowing_shipment_cancellation = shipment_name
+	elif shipment_status in (0, 1):
+		frappe.throw(_("Cancel Shipment {0} before cancelling {1} {2}.").format(shipment_name, doctype, name))
+	if doc.docstatus == 1:
+		doc.flags.borrowing_cancellation = True
+		doc.flags.custody_operation_token = _CUSTODY_OPERATION_TOKEN
+		doc.ignore_linked_doctypes = tuple(
+			set(doc.get("ignore_linked_doctypes") or ()) | LOAN_SOURCE_DOCTYPES | {"Material Request"}
+		)
+		doc.cancel()
+		if doctype == "Delivery Note" and source.doctype == "Borrowing":
+			# its own inspections (QI before delivery) go with it, right after
+			cancel_own_inspections(doc)
+	if shipment:
+		# Shipment callbacks still need the source document, including a draft receipt.
+		if shipment.docstatus == 1:
+			shipment.flags.ignore_permissions = True
+			shipment.cancel()
+		else:
+			frappe.delete_doc("Shipment", shipment.name, ignore_permissions=True, force=True)
+			doc.db_set(shipment_field, None)
+	if doc.docstatus == 0:
+		frappe.delete_doc(doctype, name, ignore_permissions=True, force=True)
+
+
+def unlink_deleted_loan_transaction(doc, method=None):
+	if doc.doctype == "Pick List":
+		source_doctype, source_name, field = "Borrowing", doc.get("borrowing"), "pick_list"
+	else:
+		if not doc.get("is_borrowing_transaction"):
+			return
+		source_doctype = doc.get("borrowing_source_doctype")
+		source_name = doc.get("borrowing_source_name")
+		field = {
+			"Delivery Note": "delivery_note",
+			"Asset Movement": "asset_movement",
+			"Stock Entry": "stock_entry",
+			"Sales Invoice": "sales_invoice",
+		}.get(doc.doctype)
+		if not field or (doc.doctype == "Stock Entry" and source_doctype != "Borrowing Adjustment"):
+			return
+	if not source_name or source_doctype not in LOAN_SOURCE_DOCTYPES:
+		return
+	if doc.docstatus == 1:
+		frappe.throw(_("Cancel the movement document before deleting it."))
+	if not frappe.db.exists(source_doctype, source_name):
+		return
+	source = frappe.get_doc(source_doctype, source_name)
+	loan_name = source.name if source_doctype == "Borrowing" else source.borrowing
+	lock_borrowing(loan_name)
+	if source.get(field) == doc.name:
+		source.db_set(field, None, update_modified=False)
+		source.update_status()
+	loan = frappe.get_doc("Borrowing", loan_name)
+	if field in ("delivery_note", "asset_movement"):
+		for row in loan.items:
+			if (
+				row.material_request_item
+				and frappe.db.get_value("Material Request Item", row.material_request_item, field) == doc.name
+			):
+				frappe.db.set_value("Material Request Item", row.material_request_item, field, None)
+	loan.update_status()
+
+
+def update_return_status_on_transaction(return_doc):
+	if return_doc.docstatus == 2:
+		return "Cancelled"
+	if return_doc.docstatus != 1:
+		return "Draft"
+	if return_doc.loan_type == "Stock":
+		delivery_note = (
+			frappe.get_doc("Delivery Note", return_doc.delivery_note)
+			if return_doc.delivery_note and frappe.db.exists("Delivery Note", return_doc.delivery_note)
+			else None
+		)
+		if delivery_note and delivery_note.docstatus == 1:
+			return "Received"
+		# received at once; a draft receipt is one the system could not submit (see the comments of the return)
+		return "Pending Receipt"
+
+	if not return_doc.asset_movement:
+		return "Pending Receipt"
+	if frappe.db.get_value("Asset Movement", return_doc.asset_movement, "docstatus") == 1:
+		return "Received"
+	return "Pending Receipt"
+
+
+def check_borrowing_source(source_doctype, source_name, loan_name):
+	if source_doctype not in LOAN_SOURCE_DOCTYPES or not source_name or not loan_name:
+		return False
+	if source_doctype == "Borrowing":
+		return source_name == loan_name
+	return frappe.db.get_value(source_doctype, source_name, "borrowing") == loan_name
+
+
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def borrowing_item_query(doctype, txt, searchfield, start, page_len, filters):
+	"""Loan Item picker for Return and Adjustment rows.
+
+	Borrowing Item is a child table, so Frappe's generic link search and validation check its permission
+	without a parent type and refuse every user. Read rights on the parent loan decide instead.
+	"""
+	parent = (filters or {}).get("parent") if isinstance(filters, dict) else None
+	if (
+		not parent
+		or not frappe.db.exists("Borrowing", parent)
+		or not frappe.has_permission("Borrowing", "read", parent)
+	):
+		return []
+	return frappe.get_all(
+		"Borrowing Item",
+		filters={"parent": parent, "parenttype": "Borrowing", "name": ["like", f"%{txt}%"]},
+		fields=["name", "item_code"],
+		order_by="idx",
+		limit_start=start,
+		limit_page_length=page_len,
+		as_list=True,
+	)

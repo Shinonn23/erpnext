@@ -19,7 +19,7 @@ class PickListItem(Document):
 		batch_no: DF.Link | None
 		company_total_stock: DF.Float
 		conversion_factor: DF.Float
-		custody_loan_item: DF.Link | None
+		borrowing_item: DF.Link | None
 		delivered_qty: DF.Float
 		description: DF.Text | None
 		item_code: DF.Link

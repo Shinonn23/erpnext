@@ -67,7 +67,7 @@
   "income_account",
   "is_fixed_asset",
   "asset",
-  "custody_loan_item",
+  "borrowing_item",
   "finance_book",
   "col_break4",
   "expense_account",
@@ -800,11 +800,11 @@
    "options": "Asset"
   },
   {
-   "fieldname": "custody_loan_item",
+   "fieldname": "borrowing_item",
    "fieldtype": "Link",
    "hidden": 1,
-   "label": "Custody Loan Item",
-   "options": "Custody Loan Item",
+   "label": "Borrowing Item",
+   "options": "Borrowing Item",
    "read_only": 1
   },
   {

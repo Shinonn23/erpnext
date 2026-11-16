@@ -25,7 +25,7 @@ class TestReceiptIntoQuarantine(TestCase):
 	def ask(self, doctype, warehouse, is_return=0, quarantine=("QUARANTINE - CD",)):
 		doc = Document(doctype=doctype, company="CD", is_return=is_return)
 		with patch(
-			"erpnext.loan.doctype.custody_loan.custody_loan_core.is_quarantine_warehouse",
+			"erpnext.borrowing.doctype.borrowing.borrowing_core.is_quarantine_warehouse",
 			side_effect=lambda name, company: name in quarantine,
 		):
 			return doc.is_receipt_into_quarantine(Row(warehouse=warehouse))
@@ -87,7 +87,7 @@ class TestInspectionGate(TestCase):
 				"erpnext.controllers.stock_controller.is_inspection_exempt_secondary_row", return_value=False
 			),
 			patch(
-				"erpnext.loan.doctype.custody_loan.custody_loan_core.is_quarantine_warehouse",
+				"erpnext.borrowing.doctype.borrowing.borrowing_core.is_quarantine_warehouse",
 				side_effect=lambda name, company: name == "QUARANTINE - CD",
 			),
 		):

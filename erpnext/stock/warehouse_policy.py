@@ -251,43 +251,43 @@ def outgoing_role_waived(doc, warehouse, policy):
 
 
 def is_loan_movement(doc):
-	if doc.doctype == "Pick List" and doc.get("custody_loan"):
-		from erpnext.loan.doctype.custody_loan.custody_loan_core import validate_custody_loan_pick_list
+	if doc.doctype == "Pick List" and doc.get("borrowing"):
+		from erpnext.borrowing.doctype.borrowing.borrowing_core import validate_borrowing_pick_list
 
-		validate_custody_loan_pick_list(doc)
+		validate_borrowing_pick_list(doc)
 		return True
 	if doc.doctype == "Stock to Asset Conversion" and doc.get("custody_loan"):
 		return conversion_matches_loan(doc)
 	if doc.doctype not in ("Stock Entry", "Delivery Note") or not doc.get("custody_loan"):
 		return False
-	from erpnext.loan.doctype.custody_loan.custody_loan_core import validate_generated_transaction
+	from erpnext.borrowing.doctype.borrowing.borrowing_core import validate_generated_transaction
 
 	validate_generated_transaction(doc)
 	if doc.doctype == "Stock Entry" and is_return_lot_swap(doc):
 		return True
 	if doc.doctype == "Stock Entry":
 		if (
-			doc.get("custody_loan_source_doctype") != "Custody Loan Adjustment"
+			doc.get("borrowing_source_doctype") != "Borrowing Adjustment"
 			or doc.purpose != "Material Issue"
 		):
 			frappe.throw(
 				_(
-					"Loan warehouses only accept transactions generated from correctly linked loan, return or loan adjustment documents."
+					"Borrowing warehouses only accept transactions generated from correctly linked borrowing, return or borrowing adjustment documents."
 				)
 			)
-		loan = frappe.get_doc("Custody Loan", doc.custody_loan)
-		adjustment = frappe.get_doc("Custody Loan Adjustment", doc.custody_loan_source_name)
+		loan = frappe.get_doc("Borrowing", doc.borrowing)
+		adjustment = frappe.get_doc("Borrowing Adjustment", doc.borrowing_source_name)
 		if (
 			adjustment.docstatus != 1
-			or sorted((row.custody_loan_item, flt(row.qty)) for row in doc.get("items"))
-			!= sorted((row.custody_loan_item, flt(row.qty)) for row in adjustment.get("items"))
+			or sorted((row.borrowing_item, flt(row.qty)) for row in doc.get("items"))
+			!= sorted((row.borrowing_item, flt(row.qty)) for row in adjustment.get("items"))
 			or any(
 				row.s_warehouse != loan.customer_loan_warehouse or row.t_warehouse for row in doc.get("items")
 			)
 		):
 			frappe.throw(
 				_(
-					"Loan warehouse adjustments must match the loan adjustment document and the customer's loan warehouse."
+					"Borrowing warehouse adjustments must match the borrowing adjustment document and the customer's borrowing warehouse."
 				)
 			)
 	return True
@@ -321,16 +321,16 @@ def conversion_matches_loan(doc):
 
 
 def is_return_lot_swap(doc):
-	"""Whether ``doc`` is the Repack a Custody Loan Return makes to exchange the lent batch for the batch the customer
+	"""Whether ``doc`` is the Repack a Borrowing Return makes to exchange the lent batch for the batch the customer
 	brought back (Siwat, 5 and 9 Nov 2026): one Item, one batch out and one batch in, the same quantity, both inside
 	the customer's loan warehouse, linked to a submitted return of that loan. Any other Repack stays refused."""
-	if doc.get("purpose") != "Repack" or doc.get("custody_loan_source_doctype") != "Custody Loan Return":
+	if doc.get("purpose") != "Repack" or doc.get("borrowing_source_doctype") != "Borrowing Return":
 		return False
-	loan = frappe.get_doc("Custody Loan", doc.custody_loan)
+	loan = frappe.get_doc("Borrowing", doc.borrowing)
 	source = frappe.db.get_value(
-		"Custody Loan Return", doc.custody_loan_source_name, ["docstatus", "custody_loan"], as_dict=True
+		"Borrowing Return", doc.borrowing_source_name, ["docstatus", "borrowing"], as_dict=True
 	)
-	if not source or source.docstatus != 1 or source.custody_loan != loan.name:
+	if not source or source.docstatus != 1 or source.borrowing != loan.name:
 		return False
 	rows = list(doc.get("items") or [])
 	outgoing = [row for row in rows if row.get("s_warehouse") and not row.get("t_warehouse")]
@@ -386,7 +386,7 @@ def _rejected_sales_return_into_quarantine(doc, row):
 	5 Nov 2026): that leg is a receipt there, not a sale, which a Quarantine type does not allow."""
 	if not (row and doc.doctype in ("Delivery Note", "Sales Invoice") and doc.get("is_return")):
 		return False
-	from erpnext.loan.doctype.custody_loan.custody_loan_core import is_quarantine_warehouse
+	from erpnext.borrowing.doctype.borrowing.borrowing_core import is_quarantine_warehouse
 
 	if not is_quarantine_warehouse(row.get("warehouse"), doc.company):
 		return False
@@ -409,16 +409,16 @@ def _rejected_inspection(row):
 
 
 def _rejected_loan_return_into_quarantine(doc, row):
-	"""Goods of a Custody Loan return that failed inspection are received into the company's quarantine warehouse
+	"""Goods of a Borrowing return that failed inspection are received into the company's quarantine warehouse
 	(Siwat, 4 Nov 2026): that leg is a receipt there, not a loan movement, which a Quarantine type does not allow."""
 	if not (row and doc.doctype == "Delivery Note"):
 		return False
-	from erpnext.loan.doctype.custody_loan.custody_loan_core import (
-		is_custody_loan_return_delivery_note,
+	from erpnext.borrowing.doctype.borrowing.borrowing_core import (
+		is_borrowing_return_delivery_note,
 		is_quarantine_warehouse,
 	)
 
-	if not is_custody_loan_return_delivery_note(doc):
+	if not is_borrowing_return_delivery_note(doc):
 		return False
 	if not is_quarantine_warehouse(row.get("warehouse"), doc.company):
 		return False

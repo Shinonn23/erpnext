@@ -38,7 +38,7 @@ class TestAssetRequestDetails(TestCase):
 			patch.object(frappe, "has_permission", side_effect=self.permission),
 			patch.object(frappe, "throw", side_effect=ValueError),
 			patch.object(requests, "_", lambda text: text),
-			patch("erpnext.loan.doctype.custody_loan.custody_loan_core.asset_awaiting_inspection", return_value=False),
+			patch("erpnext.borrowing.doctype.borrowing.borrowing_core.asset_awaiting_inspection", return_value=False),
 			patch.object(requests, "held_for_inspection_condition", return_value="1=1"),
 		):
 			context.start()
@@ -104,7 +104,7 @@ class TestAssetRequestDetails(TestCase):
 		result = self.details(material_request_type="Asset Transfer")
 		self.assertNotIn("custodian", result)
 		with self.assertRaises(ValueError):
-			self.details(material_request_type="Customer Borrow / Loan")
+			self.details(material_request_type="Customer Borrow")
 
 	def test_item_select_and_enabled_fixed_asset_checks_still_apply(self):
 		self.denied.add(("Item", "MODEL"))

@@ -7,8 +7,6 @@ import json
 from collections import Counter, defaultdict
 from itertools import batched
 
-from pypika import Criterion
-
 import frappe
 import frappe.query_builder
 from frappe import _, _dict, bold
@@ -30,6 +28,7 @@ from frappe.utils import (
 	today,
 )
 from frappe.utils.csvutils import build_csv_response
+from pypika import Criterion
 
 from erpnext import _is_within_user_permissions, _refuse, require_permission
 from erpnext.stock.doctype.purchase_receipt_item.purchase_receipt_item import PurchaseReceiptItem
@@ -465,7 +464,7 @@ class SerialandBatchBundle(Document):
 				else:
 					valuation_rate = valuation_details["batches"].get(row.batch_no)
 
-				if valuation_rate is None and self.is_custody_loan_return():
+				if valuation_rate is None and self.is_borrowing_return():
 					# another lot than the one lent comes back at the lent valuation
 					rates = list(valuation_details["serial_nos"].values()) or list(
 						valuation_details["batches"].values()
@@ -555,20 +554,20 @@ class SerialandBatchBundle(Document):
 			if flt(sn_obj.available_qty.get(batch_no))
 		}
 
-	def is_custody_loan_return(self):
+	def is_borrowing_return(self):
 		"""The goods of a loan come back in another batch or serial number than the one lent (Siwat, 5 Nov 2026): a
-		Custody Loan return Delivery Note is not held to the original rows' batches and serial numbers."""
+		Borrowing return Delivery Note is not held to the original rows' batches and serial numbers."""
 		return bool(
 			self.voucher_type == "Delivery Note"
 			and self.voucher_no
-			and frappe.db.get_value("Delivery Note", self.voucher_no, "is_custody_loan_transaction")
+			and frappe.db.get_value("Delivery Note", self.voucher_no, "is_borrowing_transaction")
 		)
 
 	def validate_returned_serial_batch_no(self, return_against, row, original_inv_details):
 		if frappe.flags.through_repost_item_valuation and not frappe.in_test:
 			return
 
-		if self.is_custody_loan_return():
+		if self.is_borrowing_return():
 			return
 
 		if row.serial_no and row.serial_no not in original_inv_details["serial_nos"]:
@@ -1453,7 +1452,7 @@ class SerialandBatchBundle(Document):
 			)
 
 	def validate_serial_and_batch_no_for_returned(self):
-		if not self.returned_against or self.is_custody_loan_return():
+		if not self.returned_against or self.is_borrowing_return():
 			return
 
 		if self.voucher_type not in [
@@ -1509,7 +1508,7 @@ class SerialandBatchBundle(Document):
 			or not reference_field
 			or not self.has_batch_no
 			or self.has_serial_no
-			or self.is_custody_loan_return()
+			or self.is_borrowing_return()
 		):
 			return
 

@@ -25,9 +25,9 @@ class AssetMovement(Document):
 		amended_from: DF.Link | None
 		assets: DF.Table[AssetMovementItem]
 		company: DF.Link
-		custody_loan: DF.Link | None
-		custody_loan_source_doctype: DF.Link | None
-		custody_loan_source_name: DF.DynamicLink | None
+		borrowing: DF.Link | None
+		borrowing_source_doctype: DF.Link | None
+		borrowing_source_name: DF.DynamicLink | None
 		customer: DF.Link | None
 		customer_address: DF.Link | None
 		customer_address_display: DF.TextEditor | None
@@ -35,7 +35,7 @@ class AssetMovement(Document):
 		customer_contact_display: DF.TextEditor | None
 		customer_contact_email: DF.Data | None
 		expected_return_date: DF.Date | None
-		is_custody_loan_transaction: DF.Check
+		is_borrowing_transaction: DF.Check
 		is_system_generated: DF.Check
 		purpose: DF.Literal["", "Issue", "Receipt", "Transfer", "Transfer and Issue", "Reassignment"]
 		recipient: DF.DynamicLink | None
@@ -71,8 +71,8 @@ class AssetMovement(Document):
 	@frappe.whitelist()
 	def submit(self):
 		self.lock_material_request()
-		if self.get("custody_loan"):
-			frappe.db.sql("select name from `tabCustody Loan` where name=%s for update", self.custody_loan)
+		if self.get("borrowing"):
+			frappe.db.sql("select name from `tabBorrowing` where name=%s for update", self.borrowing)
 		self.lock_assets()
 		return super().submit()
 
@@ -106,9 +106,9 @@ class AssetMovement(Document):
 			frappe.throw(_("Asset {0} does not belong to company {1}").format(d.asset, self.company))
 
 	def validate_movement(self, d):
-		if self.get("is_custody_loan_transaction"):
+		if self.get("is_borrowing_transaction"):
 			if self.purpose == "Reassignment":
-				frappe.throw(_("Reassignment cannot be created from a Custody Loan transaction"))
+				frappe.throw(_("Reassignment cannot be created from a Borrowing transaction"))
 			if self.purpose in ("Transfer", "Receipt"):
 				self.validate_location(d)
 			else:
@@ -251,14 +251,14 @@ class AssetMovement(Document):
 			d.target_department = current_department
 
 	# Service Equipment: the movement records a handover and writes the place onto the equipment; it has no
-	# company-asset rules (status, Material Request, custody loan) and no financial effect.
+	# company-asset rules (status, Material Request, borrowing) and no financial effect.
 	def validate_equipment_movement(self):
 		if any(row.get("asset") for row in self.assets):
 			frappe.throw(_("Move Assets and Service Equipment in separate Asset Movements."))
 		# An Installation Note may make the Install movement of its equipment; no request or loan is fulfilled.
 		referenced = self.reference_name and self.reference_doctype != "Installation Note"
-		if referenced or self.get("custody_loan") or self.get("is_custody_loan_transaction"):
-			frappe.throw(_("A Service Equipment movement cannot fulfil a request or a custody loan."))
+		if referenced or self.get("borrowing") or self.get("is_borrowing_transaction"):
+			frappe.throw(_("A Service Equipment movement cannot fulfil a request or a borrowing."))
 		if self.purpose == "Reassignment":
 			frappe.throw(_("Use Transfer, Receipt or Issue to move Service Equipment."))
 		seen = set()
@@ -402,7 +402,7 @@ class AssetMovement(Document):
 
 		request = frappe.get_doc("Material Request", self.material_request_name)
 		request.update_progress()
-		if request.material_request_type in ("Customer Demo", "Customer Borrow / Loan"):
+		if request.material_request_type in ("Customer Demo", "Borrow", "Customer Borrow"):
 			request.db_set("request_progress_status", request.request_progress_status)
 		elif request.material_request_type == "Asset Transfer":
 			request.db_set("asset_transfer_status", request.asset_transfer_status)
@@ -429,15 +429,15 @@ class AssetMovement(Document):
 			is_customer_request,
 		)
 
-		if request.material_request_type in ("Customer Borrow / Loan", "Customer Demo"):
-			if not self.get("is_custody_loan_transaction") or not self.get("custody_loan"):
-				frappe.throw(_("Create Customer Demo and Borrow Asset Movements from the Custody Loan"))
-			from erpnext.loan.doctype.custody_loan.custody_loan_core import (
-				validate_asset_movement_custody_loan,
+		if request.material_request_type in ("Borrow", "Customer Borrow", "Customer Demo"):
+			if not self.get("is_borrowing_transaction") or not self.get("borrowing"):
+				frappe.throw(_("Create Customer Demo and Borrow Asset Movements from the Borrowing"))
+			from erpnext.borrowing.doctype.borrowing.borrowing_core import (
+				validate_asset_movement_borrowing,
 				validate_generated_transaction,
 			)
 
-			validate_asset_movement_custody_loan(self)
+			validate_asset_movement_borrowing(self)
 			validate_generated_transaction(self)
 			return
 

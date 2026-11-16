@@ -69,19 +69,24 @@ class SalesInvoice(SellingController):
 	from typing import TYPE_CHECKING
 
 	if TYPE_CHECKING:
+		from frappe.types import DF
+
 		from erpnext.accounts.doctype.item_wise_tax_detail.item_wise_tax_detail import ItemWiseTaxDetail
 		from erpnext.accounts.doctype.payment_schedule.payment_schedule import PaymentSchedule
 		from erpnext.accounts.doctype.pricing_rule_detail.pricing_rule_detail import PricingRuleDetail
 		from erpnext.accounts.doctype.sales_invoice_advance.sales_invoice_advance import SalesInvoiceAdvance
 		from erpnext.accounts.doctype.sales_invoice_item.sales_invoice_item import SalesInvoiceItem
 		from erpnext.accounts.doctype.sales_invoice_payment.sales_invoice_payment import SalesInvoicePayment
-		from erpnext.accounts.doctype.sales_invoice_timesheet.sales_invoice_timesheet import SalesInvoiceTimesheet
-		from erpnext.accounts.doctype.sales_taxes_and_charges.sales_taxes_and_charges import SalesTaxesandCharges
+		from erpnext.accounts.doctype.sales_invoice_timesheet.sales_invoice_timesheet import (
+			SalesInvoiceTimesheet,
+		)
+		from erpnext.accounts.doctype.sales_taxes_and_charges.sales_taxes_and_charges import (
+			SalesTaxesandCharges,
+		)
 		from erpnext.accounts.doctype.tax_withholding_entry.tax_withholding_entry import TaxWithholdingEntry
 		from erpnext.regional.doctype.sales_invoice_deposit.sales_invoice_deposit import SalesInvoiceDeposit
 		from erpnext.selling.doctype.sales_team.sales_team import SalesTeam
 		from erpnext.stock.doctype.packed_item.packed_item import PackedItem
-		from frappe.types import DF
 
 		account_for_change_amount: DF.Link | None
 		additional_discount_account: DF.Link | None
@@ -122,9 +127,9 @@ class SalesInvoice(SellingController):
 		cost_center: DF.Link | None
 		coupon_code: DF.Link | None
 		currency: DF.Link
-		custody_loan: DF.Link | None
-		custody_loan_source_doctype: DF.Link | None
-		custody_loan_source_name: DF.DynamicLink | None
+		borrowing: DF.Link | None
+		borrowing_source_doctype: DF.Link | None
+		borrowing_source_name: DF.DynamicLink | None
 		customer: DF.Link
 		customer_address: DF.Link | None
 		customer_group: DF.Link | None
@@ -150,7 +155,7 @@ class SalesInvoice(SellingController):
 		is_cash_or_non_trade_discount: DF.Check
 		is_consolidated: DF.Check
 		is_created_using_pos: DF.Check
-		is_custody_loan_transaction: DF.Check
+		is_borrowing_transaction: DF.Check
 		is_debit_note: DF.Check
 		is_deposit_invoice: DF.Check
 		is_discounted: DF.Check
@@ -672,10 +677,10 @@ class SalesInvoice(SellingController):
 			"Serial and Batch Bundle",
 			"Tax Withholding Entry",
 		)
-		if self.get("is_custody_loan_transaction") and self.flags.get("custody_loan_cancellation"):
+		if self.get("is_borrowing_transaction") and self.flags.get("borrowing_cancellation"):
 			# The Loan cancellation hook has checked these source backlinks.
 			self.ignore_linked_doctypes += (
-				"Custody Loan", "Custody Loan Return", "Custody Loan Adjustment", "Material Request"
+				"Borrowing", "Borrowing Return", "Borrowing Adjustment", "Material Request"
 			)
 
 		self.delete_auto_created_batches()
@@ -1289,9 +1294,9 @@ class SalesInvoice(SellingController):
 		"""Loan movements cannot be billed; sales deliveries cannot update stock again."""
 		notes = [item.delivery_note for item in self.items if item.delivery_note]
 		if notes and frappe.db.exists(
-			"Delivery Note", {"name": ["in", notes], "is_custody_loan_transaction": 1}
+			"Delivery Note", {"name": ["in", notes], "is_borrowing_transaction": 1}
 		):
-			frappe.throw(_("Use the Custody Loan to record consumption or sales of loaned items."))
+			frappe.throw(_("Use the Borrowing to record consumption or sales of loaned items."))
 		if not cint(self.update_stock):
 			return
 

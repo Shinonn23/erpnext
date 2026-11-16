@@ -28,8 +28,8 @@ stock and has no selection.
   names as its own). The Stock Count form picks the defaults again when the warehouse changes.
 - **Quarantine Warehouse of each warehouse** (Connect Diagnostics, 7 Nov 2026): the Warehouse has the link
   `quarantine_warehouse` (same section). Goods that wait for a Quality Inspection or fail one are held in the quarantine
-  of the warehouse they belong to: a rejected sales or loan return is received into the quarantine of the warehouse
-  the goods came from (`custody_loan_core.quarantine_warehouse_for(company, near)`: the own link when it names an
+  of the warehouse they belong to: a rejected sales or borrowing return is received into the quarantine of the warehouse
+  the goods came from (`borrowing_core.quarantine_warehouse_for(company, near)`: the own link when it names an
   enabled leaf of the company, else the company's Quarantine warehouse that no warehouse names as its own, the one
   beside `near` first). Every test "is this a quarantine warehouse" accepts any warehouse of Warehouse Type Quarantine
   (`is_quarantine_warehouse`). A Stock Count reads the ledger of its one leaf warehouse, so the quarantine (or Lost, or

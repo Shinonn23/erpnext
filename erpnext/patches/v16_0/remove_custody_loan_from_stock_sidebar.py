@@ -1,18 +1,17 @@
 import frappe
 
-
 MOVED_LINKS = {
 	"Asset Movement",
-	"Custody Loan",
-	"Custody Loan Return",
-	"Custody Loan Adjustment",
+	"Borrowing",
+	"Borrowing Return",
+	"Borrowing Adjustment",
 	"Stock to Asset Conversion",
 	"Stock to Asset Conversion Audit",
-	"Overdue Custody Loans",
-	"Custody Loan Register",
-	"Custody Loan Asset Balance",
-	"Custody Loan Stock Balance",
-	"Custody Loan Movement History",
+	"Overdue Borrowings",
+	"Borrowing Register",
+	"Borrowing Asset Balance",
+	"Borrowing Stock Balance",
+	"Borrowing Movement History",
 }
 
 

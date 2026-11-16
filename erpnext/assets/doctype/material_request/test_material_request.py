@@ -14,7 +14,6 @@ from erpnext.assets.doctype.material_request.material_request import (
 	MATERIAL_REQUEST_PURPOSES,
 	CustomerMaterialRequest,
 )
-from erpnext.buying.doctype.supplier.test_supplier import create_supplier
 from erpnext.regional.thailand.tests.utils import ensure_company_tax_settings
 from erpnext.selling.doctype.customer.test_customer import create_internal_customer
 from erpnext.setup.doctype.employee.test_employee import make_employee
@@ -27,7 +26,7 @@ from erpnext.tests.utils import ERPNextTestSuite
 
 
 def prepare_request_prices(request):
-	"""Seed prices explicitly for successful demo/loan fixtures without changing Buying Settings."""
+	"""Seed prices explicitly for successful demo/borrowing fixtures without changing Buying Settings."""
 	if frappe.session.user != "Administrator":
 		raise RuntimeError("Prepare price masters before switching to the requester profile")
 	price_list = frappe.get_doc(
@@ -86,7 +85,7 @@ class TestMaterialRequestActions(unittest.TestCase):
 			patch(
 				"erpnext.assets.doctype.material_request.material_request.MaterialRequest.before_cancel"
 			) as native,
-			patch.object(CustomerMaterialRequest, "cancel_linked_custody_loans") as cancel_loans,
+			patch.object(CustomerMaterialRequest, "cancel_linked_borrowings") as cancel_loans,
 			patch.object(CustomerMaterialRequest, "cancel_linked_asset_movements") as cancel_movements,
 		):
 			request.before_cancel()
@@ -113,7 +112,7 @@ class TestMaterialRequestActions(unittest.TestCase):
 			patch("frappe.get_all", side_effect=[["LOAN-001"], ["ASM-001"]]),
 			patch("frappe.get_doc", side_effect=[loan, movement]),
 		):
-			CustomerMaterialRequest.cancel_linked_custody_loans(request)
+			CustomerMaterialRequest.cancel_linked_borrowings(request)
 			CustomerMaterialRequest.cancel_linked_asset_movements(request)
 
 		loan.cancel.assert_called_once_with()
@@ -138,7 +137,8 @@ class TestMaterialRequestActions(unittest.TestCase):
 				"Material Issue",
 				"Asset Transfer",
 				"Customer Demo",
-				"Customer Borrow / Loan",
+				"Borrow",
+				"Customer Borrow",
 			),
 		)
 
@@ -156,8 +156,8 @@ class TestMaterialRequestActions(unittest.TestCase):
 		doctype_root = Path(__file__).resolve().parents[3]
 		for doctype_path, fieldname in (
 			(doctype_root / "assets/doctype/asset/asset.json", "demo_loan_status"),
-			(doctype_root / "loan/doctype/custody_loan/custody_loan.json", "status"),
-			(doctype_root / "loan/doctype/custody_loan_return/custody_loan_return.json", "status"),
+			(doctype_root / "borrowing/doctype/borrowing/borrowing.json", "status"),
+			(doctype_root / "borrowing/doctype/borrowing_return/borrowing_return.json", "status"),
 		):
 			with doctype_path.open() as source:
 				doctype_fields = json.load(source)["fields"]
@@ -195,7 +195,7 @@ class TestMaterialRequestActions(unittest.TestCase):
 		)
 		self.assertEqual(
 			fields["recipient_address"]["depends_on"],
-			"eval:in_list(['Customer Demo', 'Customer Borrow / Loan'], doc.material_request_type)",
+			"eval:in_list(['Customer Demo', 'Borrow', 'Customer Borrow'], doc.material_request_type)",
 		)
 		self.assertEqual(
 			fields["recipient_address"]["mandatory_depends_on"],
@@ -205,12 +205,12 @@ class TestMaterialRequestActions(unittest.TestCase):
 		self.assertNotIn("loan_recipient_address", fields)
 		self.assertEqual(
 			fields["contact_person"]["depends_on"],
-			"eval:doc.material_request_type == 'Customer Demo' || (doc.material_request_type == 'Customer Borrow / Loan' && doc.loan_recipient_type == 'Customer')",
+			"eval:doc.material_request_type == 'Customer Demo' || (doc.material_request_type == 'Customer Borrow')",
 		)
 		self.assertEqual(
 			fields["customer_location"]["depends_on"], "eval:doc.material_request_type == 'Customer Demo'"
 		)
-		self.assertIn("Customer Borrow / Loan", fields["borrow_item_type"]["depends_on"])
+		self.assertIn("Customer Borrow", fields["borrow_item_type"]["depends_on"])
 		self.assertIn("Customer Demo", fields["items"]["depends_on"])
 		self.assertIn("borrow_item_type", fields["items"]["depends_on"])
 		self.assertIn("borrow_item_type == 'Stock Item'", fields["customer_loan_warehouse"]["depends_on"])
@@ -300,7 +300,7 @@ class TestMaterialRequestActions(unittest.TestCase):
 			customer_location="Customer Location",
 			loan_recipient_type="Customer",
 			loan_recipient_location="Customer Location",
-			customer_loan_warehouse="Customer Loan Warehouse - _TC",
+			customer_loan_warehouse="Borrowing Warehouse - _TC",
 			items=items or [],
 			update_progress=Mock(),
 		)
@@ -318,37 +318,37 @@ class TestMaterialRequestActions(unittest.TestCase):
 			**values,
 		)
 
-	def test_demo_action_creates_an_asset_custody_loan(self):
+	def test_demo_action_creates_an_asset_borrowing(self):
 		request = self.request(
 			"Customer Demo",
 			items=[self.item("MR-DEMO", "Fixed Asset", 1, asset="ASSET-001")],
 		)
 		with (
 			patch(
-				"erpnext.loan.doctype.custody_loan.custody_loan_core.get_custody_loan_actions",
+				"erpnext.borrowing.doctype.borrowing.borrowing_core.get_borrowing_actions",
 				return_value=frappe._dict(stock_loan=False, asset_loan=True),
 			),
 		):
 			actions = CustomerMaterialRequest.get_post_submit_actions(request)
 
-		self.assertTrue(actions.asset_custody_loan)
-		self.assertFalse(actions.stock_custody_loan)
+		self.assertTrue(actions.asset_borrowing)
+		self.assertFalse(actions.stock_borrowing)
 		self.assertFalse(actions.asset_movement)
 
 	def test_borrow_action_exposes_only_selected_stock_loan(self):
 		request = self.request(
-			"Customer Borrow / Loan",
+			"Customer Borrow",
 			items=[self.item("MR-LOAN-STOCK", "Stock Item", 5)],
 			borrow_item_type="Stock Item",
 		)
 		with patch(
-			"erpnext.loan.doctype.custody_loan.custody_loan_core.get_custody_loan_actions",
+			"erpnext.borrowing.doctype.borrowing.borrowing_core.get_borrowing_actions",
 			return_value=frappe._dict(stock_loan=True, asset_loan=False),
 		):
 			actions = CustomerMaterialRequest.get_post_submit_actions(request)
 
-		self.assertTrue(actions.stock_custody_loan)
-		self.assertFalse(actions.asset_custody_loan)
+		self.assertTrue(actions.stock_borrowing)
+		self.assertFalse(actions.asset_borrowing)
 		self.assertFalse(actions.asset_movement)
 
 	def test_asset_transfer_action_is_available_for_unfulfilled_items(self):
@@ -362,7 +362,7 @@ class TestMaterialRequestActions(unittest.TestCase):
 		actions = CustomerMaterialRequest.get_post_submit_actions(request)
 
 		self.assertTrue(actions.asset_movement)
-		self.assertFalse(actions.stock_custody_loan)
+		self.assertFalse(actions.stock_borrowing)
 
 	def test_unsubmitted_request_has_no_post_submit_actions(self):
 		request = self.request("Customer Demo", items=[self.item("MR-DRAFT", "Fixed Asset", 1)], docstatus=0)
@@ -370,13 +370,13 @@ class TestMaterialRequestActions(unittest.TestCase):
 		self.assertFalse(any(actions.values()))
 
 	def test_customer_request_and_asset_transfer_cannot_use_standard_stop_status_action(self):
-		for request_type in ("Customer Demo", "Customer Borrow / Loan", "Asset Transfer"):
+		for request_type in ("Customer Demo", "Borrow", "Customer Borrow", "Asset Transfer"):
 			request = self.request(request_type)
 			with self.subTest(request_type=request_type), patch("frappe.throw", side_effect=ValueError):
 				with self.assertRaises(ValueError):
 					CustomerMaterialRequest.update_status(request, "Stopped")
 
-	def test_demo_asset_movement_must_be_created_from_the_custody_loan(self):
+	def test_demo_asset_movement_must_be_created_from_the_borrowing(self):
 		request = self.request(
 			"Customer Demo",
 			items=[self.item("MR-DEMO", "Fixed Asset", 1, item_code="DEMO-ITEM", asset="ASSET-001")],
@@ -435,7 +435,7 @@ class TestMaterialRequestActions(unittest.TestCase):
 		self.assertEqual(movement.assets[1].source_location, "Office")
 		self.assertEqual(movement.assets[1].target_location, "Warehouse")
 
-	def test_customer_demo_delivery_movement_must_be_created_from_custody_loan(self):
+	def test_customer_demo_delivery_movement_must_be_created_from_borrowing(self):
 		request = self.request(
 			"Customer Demo",
 			items=[self.item("MR-DEMO", "Fixed Asset", 1, asset="ASSET-001")],
@@ -457,19 +457,19 @@ class TestCustomerMaterialRequestIntegration(ERPNextTestSuite):
 			"Company", self.company, "stock_adjustment_account", "_Test Account Stock Adjustment - _TC"
 		)
 		create_internal_customer(
-			customer_name=f"Custody Loan Internal Customer {test_id()}",
+			customer_name=f"Borrowing Internal Customer {test_id()}",
 			represents_company=self.company,
 		)
-		self.loan_warehouse = create_warehouse("_Test Customer Loan Warehouse")
+		self.loan_warehouse = create_warehouse("_Test Borrowing Warehouse")
 		self.transit_warehouse = create_warehouse(
-			"_Test Custody Loan Transit Warehouse", properties={"warehouse_type": "Transit"}
+			"_Test Borrowing Transit Warehouse", properties={"warehouse_type": "Transit"}
 		)
 		for name in (self.source_warehouse, self.loan_warehouse, self.transit_warehouse):
 			storage_location = frappe.get_doc(
 				{
 					"doctype": "Storage Location",
 					"warehouse": name,
-					"location_code": f"Loan test shelf {test_id()}",
+					"location_code": f"Borrowing test shelf {test_id()}",
 				}
 			).insert()
 			warehouse = frappe.get_doc("Warehouse", name)
@@ -608,7 +608,7 @@ class TestCustomerMaterialRequestIntegration(ERPNextTestSuite):
 		request.company = self.company
 		request.transaction_date = today()
 		request.schedule_date = add_days(today(), 1)
-		if request_type == "Customer Borrow / Loan":
+		if request_type in ("Borrow", "Customer Borrow"):
 			request.borrow_item_type = borrow_item_type or "Stock Item"
 			request.loan_recipient_type = recipient_type
 			request.loan_recipient = recipient or "_Test Customer"
@@ -619,8 +619,6 @@ class TestCustomerMaterialRequestIntegration(ERPNextTestSuite):
 				request.customer_location = self.customer_location
 				request.loan_recipient_contact = self.customer_contact
 				request.loan_recipient_location = self.customer_location
-			elif recipient_type == "Contact":
-				request.loan_recipient_contact = request.loan_recipient
 			if include_expected_return_date:
 				request.expected_return_date = add_days(today(), 30)
 		elif request_type == "Customer Demo" and customer_request:
@@ -663,7 +661,7 @@ class TestCustomerMaterialRequestIntegration(ERPNextTestSuite):
 					"warehouse": self.loan_warehouse if item.is_stock_item else None,
 				},
 			)
-		if request_type in {"Purchase", "Customer Demo", "Customer Borrow / Loan"}:
+		if request_type in {"Purchase", "Customer Demo", "Borrow", "Customer Borrow"}:
 			prepare_request_prices(request)
 		request.insert()
 		if frappe.db.exists("Workflow", {"document_type": "Material Request", "is_active": 1}):
@@ -684,9 +682,9 @@ class TestCustomerMaterialRequestIntegration(ERPNextTestSuite):
 			request.submit()
 		return frappe.get_doc("Material Request", request.name)
 
-	def make_custody_loan(self, request, loan_type, requires_shipment=False):
-		loan_data = request.make_custody_loan(loan_type)
-		loan = frappe.get_doc("Custody Loan", loan_data["name"])
+	def make_borrowing(self, request, loan_type, requires_shipment=False):
+		loan_data = request.make_borrowing(loan_type)
+		loan = frappe.get_doc("Borrowing", loan_data["name"])
 		if loan_type == "Stock":
 			for row in loan.items:
 				row.source_warehouse = self.source_warehouse
@@ -723,7 +721,7 @@ class TestCustomerMaterialRequestIntegration(ERPNextTestSuite):
 				{"voucher_type": "Delivery Note", "voucher_no": delivery_note.name},
 			),
 			0,
-			"Submitting Loan Receive must post stock through Delivery Note",
+			"Submitting Borrowing Receive must post stock through Delivery Note",
 		)
 		return return_doc
 
@@ -761,8 +759,8 @@ class TestCustomerMaterialRequestIntegration(ERPNextTestSuite):
 		)
 
 		actions = request.get_post_submit_actions()
-		self.assertTrue(actions.asset_custody_loan)
-		loan = self.make_custody_loan(request, "Asset")
+		self.assertTrue(actions.asset_borrowing)
+		loan = self.make_borrowing(request, "Asset")
 		loan.submit()
 		movement = frappe.get_doc("Asset Movement", loan.asset_movement)
 		self.assertEqual(movement.docstatus, 1)
@@ -789,24 +787,24 @@ class TestCustomerMaterialRequestIntegration(ERPNextTestSuite):
 		for asset in demo_assets:
 			self.assertEqual(frappe.db.get_value("Asset", asset.name, "location"), self.source_location)
 
-	def test_asset_custody_loan_uses_selected_material_request_asset(self):
-		asset_item_code = f"Loan Asset {test_id()}"
+	def test_asset_borrowing_uses_selected_material_request_asset(self):
+		asset_item_code = f"Borrowing Asset {test_id()}"
 		asset = self.make_asset(asset_item_code)
 		request = self.make_request(
-			"Customer Borrow / Loan",
+			"Customer Borrow",
 			borrow_item_type="Asset",
 			items=[{"asset": asset.name, "target_location": self.customer_location}],
 		)
 		actions = request.get_post_submit_actions()
-		self.assertTrue(actions.asset_custody_loan)
-		self.assertFalse(actions.stock_custody_loan)
-		asset_loan = self.make_custody_loan(request, "Asset")
+		self.assertTrue(actions.asset_borrowing)
+		self.assertFalse(actions.stock_borrowing)
+		asset_loan = self.make_borrowing(request, "Asset")
 		asset_loan.submit()
 		self.assertEqual(asset_loan.status, "Active")
 		asset_movement = frappe.get_doc("Asset Movement", asset_loan.asset_movement)
 		self.assertEqual(asset_movement.is_system_generated, 1)
-		self.assertEqual(asset_movement.is_custody_loan_transaction, 1)
-		self.assertEqual(asset_movement.custody_loan, asset_loan.name)
+		self.assertEqual(asset_movement.is_borrowing_transaction, 1)
+		self.assertEqual(asset_movement.borrowing, asset_loan.name)
 		self.assertEqual(asset_movement.assets[0].request_item, request.items[0].name)
 		self.assertEqual(frappe.db.get_value("Asset", asset.name, "location"), self.customer_location)
 		asset_return = asset_loan.make_return()
@@ -819,15 +817,15 @@ class TestCustomerMaterialRequestIntegration(ERPNextTestSuite):
 
 	def test_stock_loan_return_waits_for_shipment_and_quality_inspection(self):
 		stock_item = self.make_stock_item(qty=5)
-		request = self.make_request("Customer Borrow / Loan", [{"item_code": stock_item}])
+		request = self.make_request("Customer Borrow", [{"item_code": stock_item}])
 
-		stock_loan = self.make_custody_loan(request, "Stock", requires_shipment=True)
+		stock_loan = self.make_borrowing(request, "Stock", requires_shipment=True)
 		stock_loan.submit()
 		stock_issue, stock_issue_shipment = self.complete_stock_loan_issue(stock_loan)
 		self.assertEqual(stock_issue.docstatus, 1)
 		stock_loan.reload()
 		self.assertEqual(stock_loan.status, "Pending Shipment")
-		self.assertFalse(stock_loan.stock_entry, "Loan issue stock must be posted by the Delivery Note")
+		self.assertFalse(stock_loan.stock_entry, "Borrowing issue stock must be posted by the Delivery Note")
 		ledger_rows = frappe.get_all(
 			"Stock Ledger Entry",
 			filters={"voucher_type": "Delivery Note", "voucher_no": stock_issue.name},
@@ -862,21 +860,21 @@ class TestCustomerMaterialRequestIntegration(ERPNextTestSuite):
 		self.assertEqual(stock_loan.status, "Returned")
 
 	def test_asset_loan_cannot_use_shipment(self):
-		asset_item_code = f"Direct Loan Asset {test_id()}"
+		asset_item_code = f"Direct Borrowing Asset {test_id()}"
 		asset = self.make_asset(asset_item_code)
 		asset_request = self.make_request(
-			"Customer Borrow / Loan",
+			"Customer Borrow",
 			borrow_item_type="Asset",
 			items=[{"asset": asset.name, "target_location": self.customer_location}],
 		)
 		with self.assertRaises(frappe.ValidationError):
-			self.make_custody_loan(asset_request, "Asset", requires_shipment=True)
+			self.make_borrowing(asset_request, "Asset", requires_shipment=True)
 
 	def test_borrow_partial_stock_return_updates_request_status(self):
 		stock_item = self.make_stock_item(qty=5)
-		request = self.make_request("Customer Borrow / Loan", [{"item_code": stock_item, "qty": 2}])
+		request = self.make_request("Customer Borrow", [{"item_code": stock_item, "qty": 2}])
 
-		stock_loan = self.make_custody_loan(request, "Stock")
+		stock_loan = self.make_borrowing(request, "Stock")
 		stock_loan.submit()
 		self.complete_stock_loan_issue(stock_loan)
 		request.reload()
@@ -904,10 +902,10 @@ class TestCustomerMaterialRequestIntegration(ERPNextTestSuite):
 				doc.save()
 			stock_item = self.make_stock_item(qty=3)
 			request = self.make_request(
-				"Customer Borrow / Loan",
+				"Customer Borrow",
 				[{"item_code": stock_item}, {"item_code": stock_item}],
 			)
-			loan = self.make_custody_loan(request, "Stock")
+			loan = self.make_borrowing(request, "Stock")
 			loan.submit()
 			self.complete_stock_loan_issue(loan)
 
@@ -922,33 +920,33 @@ class TestCustomerMaterialRequestIntegration(ERPNextTestSuite):
 				doc.allow_multiple_items = value
 				doc.save()
 
-	def test_stock_loans_support_all_recipient_types(self):
+	def test_borrower_type_must_match_the_request_type(self):
 		stock_item = self.make_stock_item(qty=5)
-		employee = make_employee(f"custody-loan-{test_id()}@example.test", company=self.company)
-		supplier = create_supplier(supplier_name=f"Custody Supplier {test_id()}").name
-		contact = frappe.get_doc(
-			{
-				"doctype": "Contact",
-				"first_name": f"Custody Contact {test_id()}",
-				"links": [{"link_doctype": "Customer", "link_name": "_Test Customer"}],
-			}
-		).insert()
+		employee = make_employee(f"borrowing-mismatch-{test_id()}@example.test", company=self.company)
+		with self.assertRaises(frappe.ValidationError):
+			self.make_request("Borrow", [{"item_code": stock_item}])
+		with self.assertRaises(frappe.ValidationError):
+			self.make_request(
+				"Customer Borrow", [{"item_code": stock_item}], recipient_type="Employee", recipient=employee
+			)
+
+	def test_stock_borrowings_lend_to_the_type_borrower(self):
+		stock_item = self.make_stock_item(qty=5)
+		employee = make_employee(f"borrowing-{test_id()}@example.test", company=self.company)
 		recipients = [
-			("Employee", employee),
-			("Customer", "_Test Customer"),
-			("Supplier", supplier),
-			("Contact", contact.name),
+			("Borrow", "Employee", employee),
+			("Customer Borrow", "Customer", "_Test Customer"),
 		]
 
-		for recipient_type, recipient in recipients:
+		for request_type, recipient_type, recipient in recipients:
 			with self.subTest(recipient_type=recipient_type):
 				request = self.make_request(
-					"Customer Borrow / Loan",
+					request_type,
 					[{"item_code": stock_item}],
 					recipient_type=recipient_type,
 					recipient=recipient,
 				)
-				loan = self.make_custody_loan(request, "Stock")
+				loan = self.make_borrowing(request, "Stock")
 				loan.submit()
 				self.complete_stock_loan_issue(loan)
 				self.assertEqual(loan.borrower_type, recipient_type)
@@ -973,8 +971,8 @@ class TestCustomerMaterialRequestIntegration(ERPNextTestSuite):
 			rate=100,
 			batch_no=issued_batch.name,
 		)
-		request = self.make_request("Customer Borrow / Loan", [{"item_code": item.name}])
-		loan = self.make_custody_loan(request, "Stock")
+		request = self.make_request("Customer Borrow", [{"item_code": item.name}])
+		loan = self.make_borrowing(request, "Stock")
 		loan.items[0].batch_no = issued_batch.name
 		loan.submit()
 		self.complete_stock_loan_issue(loan)
@@ -984,7 +982,7 @@ class TestCustomerMaterialRequestIntegration(ERPNextTestSuite):
 		returned.items[0].batch_no = replacement_batch.name
 		with self.assertRaises(frappe.ValidationError):
 			returned.submit()
-		self.assertFalse(frappe.db.exists("Custody Loan Return", returned.name))
+		self.assertFalse(frappe.db.exists("Borrowing Return", returned.name))
 		self.assertEqual(loan.items[0].outstanding_qty, 1)
 		self.assertEqual(loan.status, "Active")
 
@@ -998,8 +996,8 @@ class TestCustomerMaterialRequestIntegration(ERPNextTestSuite):
 
 	def test_cancelling_return_then_loan_cancels_generated_delivery_note_and_pick_list(self):
 		stock_item = self.make_stock_item(qty=2)
-		request = self.make_request("Customer Borrow / Loan", [{"item_code": stock_item}])
-		loan = self.make_custody_loan(request, "Stock")
+		request = self.make_request("Customer Borrow", [{"item_code": stock_item}])
+		loan = self.make_borrowing(request, "Stock")
 		loan.submit()
 		self.complete_stock_loan_issue(loan)
 
@@ -1135,7 +1133,7 @@ class TestCustomerMaterialRequestIntegration(ERPNextTestSuite):
 			)
 		with self.assertRaises(frappe.ValidationError):
 			self.make_request(
-				"Customer Borrow / Loan",
+				"Customer Borrow",
 				[{"item_code": stock_item}],
 				include_expected_return_date=False,
 			)
@@ -1146,16 +1144,16 @@ class TestCustomerMaterialRequestIntegration(ERPNextTestSuite):
 		request = self.make_request("Customer Demo", items=[{"asset": asset.name}])
 		self.assertEqual(request.items[0].asset, asset.name)
 
-	def test_custody_loan_rejects_changing_generated_asset_to_another_asset(self):
-		asset_item_code = f"Requested Loan Asset {test_id()}"
+	def test_borrowing_rejects_changing_generated_asset_to_another_asset(self):
+		asset_item_code = f"Requested Borrowing Asset {test_id()}"
 		requested_asset = self.make_asset(asset_item_code)
 		other_asset = self.make_asset(asset_item_code)
 		request = self.make_request(
-			"Customer Borrow / Loan",
+			"Customer Borrow",
 			borrow_item_type="Asset",
 			items=[{"asset": requested_asset.name, "target_location": self.customer_location}],
 		)
-		loan = self.make_custody_loan(request, "Asset")
+		loan = self.make_borrowing(request, "Asset")
 		loan.submit()
 		movement = frappe.get_doc("Asset Movement", loan.asset_movement)
 		movement.assets[0].asset = other_asset.name

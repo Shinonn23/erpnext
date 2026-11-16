@@ -43,7 +43,7 @@
   "customer_name",
   "column_break_feoy",
   "material_request",
-  "custody_loan",
+  "borrowing",
   "amended_from",
   "connections_tab"
  ],
@@ -133,10 +133,10 @@
    "options": "Material Request"
   },
   {
-   "fieldname": "custody_loan",
+   "fieldname": "borrowing",
    "fieldtype": "Link",
-   "label": "Custody Loan",
-   "options": "Custody Loan",
+   "label": "Borrowing",
+   "options": "Borrowing",
    "hidden": 1,
    "read_only": 1,
    "no_copy": 1

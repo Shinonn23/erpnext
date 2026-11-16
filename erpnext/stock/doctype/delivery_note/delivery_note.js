@@ -16,15 +16,15 @@ erpnext.sales_common.setup_selling_controller();
 frappe.ui.form.on("Delivery Note", {
 	// Called from refresh below: this object also defines refresh, and a second key of an object literal
 	// replaces the first, so a loan Delivery Note never showed its loan buttons.
-	custody_loan_refresh(frm) {
-		if (!frm.doc.is_custody_loan_transaction) return;
+	borrowing_refresh(frm) {
+		if (!frm.doc.is_borrowing_transaction) return;
 		frm.set_intro(
-			__("Loan / Demo stock movement. Manage delivery, returns and consumption from the Custody Loan."),
+			__("Borrowing / Demo stock movement. Manage delivery, returns and consumption from the Borrowing."),
 			"blue"
 		);
-		if (frm.doc.custody_loan) {
-			frm.add_custom_button(__("Open Loan"), () => {
-				frappe.set_route("Form", "Custody Loan", frm.doc.custody_loan);
+		if (frm.doc.borrowing) {
+			frm.add_custom_button(__("Open Borrowing"), () => {
+				frappe.set_route("Form", "Borrowing", frm.doc.borrowing);
 			});
 		}
 		// Goods of a Loan Return are received first and inspected after (Siwat, 9 Nov 2026): the Quality Inspection(s)
@@ -95,8 +95,8 @@ frappe.ui.form.on("Delivery Note", {
 	},
 
 	refresh: function (frm) {
-		frm.trigger("custody_loan_refresh");
-		if (frm.doc.is_custody_loan_transaction) return;
+		frm.trigger("borrowing_refresh");
+		if (frm.doc.is_borrowing_transaction) return;
 
 		if (
 			frm.doc.docstatus === 1 &&
@@ -172,7 +172,7 @@ erpnext.stock.DeliveryNoteController = class DeliveryNoteController extends (
 				this.frm.add_custom_button(__("Shipment"), () => me.make_shipment(), __("Create"));
 			}
 		}
-		if (doc.is_custody_loan_transaction) {
+		if (doc.is_borrowing_transaction) {
 			erpnext.stock.delivery_note.set_print_hide(doc, dt, dn);
 			return;
 		}

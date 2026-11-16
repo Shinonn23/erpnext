@@ -52,7 +52,7 @@ class TestAssetMovementRequestReference(unittest.TestCase):
 				movement.validate_material_request()
 
 	def test_progress_uses_reference_name(self):
-		request = Mock(material_request_type="Customer Borrow / Loan", request_progress_status="Fulfilled")
+		request = Mock(material_request_type="Customer Borrow", request_progress_status="Fulfilled")
 		with patch("frappe.get_doc", return_value=request) as get_doc:
 			self.movement().update_request_progress()
 		get_doc.assert_called_once_with("Material Request", "CUR-001")
@@ -157,7 +157,7 @@ class TestAssetMovementRequestReference(unittest.TestCase):
 			with self.assertRaises(ValueError):
 				AssetMovement.validate_asset_transfer_request(movement, request)
 
-	def test_custody_loan_asset_movement_requires_a_loan_marker(self):
+	def test_borrowing_asset_movement_requires_a_loan_marker(self):
 		movement = self.movement()
 		movement.customer = "Customer-001"
 		movement.company = "Company-001"
@@ -179,7 +179,7 @@ class TestAssetMovementRequestReference(unittest.TestCase):
 			customer=movement.customer,
 			company=movement.company,
 			contact_person=None,
-			material_request_type="Customer Borrow / Loan",
+			material_request_type="Customer Borrow",
 			items=[request_item],
 		)
 		# Mock's name argument names the mock rather than setting the document's name.

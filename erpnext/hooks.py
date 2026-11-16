@@ -76,9 +76,9 @@ doctype_js = {
 	"Item": "regulatory_affairs/item.js",
 	"Material Request": "assets/doctype/material_request/material_request.js",
 	"Asset Movement": "assets/doctype/asset_movement/asset_movement.js",
-	"Custody Loan": "loan/doctype/custody_loan/custody_loan.js",
-	"Custody Loan Return": "loan/doctype/custody_loan_return/custody_loan_return.js",
-	"Custody Loan Adjustment": "loan/doctype/custody_loan_adjustment/custody_loan_adjustment.js",
+	"Borrowing": "borrowing/doctype/borrowing/borrowing.js",
+	"Borrowing Return": "borrowing/doctype/borrowing_return/borrowing_return.js",
+	"Borrowing Adjustment": "borrowing/doctype/borrowing_adjustment/borrowing_adjustment.js",
 	"Communication": "public/js/communication.js",
 	"Event": "public/js/event.js",
 	"Newsletter": "public/js/newsletter.js",
@@ -111,7 +111,7 @@ page_js = {"print": "public/js/print.js"}
 extend_doctype_class = {
 	"Address": "erpnext.accounts.custom.address.ERPNextAddress",
 	"Payment Entry": "erpnext.regional.thailand.custom.payment_entry.PaymentEntry",
-	"Quality Inspection": "erpnext.loan.doctype.custody_loan.custody_loan_core.CustodyLoanQualityInspectionMixin",
+	"Quality Inspection": "erpnext.borrowing.doctype.borrowing.borrowing_core.BorrowingQualityInspectionMixin",
 	# a Pay Account and a Receive Account per company, required by Applies To
 	"Tax Withholding Category": "erpnext.regional.thailand.custom.withholding.TaxWithholdingCategory",
 }
@@ -592,7 +592,7 @@ has_permission = dict.fromkeys(_service_equipment_shared, "erpnext.support.servi
 
 doc_events = {
 	"Pick List": {
-		"on_trash": "erpnext.loan.doctype.custody_loan.custody_loan_core.unlink_deleted_loan_transaction",
+		"on_trash": "erpnext.borrowing.doctype.borrowing.borrowing_core.unlink_deleted_loan_transaction",
 	},
 	"*": {
 		"validate": [
@@ -633,46 +633,46 @@ doc_events = {
 		"after_rename": "erpnext.stock.doctype.item.item_search.reindex_renamed_item",
 	},
 	"Stock Entry": {
-		"on_trash": "erpnext.loan.doctype.custody_loan.custody_loan_core.unlink_deleted_loan_transaction",
+		"on_trash": "erpnext.borrowing.doctype.borrowing.borrowing_core.unlink_deleted_loan_transaction",
 		"before_validate": [
-			"erpnext.loan.doctype.custody_loan.custody_loan_core.validate_generated_transaction",
+			"erpnext.borrowing.doctype.borrowing.borrowing_core.validate_generated_transaction",
 			"erpnext.stock.doctype.stock_entry.shipment_stock_entry.prepare_stock_entry_for_shipment",
 		],
 		"before_cancel": [
-			"erpnext.loan.doctype.custody_loan.custody_loan_core.validate_generated_transaction_cancellation",
+			"erpnext.borrowing.doctype.borrowing.borrowing_core.validate_generated_transaction_cancellation",
 			"erpnext.stock.doctype.stock_entry.shipment_stock_entry.validate_stock_entry_shipment_cancel",
 		],
 		"validate": [
-			"erpnext.loan.doctype.custody_loan.custody_loan_core.validate_generated_transaction",
+			"erpnext.borrowing.doctype.borrowing.borrowing_core.validate_generated_transaction",
 			"erpnext.assets.doctype.material_request.material_request.validate_stock_entry_request",
 			"erpnext.stock.doctype.stock_entry.shipment_stock_entry.validate_stock_entry_shipment",
 		],
 		"on_submit": [
 			"erpnext.stock.doctype.material_request.material_request.update_completed_and_requested_qty",
-			"erpnext.loan.doctype.custody_loan.custody_loan_core.update_custody_loan_status",
+			"erpnext.borrowing.doctype.borrowing.borrowing_core.update_borrowing_status",
 		],
 		"on_cancel": [
 			"erpnext.stock.doctype.material_request.material_request.update_completed_and_requested_qty",
-			"erpnext.loan.doctype.custody_loan.custody_loan_core.update_custody_loan_status",
+			"erpnext.borrowing.doctype.borrowing.borrowing_core.update_borrowing_status",
 		],
 	},
 	"Asset Movement": {
-		"on_trash": "erpnext.loan.doctype.custody_loan.custody_loan_core.unlink_deleted_loan_transaction",
+		"on_trash": "erpnext.borrowing.doctype.borrowing.borrowing_core.unlink_deleted_loan_transaction",
 		"validate": [
-			"erpnext.loan.doctype.custody_loan.custody_loan_core.validate_generated_transaction",
+			"erpnext.borrowing.doctype.borrowing.borrowing_core.validate_generated_transaction",
 			"erpnext.support.service_equipment.refuse_company_asset",
 		],
-		"before_cancel": "erpnext.loan.doctype.custody_loan.custody_loan_core.validate_generated_transaction_cancellation",
-		"on_submit": "erpnext.loan.doctype.custody_loan.custody_loan_core.update_custody_loan_status",
-		"on_cancel": "erpnext.loan.doctype.custody_loan.custody_loan_core.update_custody_loan_status",
+		"before_cancel": "erpnext.borrowing.doctype.borrowing.borrowing_core.validate_generated_transaction_cancellation",
+		"on_submit": "erpnext.borrowing.doctype.borrowing.borrowing_core.update_borrowing_status",
+		"on_cancel": "erpnext.borrowing.doctype.borrowing.borrowing_core.update_borrowing_status",
 	},
 	"Delivery Note": {
-		"on_trash": "erpnext.loan.doctype.custody_loan.custody_loan_core.unlink_deleted_loan_transaction",
-		"validate": "erpnext.loan.doctype.custody_loan.custody_loan_core.validate_generated_transaction",
-		"before_submit": "erpnext.loan.doctype.custody_loan.custody_loan_core.validate_custody_loan_return_receipt",
-		"before_cancel": "erpnext.loan.doctype.custody_loan.custody_loan_core.validate_generated_transaction_cancellation",
-		"on_submit": "erpnext.loan.doctype.custody_loan.custody_loan_core.update_custody_loan_status",
-		"on_cancel": "erpnext.loan.doctype.custody_loan.custody_loan_core.update_custody_loan_status",
+		"on_trash": "erpnext.borrowing.doctype.borrowing.borrowing_core.unlink_deleted_loan_transaction",
+		"validate": "erpnext.borrowing.doctype.borrowing.borrowing_core.validate_generated_transaction",
+		"before_submit": "erpnext.borrowing.doctype.borrowing.borrowing_core.validate_borrowing_return_receipt",
+		"before_cancel": "erpnext.borrowing.doctype.borrowing.borrowing_core.validate_generated_transaction_cancellation",
+		"on_submit": "erpnext.borrowing.doctype.borrowing.borrowing_core.update_borrowing_status",
+		"on_cancel": "erpnext.borrowing.doctype.borrowing.borrowing_core.update_borrowing_status",
 	},
 	"User": {
 		"after_insert": "frappe.contacts.doctype.contact.contact.update_contact",
@@ -696,19 +696,19 @@ doc_events = {
 		"on_update": "erpnext.crm.utils.disable_opportunity_creation_on_contact_us_disabled",
 	},
 	"Sales Invoice": {
-		"validate": "erpnext.loan.doctype.custody_loan.custody_loan_core.validate_generated_transaction",
-		"before_cancel": "erpnext.loan.doctype.custody_loan.custody_loan_core.validate_generated_transaction_cancellation",
+		"validate": "erpnext.borrowing.doctype.borrowing.borrowing_core.validate_generated_transaction",
+		"before_cancel": "erpnext.borrowing.doctype.borrowing.borrowing_core.validate_generated_transaction_cancellation",
 		"on_submit": [
 			"erpnext.regional.italy.utils.sales_invoice_on_submit",
-			"erpnext.loan.doctype.custody_loan.custody_loan_core.update_custody_loan_status",
+			"erpnext.borrowing.doctype.borrowing.borrowing_core.update_borrowing_status",
 		],
 		"on_cancel": [
 			"erpnext.regional.italy.utils.sales_invoice_on_cancel",
-			"erpnext.loan.doctype.custody_loan.custody_loan_core.update_custody_loan_status",
+			"erpnext.borrowing.doctype.borrowing.borrowing_core.update_borrowing_status",
 		],
 		"on_trash": [
 			"erpnext.regional.check_deletion_permission",
-			"erpnext.loan.doctype.custody_loan.custody_loan_core.unlink_deleted_loan_transaction",
+			"erpnext.borrowing.doctype.borrowing.borrowing_core.unlink_deleted_loan_transaction",
 		],
 	},
 	"Purchase Invoice": {

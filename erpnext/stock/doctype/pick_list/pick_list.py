@@ -60,7 +60,7 @@ class PickList(TransactionBase):
 		amended_from: DF.Link | None
 		company: DF.Link
 		consider_rejected_warehouses: DF.Check
-		custody_loan: DF.Link | None
+		borrowing: DF.Link | None
 		customer: DF.Link | None
 		customer_name: DF.Data | None
 		delivery_status: DF.Literal["Not Delivered", "Fully Delivered", "Partly Delivered"]
@@ -123,7 +123,7 @@ class PickList(TransactionBase):
 				row.use_serial_batch_fields = 1
 		self.validate_picked_serial_batch()
 		self.validate_customer_demo_workflow()
-		self.validate_custody_loan()
+		self.validate_borrowing()
 		self.validate_expired_batches()
 		self.validate_for_qty()
 		self.validate_stock_qty()
@@ -165,25 +165,25 @@ class PickList(TransactionBase):
 		if problems:
 			frappe.throw(problems, title=_("Enter the Batch and Serial Nos picked"), as_list=True)
 
-	def validate_custody_loan(self):
-		if not self.get("custody_loan"):
-			if any(row.get("custody_loan_item") for row in self.locations):
-				frappe.throw(_("Custody Loan Pick List rows must have a linked Custody Loan"))
+	def validate_borrowing(self):
+		if not self.get("borrowing"):
+			if any(row.get("borrowing_item") for row in self.locations):
+				frappe.throw(_("Borrowing Pick List rows must have a linked Borrowing"))
 			return
 
-		from erpnext.loan.doctype.custody_loan.custody_loan_core import validate_custody_loan_pick_list
+		from erpnext.borrowing.doctype.borrowing.borrowing_core import validate_borrowing_pick_list
 
-		validate_custody_loan_pick_list(self)
+		validate_borrowing_pick_list(self)
 
 	def validate_customer_demo_workflow(self):
 		request_type = frappe.db.get_value(
 			"Material Request", self.material_request, "material_request_type"
 		) if self.material_request else None
-		# A Demo row lent as Stock is picked for its Custody Loan (Connect Diagnostics, Siwat, 5 Nov 2026).
+		# A Demo row lent as Stock is picked for its Borrowing (Connect Diagnostics, Siwat, 5 Nov 2026).
 		if (
 			request_type == "Customer Demo"
 			and self.pick_list_type != "Customer Demo - Asset Conversion"
-			and not self.get("custody_loan")
+			and not self.get("borrowing")
 		):
 			frappe.throw(_("Pick Lists linked to a Customer Demo request must use Customer Demo - Asset Conversion"))
 		if self.pick_list_type == "Asset Conversion":
@@ -444,20 +444,20 @@ class PickList(TransactionBase):
 	def before_submit(self):
 		self.validate_sales_order()
 		self.validate_picked_items()
-		if self.get("custody_loan"):
+		if self.get("borrowing"):
 			self.validate_stock_qty()
-			from erpnext.loan.doctype.custody_loan.custody_loan_core import validate_custody_loan_pick_list
+			from erpnext.borrowing.doctype.borrowing.borrowing_core import validate_borrowing_pick_list
 
-			validate_custody_loan_pick_list(self, require_picked_qty=True)
+			validate_borrowing_pick_list(self, require_picked_qty=True)
 
 	def before_cancel(self):
 		from erpnext.stock.warehouse_policy import validate_document_policy
 
 		validate_document_policy(self)
-		if self.get("custody_loan"):
-			from erpnext.loan.doctype.custody_loan.custody_loan_core import validate_custody_loan_pick_list
+		if self.get("borrowing"):
+			from erpnext.borrowing.doctype.borrowing.borrowing_core import validate_borrowing_pick_list
 
-			validate_custody_loan_pick_list(self, cancelling=True)
+			validate_borrowing_pick_list(self, cancelling=True)
 
 	def validate_sales_order(self):
 		"""Raises an exception if the `Sales Order` has reserved stock."""
@@ -500,12 +500,12 @@ class PickList(TransactionBase):
 		self.update_reference_qty()
 		self.update_sales_order_picking_status()
 		self.update_prevdoc_status()
-		if self.get("custody_loan"):
-			from erpnext.loan.doctype.custody_loan.custody_loan_core import (
-				update_custody_loan_pick_list_status,
+		if self.get("borrowing"):
+			from erpnext.borrowing.doctype.borrowing.borrowing_core import (
+				update_borrowing_pick_list_status,
 			)
 
-			update_custody_loan_pick_list_status(self)
+			update_borrowing_pick_list_status(self)
 
 	@frappe.whitelist()
 	def make_stock_to_asset_conversion(self):
@@ -605,12 +605,12 @@ class PickList(TransactionBase):
 		self.update_sales_order_picking_status()
 		self.delink_serial_and_batch_bundle()
 		self.update_prevdoc_status()
-		if self.get("custody_loan"):
-			from erpnext.loan.doctype.custody_loan.custody_loan_core import (
-				update_custody_loan_pick_list_status,
+		if self.get("borrowing"):
+			from erpnext.borrowing.doctype.borrowing.borrowing_core import (
+				update_borrowing_pick_list_status,
 			)
 
-			update_custody_loan_pick_list_status(self)
+			update_borrowing_pick_list_status(self)
 
 	def delink_serial_and_batch_bundle(self):
 		for row in self.locations:

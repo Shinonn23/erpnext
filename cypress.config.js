@@ -14,7 +14,7 @@ module.exports = defineConfig({
 	screenshotsFolder: `cypress/artifacts/${evidenceRun}/screenshots`,
 	e2e: {
 		supportFile: "cypress/support/e2e.js",
-		specPattern: "erpnext/loan/doctype/custody_loan/ui_test_*.js",
+		specPattern: "erpnext/borrowing/doctype/borrowing/ui_test_*.js",
 		testIsolation: true,
 		setupNodeEvents(on, config) {
 			on("task", {

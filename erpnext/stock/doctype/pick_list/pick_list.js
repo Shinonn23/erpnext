@@ -186,9 +186,9 @@ frappe.ui.form.on("Pick List", {
 				// is the one place it runs.
 
 				if (frm.doc.purpose === "Delivery") {
-					if (frm.doc.custody_loan) {
-						frm.add_custom_button(__("Custody Loan"), () =>
-							frappe.set_route("Form", "Custody Loan", frm.doc.custody_loan)
+					if (frm.doc.borrowing) {
+						frm.add_custom_button(__("Borrowing"), () =>
+							frappe.set_route("Form", "Borrowing", frm.doc.borrowing)
 						);
 					} else {
 						if ((frm.doc.locations || []).every((row) => row.outgoing_inspection_requirement === "Not Required")) {

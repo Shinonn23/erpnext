@@ -193,15 +193,15 @@ class StockEntry(StockController, SubcontractingInwardController):
 		bom_no: DF.Link | None
 		company: DF.Link
 		cost_center: DF.Link | None
-		custody_loan: DF.Link | None
-		custody_loan_source_doctype: DF.Link | None
-		custody_loan_source_name: DF.DynamicLink | None
+		borrowing: DF.Link | None
+		borrowing_source_doctype: DF.Link | None
+		borrowing_source_name: DF.DynamicLink | None
 		customer_address: DF.Link | None
 		customer_address_display: DF.TextEditor | None
 		customer_contact: DF.Link | None
 		customer_contact_display: DF.TextEditor | None
 		customer_contact_email: DF.Data | None
-		is_custody_loan_transaction: DF.Check
+		is_borrowing_transaction: DF.Check
 		is_system_generated: DF.Check
 		credit_note: DF.Link | None
 		delivery_note_no: DF.Link | None

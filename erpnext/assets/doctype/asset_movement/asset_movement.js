@@ -3,7 +3,7 @@
 
 function get_material_request_recipient_details(request) {
 	const is_customer_demo = request.material_request_type === "Customer Demo";
-	const is_borrow_request = request.material_request_type === "Customer Borrow / Loan";
+	const is_borrow_request = ["Borrow", "Customer Borrow"].includes(request.material_request_type);
 	const recipient_type = is_customer_demo
 		? "Customer"
 		: is_borrow_request
@@ -24,7 +24,7 @@ function get_material_request_recipient_details(request) {
 	const contact_email = has_recipient_details
 		? request.customer_contact_email || request.loan_recipient_contact_email || null
 		: null;
-	const has_return_date = ["Customer Demo", "Customer Borrow / Loan"].includes(
+	const has_return_date = ["Customer Demo", "Borrow", "Customer Borrow"].includes(
 		request.material_request_type
 	);
 

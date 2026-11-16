@@ -8,12 +8,12 @@ frappe.listview_settings["Stock Entry"] = {
 		"is_return",
 		"add_to_transit",
 		"per_transferred",
-		"is_custody_loan_transaction",
+		"is_borrowing_transaction",
 	],
 	onload(listview) {
-		const has_loan_filter = listview.filter_area.get().some((filter) => filter[1] === "is_custody_loan_transaction");
+		const has_loan_filter = listview.filter_area.get().some((filter) => filter[1] === "is_borrowing_transaction");
 		if (!has_loan_filter) {
-			listview.filter_area.add("Stock Entry", "is_custody_loan_transaction", "=", 0);
+			listview.filter_area.add("Stock Entry", "is_borrowing_transaction", "=", 0);
 		}
 	},
 	get_indicator: function (doc) {

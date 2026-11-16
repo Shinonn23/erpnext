@@ -27,7 +27,7 @@ class MaterialRequestItem(Document):
 		brand: DF.Link | None
 		conversion_factor: DF.Float
 		cost_center: DF.Link | None
-		custody_loan: DF.Link | None
+		borrowing: DF.Link | None
 		delivery_note: DF.Link | None
 		department: DF.Link | None
 		description: DF.TextEditor | None

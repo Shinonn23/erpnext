@@ -200,7 +200,7 @@ class Company(NestedSet):
 		if self.customer_loan_warehouse:
 			warehouse_company = frappe.db.get_value("Warehouse", self.customer_loan_warehouse, "company")
 			if warehouse_company != self.name:
-				frappe.throw(_("Customer Loan Warehouse must belong to Company {0}").format(self.name))
+				frappe.throw(_("Borrowing Warehouse must belong to Company {0}").format(self.name))
 
 	def cant_change_valuation_method(self):
 		doc_before_save = self.get_doc_before_save()

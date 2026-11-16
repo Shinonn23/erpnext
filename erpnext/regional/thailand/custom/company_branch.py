@@ -3,7 +3,7 @@
 The selling documents (Quotation, Sales Order, Delivery Note, Sales Invoice) carry the branch in the standard
 `company_address` field. A company with a single company address is left as it is today.
 
-Known limitations (owner decision pending, not handled here): POS Invoices and Custody Loan documents do not
+Known limitations (owner decision pending, not handled here): POS Invoices and Borrowing documents do not
 go through `validate_company_branch`, so their branch is not checked against the company's branches.
 """
 

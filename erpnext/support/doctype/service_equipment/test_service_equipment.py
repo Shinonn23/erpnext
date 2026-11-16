@@ -107,7 +107,7 @@ class TestEquipmentMovement(Offline):
 		self.placement.assert_called_once_with("CD", None, None, "CUS", "CUS-Shipping")
 
 	def test_an_equipment_movement_fulfils_no_request_or_loan(self):
-		for values in ({"reference_name": "MR-1"}, {"custody_loan": "CL-1"}, {"purpose": "Reassignment"}):
+		for values in ({"reference_name": "MR-1"}, {"borrowing": "CL-1"}, {"purpose": "Reassignment"}):
 			with self.subTest(values=values), self.assertRaises(frappe.ValidationError):
 				movement(assets=[row()], **values).validate()
 

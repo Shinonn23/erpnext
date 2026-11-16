@@ -234,40 +234,40 @@ def permission_query(user=None, doctype=None):
 
 def failed_asset_return_condition(user=None):
 	"""List the same exact rejected returns allowed by readable_failed_asset_return."""
-	if not frappe.has_permission("Custody Loan Return", "read", user=user):
+	if not frappe.has_permission("Borrowing Return", "read", user=user):
 		return "1=0"
-	returns = frappe.get_list("Custody Loan Return", user=user, filters={"docstatus": 1},
+	returns = frappe.get_list("Borrowing Return", user=user, filters={"docstatus": 1},
 		pluck="name", limit_page_length=0)
 	if not returns:
 		return "1=0"
 	names = ", ".join(frappe.db.escape(name) for name in returns)
-	return f"""exists (select 1 from `tabCustody Loan Return` loan_return
-		join `tabCustody Loan Return Item` returned on returned.parent = loan_return.name
+	return f"""exists (select 1 from `tabBorrowing Return` loan_return
+		join `tabBorrowing Return Item` returned on returned.parent = loan_return.name
 		join `tabQuality Inspection` qi on qi.name = returned.quality_inspection
 		join `tabAsset Movement` movement on movement.name = loan_return.asset_movement
 		where loan_return.name in ({names}) and loan_return.docstatus = 1 and movement.docstatus = 1
-		and loan_return.name = `tabAsset Repair`.custody_loan_return
+		and loan_return.name = `tabAsset Repair`.borrowing_return
 		and loan_return.company = `tabAsset Repair`.company
-		and returned.name = `tabAsset Repair`.custody_loan_return_item
+		and returned.name = `tabAsset Repair`.borrowing_return_item
 		and returned.asset = `tabAsset Repair`.asset
-		and qi.docstatus = 1 and qi.status = 'Rejected' and qi.reference_type = 'Custody Loan Return'
+		and qi.docstatus = 1 and qi.status = 'Rejected' and qi.reference_type = 'Borrowing Return'
 		and qi.reference_name = loan_return.name and qi.child_row_reference = returned.name)"""
 
 
 def readable_failed_asset_return(doc, user=None):
 	"""A returned asset is eligible only through the exact submitted rejected return row."""
-	return_name, row_name, asset = doc.get("custody_loan_return"), doc.get("custody_loan_return_item"), doc.get("asset")
-	if not return_name or not row_name or not asset or not frappe.has_permission("Custody Loan Return", "read", doc=return_name, user=user):
+	return_name, row_name, asset = doc.get("borrowing_return"), doc.get("borrowing_return_item"), doc.get("asset")
+	if not return_name or not row_name or not asset or not frappe.has_permission("Borrowing Return", "read", doc=return_name, user=user):
 		return False
-	parent = frappe.db.get_value("Custody Loan Return", return_name, ["docstatus", "company", "asset_movement"], as_dict=True)
-	row = frappe.db.get_value("Custody Loan Return Item", row_name, ["parent", "asset", "quality_inspection"], as_dict=True)
+	parent = frappe.db.get_value("Borrowing Return", return_name, ["docstatus", "company", "asset_movement"], as_dict=True)
+	row = frappe.db.get_value("Borrowing Return Item", row_name, ["parent", "asset", "quality_inspection"], as_dict=True)
 	if not parent or parent.docstatus != 1 or parent.company != doc.get("company") or not row or row.parent != return_name or row.asset != asset:
 		return False
 	if not parent.asset_movement or frappe.db.get_value("Asset Movement", parent.asset_movement, "docstatus") != 1:
 		return False
 	qi = frappe.db.get_value("Quality Inspection", row.quality_inspection,
 		["docstatus", "status", "reference_type", "reference_name", "child_row_reference"], as_dict=True) if row.quality_inspection else None
-	return bool(qi and qi.docstatus == 1 and qi.status == "Rejected" and qi.reference_type == "Custody Loan Return"
+	return bool(qi and qi.docstatus == 1 and qi.status == "Rejected" and qi.reference_type == "Borrowing Return"
 		and qi.reference_name == return_name and qi.child_row_reference == row_name)
 
 

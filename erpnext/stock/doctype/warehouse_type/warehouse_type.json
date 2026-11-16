@@ -44,7 +44,7 @@
   {
    "fieldname": "allow_loan",
    "fieldtype": "Check",
-   "label": "Allow Loan",
+   "label": "Allow Borrowing",
    "default": "1"
   },
   {
