@@ -173,6 +173,34 @@ class TestWarehousePolicy(unittest.TestCase):
 		with self.assertRaises(frappe.ValidationError):
 			warehouse_policy.validate_warehouse_operation("WH", "issue", outgoing=True, doc=write_off)
 
+	def test_a_disposal_issue_leaves_a_write_off_warehouse_and_nothing_else_does(self):
+		# Connect Diagnostics, 16 Nov 2026: goods moved into DAMAGE were stuck there
+		self.warehouse.warehouse_type = "Write-Off"
+		self.policy.name = "Write-Off"
+		self.policy.allow_issue = 0
+		self.policy.allow_sales = 0
+		self.policy.outgoing_role = "Stock Manager"
+		disposal = frappe._dict(
+			doctype="Stock Entry", purpose="Material Issue", operation_issue_type="Disposal"
+		)
+		# the Managing Director approves and submits it and holds no Stock Manager role: the role is waived too
+		warehouse_policy.validate_warehouse_operation("WH", "issue", outgoing=True, doc=disposal)
+		for other in (
+			frappe._dict(
+				doctype="Stock Entry", purpose="Material Issue", operation_issue_type="Internal Use"
+			),
+			frappe._dict(doctype="Stock Entry", purpose="Material Transfer", operation_issue_type="Disposal"),
+			None,
+		):
+			with self.assertRaises(frappe.ValidationError):
+				warehouse_policy.validate_warehouse_operation("WH", "issue", outgoing=True, doc=other)
+		with self.assertRaises(frappe.ValidationError):
+			warehouse_policy.validate_warehouse_operation("WH", "sales", outgoing=True, doc=disposal)
+		self.warehouse.warehouse_type = "Frozen"
+		self.policy.name = "Frozen"
+		with self.assertRaises(frappe.ValidationError):
+			warehouse_policy.validate_warehouse_operation("WH", "issue", outgoing=True, doc=disposal)
+
 	def test_document_and_ledger_checks_hand_the_document_to_the_waiver(self):
 		self.policy.outgoing_role = "Stock Manager"
 		doc = frappe._dict(
