@@ -89,35 +89,8 @@ class QualityInspection(Document):
 			self.inspect_and_set_status()
 
 		self.validate_inspection_required()
-		self.validate_treatment_step_reference()
 		self.set_child_row_reference()
 		self.set_company()
-
-	def validate_treatment_step_reference(self):
-		if self.reference_type != "Quality Treatment Step":
-			return
-		if not self.reference_name or not self.child_row_reference:
-			frappe.throw(_("A repair inspection must identify its submitted confirmation and allocation."))
-		step = frappe.get_doc("Quality Treatment Step", self.reference_name)
-		step.check_permission("read")
-		if step.docstatus != 1 or step.stage != "Confirm Current Location":
-			frappe.throw(_("Repair reinspection requires a submitted current-location confirmation."))
-		allocation = next((row for row in step.get("allocations") or []
-			if row.name == self.child_row_reference), None)
-		if (not allocation or self.inspection_type != "Incoming" or step.item_code != self.item_code
-			or self.get("quality_treatment_case") != step.treatment_case
-			or (allocation.get("serial_no") or None) != (self.get("item_serial_no") or None)
-			or (allocation.get("batch_no") or None) != (self.get("batch_no") or None)
-			or abs(flt(allocation.get("quantity")) - flt(self.get("purchase_unit_qty"))) > 1e-9):
-			frappe.throw(_("The repair inspection must match its confirmed Item, Serial Number, Batch and quantity."))
-		if self.company and self.company != step.company:
-			frappe.throw(_("The repair inspection company must match its confirmation."))
-		self.company = step.company
-		previous = self.get_doc_before_save()
-		identity = ("reference_type", "reference_name", "child_row_reference", "item_code", "item_serial_no",
-			"batch_no", "purchase_unit_qty", "quality_treatment_case")
-		if previous and any((previous.get(field) or "") != (self.get(field) or "") for field in identity):
-			frappe.throw(_("The confirmed repair inspection identity cannot be changed."))
 
 	def set_company(self):
 		if self.reference_type and self.reference_name:
@@ -126,7 +99,7 @@ class QualityInspection(Document):
 				self.company = company
 
 	def set_child_row_reference(self):
-		if self.reference_type in ("Quality Treatment Step", "Asset Repair"):
+		if self.reference_type in ("Asset Repair",):
 			return
 		if self.child_row_reference:
 			return
@@ -271,7 +244,7 @@ class QualityInspection(Document):
 				frappe.throw(_("Row #{0}: Status is mandatory").format(reading.idx))
 
 	def update_qc_reference(self, remove_reference=False):
-		if self.reference_type in ("Pick List", "Quality Treatment Step", "Asset Repair"):
+		if self.reference_type in ("Pick List", "Asset Repair"):
 			return
 		quality_inspection = self.name if self.docstatus < 2 and not remove_reference else ""
 
@@ -506,17 +479,6 @@ def item_query(doctype: Any, txt: str | None, searchfield: Any, start: int, page
 			or_filters={"name": ["like", f"%{txt or ''}%"], "item_name": ["like", f"%{txt or ''}%"]},
 			fields=["name", "item_name"], limit_start=start, limit_page_length=page_len)
 		return [(item.name, item.item_name) for item in items]
-	elif reference_doctype == "Quality Treatment Step":
-		if not filters.get("reference_name"):
-			return []
-		step = frappe.get_doc("Quality Treatment Step", filters["reference_name"])
-		step.check_permission("read")
-		if step.docstatus != 1 or step.stage != "Confirm Current Location" or not step.item_code:
-			return []
-		rows = frappe.get_list("Item", filters={"name": step.item_code},
-			or_filters={"name": ["like", f"%{txt or ''}%"], "item_name": ["like", f"%{txt or ''}%"]},
-			fields=["name", "item_name"], limit_start=start, limit_page_length=page_len)
-		return [(row.name, row.item_name) for row in rows]
 	elif reference_doctype == "Pick List":
 		from connect_diagnostics_setup.stock.outgoing_inspection import required, source_rows
 

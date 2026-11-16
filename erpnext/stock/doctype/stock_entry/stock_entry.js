@@ -223,7 +223,12 @@ frappe.ui.form.on("Stock Entry", {
 			return;
 		}
 
-		if (!frm.is_new() && frm.doc.docstatus === 0) {
+		// A Quarantine Intake is inspected by the QI team through the app's own button (Siwat, 17 Nov 2026)
+		if (
+			!frm.is_new() &&
+			frm.doc.docstatus === 0 &&
+			frm.doc.operation_approval_route !== "Quarantine Intake"
+		) {
 			frm.add_custom_button(
 				__("Quality Inspection(s)"),
 				() => {
