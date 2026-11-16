@@ -1296,7 +1296,7 @@ class SalesInvoice(SellingController):
 		if notes and frappe.db.exists(
 			"Delivery Note", {"name": ["in", notes], "is_borrowing_transaction": 1}
 		):
-			frappe.throw(_("Use the Borrowing to record consumption or sales of loaned items."))
+			frappe.throw(_("Use the Borrowing to record consumption or sales of borrowed items."))
 		if not cint(self.update_stock):
 			return
 

@@ -45,3 +45,25 @@ class TestRenameCustodyLoanToBorrowing(unittest.TestCase):
 		with patch.object(patch_module.frappe, "db", database, create=True):
 			patch_module.split_request_types()
 		database.set_value.assert_not_called()
+
+	def test_old_column_is_dropped_so_a_rerun_copies_nothing(self):
+		database = MagicMock()
+		database.exists.return_value = True
+		columns = {("Pick List", "custody_loan")}
+		database.has_column.side_effect = lambda doctype, field: (doctype, field) in columns
+		fields = {("stock", "Pick List"): {"custody_loan": "borrowing"}}
+
+		def drop(sql):
+			columns.clear()
+
+		database.sql_ddl.side_effect = drop
+		with (
+			patch.object(patch_module, "FIELDS", fields),
+			patch.object(patch_module.frappe, "db", database, create=True),
+			patch.object(patch_module.frappe, "reload_doc", create=True),
+			patch.object(patch_module, "rename_field") as rename_field,
+		):
+			patch_module.rename_fields()
+			patch_module.rename_fields()
+		rename_field.assert_called_once_with("Pick List", "custody_loan", "borrowing")
+		database.sql_ddl.assert_called_once()

@@ -845,7 +845,7 @@ def make_sales_invoice(
 
 	doc = frappe.get_doc("Delivery Note", source_name)
 	if doc.get("is_borrowing_transaction"):
-		frappe.throw(_("Use the Borrowing to record consumption or sales of loaned items."))
+		frappe.throw(_("Use the Borrowing to record consumption or sales of borrowed items."))
 
 	to_make_invoice_qty_map = {}
 	returned_qty_map = get_returned_qty_map(source_name)
@@ -1179,7 +1179,7 @@ def make_sales_return(source_name, target_doc=None):
 	from erpnext.controllers.sales_and_purchase_return import make_return_doc
 
 	if frappe.get_doc("Delivery Note", source_name).get("is_borrowing_transaction"):
-		frappe.throw(_("Use the Borrowing to return loaned items."))
+		frappe.throw(_("Use the Borrowing to return borrowed items."))
 	return make_return_doc("Delivery Note", source_name, target_doc)
 
 

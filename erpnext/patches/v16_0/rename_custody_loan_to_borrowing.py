@@ -71,6 +71,7 @@ def request_type(borrower_type=None, recipient_type=None, customer=None):
 def execute():
 	rename_doctypes()
 	split_request_types()
+	log_odd_borrowings()
 	rename_fields()
 	rename_reports()
 	rename_module()
@@ -123,6 +124,22 @@ def split_request_types():
 		frappe.log_error(title="Borrowing rename: borrowers to review", message=message)
 
 
+def log_odd_borrowings():
+	"""A Borrowing may name only an Employee or a Customer now; older Supplier / Contact ones are listed."""
+	if not frappe.db.table_exists("Borrowing") or not frappe.db.has_column("Borrowing", "borrower_type"):
+		return
+	odd = frappe.db.sql(
+		"""select name, borrower_type, borrower from `tabBorrowing`
+		where docstatus < 2 and ifnull(borrower_type, '') not in ('', 'Employee', 'Customer')""",
+		as_dict=True,
+	)
+	if odd:
+		message = "Borrowings whose borrower is no longer allowed (Employee or Customer only); fix by hand:\n"
+		message += "\n".join(f"{row.name} ({row.borrower_type} {row.borrower})" for row in odd)
+		print(message)
+		frappe.log_error(title="Borrowing rename: Borrowings to review", message=message)
+
+
 def rename_fields():
 	for (module, doctype), fields in FIELDS.items():
 		if not frappe.db.exists("DocType", doctype):
@@ -131,6 +148,9 @@ def rename_fields():
 		for old, new in fields.items():
 			if frappe.db.has_column(doctype, old):
 				rename_field(doctype, old, new)
+				# drop the old column: a second run then finds nothing to copy and never
+				# overwrites the borrowing* values written since
+				frappe.db.sql_ddl(f"alter table `tab{doctype}` drop column `{old}`")
 
 
 def rename_reports():
