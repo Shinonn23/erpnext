@@ -38,6 +38,7 @@
   "demo_extension_decided_on",
   "address_and_contact_tab",
   "section_break_recipient",
+  "recipient_customer",
   "recipient_address",
   "recipient_address_display",
   "recipient_contact_column",
@@ -319,6 +320,14 @@
    "fieldname": "section_break_recipient",
    "fieldtype": "Section Break",
    "label": "Recipient"
+  },
+  {
+   "description": "The demo customer who receives the Assets of a conversion to Demo Asset.",
+   "fieldname": "recipient_customer",
+   "fieldtype": "Link",
+   "label": "Recipient Customer",
+   "no_copy": 1,
+   "options": "Customer"
   },
   {
    "fieldname": "recipient_address",

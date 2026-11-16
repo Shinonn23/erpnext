@@ -59,6 +59,7 @@ class StocktoAssetConversion(StockController):
 		company: DF.Link
 		custody_loan: DF.Link | None
 		custody_loan_item: DF.Data | None
+		demo_customer: DF.Link | None
 		department: DF.Link | None
 		material_request: DF.Link | None
 		naming_series: DF.Literal["ACC-STAC-.YYYY.-"]

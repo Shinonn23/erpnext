@@ -299,6 +299,48 @@ class ConvertedAssetLoanTest(unittest.TestCase):
 			self.loan().update_material_request_status()
 		get_doc.assert_not_called()
 
+	def test_the_demo_customer_address_and_contact_are_kept(self):
+		request = Doc(
+			items=[],
+			docstatus=1,
+			material_request_type="Customer Borrow / Loan",
+			company="CD",
+			loan_recipient_type="Employee",
+			loan_recipient="EMP-1",
+			customer=None,
+			transaction_date="2026-11-01",
+			expected_return_date="2026-12-01",
+			recipient_address="REQ-ADDR",
+			recipient_address_display="request address",
+			loan_recipient_contact="REQ-CON",
+			contact_person=None,
+			loan_recipient_contact_display=None,
+			customer_contact_display=None,
+			loan_recipient_contact_email=None,
+			customer_contact_email=None,
+			loan_recipient_location=None,
+			customer_location=None,
+		)
+		db = MagicMock()
+		db.exists.return_value = True
+		for recipient_customer, address in (("CUST-1", "CUST-ADDR"), (None, "REQ-ADDR")):
+			doc = self.loan(
+				recipient_customer=recipient_customer,
+				recipient_address="CUST-ADDR",
+				company="CD",
+				borrower_type="Employee",
+				borrower="EMP-1",
+				expected_return_date="2026-12-01",
+				items=[],
+			)
+			with (
+				patch.object(frappe, "get_doc", return_value=request),
+				patch.object(frappe, "db", db),
+				patch.object(core.CustodyLoan, "set_requester"),
+			):
+				doc.validate_material_request()
+			self.assertEqual(doc.recipient_address, address)
+
 	def test_no_outgoing_asset_movement_is_asked(self):
 		doc = self.loan()
 		with patch.object(core.CustodyLoan, "reload"), patch.object(

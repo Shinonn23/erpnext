@@ -159,13 +159,17 @@ class CustodyLoan(Document):
 		):
 			frappe.throw(_("Expected Return Date must be on or after the Material Request date"))
 
-		self.recipient_address = request.recipient_address
-		self.recipient_address_display = request.recipient_address_display
-		self.recipient_contact = request.loan_recipient_contact or request.contact_person
-		self.recipient_contact_display = (
-			request.loan_recipient_contact_display or request.customer_contact_display
-		)
-		self.recipient_contact_email = request.loan_recipient_contact_email or request.customer_contact_email
+		# an Asset loan of converted Demo Assets keeps the address and contact of its demo customer (Siwat, 16 Nov 2026)
+		if not (self.get("source_conversion") and self.get("recipient_customer")):
+			self.recipient_address = request.recipient_address
+			self.recipient_address_display = request.recipient_address_display
+			self.recipient_contact = request.loan_recipient_contact or request.contact_person
+			self.recipient_contact_display = (
+				request.loan_recipient_contact_display or request.customer_contact_display
+			)
+			self.recipient_contact_email = (
+				request.loan_recipient_contact_email or request.customer_contact_email
+			)
 		self.recipient_location = request.loan_recipient_location or request.customer_location
 		if self.loan_type == "Stock":
 			self.customer_loan_warehouse = frappe.db.get_value(

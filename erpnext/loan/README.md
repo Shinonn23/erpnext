@@ -43,5 +43,10 @@ customer for a demo has it converted to a Demo Asset without returning it first:
   for no outgoing Asset Movement (`prepare_asset_movement` refuses) and is left out of the request's fulfilment
   (`update_material_request_status`, `Material Request.update_custody_loan_progress`). Its return is the normal Asset
   return back to the Asset's location.
+- The Customer chosen at Convert to Demo Asset is stored in the conversion's read-only `demo_customer` (hidden while
+  empty). The Asset loan made from the conversion takes it as `Custody Loan.recipient_customer` ("Recipient Customer",
+  editable while draft) with the customer's primary Address and Contact as recipient address and contact, and keeps
+  them (`validate_material_request` does not copy the request's address over them); the form filters the address and
+  contact by the Recipient Customer. The borrower stays the Sales Employee.
 - A submitted conversion is not cancelled while such a loan is submitted, and a submitted Custody Loan of an Asset is a
   follow-up transaction of the conversion.
