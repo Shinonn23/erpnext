@@ -1660,6 +1660,17 @@ def validate_borrowing_return_quality_inspection(quality_inspection, delivery_no
 		or quality_inspection.reference_name != delivery_note.name
 	):
 		frappe.throw(_("Quality Inspection must reference the Borrowing Return Delivery Note"))
+	if not quality_inspection.child_row_reference:
+		# a QI made by hand names the Item: take its return row when only one row of the note fits
+		candidates = [
+			item.name
+			for item in delivery_note.items
+			if item.item_code == quality_inspection.item_code
+			and item.borrowing_item in {row.borrowing_item for row in return_doc.items}
+			and (not quality_inspection.batch_no or item.batch_no == quality_inspection.batch_no)
+		]
+		if len(candidates) == 1:
+			quality_inspection.child_row_reference = candidates[0]
 	row = frappe.db.get_value(
 		"Delivery Note Item",
 		quality_inspection.child_row_reference,
