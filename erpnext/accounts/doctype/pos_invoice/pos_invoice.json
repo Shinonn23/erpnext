@@ -15,6 +15,7 @@
   "customer_name",
   "receipt_customer_name",
   "tax_id",
+  "buyer_branch_code",
   "pos_profile",
   "consolidated_invoice",
   "is_pos",
@@ -256,6 +257,16 @@
    "label": "Tax Id",
    "print_hide": 1,
    "read_only_depends_on": "eval:doc.docstatus > 0 || doc.customer_group !== \"Temporary Customer\""
+  },
+  {
+   "depends_on": "eval:doc.customer_group === \"Temporary Customer\" && doc.tax_id",
+   "description": "Cash sale with a buyer Tax ID: 00000 is the head office, otherwise the branch code of the buyer (for example 00003). It prints on the full tax invoice.",
+   "fieldname": "buyer_branch_code",
+   "fieldtype": "Data",
+   "label": "Buyer Branch Code",
+   "no_copy": 1,
+   "print_hide": 1,
+   "read_only_depends_on": "eval:doc.docstatus > 0"
   },
   {
    "default": "1",
