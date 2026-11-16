@@ -147,7 +147,8 @@ def _validate(doc, *, warn_only):
 	required = get_registration_required_items(codes) if doc.doctype in SALE_DOCTYPES else set()
 	enabled = validation_enabled(doc.doctype, settings)
 	rows = [
-		row for row in rows
+		row
+		for row in rows
 		if row.get("item_code") in required or (enabled and not is_delivery_linked(doc.doctype, row))
 	]
 	codes = {row.get("item_code") for row in rows}
@@ -176,7 +177,12 @@ def _validate(doc, *, warn_only):
 			continue
 
 		messages = evaluate_row(
-			doc.doctype, row, mappings[key], coverage_date, settings, registration_required=item_code in required
+			doc.doctype,
+			row,
+			mappings[key],
+			coverage_date,
+			settings,
+			registration_required=item_code in required,
 		)
 		if not messages:
 			continue
@@ -186,7 +192,10 @@ def _validate(doc, *, warn_only):
 			required_problems.add(item_code)
 
 	report_messages(
-		reported, warn_only=warn_only, doc=doc, item_codes=sorted(problem_items),
+		reported,
+		warn_only=warn_only,
+		doc=doc,
+		item_codes=sorted(problem_items),
 		force_block=bool(required_problems),
 	)
 
@@ -249,7 +258,12 @@ def report_messages(reported, *, warn_only, doc=None, item_codes=(), force_block
 			title=_("This cannot go on yet: an Item is not registered"),
 			primary_action=notify_action(doc, item_codes),
 		)
-	frappe.msgprint(body, title=_("Regulatory warning"), indicator="orange")
+	frappe.msgprint(
+		body,
+		title=_("Regulatory warning"),
+		indicator="orange",
+		primary_action=notify_action(doc, item_codes),
+	)
 
 
 def display_message(message):
@@ -308,7 +322,8 @@ def blocked_rows(doc):
 	required = get_registration_required_items(codes) if doc.doctype in SALE_DOCTYPES else set()
 	enabled = validation_enabled(doc.doctype, settings)
 	rows = [
-		row for row in rows
+		row
+		for row in rows
 		if row.get("item_code") in required or (enabled and not is_delivery_linked(doc.doctype, row))
 	]
 	codes = {row.get("item_code") for row in rows}
@@ -501,10 +516,13 @@ def get_registration_required_items(item_codes):
 	"""Purchasing's Required assessment is enforced even for Administrator and relaxed site policies."""
 	if not item_codes or not frappe.get_meta("Item").has_field("registration_requirement"):
 		return set()
-	return set(frappe.get_all(
-		"Item", filters={"name": ["in", sorted(item_codes)], "registration_requirement": "Required"},
-		pluck="name",
-	))
+	return set(
+		frappe.get_all(
+			"Item",
+			filters={"name": ["in", sorted(item_codes)], "registration_requirement": "Required"},
+			pluck="name",
+		)
+	)
 
 
 def get_coverage_date(doc, row):
@@ -524,10 +542,19 @@ def get_coverage_date(doc, row):
 def evaluate_row(doctype, row, mapping, coverage_date, settings, *, registration_required=False):
 	"""Policy messages for one row, each prefixed `Block:` or `Warning:`; ignored checks add nothing."""
 	if registration_required:
-		settings = {**settings, **dict.fromkeys((
-			"missing_registration_action", "expired_registration_action", "suspended_registration_action",
-			"revoked_registration_action", "expired_registration_existing_stock_policy",
-		), BLOCK)}
+		settings = {
+			**settings,
+			**dict.fromkeys(
+				(
+					"missing_registration_action",
+					"expired_registration_action",
+					"suspended_registration_action",
+					"revoked_registration_action",
+					"expired_registration_existing_stock_policy",
+				),
+				BLOCK,
+			),
+		}
 	item_code = row.get("item_code") or ""
 	coverage_date = getdate(coverage_date)
 	prefix = _("Item {1} (row {0})").format(row.get("idx") or "?", frappe.bold(escape_html(item_code)))

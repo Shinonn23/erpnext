@@ -81,12 +81,16 @@ REGULATED_DOCTYPES.forEach((doctype) => {
 		refresh(frm) {
 			if (frm.is_new() || frm.doc.docstatus !== 0) return;
 			if (!(frm.doc.items || []).some((row) => row.item_code)) return;
+			// refresh runs more than once after a save: only the latest answer may draw the banner
+			const token = (frm.__regulatory_token = (frm.__regulatory_token || 0) + 1);
 			frappe
 				.xcall("erpnext.regulatory_affairs.transactions.get_blocked_items", {
 					doctype: frm.doctype,
 					name: frm.doc.name,
 				})
 				.then((items) => {
+					if (token !== frm.__regulatory_token) return;
+					frm.dashboard.clear_headline();
 					if (!items || !items.length) return;
 					const names = [...new Set(items.map((row) => row.item_code))].join(", ");
 					frm.dashboard.set_headline_alert(
