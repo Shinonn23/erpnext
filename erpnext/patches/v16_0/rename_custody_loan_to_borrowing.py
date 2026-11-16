@@ -45,6 +45,10 @@ FIELDS = {
 	("stock", "Delivery Note"): {**TRANSACTION_FIELDS, "custody_loan_shipment": "borrowing_shipment"},
 	("stock", "Shipment"): {"custody_loan": "borrowing", "custody_loan_direction": "borrowing_direction"},
 	("stock", "Pick List"): {"custody_loan": "borrowing"},
+	("assets", "Stock to Asset Conversion"): {
+		"custody_loan": "borrowing",
+		"custody_loan_item": "borrowing_item",
+	},
 	("stock", "Material Request Item"): {"custody_loan": "borrowing"},
 	("accounts", "Sales Invoice Item"): {"custody_loan_item": "borrowing_item"},
 	("assets", "Asset Movement Item"): {"custody_loan_item": "borrowing_item"},
@@ -59,6 +63,10 @@ FIELDS = {
 }
 
 OLD_MODULE, NEW_MODULE = "Loan", "Borrowing"
+# The Workspace, Sidebar, Workspace Sidebar and Desktop Icon are "Borrowings": a workspace named
+# "Borrowing" would take the route /desk/borrowing of the DocType Borrowing (the router asks the
+# workspaces first). "Borrowing" is listed too, for a site that ran an earlier build of this patch.
+OLD_NAVIGATION, NEW_NAVIGATION = ("Loan", "Borrowing"), "Borrowings"
 
 
 def request_type(borrower_type=None, recipient_type=None, customer=None):
@@ -71,10 +79,12 @@ def request_type(borrower_type=None, recipient_type=None, customer=None):
 def execute():
 	rename_doctypes()
 	split_request_types()
+	split_borrowing_request_types()
 	log_odd_borrowings()
 	rename_fields()
 	rename_reports()
 	rename_module()
+	rename_blocked_modules()
 	rename_navigation()
 
 
@@ -107,12 +117,18 @@ def split_request_types():
 			as_dict=True,
 		):
 			borrowers.setdefault(row.material_request, row.borrower_type)
-	odd = []
+	odd, mismatched = [], []
 	for request in requests:
 		borrower = borrowers.get(request.name)
 		new = request_type(borrower, request.loan_recipient_type, request.customer)
 		if (borrower or request.loan_recipient_type) not in (None, "", "Employee", "Customer"):
 			odd.append(f"{request.name} ({borrower or request.loan_recipient_type})")
+		elif request.loan_recipient_type in ("Employee", "Customer") and request.loan_recipient_type != (
+			"Customer" if new == "Customer Borrow" else "Employee"
+		):
+			# the Borrowing's borrower decided the type; the request's recipient (a name of the other
+			# DocType) is left as it is for the Administrator, never rewritten to a wrong link
+			mismatched.append(f"{request.name} ({new}, recipient {request.loan_recipient_type})")
 		values = {"material_request_type": new}
 		if not request.loan_recipient_type or request.loan_recipient_type not in ("Employee", "Customer"):
 			values["loan_recipient_type"] = "Customer" if new == "Customer Borrow" else "Employee"
@@ -122,6 +138,38 @@ def split_request_types():
 		message = "Supplier or Contact borrowers moved to Borrow (Employee); fix by hand:\n" + "\n".join(odd)
 		print(message)
 		frappe.log_error(title="Borrowing rename: borrowers to review", message=message)
+	if mismatched:
+		message = "Requests whose recipient type differs from their Borrowing's borrower; fix by hand:\n"
+		message += "\n".join(mismatched)
+		print(message)
+		frappe.log_error(title="Borrowing rename: recipients to review", message=message)
+
+
+def split_borrowing_request_types():
+	"""`Borrowing.material_request_type` (fetched from the request) takes its request's new type; a
+	Borrowing of the old type whose request is gone follows its own borrower. A rerun finds nothing."""
+	if not frappe.db.table_exists("Borrowing") or not frappe.db.has_column(
+		"Borrowing", "material_request_type"
+	):
+		return
+	frappe.db.sql(
+		"""update `tabBorrowing` b join `tabMaterial Request` mr on mr.name = b.material_request
+		set b.material_request_type = mr.material_request_type
+		where b.material_request_type = %s and mr.material_request_type != %s""",
+		(OLD_REQUEST_TYPE, OLD_REQUEST_TYPE),
+	)
+	for row in frappe.db.sql(
+		"""select name, borrower_type from `tabBorrowing` where material_request_type = %s""",
+		OLD_REQUEST_TYPE,
+		as_dict=True,
+	):
+		frappe.db.set_value(
+			"Borrowing",
+			row.name,
+			"material_request_type",
+			request_type(row.borrower_type),
+			update_modified=False,
+		)
 
 
 def log_odd_borrowings():
@@ -173,17 +221,26 @@ def rename_module():
 	frappe.db.delete("Module Def", {"name": OLD_MODULE, "app_name": "erpnext"})
 
 
+def rename_blocked_modules():
+	"""`Block Module.module` is Data, so the Module Def rename does not reach it: a user or Module
+	Profile that blocked Loan blocks Borrowing."""
+	if frappe.db.table_exists("Block Module"):
+		frappe.db.sql("update `tabBlock Module` set module = %s where module = %s", (NEW_MODULE, OLD_MODULE))
+
+
 def rename_navigation():
 	for doctype in ("Workspace", "Sidebar", "Workspace Sidebar"):
-		if (
-			frappe.db.table_exists(doctype)
-			and frappe.db.exists(doctype, OLD_MODULE)
-			and not frappe.db.exists(doctype, NEW_MODULE)
-		):
-			frappe.rename_doc(doctype, OLD_MODULE, NEW_MODULE, force=True)
-	if frappe.db.table_exists("Desktop Icon") and frappe.db.exists("Desktop Icon", OLD_MODULE):
+		if not frappe.db.table_exists(doctype):
+			continue
+		for old in OLD_NAVIGATION:
+			if frappe.db.exists(doctype, old) and not frappe.db.exists(doctype, NEW_NAVIGATION):
+				frappe.rename_doc(doctype, old, NEW_NAVIGATION, force=True)
+	icons = frappe.db.table_exists("Desktop Icon") and [
+		old for old in OLD_NAVIGATION if frappe.db.exists("Desktop Icon", old)
+	]
+	if icons:
 		# raw delete: its hooks export files in developer mode; the sync imports the new icon
-		frappe.db.delete("Desktop Icon", {"name": OLD_MODULE})
+		frappe.db.delete("Desktop Icon", {"name": ["in", icons]})
 		try:
 			from frappe.desk.doctype.desktop_icon.desktop_icon import clear_every_users_desktop_icons
 

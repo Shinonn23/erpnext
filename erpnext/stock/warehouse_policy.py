@@ -90,7 +90,7 @@ OPERATION_RULES = (
 	("sales", "Pick List for Delivery", {"doctype": "Pick List", "purpose": "Delivery", "outgoing": True}),
 	(
 		"loan",
-		"Custody Loan documents: loan, return, loan adjustment and the Stock to Asset Conversion of a loan unit"
+		"Borrowing documents: loan, return, loan adjustment and the Stock to Asset Conversion of a loan unit"
 		" (a Transit warehouse treats these as Transfer)",
 		{"doctype": "Stock Entry", "purpose": "Material Issue", "loan": True},
 	),
@@ -256,9 +256,9 @@ def is_loan_movement(doc):
 
 		validate_borrowing_pick_list(doc)
 		return True
-	if doc.doctype == "Stock to Asset Conversion" and doc.get("custody_loan"):
+	if doc.doctype == "Stock to Asset Conversion" and doc.get("borrowing"):
 		return conversion_matches_loan(doc)
-	if doc.doctype not in ("Stock Entry", "Delivery Note") or not doc.get("custody_loan"):
+	if doc.doctype not in ("Stock Entry", "Delivery Note") or not doc.get("borrowing"):
 		return False
 	from erpnext.borrowing.doctype.borrowing.borrowing_core import validate_generated_transaction
 
@@ -266,10 +266,7 @@ def is_loan_movement(doc):
 	if doc.doctype == "Stock Entry" and is_return_lot_swap(doc):
 		return True
 	if doc.doctype == "Stock Entry":
-		if (
-			doc.get("borrowing_source_doctype") != "Borrowing Adjustment"
-			or doc.purpose != "Material Issue"
-		):
+		if doc.get("borrowing_source_doctype") != "Borrowing Adjustment" or doc.purpose != "Material Issue":
 			frappe.throw(
 				_(
 					"Borrowing warehouses only accept transactions generated from correctly linked borrowing, return or borrowing adjustment documents."
@@ -297,8 +294,8 @@ def conversion_matches_loan(doc):
 	"""A Stock to Asset Conversion of a Borrow loan unit (Connect Diagnostics, Siwat 16 Nov 2026) takes the unit out of
 	the Loan warehouse of the loan it names, from the row it names, and nothing else: it is a loan movement there."""
 	loan = frappe.db.get_value(
-		"Custody Loan",
-		doc.custody_loan,
+		"Borrowing",
+		doc.borrowing,
 		["docstatus", "loan_type", "customer_loan_warehouse", "company"],
 		as_dict=True,
 	)
@@ -307,8 +304,8 @@ def conversion_matches_loan(doc):
 		or loan.docstatus != 1
 		or loan.loan_type != "Stock"
 		or loan.company != doc.company
-		or not doc.get("custody_loan_item")
-		or frappe.db.get_value("Custody Loan Item", doc.custody_loan_item, "parent") != doc.custody_loan
+		or not doc.get("borrowing_item")
+		or frappe.db.get_value("Borrowing Item", doc.borrowing_item, "parent") != doc.borrowing
 		or doc.get("material_request")
 		or any(row.get("warehouse") != loan.customer_loan_warehouse for row in doc.get("stock_items") or [])
 	):

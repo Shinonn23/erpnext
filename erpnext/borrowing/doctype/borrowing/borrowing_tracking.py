@@ -124,7 +124,7 @@ def _movement_rows(loan_name, *, exclude=None):
 				kind = "returned" if state[row.parent] == "Received" else "pending"
 			rows.append((kind, row))
 	# a unit converted to a Demo Asset (Siwat, 16 Nov 2026): a draft reserves it, a submitted conversion settles it
-	from erpnext.loan.doctype.custody_loan.custody_loan_core import loan_conversion_rows
+	from erpnext.borrowing.doctype.borrowing.borrowing_core import loan_conversion_rows
 
 	skip = exclude[1] if exclude and exclude[0] == "Stock to Asset Conversion" else None
 	for row in loan_conversion_rows(loan_name, exclude=skip):
@@ -183,15 +183,15 @@ def get_balances(loan, *, exclude=None, attribute=True):
 		pending_conversion = kind == "pending" and conversion
 		if serials:
 			for serial in serials:
-				entry = balance(_key(row.custody_loan_item, None, serial), item_code)
+				entry = balance(_key(row.borrowing_item, None, serial), item_code)
 				entry[field[kind]] += 1
 				entry.converted_qty = entry.get("converted_qty", 0) + (1 if converted else 0)
 				entry.pending_conversion_qty = entry.get("pending_conversion_qty", 0) + (
 					1 if pending_conversion else 0
 				)
 		else:
-			qty = flt(row.qty) * factors.get(row.custody_loan_item, 1)
-			entry = balance(_key(row.custody_loan_item, row.batch_no, None), item_code)
+			qty = flt(row.qty) * factors.get(row.borrowing_item, 1)
+			entry = balance(_key(row.borrowing_item, row.batch_no, None), item_code)
 			entry[field[kind]] += qty
 			entry.converted_qty = entry.get("converted_qty", 0) + (qty if converted else 0)
 			entry.pending_conversion_qty = entry.get("pending_conversion_qty", 0) + (
@@ -404,7 +404,9 @@ def validate_tracked_rows(doc, loan, qty_field, allow_other_lots=False):
 				pass
 			elif not entry or entry.issued_qty <= 0:
 				frappe.throw(
-					_("Row {0}: Batch {1} was not issued on this Borrowing Item").format(row.idx, row.batch_no)
+					_("Row {0}: Batch {1} was not issued on this Borrowing Item").format(
+						row.idx, row.batch_no
+					)
 				)
 			stock_qty = qty * (factors.get(loan_item.name, 1) or 1)
 			taken[key] += stock_qty

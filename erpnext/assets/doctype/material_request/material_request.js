@@ -443,7 +443,7 @@ function configure_material_request_item_columns(frm) {
 	if (!grid) return;
 
 	const purpose = frm.doc.material_request_type;
-	const is_loan = ["Customer Demo", "Customer Borrow / Loan"].includes(purpose);
+	const is_loan = ["Customer Demo", "Borrow", "Customer Borrow"].includes(purpose);
 	const visible_columns = new Set();
 	visible_columns.add("item_code");
 

@@ -818,13 +818,13 @@ class CustomerMaterialRequest(MaterialRequest):
 			else:
 				self.asset_transfer_status = "Pending"
 
-	def update_custody_loan_progress(self):
+	def update_borrowing_progress(self):
 		# an Asset loan of units converted from the stock loan (source_conversion) records custody, not fulfilment
 		loan_items = frappe.db.sql(
 			"""select cli.name, cli.material_request_item, cli.qty, cli.returned_qty,
-				cli.outstanding_qty, l.status, l.delivery_note, l.asset_movement, l.name as custody_loan
-				from `tabCustody Loan Item` cli
-			join `tabCustody Loan` l on l.name = cli.parent
+				cli.outstanding_qty, l.status, l.delivery_note, l.asset_movement, l.name as borrowing
+				from `tabBorrowing Item` cli
+			join `tabBorrowing` l on l.name = cli.parent
 			where l.material_request = %s and l.docstatus = 1
 			and coalesce(l.source_conversion, '') = ''""",
 			self.name,
@@ -1130,7 +1130,8 @@ def asset_query(doctype, txt, searchfield, start, page_len, filters, as_dict=Fal
 	if (
 		not filters.company
 		or not frappe.db.exists("Company", filters.company)
-		or filters.material_request_type not in ("Asset Transfer", "Customer Demo", "Borrow", "Customer Borrow")
+		or filters.material_request_type
+		not in ("Asset Transfer", "Customer Demo", "Borrow", "Customer Borrow")
 	):
 		return []
 	frappe.has_permission("Company", "select", doc=filters.company, throw=True)

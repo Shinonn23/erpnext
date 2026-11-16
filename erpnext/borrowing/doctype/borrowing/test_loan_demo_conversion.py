@@ -15,8 +15,8 @@ from unittest.mock import MagicMock, patch
 import frappe
 
 from erpnext.assets.doctype.stock_to_asset_conversion import stock_to_asset_conversion as conversion_module
-from erpnext.loan.doctype.custody_loan import custody_loan_core as core
-from erpnext.loan.doctype.custody_loan import custody_loan_tracking as tracking
+from erpnext.borrowing.doctype.borrowing import borrowing_core as core
+from erpnext.borrowing.doctype.borrowing import borrowing_tracking as tracking
 from erpnext.stock import warehouse_policy
 
 REJECTED = core.CONVERSION_REJECTED_STATE
@@ -48,8 +48,8 @@ def fake_db(parents, items, entries=None, factor=1, has_column=True):
 		if doctype == "Stock to Asset Conversion":
 			wanted = filters["docstatus"][1]
 			rows = [row for row in parents if row.docstatus in wanted]
-			if "custody_loan_item" in filters:
-				rows = [row for row in rows if row.custody_loan_item == filters["custody_loan_item"]]
+			if "borrowing_item" in filters:
+				rows = [row for row in rows if row.borrowing_item == filters["borrowing_item"]]
 			if "name" in filters:
 				rows = [row for row in rows if row.name != filters["name"][1]]
 			return rows
@@ -66,7 +66,7 @@ def fake_db(parents, items, entries=None, factor=1, has_column=True):
 
 
 def parent(name, docstatus, state=None, loan_item="CLI-1"):
-	return frappe._dict(name=name, docstatus=docstatus, workflow_state=state, custody_loan_item=loan_item)
+	return frappe._dict(name=name, docstatus=docstatus, workflow_state=state, borrowing_item=loan_item)
 
 
 def item(qty, bundle=None):
@@ -180,14 +180,14 @@ class TrackingTest(unittest.TestCase):
 		)
 		issued = {"CLI-1": [("B-1", "SN-1", 1), ("B-1", "SN-2", 1)]}
 		converted = frappe._dict(
-			custody_loan_item="CLI-1",
+			borrowing_item="CLI-1",
 			qty=1,
 			batch_no="B-1",
 			serial_no="SN-1",
 			serial_and_batch_bundle="SBB-1",
 		)
 		draft = frappe._dict(
-			custody_loan_item="CLI-1",
+			borrowing_item="CLI-1",
 			qty=1,
 			batch_no="B-1",
 			serial_no="SN-2",
@@ -231,7 +231,7 @@ class WarehousePolicyTest(unittest.TestCase):
 		)
 
 		def get_value(doctype, name, fields=None, as_dict=False):
-			return loan if doctype == "Custody Loan" else parent_of_row
+			return loan if doctype == "Borrowing" else parent_of_row
 
 		db.get_value.side_effect = get_value
 		with patch.object(frappe, "db", db), patch.object(frappe, "throw", side_effect=_throw):
@@ -240,8 +240,8 @@ class WarehousePolicyTest(unittest.TestCase):
 	def conversion(self, **values):
 		doc = frappe._dict(
 			doctype="Stock to Asset Conversion",
-			custody_loan="CL-1",
-			custody_loan_item="CLI-1",
+			borrowing="CL-1",
+			borrowing_item="CLI-1",
 			company="CD",
 			material_request=None,
 			stock_items=[frappe._dict(warehouse="LOAN - CD")],
@@ -256,7 +256,7 @@ class WarehousePolicyTest(unittest.TestCase):
 		for doc in (
 			self.conversion(stock_items=[frappe._dict(warehouse="CD STOCK - CD")]),
 			self.conversion(material_request="MR-1"),
-			self.conversion(custody_loan_item=None),
+			self.conversion(borrowing_item=None),
 		):
 			with self.assertRaises(Thrown):
 				self.check(doc)
@@ -276,10 +276,10 @@ class WarehousePolicyTest(unittest.TestCase):
 
 class ConvertedAssetLoanTest(unittest.TestCase):
 	def loan(self, **values):
-		doc = core.CustodyLoan.__new__(core.CustodyLoan)
+		doc = core.Borrowing.__new__(core.Borrowing)
 		doc.__dict__.update(
 			dict(
-				doctype="Custody Loan",
+				doctype="Borrowing",
 				name="CL-2",
 				loan_type="Asset",
 				docstatus=1,
@@ -303,7 +303,7 @@ class ConvertedAssetLoanTest(unittest.TestCase):
 		request = Doc(
 			items=[],
 			docstatus=1,
-			material_request_type="Customer Borrow / Loan",
+			material_request_type="Borrow",
 			company="CD",
 			loan_recipient_type="Employee",
 			loan_recipient="EMP-1",
@@ -336,24 +336,27 @@ class ConvertedAssetLoanTest(unittest.TestCase):
 			with (
 				patch.object(frappe, "get_doc", return_value=request),
 				patch.object(frappe, "db", db),
-				patch.object(core.CustodyLoan, "set_requester"),
+				patch.object(core.Borrowing, "set_requester"),
 			):
 				doc.validate_material_request()
 			self.assertEqual(doc.recipient_address, address)
 
 	def test_no_outgoing_asset_movement_is_asked(self):
 		doc = self.loan()
-		with patch.object(core.CustodyLoan, "reload"), patch.object(
-			core.CustodyLoan, "check_permission"
-		), patch.object(frappe, "throw", side_effect=_throw):
+		with (
+			patch.object(core.Borrowing, "reload"),
+			patch.object(core.Borrowing, "check_permission"),
+			patch.object(frappe, "throw", side_effect=_throw),
+		):
 			with self.assertRaises(Thrown):
 				doc.prepare_asset_movement()
 		self.assertFalse(doc.waits_for_stock_delivery())
 
 	def test_the_assets_count_as_issued_at_once(self):
 		doc = self.loan(items=[frappe._dict(name="CLI-9", qty=1)])
-		with patch.object(core, "transaction_is_received", return_value=False), patch.object(
-			frappe, "db", MagicMock()
+		with (
+			patch.object(core, "transaction_is_received", return_value=False),
+			patch.object(frappe, "db", MagicMock()),
 		):
 			doc.update_issued_quantities()
 		self.assertEqual(doc.items[0].issued_qty, 1)
@@ -366,8 +369,8 @@ class ConversionCancelTest(unittest.TestCase):
 			dict(
 				doctype="Stock to Asset Conversion",
 				name="STAC-1",
-				custody_loan="CL-1",
-				custody_loan_item="CLI-1",
+				borrowing="CL-1",
+				borrowing_item="CLI-1",
 				material_request=None,
 				pick_list=None,
 				company="CD",
@@ -383,7 +386,7 @@ class ConversionCancelTest(unittest.TestCase):
 			with self.assertRaises(Thrown):
 				self.doc().validate_no_active_asset_loan()
 		db.get_value.assert_called_once_with(
-			"Custody Loan", {"source_conversion": "STAC-1", "docstatus": 1}, "name"
+			"Borrowing", {"source_conversion": "STAC-1", "docstatus": 1}, "name"
 		)
 
 	def test_cancel_goes_on_without_an_asset_loan(self):
@@ -392,18 +395,18 @@ class ConversionCancelTest(unittest.TestCase):
 		with patch.object(frappe, "db", db):
 			self.doc().validate_no_active_asset_loan()
 
-	def test_the_follow_up_check_sees_the_custody_loan(self):
+	def test_the_follow_up_check_sees_the_borrowing(self):
 		db = MagicMock()
-		db.sql.side_effect = lambda query, values: [[1]] if "tabCustody Loan Item" in query else []
+		db.sql.side_effect = lambda query, values: [[1]] if "tabBorrowing Item" in query else []
 		with patch.object(frappe, "db", db), patch.object(frappe, "throw", side_effect=_throw):
 			with self.assertRaises(Thrown) as raised:
 				self.doc().validate_asset_has_no_follow_up_transactions("AST-1")
-		self.assertIn("Custody Loan", str(raised.exception))
+		self.assertIn("Borrowing", str(raised.exception))
 
 	def test_a_loan_conversion_cannot_name_a_request(self):
 		with patch.object(frappe, "throw", side_effect=_throw):
 			with self.assertRaises(Thrown):
-				self.doc(material_request="MR-1").validate_custody_loan_source()
+				self.doc(material_request="MR-1").validate_borrowing_source()
 
 	def test_a_row_issued_in_another_unit_cannot_convert(self):
 		loan = Doc(
@@ -425,7 +428,7 @@ class ConversionCancelTest(unittest.TestCase):
 			patch.object(core, "loan_item_available_to_adjust", return_value=5) as available,
 		):
 			with self.assertRaises(Thrown) as raised:
-				self.doc(stock_items=[row]).validate_custody_loan_source()
+				self.doc(stock_items=[row]).validate_borrowing_source()
 		self.assertIn("conversion factor 1", str(raised.exception))
 		available.assert_not_called()
 

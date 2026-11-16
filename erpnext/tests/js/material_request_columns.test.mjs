@@ -57,7 +57,7 @@ test("asset transfers hide cost and unit and row dates follow the header", () =>
 
 test("the requester is never asked for a storage location, for any purpose", () => {
 	for (const purpose of ["Asset Transfer", "Purchase", "Material Transfer", "Material Issue", "Customer Demo",
-		"Customer Borrow / Loan"]) {
+		"Borrow", "Customer Borrow"]) {
 		const { visibility, queries } = columns(purpose);
 		assert.equal(visibility.storage_location, false, `${purpose}: storage_location`);
 		assert.equal(visibility.from_storage_location, false, `${purpose}: from_storage_location`);
