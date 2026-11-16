@@ -12,8 +12,9 @@ from frappe.model.mapper import map_child_doc
 from frappe.query_builder import Case
 from frappe.query_builder.custom import GROUP_CONCAT
 from frappe.query_builder.functions import Coalesce, Locate, Replace, Sum
-from frappe.utils import cint, floor, flt, get_link_to_form, now_datetime
+from frappe.utils import cint, cstr, floor, flt, get_link_to_form, now_datetime
 from frappe.utils.nestedset import get_descendants_of
+from pypika.terms import CustomFunction
 
 from erpnext.selling.doctype.sales_order.sales_order import (
 	make_delivery_note as create_delivery_note_from_sales_order,
@@ -25,6 +26,7 @@ from erpnext.stock.doctype.serial_and_batch_bundle.serial_and_batch_bundle impor
 	get_auto_batch_nos,
 	get_available_serial_nos,
 )
+from erpnext.stock.doctype.storage_location.storage_location import is_staging_location
 from erpnext.stock.get_item_details import get_company_total_stock, get_conversion_factor
 from erpnext.stock.serial_batch_bundle import (
 	SerialBatchCreation,
@@ -78,7 +80,7 @@ class PickList(TransactionBase):
 		scan_barcode: DF.Data | None
 		scan_mode: DF.Check
 		status: DF.Literal[
-			"Draft", "Open", "Partly Delivered", "Partially Transferred", "Completed", "Cancelled"
+			"Draft", "Open", "Partly Delivered", "Partially Transferred", "Completed", "Cancelled", "Closed"
 		]
 		work_order: DF.Link | None
 	# end: auto-generated types
@@ -451,6 +453,9 @@ class PickList(TransactionBase):
 			validate_borrowing_pick_list(self, require_picked_qty=True)
 
 	def before_cancel(self):
+		if self.status == "Closed":
+			frappe.throw(_("Closed Pick List cannot be cancelled. Reopen it to cancel."))
+
 		from erpnext.stock.warehouse_policy import validate_document_policy
 
 		validate_document_policy(self)
@@ -586,6 +591,9 @@ class PickList(TransactionBase):
 				row.db_set("serial_and_batch_bundle", sn_doc.name)
 
 	def on_update_after_submit(self) -> None:
+		if self.status == "Closed":
+			frappe.throw(_("A closed Pick List cannot be changed. Reopen it first."))
+
 		if self.has_reserved_stock():
 			msg = _(
 				"The Pick List having Stock Reservation Entries cannot be updated. If you need to make changes, we recommend canceling the existing Stock Reservation Entries before updating the Pick List."
@@ -653,6 +661,62 @@ class PickList(TransactionBase):
 				doc = frappe.get_doc("Serial and Batch Bundle", row.serial_and_batch_bundle)
 				if doc.docstatus == 0:
 					doc.submit()
+
+	def can_be_closed(self) -> bool:
+		"""A submitted Delivery Pick List of Sales Order goods that is still open: not a Borrowing's, not delivered
+		completely."""
+		return (
+			self.docstatus == 1
+			and self.purpose == "Delivery"
+			and not self.get("borrowing")
+			and self.status in ("Open", "Partly Delivered")
+		)
+
+	def close(self):
+		"""Status > Close (Connect Diagnostics, Siwat, 17 Nov 2026): the Pick List stops holding stock, as a closed
+		Sales Order stops holding its quantities. Its Stock Reservation Entries are cancelled first, so a refusal
+		of that leaves the Pick List open. The record, its Quality Inspections and its Delivery Notes stay."""
+		if not self.can_be_closed():
+			frappe.throw(
+				_("Only a submitted Delivery Pick List that is Open or Partly Delivered can be closed, not {0}.").format(
+					_(self.status)
+				)
+			)
+
+		if self.has_reserved_stock():
+			self.cancel_stock_reservation_entries(notify=False)
+
+		self.db_set("status", "Closed")
+		self.update_reference_qty()
+		self.update_sales_order_picking_status()
+		self.update_prevdoc_status()
+		self.add_comment("Label", _("Closed"))
+
+	def reopen(self):
+		"""Status > Reopen: the Pick List holds its stock again. Refused, with nothing reserved, naming each row
+		that is short, when what it picked is no longer there for it."""
+		if self.docstatus != 1 or self.status != "Closed":
+			frappe.throw(_("Only a closed Pick List can be reopened."))
+
+		shortages = get_reopen_shortages(self)
+		if shortages:
+			frappe.throw(
+				_("Pick List {0} cannot be reopened, the stock it picked is no longer free:").format(self.name)
+				+ "<br>"
+				+ "<br>".join(shortages),
+				title=_("Not Enough Stock"),
+			)
+
+		had_reservations = was_reserved_by(self.name)
+		self.db_set("status", "Open")
+		self.update_status()
+		self.update_reference_qty()
+		self.update_sales_order_picking_status()
+		self.update_prevdoc_status()
+		if had_reservations and frappe.get_cached_value("Stock Settings", None, "enable_stock_reservation"):
+			self.reload()
+			self.create_stock_reservation_entries(notify=False)
+		self.add_comment("Label", _("Reopened"))
 
 	def update_status(self, status=None, update_modified=True):
 		if not status:
@@ -1128,6 +1192,7 @@ class PickList(TransactionBase):
 				& ((pi_item.picked_qty > 0) | (pi_item.stock_qty > 0))
 				& (pi.status != "Completed")
 				& (pi.status != "Cancelled")
+				& (pi.status != "Closed")
 				& (pi_item.docstatus != 2)
 			)
 		)
@@ -1208,20 +1273,193 @@ def update_pick_list_status(pick_list):
 	if pick_list:
 		doc = frappe.get_doc("Pick List", pick_list)
 		doc.run_method("update_status")
+		if doc.status == "Closed":
+			# a Delivery Note of a closed pick was submitted or cancelled: the order counts what was delivered
+			doc.update_reference_qty()
+			doc.update_sales_order_picking_status()
+
+
+@frappe.whitelist(methods=["POST"])
+def close_pick_list(name):
+	"""Status > Close. Anyone who may submit a Pick List (Stock User, Stock Manager)."""
+	pick = frappe.get_doc("Pick List", name, for_update=True)
+	pick.check_permission("submit")
+	pick.close()
+	return pick.status
+
+
+@frappe.whitelist(methods=["POST"])
+def reopen_pick_list(name):
+	"""Status > Reopen. Refused, naming each short row, when the picked stock is no longer free."""
+	pick = frappe.get_doc("Pick List", name, for_update=True)
+	pick.check_permission("submit")
+	pick.reopen()
+	return pick.status
+
+
+def was_reserved_by(pick_list):
+	"""A Close cancelled this Pick List's Stock Reservation Entries and nothing reserves for it now."""
+	entry = {"from_voucher_type": "Pick List", "from_voucher_no": pick_list}
+	return bool(
+		frappe.db.exists("Stock Reservation Entry", {**entry, "docstatus": 2})
+		and not frappe.db.exists("Stock Reservation Entry", {**entry, "docstatus": 1})
+	)
+
+
+def _row_serials(row):
+	serials = [line.strip() for line in cstr(row.get("serial_no")).splitlines() if line.strip()]
+	if not serials and row.get("serial_and_batch_bundle"):
+		serials = list(get_serial_nos_from_bundle(row.get("serial_and_batch_bundle")) or [])
+	return serials
+
+
+def get_reopen_shortages(pick) -> list[str]:
+	"""One line for each row of a closed Pick List whose remaining quantity (picked less delivered) is not free any
+	more: the warehouse, Storage Location, Batch and Serial Nos it names, less what other open Pick Lists hold.
+	Empty when everything is still there."""
+	from erpnext.stock.doctype.storage_location.storage_location import location_stock
+
+	rows = [row for row in pick.get("locations") if flt(row.picked_qty) - flt(row.delivered_qty) > 1e-9]
+	if not rows:
+		return []
+
+	others = pick._get_pick_list_items(rows)
+	for other in others:
+		other["serials"] = set(_row_serials(other))
+
+	needed, labels = {}, {}
+	shortages = []
+	for row in rows:
+		remaining = flt(row.picked_qty) - flt(row.delivered_qty)
+		place = ", ".join(
+			part for part in (row.warehouse, row.storage_location, row.batch_no) if part
+		)
+		serials = _row_serials(row)
+		if serials:
+			held = set().union(
+				*(
+					other["serials"]
+					for other in others
+					if other.item_code == row.item_code and other.warehouse == row.warehouse
+				)
+			)
+			free = [
+				serial
+				for serial in frappe.get_all(
+					"Serial No",
+					filters={"name": ["in", serials], "warehouse": row.warehouse},
+					pluck="name",
+				)
+				if serial not in held
+			]
+			if len(free) + 1e-9 < remaining:
+				shortages.append(
+					_("Row {0}: {1} in {2}: {3} needed, {4} free").format(
+						row.idx, row.item_code, place, flt(remaining), len(free)
+					)
+				)
+			continue
+
+		key = (row.item_code, row.warehouse, row.storage_location or "", row.batch_no or "")
+		needed[key] = needed.get(key, 0) + remaining
+		labels.setdefault(key, []).append(row.idx)
+
+	for key, quantity in needed.items():
+		item_code, warehouse, location, batch_no = key
+		located = location_stock(item_code, warehouse, batch_no or None)
+		if location:
+			available = flt(located.get(location))
+		else:
+			available = sum(located.values()) + sum(
+				location_stock(item_code, warehouse, batch_no or None, unlocated=True).values()
+			)
+		held = sum(
+			flt(other.picked_qty)
+			for other in others
+			if other.item_code == item_code
+			and other.warehouse == warehouse
+			and (not location or other.storage_location == location)
+			and (not batch_no or other.batch_no == batch_no)
+			and not other["serials"]
+		)
+		free = available - held
+		if free + 1e-9 < quantity:
+			place = ", ".join(part for part in (warehouse, location, batch_no) if part)
+			shortages.append(
+				_("Row {0}: {1} in {2}: {3} needed, {4} free").format(
+					", ".join(str(idx) for idx in labels[key]), item_code, place, flt(quantity), flt(free)
+				)
+			)
+	return shortages
+
+
+def close_open_picks_of_order(sales_order, cancelling=False):
+	"""A Sales Order was closed or is being cancelled: close its open Delivery Pick Lists, each only when every one
+	of its rows belongs to an order that is now Closed or Cancelled (the order being cancelled counts as
+	cancelled). Returns (closed, shared): the Pick Lists closed, and those left because they also serve an order
+	that is still open (a Stock User closes those by hand)."""
+	names = frappe.get_all(
+		"Pick List Item", filters={"sales_order": sales_order, "docstatus": 1}, pluck="parent"
+	)
+	closed, shared = [], []
+	for name in sorted(set(names)):
+		values = frappe.db.get_value(
+			"Pick List", name, ["docstatus", "purpose", "borrowing", "status"], as_dict=True
+		)
+		if (
+			not values
+			or values.docstatus != 1
+			or values.purpose != "Delivery"
+			or values.borrowing
+			or values.status not in ("Open", "Partly Delivered")
+		):
+			continue
+
+		orders = {
+			order
+			for order in frappe.get_all("Pick List Item", filters={"parent": name}, pluck="sales_order")
+			if order
+		}
+		states = {
+			order: "Cancelled"
+			if cancelling and order == sales_order
+			else frappe.db.get_value("Sales Order", order, "status")
+			for order in orders
+		}
+		if any(state not in ("Closed", "Cancelled") for state in states.values()):
+			shared.append(name)
+			continue
+
+		pick = frappe.get_doc("Pick List", name, for_update=True)
+		pick.flags.ignore_permissions = True
+		pick.close()
+		closed.append(name)
+	return closed, shared
 
 
 def get_picked_items_qty(items, contains_packed_items=False) -> list[dict]:
+	pi = frappe.qb.DocType("Pick List")
 	pi_item = frappe.qb.DocType("Pick List Item")
 
+	# A closed Pick List counts only what it delivered: it no longer holds the rest
 	query = (
 		frappe.qb.from_(pi_item)
+		.inner_join(pi)
+		.on(pi.name == pi_item.parent)
 		.select(
 			pi_item.sales_order_item,
 			pi_item.product_bundle_item,
 			pi_item.item_code,
 			pi_item.sales_order,
 			Sum(pi_item.stock_qty).as_("stock_qty"),
-			Sum(pi_item.picked_qty).as_("picked_qty"),
+			Sum(
+				Case()
+				.when(
+					pi.status == "Closed",
+					CustomFunction("LEAST", ["a", "b"])(pi_item.picked_qty, pi_item.delivered_qty),
+				)
+				.else_(pi_item.picked_qty)
+			).as_("picked_qty"),
 		)
 		.where(pi_item.docstatus == 1)
 		.for_update()
@@ -1345,7 +1583,10 @@ def get_available_item_locations(
 	has_serial_no = frappe.get_cached_value("Item", item_code, "has_serial_no")
 	has_batch_no = frappe.get_cached_value("Item", item_code, "has_batch_no")
 
-	if has_batch_no and has_serial_no:
+	if is_staging_location((inventory_dimensions_dict or {}).get("storage_location")):
+		# Stock at a receiving (STAGING) location is never picked: it leaves only by a Stock Entry (Siwat, 17 Nov 2026)
+		pass
+	elif has_batch_no and has_serial_no:
 		locations = get_available_item_locations_for_serial_and_batched_item(
 			item_code,
 			from_warehouses,
@@ -1737,6 +1978,8 @@ def create_delivery(
 ):
 	pick_list = frappe.get_doc("Pick List", source_name)
 	pick_list.check_permission("read")
+	if pick_list.status == "Closed":
+		frappe.throw(_("Pick List {0} is closed. Reopen it to deliver from it.").format(bold(pick_list.name)))
 	target = target or (frappe.flags.args or {}).get("target") or "Delivery Note"
 	validate_item_locations(pick_list)
 	sales_dict = dict()

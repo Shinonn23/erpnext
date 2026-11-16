@@ -169,6 +169,27 @@ frappe.ui.form.on("Pick List", {
 		);
 	},
 
+	close_pick_list: (frm) => {
+		frappe.confirm(
+			__("Close this Pick List? It stops holding the stock and its reservations are released."),
+			() => {
+				frappe.call({
+					method: "erpnext.stock.doctype.pick_list.pick_list.close_pick_list",
+					args: { name: frm.doc.name },
+					callback: () => frm.reload_doc(),
+				});
+			}
+		);
+	},
+
+	reopen_pick_list: (frm) => {
+		frappe.call({
+			method: "erpnext.stock.doctype.pick_list.pick_list.reopen_pick_list",
+			args: { name: frm.doc.name },
+			callback: () => frm.reload_doc(),
+		});
+	},
+
 	get_item_locations: (frm) => {
 		// The Auto Pick button: one press fills every row (Pick List.keep_manual_picking: nothing picks on save)
 		frm.events.set_item_locations(frm, false);
@@ -180,8 +201,31 @@ frappe.ui.form.on("Pick List", {
 
 		if (frm.doc.docstatus === 1) {
 			const status_completed = frm.doc.status === "Completed";
+			const status_closed = frm.doc.status === "Closed";
 
-			if (!status_completed) {
+			// Status > Close / Reopen, as on a Sales Order (Siwat, 17 Nov 2026)
+			if (
+				frm.doc.purpose === "Delivery" &&
+				!frm.doc.borrowing &&
+				frm.perm[0] &&
+				frm.perm[0].submit
+			) {
+				if (["Open", "Partly Delivered"].includes(frm.doc.status)) {
+					frm.add_custom_button(
+						__("Close"),
+						() => frm.events.close_pick_list(frm),
+						__("Status")
+					);
+				} else if (status_closed) {
+					frm.add_custom_button(
+						__("Reopen"),
+						() => frm.events.reopen_pick_list(frm),
+						__("Status")
+					);
+				}
+			}
+
+			if (!status_completed && !status_closed) {
 				// "Update Current Stock" re-ran the automatic pick on a submitted list: the Auto Pick of the draft
 				// is the one place it runs.
 

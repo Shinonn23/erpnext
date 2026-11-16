@@ -213,7 +213,7 @@
    "in_standard_filter": 1,
    "label": "Status",
    "no_copy": 1,
-   "options": "Draft\nOpen\nPartly Delivered\nPartially Transferred\nCompleted\nCancelled",
+   "options": "Draft\nOpen\nPartly Delivered\nPartially Transferred\nCompleted\nCancelled\nClosed",
    "print_hide": 1,
    "read_only": 1,
    "report_hide": 1,
