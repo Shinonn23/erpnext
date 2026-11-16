@@ -255,7 +255,7 @@
    "fieldtype": "Data",
    "label": "Tax Id",
    "print_hide": 1,
-   "read_only": 1
+   "read_only_depends_on": "eval:doc.docstatus > 0 || doc.customer_group !== \"Temporary Customer\""
   },
   {
    "default": "1",
