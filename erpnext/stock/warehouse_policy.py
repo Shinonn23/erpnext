@@ -9,6 +9,7 @@ from erpnext.accounts.doctype.pos_invoice_merge_log.pos_invoice_merge_log import
 
 WRITE_OFF_ENTRY_TYPE = "Stock Write-Off"
 LOST_WAREHOUSE_TYPE = "Lost"
+WRITE_OFF_WAREHOUSE_TYPE = "Write-Off"
 
 MOVEMENT_DOCTYPES = {
 	"Stock Entry",
@@ -161,7 +162,11 @@ def validate_warehouse_operation(
 	# check is skipped) but the issue out of Lost is still the write-off's own
 	if not cint(policy.get(f"allow_{operation}")) and not (
 		operation == "issue"
-		and (is_write_off_from_lost(doc, location) or is_rejected_return_from_quarantine(doc, location))
+		and (
+			is_write_off_from_lost(doc, location)
+			or is_rejected_return_from_quarantine(doc, location)
+			or is_disposal_from_write_off(doc, location)
+		)
 	):
 		frappe.throw(
 			_(
@@ -226,6 +231,20 @@ def is_write_off_from_lost(doc, warehouse):
 	)
 
 
+def is_disposal_from_write_off(doc, warehouse):
+	"""Whether ``doc`` is the disposal of goods that wait in a Write-Off (DAMAGE) warehouse (Connect Diagnostics, 16 Nov
+	2026): a Material Issue whose Issue Type is "Disposal". The Write-Off type otherwise allows no issue, which left
+	every item moved into DAMAGE stuck there. The approval of a Disposal is the Managing Director's, who holds no Stock
+	Manager role, so the outgoing role is waived for the same document."""
+	return bool(
+		doc is not None
+		and doc.doctype == "Stock Entry"
+		and doc.get("purpose") == "Material Issue"
+		and doc.get("operation_issue_type") == "Disposal"
+		and warehouse.get("warehouse_type") == WRITE_OFF_WAREHOUSE_TYPE
+	)
+
+
 def outgoing_role_waived(doc, warehouse, policy):
 	"""Whether an app lets this document move stock out of `warehouse` without the type's outgoing role.
 
@@ -241,6 +260,8 @@ def outgoing_role_waived(doc, warehouse, policy):
 	if is_count_posting(doc):
 		return True
 	if is_write_off_from_lost(doc, warehouse):
+		return True
+	if is_disposal_from_write_off(doc, warehouse):
 		return True
 	if is_rejected_return_from_quarantine(doc, warehouse):
 		return True
