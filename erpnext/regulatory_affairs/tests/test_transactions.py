@@ -328,9 +328,13 @@ class ValidationHarness:
 	@contextmanager
 	def patched(self):
 		with ExitStack() as stack:
-			stack.enter_context(patch.object(
-				transactions, "get_registration_required_items", side_effect=lambda codes: set(codes) & self.required
-			))
+			stack.enter_context(
+				patch.object(
+					transactions,
+					"get_registration_required_items",
+					side_effect=lambda codes: set(codes) & self.required,
+				)
+			)
 			self.get_settings = stack.enter_context(
 				patch.object(transactions, "get_settings", return_value=self.settings)
 			)
@@ -815,8 +819,11 @@ class TestSalesOrderAndQuotation(unittest.TestCase):
 		warn = "erpnext.regulatory_affairs.transactions.validate_warning_transaction"
 		handlers = self.handlers("Sales Order", "before_submit")
 		self.assertLess(handlers.index(validate), handlers.index(snapshot))
-		# saving is refused too (Siwat, 5 Nov 2026), not only warned about
-		for doctype in ("Quotation", "Sales Order", "Delivery Note", "Sales Invoice"):
+		# Quotation and Sales Order only warn on save (Siwat, 16 Nov 2026); Delivery Note and Invoice refuse it
+		for doctype in ("Quotation", "Sales Order"):
+			self.assertIn(warn, self.handlers(doctype, "validate"), doctype)
+			self.assertNotIn(validate, self.handlers(doctype, "validate"), doctype)
+		for doctype in ("Delivery Note", "Sales Invoice"):
 			self.assertIn(validate, self.handlers(doctype, "validate"), doctype)
 			self.assertNotIn(warn, self.handlers(doctype, "validate"), doctype)
 		self.assertIn(warn, self.handlers("Purchase Order", "validate"))
@@ -1006,9 +1013,9 @@ class TestClassification(unittest.TestCase):
 	def test_required_items_with_valid_registration_pass(self):
 		for doctype in transactions.SALE_DOCTYPES:
 			with self.subTest(doctype=doctype):
-				harness = ValidationHarness(
-					{"DEVICE-1": make_mapping()}, required={"DEVICE-1"}
-				).run_with(make_doc(doctype, transaction_date="2026-08-09"))
+				harness = ValidationHarness({"DEVICE-1": make_mapping()}, required={"DEVICE-1"}).run_with(
+					make_doc(doctype, transaction_date="2026-08-09")
+				)
 				self.assertFalse(harness.raised)
 
 	def test_required_invoice_rows_are_checked_even_when_delivery_linked(self):
@@ -1098,7 +1105,9 @@ class TestClassification(unittest.TestCase):
 			patch.object(frappe, "get_meta", return_value=MagicMock(has_field=lambda field: True)),
 		):
 			condition = transactions.sellable_items_condition("2026-08-09")
-		self.assertIn("= 'Not Regulated' and ifnull(tabItem.registration_requirement, '') != 'Required'", condition)
+		self.assertIn(
+			"= 'Not Regulated' and ifnull(tabItem.registration_requirement, '') != 'Required'", condition
+		)
 		self.assertIn("not in ('', 'Not Regulated') and exists", condition)
 
 	def test_get_unclassified_items_lists_items_without_a_category(self):
