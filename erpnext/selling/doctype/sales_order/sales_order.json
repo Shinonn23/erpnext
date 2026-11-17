@@ -129,6 +129,7 @@
   "ignore_default_payment_terms_template",
   "payment_terms_template",
   "requires_credit_approval",
+  "requires_accounts_review",
   "payment_schedule",
   "section_break_o8q38",
   "has_deposit",
@@ -1793,6 +1794,15 @@
    "read_only": 1
   },
   {
+   "fieldname": "requires_accounts_review",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "is_virtual": 1,
+   "label": "Requires Accounts Review",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
    "fieldname": "connect_operations_tab",
    "fieldtype": "Tab Break",
    "label": "Operations and Approval"
@@ -1864,7 +1874,7 @@
  "idx": 105,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-11-08 12:00:00.000000",
+ "modified": "2026-11-17 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Selling",
  "name": "Sales Order",
