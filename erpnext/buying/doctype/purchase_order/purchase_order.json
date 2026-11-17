@@ -91,6 +91,7 @@
   "base_rounded_total",
   "section_break_tnkm",
   "advance_paid",
+  "cancelled_advance_references",
   "discount_section",
   "apply_discount_on",
   "base_discount_amount",
@@ -881,6 +882,16 @@
    "read_only": 1
   },
   {
+   "fieldname": "cancelled_advance_references",
+   "fieldtype": "JSON",
+   "hidden": 1,
+   "label": "Advance References at Cancellation",
+   "no_copy": 1,
+   "print_hide": 1,
+   "read_only": 1,
+   "report_hide": 1
+  },
+  {
    "fieldname": "payment_schedule_section",
    "fieldtype": "Section Break",
    "label": "Payment Terms"
@@ -1505,7 +1516,7 @@
  "idx": 105,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-11-08 12:00:00.000000",
+ "modified": "2026-11-17 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Buying",
  "name": "Purchase Order",

@@ -699,11 +699,11 @@
    "hidden": 1,
    "label": "Borrowing Approval Band",
    "no_copy": 1,
-   "options": "\nItem Group\nManaging Director\nChief Executive Officer",
+   "options": "\nProduct Group\nManaging Director\nChief Executive Officer",
    "read_only": 1
   },
   {
-   "depends_on": "eval:doc.loan_approval_band == 'Item Group'",
+   "depends_on": "eval:doc.loan_approval_band == 'Product Group'",
    "fieldname": "loan_group_approver_roles",
    "fieldtype": "Small Text",
    "hidden": 1,

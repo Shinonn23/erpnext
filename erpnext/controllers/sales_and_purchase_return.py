@@ -76,8 +76,14 @@ def validate_return_against(doc):
 					)
 				)
 
-			# validate update stock
-			if doc.doctype == "Sales Invoice" and doc.update_stock and not ref_doc.update_stock:
+			# validate update stock; the return of a POS closing (consolidated) may be of a sale of a former
+			# shift whose consolidated invoice carries the stock flag of its last receipt only (Siwat, 17 Nov 2026)
+			if (
+				doc.doctype == "Sales Invoice"
+				and doc.update_stock
+				and not ref_doc.update_stock
+				and not doc.get("is_consolidated")
+			):
 				frappe.throw(
 					_("'Update Stock' can not be checked because items are not delivered via {0}").format(
 						doc.return_against
@@ -307,9 +313,15 @@ def validate_quantity(doc, key, args, ref, valid_items, already_returned_items):
 					_("Item {0} has already been returned").format(args.item_code), StockOverReturnError
 				)
 			elif abs(flt(current_stock_qty, field_precision)) > max_returnable_qty:
+				# said in the unit of the document row (packs), not in stock units
+				# (the qty column is already in it; every other column is counted in stock units)
+				factor = 1.0 if column == "qty" else flt(args.get("conversion_factor")) or 1.0
 				frappe.throw(
-					_("Row # {0}: Cannot return more than {1} for Item {2}").format(
-						args.idx, max_returnable_qty, args.item_code
+					_("Row # {0}: Cannot return more than {1} {2} for Item {3}").format(
+						args.idx,
+						flt(max_returnable_qty / factor, field_precision),
+						args.get("uom") or args.get("stock_uom") or "",
+						args.item_code,
 					),
 					StockOverReturnError,
 				)

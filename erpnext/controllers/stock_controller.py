@@ -2625,7 +2625,7 @@ def make_quality_inspections(
 
 	inspections = []
 	for item in items:
-		if flt(item.get("sample_size")) > flt(item.get("qty")):
+		if flt(item.get("sample_size")) > abs(flt(item.get("qty"))):
 			frappe.throw(
 				_(
 					"{item_name}'s Sample Size ({sample_size}) cannot be greater than the Accepted Quantity ({accepted_quantity})"

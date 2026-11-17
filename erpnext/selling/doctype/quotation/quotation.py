@@ -65,6 +65,7 @@ class Quotation(SellingController):
 		customer_address: DF.Link | None
 		customer_group: DF.Link | None
 		customer_name: DF.Data | None
+		delivery_terms: DF.Data | None
 		disable_rounded_total: DF.Check
 		discount_amount: DF.Currency
 		enq_det: DF.Text | None
@@ -92,6 +93,7 @@ class Quotation(SellingController):
 		payment_terms_template: DF.Link | None
 		plc_conversion_rate: DF.Float
 		price_list_currency: DF.Link
+		price_validity: DF.Data | None
 		pricing_rules: DF.Table[PricingRuleDetail]
 		quotation_to: DF.Link
 		referral_sales_partner: DF.Link | None

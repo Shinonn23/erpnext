@@ -22,7 +22,7 @@ frappe.ui.form.on("Address", {
 				frappe.prompt(
 					fields,
 					function (filters) {
-						frm.events.get_address_by_tax_id(frm, filters);
+						get_address_by_tax_id(frm, filters);
 					},
 					__("RD VAT Service"),
 					__("Get Address")
@@ -97,25 +97,27 @@ frappe.ui.form.on("Address", {
 			__("Get Address")
 		);
 	},
-
-	get_address_by_tax_id: function (frm, filters) {
-		return frappe.call({
-			method: "erpnext.regional.thailand.utils.get_address_by_tax_id",
-			args: {
-				tax_id: filters.tax_id,
-				branch: filters.branch,
-			},
-			callback: function (r) {
-				cur_frm.set_value("address_title", r.message["name"]);
-				cur_frm.set_value("address_line1", r.message["address_line1"]);
-				cur_frm.set_value("city", r.message["city"]);
-				cur_frm.set_value("county", r.message["county"]);
-				cur_frm.set_value("state", r.message["state"]);
-				cur_frm.set_value("pincode", r.message["pincode"]);
-				cur_frm.set_value("tax_id", filters.tax_id);
-				cur_frm.set_value("branch_code", filters.branch);
-				cur_frm.set_value("update_tax_branch", 1);
-			},
-		});
-	},
 });
+
+// App scripts load before Address opens, so this helper is unavailable through frm.events.
+function get_address_by_tax_id(frm, filters) {
+	return frappe.call({
+		method: "erpnext.regional.thailand.utils.get_address_by_tax_id",
+		args: {
+			tax_id: filters.tax_id,
+			branch: filters.branch,
+		},
+		callback: function (r) {
+			if (!r.message) return;
+			frm.set_value("address_title", r.message["name"]);
+			frm.set_value("address_line1", r.message["address_line1"]);
+			frm.set_value("city", r.message["city"]);
+			frm.set_value("county", r.message["county"]);
+			frm.set_value("state", r.message["state"]);
+			frm.set_value("pincode", r.message["pincode"]);
+			frm.set_value("tax_id", filters.tax_id);
+			frm.set_value("branch_code", filters.branch);
+			frm.set_value("update_tax_branch", 1);
+		},
+	});
+}
