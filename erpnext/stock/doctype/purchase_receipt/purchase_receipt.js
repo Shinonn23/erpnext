@@ -272,13 +272,6 @@ erpnext.stock.PurchaseReceiptController = class PurchaseReceiptController extend
 
 				cur_frm.add_custom_button(__("Purchase Return"), this.make_purchase_return, __("Create"), "Purchase Receipt");
 
-				cur_frm.add_custom_button(
-					__("Make Stock Entry"),
-					cur_frm.cscript["Make Stock Entry"],
-					__("Create"),
-					"Stock Entry"
-				);
-
 				if (flt(this.frm.doc.per_billed) < 100) {
 					cur_frm.add_custom_button(
 						__("Purchase Invoice"),
@@ -472,13 +465,6 @@ frappe.ui.form.on("Purchase Receipt Item", {
 cur_frm.cscript._make_purchase_return = function () {
 	frappe.model.open_mapped_doc({
 		method: "erpnext.stock.doctype.purchase_receipt.purchase_receipt.make_purchase_return",
-		frm: cur_frm,
-	});
-};
-
-cur_frm.cscript["Make Stock Entry"] = function () {
-	frappe.model.open_mapped_doc({
-		method: "erpnext.stock.doctype.purchase_receipt.purchase_receipt.make_stock_entry",
 		frm: cur_frm,
 	});
 };
