@@ -899,8 +899,11 @@ def get_sre_reserved_qty_for_item_and_warehouse(item_code: str, warehouse: str |
 
 
 def get_sre_reserved_qty_for_items_and_warehouses(
-	item_code_list: list, warehouse_list: list | None = None, *, group_by_storage_location: bool = False,
-	storage_locations: list | None = None
+	item_code_list: list,
+	warehouse_list: list | None = None,
+	*,
+	group_by_storage_location: bool = False,
+	storage_locations: list | None = None,
 ) -> dict:
 	"""Return quantities keyed by item/warehouse, optionally including Storage Location."""
 
@@ -937,7 +940,9 @@ def get_sre_reserved_qty_for_items_and_warehouses(
 	data = query.run(as_dict=True)
 
 	return {
-		(d.item_code, d.warehouse, d.storage_location or None) if group_by_storage_location else (d.item_code, d.warehouse): d.reserved_qty
+		(d.item_code, d.warehouse, d.storage_location or None)
+		if group_by_storage_location
+		else (d.item_code, d.warehouse): d.reserved_qty
 		for d in data
 	}
 
@@ -1137,13 +1142,13 @@ def get_sre_details_for_voucher(voucher_type: str, voucher_no: str) -> list[dict
 			sre.item_code,
 			sre.warehouse,
 			sre.storage_location,
-				sre.voucher_type,
-				sre.voucher_no,
-				sre.voucher_detail_no,
-				(sre.reserved_qty - sre.delivered_qty).as_("reserved_qty"),
-				sre.has_serial_no,
-				sre.has_batch_no,
-				sre.reservation_based_on,
+			sre.voucher_type,
+			sre.voucher_no,
+			sre.voucher_detail_no,
+			(sre.reserved_qty - sre.delivered_qty).as_("reserved_qty"),
+			sre.has_serial_no,
+			sre.has_batch_no,
+			sre.reservation_based_on,
 		)
 		.where(
 			(sre.docstatus == 1)
@@ -1490,12 +1495,12 @@ class StockReservation:
 				if not (
 					row.item_code == entry.item_code
 					and row.warehouse == entry.warehouse
-				and (
-					not row.storage_location
-					or not entry.storage_location
-					or row.storage_location == entry.storage_location
-				)
-				and entry.qty > 0
+					and (
+						not row.storage_location
+						or not entry.storage_location
+						or row.storage_location == entry.storage_location
+					)
+					and entry.qty > 0
 				):
 					continue
 
@@ -1985,6 +1990,15 @@ def create_stock_reservation_entries_for_so_items(
 			index, picked_qty = 0, 0
 			while index < len(sbb.entries) and picked_qty < qty_to_be_reserved:
 				entry = sbb.entries[index]
+				if (
+					has_serial_no
+					and from_voucher_type == "Pick List"
+					and frappe.db.get_value("Serial No", entry.serial_no, "warehouse") != entry.warehouse
+				):
+					# a serial a Delivery Note already took out of the warehouse is not reserved again
+					index += 1
+					continue
+
 				qty = 1 if has_serial_no else min(abs(entry.qty), qty_to_be_reserved - picked_qty)
 
 				sre.append(

@@ -253,6 +253,7 @@ frappe.ui.form.on("Sales Order", {
 
 		frm.ignore_doctypes_on_cancel_all = [
 			"Purchase Order",
+			"Pick List",
 			"Unreconcile Payment",
 			"Unreconcile Payment Entries",
 			"Delivery Schedule Item",

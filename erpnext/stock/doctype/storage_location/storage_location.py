@@ -11,6 +11,39 @@ from frappe.utils import cint, cstr, flt, get_time, getdate
 DEFAULT_LOCATION_CODE = "STAGING"
 
 
+def is_staging_code(location_code):
+	"""A receiving location: ``STAGING`` or ``STAGING-<anything>``."""
+	code = cstr(location_code)
+	return code == DEFAULT_LOCATION_CODE or code.startswith(f"{DEFAULT_LOCATION_CODE}-")
+
+
+def is_staging_location(location, warehouse=None):
+	"""The Storage Location is an enabled receiving (STAGING) location, of ``warehouse`` when given. Stock at such a
+	location is never picked by a Pick List; it leaves only by a Stock Entry (Siwat, 17 Nov 2026)."""
+	if not location:
+		return False
+	values = frappe.db.get_value(
+		"Storage Location", location, ["warehouse", "location_code", "disabled"], as_dict=True
+	)
+	return bool(
+		values
+		and (not warehouse or values.warehouse == warehouse)
+		and not cint(values.disabled)
+		and is_staging_code(values.location_code)
+	)
+
+
+def staging_location_sql(expression):
+	"""SQL condition that is true when the Storage Location named by ``expression`` is NOT a STAGING location. An
+	empty or unknown location passes (it is not a receiving location). Put it in a WHERE with the ledger tables
+	joined; ``expression`` is trusted code, never user input."""
+	return (
+		"not exists (select 1 from `tabStorage Location` staging_sl "
+		f"where staging_sl.name = ({expression}) "
+		"and (staging_sl.location_code = 'STAGING' or staging_sl.location_code like 'STAGING-%%'))"
+	)
+
+
 class StorageLocation(Document):
 	def before_insert(self):
 		# before the name is made ("{warehouse} / {location_code}")

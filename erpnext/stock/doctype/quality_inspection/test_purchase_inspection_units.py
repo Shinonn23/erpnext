@@ -21,10 +21,16 @@ class TestPurchaseInspectionUnits(unittest.TestCase):
 	def test_manual_numeric_result_cannot_accept_an_out_of_range_reading(self):
 		from erpnext.stock.doctype.quality_inspection.quality_inspection import QualityInspection
 
-		row = frappe._dict(numeric=1, manual_inspection=1, min_value=1.4, max_value=2,
-			reading_1="5", status="Accepted")
-		doc = frappe._dict(purchase_unit_qty=1, purchase_rejected_qty=0, manual_inspection=0,
-			readings=[row], status="Accepted")
+		row = frappe._dict(
+			numeric=1, manual_inspection=1, min_value=1.4, max_value=2, reading_1="5", status="Accepted"
+		)
+		doc = frappe._dict(
+			purchase_unit_qty=1,
+			purchase_rejected_qty=0,
+			manual_inspection=0,
+			readings=[row],
+			status="Accepted",
+		)
 		doc.min_max_criteria_passed = lambda reading: False
 		QualityInspection.inspect_and_set_status(doc)
 		self.assertEqual((row.status, doc.status), ("Rejected", "Rejected"))
@@ -33,34 +39,70 @@ class TestPurchaseInspectionUnits(unittest.TestCase):
 		from erpnext.stock.doctype.quality_inspection_reading.quality_inspection_reading import (
 			has_automatic_criteria,
 		)
+
 		self.assertTrue(has_automatic_criteria(frappe._dict(numeric=0, value="Present")))
 		self.assertTrue(has_automatic_criteria(frappe._dict(numeric=1, min_value=1, max_value=2)))
-		self.assertTrue(has_automatic_criteria(frappe._dict(formula_based_criteria=1, acceptance_formula="reading_1 > 1")))
+		self.assertTrue(
+			has_automatic_criteria(frappe._dict(formula_based_criteria=1, acceptance_formula="reading_1 > 1"))
+		)
 		self.assertFalse(has_automatic_criteria(frappe._dict(numeric=1, min_value=0, max_value=0)))
+
 	def test_batch_only_item_ignores_serial_values_in_bundle(self):
-		row = frappe._dict(item_code="ITEM", qty=2, idx=1, serial_and_batch_bundle="BUNDLE",
-			purchase_inspection_granularity="Batch/Lot")
-		with (patch.object(frappe, "get_cached_value", return_value=0),
+		row = frappe._dict(
+			item_code="ITEM",
+			qty=2,
+			idx=1,
+			serial_and_batch_bundle="BUNDLE",
+			purchase_inspection_granularity="Batch/Lot",
+		)
+		with (
+			patch.object(frappe, "get_cached_value", return_value=0),
 			patch.object(frappe, "get_all", return_value=[]),
 			patch("erpnext.stock.serial_batch_bundle.get_serial_nos", return_value=["S1", "S2"]),
-			patch("erpnext.stock.serial_batch_bundle.get_batch_nos", return_value={"B": frappe._dict(qty=2)})):
-			self.assertEqual(module.receipt_units(row), [{"batch_no": "B", "serial_no": None, "qty": 2.0, "serials": []}])
+			patch("erpnext.stock.serial_batch_bundle.get_batch_nos", return_value={"B": frappe._dict(qty=2)}),
+		):
+			self.assertEqual(
+				module.receipt_units(row), [{"batch_no": "B", "serial_no": None, "qty": 2.0, "serials": []}]
+			)
 
 	def test_only_submitted_serials_and_batches_are_released(self):
 		units = split_units(2, ["S1", "S2"], {"B": 2}, {"S1": "B", "S2": "B"}, "Serial Number")
-		qi = frappe._dict(name="QI-1", docstatus=1, status="Accepted", purchase_unit_qty=1,
-			item_serial_no="S1", batch_no="B", purchase_accepted_qty=1, purchase_rejected_qty=0)
+		qi = frappe._dict(
+			name="QI-1",
+			docstatus=1,
+			status="Accepted",
+			purchase_unit_qty=1,
+			item_serial_no="S1",
+			batch_no="B",
+			purchase_accepted_qty=1,
+			purchase_rejected_qty=0,
+		)
 		held = [{"batch_no": "B", "qty": 2, "serial_nos": ["S1", "S2"]}]
 		result = remaining_inspection_results(units, [qi], held, [])
 		self.assertEqual(len(result), 1)
 		self.assertEqual(result[0]["accepted"]["serial_nos"], ["S1"])
-		self.assertEqual(remaining_inspection_results(units, [qi], [{"batch_no": "B", "qty": 1, "serial_nos": ["S2"]}], [])[0]["accepted"]["qty"], 0)
+		self.assertEqual(
+			remaining_inspection_results(
+				units, [qi], [{"batch_no": "B", "qty": 1, "serial_nos": ["S2"]}], []
+			)[0]["accepted"]["qty"],
+			0,
+		)
 
 		lots = split_units(5, [], {"B1": 2, "B2": 3}, {}, "Batch/Lot")
-		lot_qi = frappe._dict(name="QI-2", docstatus=1, status="Accepted", purchase_unit_qty=2,
-			batch_no="B1", purchase_accepted_qty=2, purchase_rejected_qty=0)
-		result = remaining_inspection_results(lots, [lot_qi], [{"batch_no": "B1", "qty": 2}, {"batch_no": "B2", "qty": 3}], [])
+		lot_qi = frappe._dict(
+			name="QI-2",
+			docstatus=1,
+			status="Accepted",
+			purchase_unit_qty=2,
+			batch_no="B1",
+			purchase_accepted_qty=2,
+			purchase_rejected_qty=0,
+		)
+		result = remaining_inspection_results(
+			lots, [lot_qi], [{"batch_no": "B1", "qty": 2}, {"batch_no": "B2", "qty": 3}], []
+		)
 		self.assertEqual([(r["unit"]["batch_no"], r["accepted"]["qty"]) for r in result], [("B1", 2)])
+
 	def test_serial_and_batch_grouping(self):
 		serials = ["S1", "S2", "S3"]
 		batches = {"B1": 2, "B2": 1}
@@ -217,7 +259,9 @@ class TestPurchaseInspectionUnits(unittest.TestCase):
 		)
 
 	def test_missing_serials_are_counted_individually_for_batch_receipt(self):
-		units = split_units(3, ["S1", "S2", "S3"], {"B": 3}, {s: "B" for s in ("S1", "S2", "S3")}, "Batch/Lot")
+		units = split_units(
+			3, ["S1", "S2", "S3"], {"B": 3}, {s: "B" for s in ("S1", "S2", "S3")}, "Batch/Lot"
+		)
 		progress = summarize_progress(units, [])
 		self.assertEqual((progress["required"], progress["missing"]), (3, 3))
 
@@ -280,41 +324,75 @@ class TestPurchaseInspectionUnits(unittest.TestCase):
 			self.assertTrue(module.has_active_serial_outflow(doc, row, unit))
 
 	def test_serialized_lot_without_an_individual_serial_is_rejected(self):
-		doc = frappe._dict(name="QI-1", item_code="ITEM", batch_no="B", purchase_unit_qty=2,
-			sample_size=1, status="Rejected", readings=[frappe._dict(status="Accepted")])
+		doc = frappe._dict(
+			name="QI-1",
+			item_code="ITEM",
+			batch_no="B",
+			purchase_unit_qty=2,
+			sample_size=1,
+			status="Rejected",
+			readings=[frappe._dict(status="Accepted")],
+		)
 		units = split_units(2, ["S1", "S2"], {"B": 2}, {"S1": "B", "S2": "B"}, "Batch/Lot")
-		with (patch.object(module, "receipt_units", return_value=units),
+		with (
+			patch.object(module, "receipt_units", return_value=units),
 			patch.object(module, "inspections_for_row", return_value=[]),
 			patch.object(frappe, "throw", side_effect=frappe.ValidationError),
-			self.assertRaises(frappe.ValidationError)):
-			module.validate_purchase_unit_inspection(doc, frappe._dict(), frappe._dict(item_code="ITEM"), "before_submit")
+			self.assertRaises(frappe.ValidationError),
+		):
+			module.validate_purchase_unit_inspection(
+				doc, frappe._dict(), frappe._dict(item_code="ITEM"), "before_submit"
+			)
 
 	def test_new_incoming_serialized_lot_cannot_be_saved_then_submitted(self):
-		doc = frappe._dict(name="QI-1", reference_type="Purchase Receipt", item_code="ITEM", batch_no="B",
-			purchase_unit_qty=2, sample_size=1)
+		doc = frappe._dict(
+			name="QI-1",
+			reference_type="Purchase Receipt",
+			item_code="ITEM",
+			batch_no="B",
+			purchase_unit_qty=2,
+			sample_size=1,
+		)
 		units = split_units(2, ["S1", "S2"], {"B": 2}, {"S1": "B", "S2": "B"}, "Batch/Lot")
-		with (patch.object(module, "receipt_units", return_value=units),
+		with (
+			patch.object(module, "receipt_units", return_value=units),
 			patch.object(frappe, "throw", side_effect=frappe.ValidationError),
-			self.assertRaises(frappe.ValidationError)):
-			module.validate_purchase_unit_inspection(doc, frappe._dict(), frappe._dict(item_code="ITEM"), "validate")
+			self.assertRaises(frappe.ValidationError),
+		):
+			module.validate_purchase_unit_inspection(
+				doc, frappe._dict(), frappe._dict(item_code="ITEM"), "validate"
+			)
 
 	def test_existing_serialized_lot_and_outgoing_inspections_can_submit(self):
 		units = split_units(2, ["S1", "S2"], {"B": 2}, {"S1": "B", "S2": "B"}, "Batch/Lot")
 		for reference_type, existing in (("Purchase Receipt", True), ("Pick List", False)):
 			with self.subTest(reference_type=reference_type):
-				doc = frappe._dict(name="QI-1", reference_type=reference_type, item_code="ITEM", batch_no="B",
-					purchase_unit_qty=2, sample_size=1, status="Rejected",
-					readings=[frappe._dict(status="Accepted")])
+				doc = frappe._dict(
+					name="QI-1",
+					reference_type=reference_type,
+					item_code="ITEM",
+					batch_no="B",
+					purchase_unit_qty=2,
+					sample_size=1,
+					status="Rejected",
+					readings=[frappe._dict(status="Accepted")],
+				)
 				if existing:
-					doc.purchase_serial_results = [frappe._dict(serial_no="S1", result="Accepted"),
-						frappe._dict(serial_no="S2", result="Rejected")]
+					doc.purchase_serial_results = [
+						frappe._dict(serial_no="S1", result="Accepted"),
+						frappe._dict(serial_no="S2", result="Rejected"),
+					]
 				previous = doc.copy() if existing else None
 				doc.get_doc_before_save = lambda: previous
 				doc.set = lambda field, value: doc.update({field: value})
 				doc.append = lambda field, value: doc[field].append(frappe._dict(value))
-				with (patch.object(module, "receipt_units", return_value=units),
-					patch.object(module, "inspections_for_row", return_value=[])):
-					module.validate_purchase_unit_inspection(doc, frappe._dict(), frappe._dict(item_code="ITEM"), "before_submit")
+				with (
+					patch.object(module, "receipt_units", return_value=units),
+					patch.object(module, "inspections_for_row", return_value=[]),
+				):
+					module.validate_purchase_unit_inspection(
+						doc, frappe._dict(), frappe._dict(item_code="ITEM"), "before_submit"
+					)
 				self.assertEqual(doc.purchase_rejected_serials, "S2" if existing else "S1\nS2")
 				self.assertEqual(doc.purchase_rejected_qty, 1 if existing else 2)
 				self.assertEqual(len(doc.purchase_serial_results), 2)
@@ -322,15 +400,33 @@ class TestPurchaseInspectionUnits(unittest.TestCase):
 	def test_cancelled_legacy_serialized_lot_can_be_amended_without_changing_coverage(self):
 		from copy import deepcopy
 
-		original = frappe._dict(name="QI-OLD", docstatus=2, reference_type="Purchase Receipt",
-			reference_name="PR-1", child_row_reference="ROW-1", item_code="ITEM", batch_no="B",
-			purchase_unit_qty=2, sample_size=1, status="Rejected", readings=[frappe._dict(
-				status="Accepted", reading_value="Original measurement")], purchase_serial_results=[
-				frappe._dict(serial_no="S1", result="Accepted"), frappe._dict(serial_no="S2", result="Rejected")])
+		original = frappe._dict(
+			name="QI-OLD",
+			docstatus=2,
+			reference_type="Purchase Receipt",
+			reference_name="PR-1",
+			child_row_reference="ROW-1",
+			item_code="ITEM",
+			batch_no="B",
+			purchase_unit_qty=2,
+			sample_size=1,
+			status="Rejected",
+			readings=[frappe._dict(status="Accepted", reading_value="Original measurement")],
+			purchase_serial_results=[
+				frappe._dict(serial_no="S1", result="Accepted"),
+				frappe._dict(serial_no="S2", result="Rejected"),
+			],
+		)
 		units = split_units(2, ["S1", "S2"], {"B": 2}, {"S1": "B", "S2": "B"}, "Batch/Lot")
-		for changed in ({}, {"reference_name": "PR-OTHER"}, {"child_row_reference": "ROW-OTHER"},
-			{"reference_type": "Purchase Invoice"}, {"source_docstatus": 1},
-			{"source_serial": "OTHER"}, {"amend_serial": "OTHER"}):
+		for changed in (
+			{},
+			{"reference_name": "PR-OTHER"},
+			{"child_row_reference": "ROW-OTHER"},
+			{"reference_type": "Purchase Invoice"},
+			{"source_docstatus": 1},
+			{"source_serial": "OTHER"},
+			{"amend_serial": "OTHER"},
+		):
 			with self.subTest(changed=changed):
 				source = deepcopy(original)
 				doc = deepcopy(original)
@@ -345,27 +441,45 @@ class TestPurchaseInspectionUnits(unittest.TestCase):
 					doc.update(changed)
 				doc.set = lambda field, value: doc.update({field: value})
 				doc.append = lambda field, value: doc[field].append(frappe._dict(value))
-				with (patch.object(module, "receipt_units", return_value=units),
+				with (
+					patch.object(module, "receipt_units", return_value=units),
 					patch.object(module, "inspections_for_row", return_value=[]),
 					patch.object(frappe, "get_doc", return_value=source),
-					patch.object(frappe, "throw", side_effect=frappe.ValidationError)):
+					patch.object(frappe, "throw", side_effect=frappe.ValidationError),
+				):
 					if changed:
 						with self.assertRaises(frappe.ValidationError):
-							module.validate_purchase_unit_inspection(doc, frappe._dict(), frappe._dict(item_code="ITEM"), "validate")
+							module.validate_purchase_unit_inspection(
+								doc, frappe._dict(), frappe._dict(item_code="ITEM"), "validate"
+							)
 					else:
-						module.validate_purchase_unit_inspection(doc, frappe._dict(), frappe._dict(item_code="ITEM"), "validate")
-						module.validate_purchase_unit_inspection(doc, frappe._dict(), frappe._dict(item_code="ITEM"), "before_submit")
+						module.validate_purchase_unit_inspection(
+							doc, frappe._dict(), frappe._dict(item_code="ITEM"), "validate"
+						)
+						module.validate_purchase_unit_inspection(
+							doc, frappe._dict(), frappe._dict(item_code="ITEM"), "before_submit"
+						)
 						self.assertEqual(doc.readings, original.readings)
 						self.assertEqual((doc.reference_name, doc.child_row_reference), ("PR-1", "ROW-1"))
-						self.assertEqual((doc.purchase_accepted_qty, doc.purchase_rejected_serials), (1, "S2"))
+						self.assertEqual(
+							(doc.purchase_accepted_qty, doc.purchase_rejected_serials), (1, "S2")
+						)
 		self.assertEqual(original.docstatus, 2)
 
 	def test_serial_history_preserves_legacy_lot_results_and_filters_parent_access(self):
 		visible = frappe._dict(name="QI-visible", docstatus=1, status="Rejected")
-		with (patch.object(frappe, "get_doc", return_value=Mock()),
-			patch.object(frappe, "get_all", return_value=[frappe._dict(parent="QI-visible", result="Accepted"),
-				frappe._dict(parent="QI-hidden", result="Rejected")]),
-			patch.object(frappe, "get_list", side_effect=[[], [visible]]) as get_list):
+		with (
+			patch.object(frappe, "get_doc", return_value=Mock()),
+			patch.object(
+				frappe,
+				"get_all",
+				return_value=[
+					frappe._dict(parent="QI-visible", result="Accepted"),
+					frappe._dict(parent="QI-hidden", result="Rejected"),
+				],
+			),
+			patch.object(frappe, "get_list", side_effect=[[], [visible]]) as get_list,
+		):
 			result = module.serial_inspection_history("S1")
 		self.assertEqual([(row.name, row.serial_result) for row in result], [("QI-visible", "Accepted")])
 		self.assertEqual(get_list.call_args.kwargs["filters"]["docstatus"], ["<", 2])
@@ -420,9 +534,11 @@ class TestPurchaseInspectionUnits(unittest.TestCase):
 	def test_serial_history_only_returns_readable_quality_inspections(self):
 		serial = Mock()
 		visible = frappe._dict(name="QI-visible", docstatus=1, status="Rejected")
-		with (patch.object(frappe, "get_doc", return_value=serial),
+		with (
+			patch.object(frappe, "get_doc", return_value=serial),
 			patch.object(frappe, "get_all", return_value=[]),
-			patch.object(frappe, "get_list", return_value=[visible])):
+			patch.object(frappe, "get_list", return_value=[visible]),
+		):
 			result = module.serial_inspection_history("S1")
 		serial.check_permission.assert_called_once_with("read")
 		self.assertEqual([(row.name, row.serial_result) for row in result], [("QI-visible", "Rejected")])
@@ -432,14 +548,19 @@ class TestPurchaseInspectionUnits(unittest.TestCase):
 		row = frappe._dict(name="row-1", idx=1, item_code="ITEM")
 		unit = {"batch_no": "B", "serial_no": None, "qty": 2, "serials": ["S1", "S2"]}
 		inspection = Mock(quality_inspection_template=None)
-		with (patch.object(frappe, "get_doc", return_value=inspection),
+		with (
+			patch.object(frappe, "get_doc", return_value=inspection),
 			patch.object(frappe, "db", Mock(get_value=Mock(return_value=None))),
-			patch.object(frappe, "session", frappe._dict(user="inspector@example.test"))):
+			patch.object(frappe, "session", frappe._dict(user="inspector@example.test")),
+		):
 			module.new_purchase_inspection(doc, row, unit)
-		self.assertEqual([call.args for call in inspection.append.call_args_list], [
-			("purchase_serial_results", {"serial_no": "S1", "result": "Accepted"}),
-			("purchase_serial_results", {"serial_no": "S2", "result": "Accepted"}),
-		])
+		self.assertEqual(
+			[call.args for call in inspection.append.call_args_list],
+			[
+				("purchase_serial_results", {"serial_no": "S1", "result": "Accepted"}),
+				("purchase_serial_results", {"serial_no": "S2", "result": "Accepted"}),
+			],
+		)
 
 	def test_new_draft_references_the_exact_serial_and_batch(self):
 		doc = frappe._dict(doctype="Purchase Receipt", name="PR-1", company="COMPANY")
@@ -497,84 +618,3 @@ class TestPurchaseInspectionUnits(unittest.TestCase):
 		}
 		self.assertIsNone(completed_row_inspection(units, [accepted]))
 		self.assertEqual(completed_row_inspection(units, [accepted, rejected]).status, "Rejected")
-
-
-class TestDispatchedPurchaseSlices(unittest.TestCase):
-	def qi(self, identity="D1", qty=4, serials=(), **values):
-		return frappe._dict(name="QI-" + identity, docstatus=0, item_code="ITEM", batch_no="B",
-			purchase_dispatch_id=identity, purchase_dispatch_warehouse="W", purchase_dispatch_location="A",
-			purchase_dispatch_serials="\n".join(serials), purchase_unit_qty=qty, **values)
-
-	def test_two_locations_partition_same_received_batch_without_inspecting_the_remainder(self):
-		units = split_units(10, [], {"B": 10}, {}, "Batch/Lot")
-		first, second = self.qi(), self.qi("D2", 3)
-		second.purchase_dispatch_location = "B"
-		first.update(docstatus=1, status="Accepted", purchase_accepted_qty=4, purchase_rejected_qty=0)
-		progress = inspection_progress(units, [first, second])
-		self.assertEqual([(entry["unit"]["qty"], entry["state"]) for entry in progress],
-			[(4, "submitted"), (3, "draft"), (3, "missing")])
-		self.assertEqual(summarize_progress(units, [first, second])["accepted_qty"], 4)
-		self.assertIsNone(completed_row_inspection(units, [first, second]))
-		self.assertEqual(module.inspection_unit(units, second)["storage_location"], "B")
-
-	def test_serial_inspection_matches_one_serial_inside_a_batch_receipt(self):
-		units = split_units(3, ["S1", "S2", "S3"], {"B": 3},
-			{"S1": "B", "S2": "B", "S3": "B"}, "Batch/Lot")
-		one = self.qi(qty=1, serials=["S1"], item_serial_no="S1")
-		two = self.qi("D2", qty=1, serials=["S2"], item_serial_no="S2")
-		progress = inspection_progress(units, [one, two])
-		self.assertEqual([entry["unit"]["serials"] for entry in progress], [["S1"], ["S2"], ["S3"]])
-		self.assertEqual(progress[0]["unit"]["serial_no"], "S1")
-		with self.assertRaises(ValueError):
-			inspection_progress(units, [self.qi(qty=1, serials=["S2"], item_serial_no="S1")])
-
-	def test_dispatched_serial_subsets_must_be_disjoint_and_exact(self):
-		units = split_units(4, ["S1", "S2", "S3", "S4"], {"B": 4},
-			{serial: "B" for serial in ("S1", "S2", "S3", "S4")}, "Batch/Lot")
-		first = self.qi(qty=2, serials=["S1", "S2"])
-		second = self.qi("D2", 1, ["S3"])
-		progress = inspection_progress(units, [first, second])
-		self.assertEqual(progress[-1]["unit"]["serials"], ["S4"])
-		for serials, qty in ((["S2"], 1), (["OTHER"], 1), (["S3", "S3"], 2), (["S3"], 2)):
-			with self.subTest(serials=serials), self.assertRaises(ValueError):
-				inspection_progress(units, [first, self.qi("D3", qty, serials)])
-
-	def test_overdispatch_duplicate_identity_and_legacy_overlap_are_rejected(self):
-		units = split_units(5, [], {"B": 5}, {}, "Batch/Lot")
-		for inspections in ([self.qi(), self.qi("D2", 2)], [self.qi(), self.qi()],
-			[self.qi(), frappe._dict(name="OLD", batch_no="B", purchase_unit_qty=5, docstatus=0)]):
-			with self.subTest(inspections=inspections), self.assertRaises(ValueError):
-				inspection_progress(units, inspections)
-
-	def test_cancelled_slices_do_not_cover_or_release_received_goods(self):
-		units = split_units(5, [], {"B": 5}, {}, "Batch/Lot")
-		cancelled = self.qi()
-		cancelled.docstatus = 2
-		self.assertEqual([(entry["unit"]["qty"], entry["state"])
-			for entry in inspection_progress(units, [cancelled])], [(5, "missing")])
-
-	def test_dispatched_serial_result_uses_single_serial_field(self):
-		class Inspection(frappe._dict):
-			def is_new(self):
-				return False
-		doc = Inspection(self.qi(qty=1, serials=["S1"], item_serial_no="S1"))
-		doc.update(status="Rejected", sample_size=1, readings=[{"status": "Accepted"}], flags=frappe._dict())
-		units = split_units(2, ["S1", "S2"], {"B": 2}, {"S1": "B", "S2": "B"}, "Batch/Lot")
-		with (patch.object(module, "receipt_units", return_value=units),
-			patch.object(module, "inspections_for_row", return_value=[])):
-			module.validate_purchase_unit_inspection(doc, frappe._dict(), frappe._dict(item_code="ITEM"), "before_submit")
-		self.assertEqual((doc.purchase_accepted_qty, doc.purchase_rejected_qty, doc.purchase_rejected_serials), (0, 1, "S1"))
-
-	def test_existing_dispatch_identity_cannot_be_changed(self):
-		old = self.qi()
-		doc = Mock(wraps=old)
-		doc.get.side_effect = old.get
-		doc.purchase_unit_qty = old.purchase_unit_qty
-		doc.is_new.return_value = False
-		doc.get_doc_before_save.return_value = {**old, "purchase_dispatch_location": "OTHER"}
-		with (
-			patch.object(module, "receipt_units", return_value=split_units(5, [], {"B": 5}, {}, "Batch/Lot")),
-			patch.object(frappe, "throw", side_effect=frappe.ValidationError),
-		):
-			with self.assertRaises(frappe.ValidationError):
-				module.validate_purchase_unit_inspection(doc, frappe._dict(), frappe._dict(item_code="ITEM"), "validate")

@@ -174,6 +174,9 @@ status_map = {
 		],
 		["Completed", "eval:self.purpose == 'Delivery' and self.delivery_status == 'Fully Delivered'"],
 		["Cancelled", "eval:self.docstatus == 2"],
+		# the LAST matching rule wins (get_status reads the list reversed): like Sales Order, Closed stays Closed
+		# when a Delivery Note recomputes the status, until the Pick List is reopened
+		["Closed", "eval:self.status=='Closed' and self.docstatus != 2"],
 	],
 }
 

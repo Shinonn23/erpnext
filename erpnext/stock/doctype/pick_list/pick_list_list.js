@@ -10,6 +10,7 @@ frappe.listview_settings["Pick List"] = {
 			"Partially Transferred": "yellow",
 			Completed: "green",
 			Cancelled: "red",
+			Closed: "green",
 		};
 		return [__(doc.status), status_colors[doc.status], "status,=," + doc.status];
 	},

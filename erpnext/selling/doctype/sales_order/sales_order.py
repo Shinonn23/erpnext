@@ -562,6 +562,9 @@ class SalesOrder(SellingController):
 		if self.status == "Closed":
 			frappe.throw(_("Closed order cannot be cancelled. Unclose to cancel."))
 
+		self.close_delivery_picks(cancelling=True)
+		self.ignore_linked_doctypes = (*self.ignore_linked_doctypes, "Pick List")
+
 		self.delete_delivery_schedule_items()
 		self.check_nextdoc_docstatus()
 		self.update_reserved_qty()
@@ -622,9 +625,36 @@ class SalesOrder(SellingController):
 		if date_diff and date_diff[0][0]:
 			frappe.throw(_("{0} {1} has been modified. Please refresh.").format(self.doctype, self.name))
 
+	def close_delivery_picks(self, cancelling=False):
+		"""A closed or cancelled order no longer delivers: close its open Delivery Pick Lists, so they stop holding
+		stock (Siwat, 17 Nov 2026). A Pick List that also serves an order still open is left to the Stock User."""
+		from erpnext.stock.doctype.pick_list.pick_list import close_open_picks_of_order
+
+		closed, shared = close_open_picks_of_order(self.name, cancelling=cancelling)
+		if closed:
+			self.add_comment("Label", _("Pick Lists closed with the order: {0}").format(", ".join(closed)))
+		if shared:
+			self.add_comment(
+				"Label",
+				_("Pick Lists also used by an open order, close them by hand: {0}").format(", ".join(shared)),
+			)
+			names = ", ".join(frappe.bold(name) for name in shared)
+			if cancelling:
+				frappe.throw(
+					_("Close Pick List {0} first: it also serves another open Sales Order.").format(names)
+				)
+			frappe.msgprint(
+				_(
+					"Pick Lists {0} also serve another open Sales Order. Close them by hand when they are not needed."
+				).format(names),
+				alert=True,
+			)
+
 	def update_status(self, status):
 		self.check_modified_date()
 		self.set_status(update=True, status=status)
+		if status == "Closed":
+			self.close_delivery_picks()
 		# Upon Sales Order Re-open, check for credit limit.
 		# Limit should be checked after the 'Hold/Closed' status is reset.
 		if status == "Draft" and self.docstatus == 1:

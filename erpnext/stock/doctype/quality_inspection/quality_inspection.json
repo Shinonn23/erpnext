@@ -39,10 +39,6 @@
   "specification_details",
   "quality_inspection_template",
   "manual_inspection",
-  "purchase_dispatch_id",
-  "purchase_dispatch_warehouse",
-  "purchase_dispatch_location",
-  "purchase_dispatch_serials",
   "readings",
   "section_break_14",
   "inspected_by",
@@ -98,7 +94,7 @@
    "fieldname": "reference_type",
    "fieldtype": "Select",
    "label": "Reference Type",
-   "options": "\nPurchase Receipt\nPurchase Invoice\nSubcontracting Receipt\nPick List\nDelivery Note\nSales Invoice\nStock Entry\nJob Card\nQuality Treatment Step",
+   "options": "\nPurchase Receipt\nPurchase Invoice\nSubcontracting Receipt\nPick List\nDelivery Note\nSales Invoice\nStock Entry\nJob Card",
    "reqd": 1
   },
   {
@@ -334,36 +330,6 @@
    "fieldtype": "Small Text",
    "label": "Rejected Serial Numbers",
    "hidden": 1
-  },
-  {
-   "fieldname": "purchase_dispatch_id",
-   "fieldtype": "Data",
-   "label": "Dispatch ID",
-   "hidden": 1,
-   "read_only": 1
-  },
-  {
-   "fieldname": "purchase_dispatch_warehouse",
-   "fieldtype": "Link",
-   "label": "Dispatch Warehouse",
-   "hidden": 1,
-   "read_only": 1,
-   "options": "Warehouse"
-  },
-  {
-   "fieldname": "purchase_dispatch_location",
-   "fieldtype": "Link",
-   "label": "Dispatch Storage Location",
-   "hidden": 1,
-   "read_only": 1,
-   "options": "Storage Location"
-  },
-  {
-   "fieldname": "purchase_dispatch_serials",
-   "fieldtype": "Small Text",
-   "label": "Dispatch Serial Numbers",
-   "hidden": 1,
-   "read_only": 1
   },
   {
    "fieldname": "purchase_serials_section",

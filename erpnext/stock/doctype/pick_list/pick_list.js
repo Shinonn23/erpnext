@@ -6,14 +6,32 @@ class PickListBarcodeScanner extends erpnext.utils.BarcodeScanner {
 		this.serial_scan = data.serial_no ? data : null;
 		const rows = this.frm.doc.locations || [];
 		if (this.serial_scan) {
-			if (rows.some((row) => (row.serial_no || "").split("\n").map((s) => s.trim()).includes(data.serial_no))) {
+			if (
+				rows.some((row) =>
+					(row.serial_no || "")
+						.split("\n")
+						.map((s) => s.trim())
+						.includes(data.serial_no)
+				)
+			) {
 				this.show_alert(__("Serial No {0} is already added", [data.serial_no]), "orange");
 				return Promise.reject();
 			}
 		}
-		const row = this.get_row_to_modify_on_scan(data.item_code, data.batch_no, data.uom, data.barcode, data.default_warehouse);
+		const row = this.get_row_to_modify_on_scan(
+			data.item_code,
+			data.batch_no,
+			data.uom,
+			data.barcode,
+			data.default_warehouse
+		);
 		if (!row?.item_code && rows.some((r) => r.item_code === data.item_code)) {
-			this.show_alert(__("No available row for item {0}; check the picked quantity and location.", [data.item_code]), "red");
+			this.show_alert(
+				__("No available row for item {0}; check the picked quantity and location.", [
+					data.item_code,
+				]),
+				"red"
+			);
 			this.clean_up();
 			return Promise.reject();
 		}
@@ -26,26 +44,51 @@ class PickListBarcodeScanner extends erpnext.utils.BarcodeScanner {
 		const rows = this.frm.doc.locations || [];
 		const eligible = rows.filter((row) => {
 			const demand = this.demand_ref_fields.some((f) => row[f]);
-			return row.item_code === item_code && !row.serial_and_batch_bundle && !row.has_item_scanned &&
+			return (
+				row.item_code === item_code &&
+				!row.serial_and_batch_bundle &&
+				!row.has_item_scanned &&
 				(!demand || flt(row.picked_qty) < flt(row.qty)) &&
 				(!row.batch_no || row.batch_no === batch_no) &&
-				(!row.picked_qty || (row.warehouse === data.serial_warehouse &&
-					(row.storage_location || null) === (data.serial_storage_location || null)));
+				(!row.picked_qty ||
+					(row.warehouse === data.serial_warehouse &&
+						(row.storage_location || null) === (data.serial_storage_location || null)))
+			);
 		});
-		return eligible.find((r) => r.warehouse === data.serial_warehouse &&
-			(r.storage_location || null) === (data.serial_storage_location || null)) || eligible[0];
+		return (
+			eligible.find(
+				(r) =>
+					r.warehouse === data.serial_warehouse &&
+					(r.storage_location || null) === (data.serial_storage_location || null)
+			) || eligible[0]
+		);
 	}
 
 	async set_serial_no(row, serial_no) {
 		if (serial_no && this.serial_scan) {
-			await frappe.model.set_value(row.doctype, row.name, "warehouse", this.serial_scan.serial_warehouse);
-			await frappe.model.set_value(row.doctype, row.name, "storage_location", this.serial_scan.serial_storage_location);
+			await frappe.model.set_value(
+				row.doctype,
+				row.name,
+				"warehouse",
+				this.serial_scan.serial_warehouse
+			);
+			await frappe.model.set_value(
+				row.doctype,
+				row.name,
+				"storage_location",
+				this.serial_scan.serial_storage_location
+			);
 		}
 		return super.set_serial_no(row, serial_no);
 	}
 
 	is_duplicate_serial_no(row, serial_no) {
-		return serial_no ? (row.serial_no || "").split("\n").map((s) => s.trim()).includes(serial_no) : false;
+		return serial_no
+			? (row.serial_no || "")
+					.split("\n")
+					.map((s) => s.trim())
+					.includes(serial_no)
+			: false;
 	}
 }
 
@@ -169,6 +212,27 @@ frappe.ui.form.on("Pick List", {
 		);
 	},
 
+	close_pick_list: (frm) => {
+		frappe.confirm(
+			__("Close this Pick List? It stops holding the stock and its reservations are released."),
+			() => {
+				frappe.call({
+					method: "erpnext.stock.doctype.pick_list.pick_list.close_pick_list",
+					args: { name: frm.doc.name },
+					callback: () => frm.reload_doc(),
+				});
+			}
+		);
+	},
+
+	reopen_pick_list: (frm) => {
+		frappe.call({
+			method: "erpnext.stock.doctype.pick_list.pick_list.reopen_pick_list",
+			args: { name: frm.doc.name },
+			callback: () => frm.reload_doc(),
+		});
+	},
+
 	get_item_locations: (frm) => {
 		// The Auto Pick button: one press fills every row (Pick List.keep_manual_picking: nothing picks on save)
 		frm.events.set_item_locations(frm, false);
@@ -180,8 +244,18 @@ frappe.ui.form.on("Pick List", {
 
 		if (frm.doc.docstatus === 1) {
 			const status_completed = frm.doc.status === "Completed";
+			const status_closed = frm.doc.status === "Closed";
 
-			if (!status_completed) {
+			// Status > Close / Reopen, as on a Sales Order (Siwat, 17 Nov 2026)
+			if (frm.doc.purpose === "Delivery" && !frm.doc.borrowing && frm.perm[0] && frm.perm[0].submit) {
+				if (["Open", "Partly Delivered"].includes(frm.doc.status)) {
+					frm.add_custom_button(__("Close"), () => frm.events.close_pick_list(frm), __("Status"));
+				} else if (status_closed) {
+					frm.add_custom_button(__("Reopen"), () => frm.events.reopen_pick_list(frm), __("Status"));
+				}
+			}
+
+			if (!status_completed && !status_closed) {
 				// "Update Current Stock" re-ran the automatic pick on a submitted list: the Auto Pick of the draft
 				// is the one place it runs.
 
@@ -191,7 +265,11 @@ frappe.ui.form.on("Pick List", {
 							frappe.set_route("Form", "Borrowing", frm.doc.borrowing)
 						);
 					} else {
-						if ((frm.doc.locations || []).every((row) => row.outgoing_inspection_requirement === "Not Required")) {
+						if (
+							(frm.doc.locations || []).every(
+								(row) => row.outgoing_inspection_requirement === "Not Required"
+							)
+						) {
 							frm.add_custom_button(
 								__("Delivery Note"),
 								() => frm.events.create_delivery(frm, "Delivery Note"),
@@ -204,7 +282,9 @@ frappe.ui.form.on("Pick List", {
 							__("Create")
 						);
 					}
-				} else if (!["Customer Demo - Asset Conversion", "Asset Conversion"].includes(frm.doc.pick_list_type)) {
+				} else if (
+					!["Customer Demo - Asset Conversion", "Asset Conversion"].includes(frm.doc.pick_list_type)
+				) {
 					frm.add_custom_button(
 						__("Stock Entry"),
 						() => frm.trigger("create_stock_entry"),
@@ -410,7 +490,13 @@ frappe.ui.form.on("Pick List Item", {
 	item_code: (frm, cdt, cdn) => {
 		let row = frappe.get_doc(cdt, cdn);
 		if (row.item_code) {
-			get_item_details(row.item_code, row.uom, row.warehouse, frm.doc.company, row.storage_location).then((data) => {
+			get_item_details(
+				row.item_code,
+				row.uom,
+				row.warehouse,
+				frm.doc.company,
+				row.storage_location
+			).then((data) => {
 				frappe.model.set_value(cdt, cdn, "uom", data.stock_uom);
 				frappe.model.set_value(cdt, cdn, "stock_uom", data.stock_uom);
 				frappe.model.set_value(cdt, cdn, "conversion_factor", 1);
@@ -440,10 +526,12 @@ frappe.ui.form.on("Pick List Item", {
 				}
 			});
 		}
-		get_item_details(row.item_code, row.uom, row.warehouse, frm.doc.company, row.storage_location).then((data) => {
-			frappe.model.set_value(cdt, cdn, "actual_qty", data.actual_qty);
-			frappe.model.set_value(cdt, cdn, "company_total_stock", data.company_total_stock);
-		});
+		get_item_details(row.item_code, row.uom, row.warehouse, frm.doc.company, row.storage_location).then(
+			(data) => {
+				frappe.model.set_value(cdt, cdn, "actual_qty", data.actual_qty);
+				frappe.model.set_value(cdt, cdn, "company_total_stock", data.company_total_stock);
+			}
+		);
 	},
 
 	storage_location: (frm, cdt, cdn) => {
@@ -458,9 +546,11 @@ frappe.ui.form.on("Pick List Item", {
 			frappe.model.set_value(cdt, cdn, "batch_no", null);
 		}
 		if (!row.item_code || !row.warehouse) return;
-		get_item_details(row.item_code, row.uom, row.warehouse, frm.doc.company, row.storage_location).then((data) => {
-			frappe.model.set_value(cdt, cdn, "actual_qty", data.actual_qty);
-		});
+		get_item_details(row.item_code, row.uom, row.warehouse, frm.doc.company, row.storage_location).then(
+			(data) => {
+				frappe.model.set_value(cdt, cdn, "actual_qty", data.actual_qty);
+			}
+		);
 	},
 
 	qty: (frm, cdt, cdn) => {

@@ -427,21 +427,18 @@ erpnext.TransactionController = class TransactionController extends erpnext.taxe
 		}
 
 		// A receipt is submitted first and inspected after it (Connect Diagnostics, Siwat, 9 Nov 2026): a Purchase
-		// Receipt / Purchase Invoice shows the button only once submitted. A return (goods coming back) the same.
+		// Receipt / Purchase Invoice and a return (goods coming back) show no native button at all, the QI team's
+		// button of the app (Create > Quality Inspection) replaces it (Siwat, 17 Nov 2026).
 		const receipt_first =
 			["Purchase Receipt", "Purchase Invoice"].includes(this.frm.doc.doctype) ||
 			(["Delivery Note", "Sales Invoice"].includes(this.frm.doc.doctype) && this.frm.doc.is_return);
-		const qc_stage_open = receipt_first
-			? this.frm.doc.docstatus === 1
-			: this.frm.doc.docstatus === 0 || this.frm.doc.__onload?.allow_to_make_qc_after_submission;
+		const qc_stage_open =
+			this.frm.doc.docstatus === 0 || this.frm.doc.__onload?.allow_to_make_qc_after_submission;
 
 		const me = this;
 		if (
 			!this.frm.is_new() &&
-			!(
-				["Purchase Receipt", "Purchase Invoice"].includes(this.frm.doc.doctype) &&
-				!this.frm.doc.is_return
-			) &&
+			!receipt_first &&
 			qc_stage_open &&
 			frappe.model.can_create("Quality Inspection") &&
 			show_qc_button
@@ -2899,7 +2896,8 @@ erpnext.TransactionController = class TransactionController extends erpnext.taxe
 							description: item.description,
 							serial_no: item.serial_no,
 							batch_no: item.batch_no,
-							sample_size: item.sample_quantity || (item.qty < 0 ? Math.abs(item.qty) : undefined),
+							sample_size:
+								item.sample_quantity || (item.qty < 0 ? Math.abs(item.qty) : undefined),
 							child_row_reference: item.name,
 						});
 						dialog_items.grid.refresh();

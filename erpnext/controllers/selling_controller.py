@@ -597,6 +597,27 @@ class SellingController(StockController):
 		if self.is_return:
 			return
 		self.check_for_on_hold_or_closed_status("Sales Order", ref_fieldname)
+		self.check_pick_list_not_closed()
+
+	def check_pick_list_not_closed(self):
+		"""A closed Pick List no longer delivers: its goods are free for another pick (Siwat, 17 Nov 2026)."""
+		if self.docstatus == 2 or self.get("_action") == "cancel":
+			# a cancel always works: it gives the quantity back to the order
+			return
+		if self.doctype == "Sales Invoice" and not self.get("update_stock"):
+			return
+
+		pick_lists = {
+			row.get("against_pick_list") for row in self.get("items") if row.get("against_pick_list")
+		}
+		for pick_list in sorted(pick_lists):
+			if frappe.db.get_value("Pick List", pick_list, "status") == "Closed":
+				frappe.throw(
+					_(
+						"Pick List {0} is closed. Reopen it, or make a new Pick List, to deliver these items."
+					).format(frappe.bold(pick_list)),
+					title=_("Pick List Closed"),
+				)
 
 	def update_reserved_qty(self):
 		so_map = {}
