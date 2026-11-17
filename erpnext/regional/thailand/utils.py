@@ -258,6 +258,110 @@ def get_party_by_tax_id(doctype: str, tax_id: str, branch: str | None = "00000")
 	return out
 
 
+RD_LOOKUP_KEY = "rd_address_lookup"
+PARTY_TYPE_FIELDS = {"Customer": "customer_type", "Supplier": "supplier_type"}
+# The defaults a party saved straight from the preview takes: (settings DocType, settings field, party field).
+PARTY_DEFAULTS = {
+	"Customer": (
+		("Selling Settings", "customer_group", "customer_group"),
+		("Selling Settings", "territory", "territory"),
+	),
+	"Supplier": (("Buying Settings", "supplier_group", "supplier_group"),),
+}
+
+
+def rd_party_address(data):
+	"""RD's address as the attributes ERPNext's ``create_primary_address`` reads (international layout; City is
+	required by ``make_address``, so a record without อำเภอ takes จังหวัด)."""
+	a = finalize_address_dict(data)
+	if not (a["address_line1"] or a["address_line2"] or a["city"] or a["state"]):
+		return {}
+	return {
+		"address_line1": a["address_line1"] or a["name"],
+		"address_line2": a["address_line2"],
+		"city": a["city"] or a["state"],
+		"state": a["state"],
+		"pincode": a["pincode"],
+		"country": "Thailand",
+	}
+
+
+def party_defaults(doctype):
+	"""The defaults a preview save needs, and the labels of the ones the settings lack."""
+	values, missing = {}, []
+	for settings, field, target in PARTY_DEFAULTS[doctype]:
+		value = frappe.db.get_single_value(settings, field)
+		if value:
+			values[target] = value
+		else:
+			missing.append(_(frappe.unscrub(field)))
+	return values, missing
+
+
+@frappe.whitelist(methods=["POST"])
+@rate_limit(limit=30, seconds=60)
+def create_party_from_tax_id(doctype: str, tax_id: str, branch: str | None = "00000"):
+	"""Save of the Tax ID preview: the server reads RD again and creates the party with the default group (and
+	territory) and its Billing Address in one go. The browser sends only the Tax ID and branch.
+
+	Returns {"name"} on success; {"existing": [...]} when the party already exists; {"missing": [labels]} when a
+	required default is not set (the client then opens the form to edit); {"found": False} when RD has no record.
+	"""
+	if doctype not in PARTY_DOCTYPES:
+		frappe.throw(_("Only a Customer or a Supplier can be filled from a Tax ID"))
+	frappe.has_permission(doctype, "create", throw=True)
+	tax_id = clean_tax_id(tax_id)
+	branch_code = branch_code_of(clean_branch(branch))
+	existing = existing_parties(doctype, tax_id, branch_code)
+	if (doctype == "Customer" and existing) or any(p["same_branch"] for p in existing):
+		return {"existing": existing}
+	defaults, missing = party_defaults(doctype)
+	if missing:
+		return {"missing": missing}
+	data = fetch_rd_vat_record(tax_id, branch_code)
+	if not data:
+		return {"found": False}
+	party = frappe.get_doc(
+		{
+			"doctype": doctype,
+			PARTY_DOCTYPES[doctype]: rd_legal_name(data),
+			PARTY_TYPE_FIELDS[doctype]: "Company",
+			"tax_id": tax_id,
+			**defaults,
+		}
+	)
+	if party.meta.has_field("branch_code"):
+		party.branch_code = branch_code
+	party.update(rd_party_address(data))
+	party.insert()
+	return {"name": party.name}
+
+
+def fill_rd_address_before_insert(doc, method=None):
+	"""Customer / Supplier before_insert: a form opened by "Edit Before Saving" carries only the Tax ID and branch
+	(the non-stored key ``rd_address_lookup`` = "<tax id>:<branch>"); the server reads RD again here so ERPNext's
+	``create_primary_address`` makes the Billing Address. The browser never supplies the stored address."""
+	lookup = doc.get(RD_LOOKUP_KEY)
+	if doc.doctype not in PARTY_DOCTYPES or not isinstance(lookup, str):
+		return
+	doc.__dict__.pop(RD_LOOKUP_KEY, None)
+	if doc.get("address_line1"):
+		return
+	tax_id, _sep, branch = lookup.partition(":")
+	tax_id = re.sub(r"\D", "", tax_id)
+	if len(tax_id) != 13 or tax_id != re.sub(r"\D", "", doc.tax_id or ""):
+		return  # the user changed the Tax ID: RD's address of the old one does not belong to this party
+	try:
+		data = fetch_rd_vat_record(tax_id, branch or "00000")
+	except frappe.ValidationError:
+		# RD down or a bad branch never blocks saving: the party is saved without the address
+		frappe.clear_last_message()
+		frappe.msgprint(_("The address could not be read from the Revenue Department. Add it after saving."))
+		return
+	if data:
+		doc.update(rd_party_address(data))
+
+
 def finalize_address_dict(data):
 	def get_part(data, key, value):
 		return (_part(data.get(key)) and value % (map[key], _part(data.get(key)))) or ""

@@ -1,4 +1,8 @@
 frappe.listview_settings["Supplier"] = {
+	onload(listview) {
+		// Thailand: "New from Tax ID" opens the Revenue Department preview (public/js/thailand/party_tax_id.js)
+		if (erpnext.thailand && erpnext.thailand.add_list_button) erpnext.thailand.add_list_button(listview);
+	},
 	add_fields: ["supplier_name", "supplier_group", "image", "on_hold", "disabled", "is_frozen"],
 	get_indicator: function (doc) {
 		if (cint(doc.disabled)) {

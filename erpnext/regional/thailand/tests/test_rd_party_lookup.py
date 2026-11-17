@@ -60,6 +60,19 @@ def response(content, status=200):
 	return r
 
 
+class Doc:
+	"""A Document as far as the insert hook sees it: attributes, get and update."""
+
+	def __init__(self, **values):
+		self.__dict__.update(values)
+
+	def get(self, key):
+		return self.__dict__.get(key)
+
+	def update(self, values):
+		self.__dict__.update(values)
+
+
 class TestRDLookup(unittest.TestCase):
 	def setUp(self):
 		self.cache = FakeCache()
@@ -198,6 +211,94 @@ class TestRDLookup(unittest.TestCase):
 		out, post, _f = self._lookup_with("Customer", rows)
 		post.assert_not_called()
 		self.assertFalse(out["found"])
+
+	def _create(self, doctype, rows=(), settings=None, post_content=RD_OK):
+		import frappe
+
+		settings = (
+			settings
+			if settings is not None
+			else {"customer_group": "Commercial", "territory": "Thailand", "supplier_group": "Local"}
+		)
+		inserted = []
+
+		class Party(frappe._dict):
+			meta = mock.Mock(has_field=lambda f: f == "branch_code")
+
+			def insert(self):
+				inserted.append(self)
+				self.name = "P-1"
+
+		with (
+			mock.patch.object(utils.frappe, "get_all", return_value=list(rows)),
+			mock.patch.object(utils.frappe, "has_permission", lambda *a, **k: True),
+			mock.patch.object(utils.frappe, "get_doc", lambda d: Party(d)),
+			mock.patch.object(
+				utils.frappe, "db", mock.Mock(get_single_value=lambda dt, f: settings.get(f)), create=True
+			),
+			mock.patch.object(utils.frappe, "unscrub", lambda f: f, create=True),
+			mock.patch.object(utils.requests, "post", return_value=response(post_content)) as post,
+		):
+			out = utils.create_party_from_tax_id(doctype, "0105551058581", "0")
+		return out, inserted, post
+
+	def test_save_creates_the_party_with_defaults_and_rd_address_read_on_the_server(self):
+		out, inserted, post = self._create("Customer")
+		post.assert_called_once()
+		self.assertEqual(out, {"name": "P-1"})
+		party = inserted[0]
+		self.assertEqual(party.customer_name, "บริษัท คอนเนค ไดแอกโนสติกส์ จำกัด")
+		self.assertEqual(party.customer_type, "Company")
+		self.assertEqual((party.customer_group, party.territory), ("Commercial", "Thailand"))
+		self.assertEqual(party.branch_code, "00000")
+		self.assertEqual(party.address_line2, "ท่าแร้ง")
+		self.assertEqual(party.city, "บางเขน")
+		self.assertEqual(party.state, "กรุงเทพมหานคร")
+		self.assertEqual(party.country, "Thailand")
+
+	def test_save_with_a_missing_default_creates_nothing(self):
+		out, inserted, post = self._create("Supplier", settings={})
+		self.assertEqual(out, {"missing": ["supplier_group"]})
+		self.assertEqual(inserted, [])
+		post.assert_not_called()
+
+	def test_save_of_an_existing_party_or_unknown_tax_id_creates_nothing(self):
+		import frappe
+
+		rows = [frappe._dict(name="C-1", customer_name="A", tax_id="0105551058581", branch_code="00001")]
+		out, inserted, _post = self._create("Customer", rows=rows)
+		self.assertEqual([p["name"] for p in out["existing"]], ["C-1"])
+		out, inserted2, _post = self._create("Supplier", post_content=RD_NOT_FOUND)
+		self.assertEqual(out, {"found": False})
+		self.assertEqual(inserted + inserted2, [])
+
+	def test_edit_before_saving_reads_rd_on_insert_only_for_the_same_tax_id(self):
+		import frappe
+
+		doc = Doc(doctype="Supplier", tax_id="0105551058581", rd_address_lookup="0105551058581:00000")
+		with mock.patch.object(utils.requests, "post", return_value=response(RD_OK)):
+			utils.fill_rd_address_before_insert(doc)
+		self.assertEqual(doc.city, "บางเขน")
+		self.assertIsNone(doc.get("rd_address_lookup"))
+		changed = Doc(doctype="Supplier", tax_id="1111111111111", rd_address_lookup="0105551058581:00000")
+		with mock.patch.object(utils.requests, "post") as post:
+			utils.fill_rd_address_before_insert(changed)
+		post.assert_not_called()
+		self.assertIsNone(changed.get("address_line1"))
+
+	def test_rd_down_on_insert_never_blocks_saving(self):
+		import frappe
+
+		doc = Doc(doctype="Customer", tax_id="0105551058581", rd_address_lookup="0105551058581:00000")
+		with (
+			mock.patch.object(utils.frappe, "throw", side_effect=frappe.ValidationError("down")),
+			mock.patch.object(utils.frappe, "clear_last_message", mock.Mock(), create=True),
+			mock.patch.object(utils.frappe, "msgprint", mock.Mock()) as msg,
+			mock.patch.object(utils.requests, "post", side_effect=requests.ConnectionError()),
+		):
+			utils.fill_rd_address_before_insert(doc)
+		msg.assert_called_once()
+		self.assertIsNone(doc.get("address_line1"))
 
 	def test_only_customer_or_supplier(self):
 		with self.assertRaises(Thrown):

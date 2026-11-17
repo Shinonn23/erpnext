@@ -1,9 +1,13 @@
-// New Customer / Supplier from a Tax ID: "Fetch from Revenue Department" fills the legal name, type Company, Tax ID
-// and branch code from RD (regional/thailand/utils.get_party_by_tax_id) and puts RD's address into the form's
-// address fields at once (address line, ตำบล/แขวง = City, อำเภอ/เขต = County, จังหวัด = State, ZIP, Thailand); on
-// save ERPNext's create_primary_address makes it the linked primary Address. A party that already has the Tax ID
-// (a Customer at any branch, a Supplier at the same branch) is offered instead. RD not knowing the Tax ID (an individual, a non-VAT party) or being down never
-// blocks saving: the user types by hand. Nothing here is mandatory.
+// Customer / Supplier from a Tax ID (Revenue Department, regional/thailand/utils).
+// The list button "New from Tax ID" and the new form's "Fetch from Revenue Department" open ONE preview dialog:
+// Tax ID + branch -> Fetch shows RD's legal name, Tax ID, branch and address (international layout: Address Line 2 =
+// ตำบล/แขวง, City = อำเภอ/เขต, State = จังหวัด). A party that already has the Tax ID (a Customer at any branch, a
+// Supplier at the same branch) is offered with "Open Existing"; RD not knowing it gives "Enter Manually". "Save" asks
+// the server (create_party_from_tax_id), which reads RD again and creates the party with its Billing Address;
+// "Edit Before Saving" opens the unsaved form with the name, type, Tax ID and branch, and only the non-stored key
+// rd_address_lookup ("<tax id>:<branch>"): the server reads RD again on insert and makes the Address
+// (fill_rd_address_before_insert). The browser never sends the stored address. Nothing here is mandatory.
+// The quick entry dialog keeps its own Tax ID section, which fills its native address fields.
 erpnext.thailand = erpnext.thailand || {};
 
 erpnext.thailand.RD_PARTY = {
@@ -119,20 +123,6 @@ erpnext.thailand.fill_rd_address = function (target, a) {
 	}
 };
 
-erpnext.thailand.form_target = function (frm) {
-	return {
-		doctype: frm.doctype,
-		doc: frm.doc,
-		state: (frm.__rd_state = frm.__rd_state || {}),
-		set_value: (field, value) => frm.set_value(field, value),
-		has_field: (field) => Boolean(frm.fields_dict[field]),
-	};
-};
-
-erpnext.thailand.apply_rd_party = function (frm, data) {
-	return erpnext.thailand.apply_rd_result(erpnext.thailand.form_target(frm), data);
-};
-
 erpnext.thailand.lookup_rd = function (target) {
 	const tax_id = erpnext.thailand.rd_tax_id_digits(target.doc.tax_id);
 	if (!/^[0-9]{13}$/.test(tax_id)) {
@@ -151,10 +141,6 @@ erpnext.thailand.lookup_rd = function (target) {
 	});
 };
 
-erpnext.thailand.fetch_rd_party = function (frm) {
-	return erpnext.thailand.lookup_rd(erpnext.thailand.form_target(frm));
-};
-
 // Tax ID or branch changed: a complete new pair is looked up once (its RD record replaces the filled values).
 erpnext.thailand.on_rd_key_change = function (target) {
 	const key = erpnext.thailand.rd_key(target.doc);
@@ -164,19 +150,241 @@ erpnext.thailand.on_rd_key_change = function (target) {
 	erpnext.thailand.lookup_rd(target);
 };
 
+// ---- Preview dialog -------------------------------------------------------------------------------------
+
+erpnext.thailand.RD_LOOKUP_KEY = "rd_address_lookup";
+erpnext.thailand.LIST_BUTTON = "New from Tax ID";
+
+// What the preview offers for an RD answer: "existing" (Open Existing), "not_found" (Enter Manually) or "found".
+erpnext.thailand.preview_mode = function (doctype, data) {
+	if (erpnext.thailand.rd_blocking_party(doctype, data)) return "existing";
+	return data && data.found ? "found" : "not_found";
+};
+
+erpnext.thailand.preview_address = function (a) {
+	a = a || {};
+	return [a.address_line1, a.address_line2, a.city, a.state, a.pincode].filter(Boolean).join(" ");
+};
+
+erpnext.thailand.preview_html = function (doctype, data) {
+	const esc = (v) => frappe.utils.escape_html(String(v || ""));
+	const mode = erpnext.thailand.preview_mode(doctype, data);
+	if (mode === "existing") {
+		const p = erpnext.thailand.rd_blocking_party(doctype, data);
+		return `<p>${esc(
+			__("{0} {1} ({2}) already has Tax ID {3} (branch {4}).", [
+				__(doctype),
+				p.title,
+				p.name,
+				data.tax_id,
+				p.branch_code || "-",
+			]),
+		)}</p>`;
+	}
+	if (mode === "not_found") {
+		return `<p>${esc(
+			__(
+				"Tax ID {0} is not found at the Revenue Department (an individual or not VAT registered). Enter the details by hand.",
+				[data.tax_id],
+			),
+		)}</p>`;
+	}
+	const a = data.address || {};
+	const rows = [
+		[__("Legal Name"), data.legal_name],
+		[__("Tax ID"), data.tax_id],
+		[__("Branch Code"), data.branch_code],
+		[__("Address Line 1"), a.address_line1],
+		[__("Address Line 2"), a.address_line2],
+		[__("City/Town"), a.city || a.state],
+		[__("State/Province"), a.state],
+		[__("Postal Code"), a.pincode],
+		[__("Country"), "Thailand"],
+	];
+	const others = (data.existing || []).filter((p) => !p.same_branch);
+	return (
+		`<table class="table table-bordered table-condensed">${rows
+			.map(([label, value]) => `<tr><th>${esc(label)}</th><td>${esc(value)}</td></tr>`)
+			.join("")}</table>` +
+		(others.length
+			? `<p class="text-muted">${esc(
+					__("This Tax ID is already {0} at another branch.", [
+						others.map((p) => p.name).join(", "),
+					]),
+				)}</p>`
+			: "")
+	);
+};
+
+// The values an unsaved form starts with. With rd = true it carries the lookup key, so the server adds RD's address.
+erpnext.thailand.form_values = function (doctype, data, rd) {
+	const fields = erpnext.thailand.RD_PARTY[doctype];
+	const values = { tax_id: data.tax_id, branch_code: data.branch_code };
+	if (rd) {
+		values[fields.name] = data.legal_name;
+		values[fields.type] = "Company";
+		values[erpnext.thailand.RD_LOOKUP_KEY] = `${data.tax_id}:${data.branch_code}`;
+	}
+	return values;
+};
+
+// Open the values in a form: the one the preview came from, else a new unsaved one.
+erpnext.thailand.open_form = function (doctype, values, frm) {
+	if (frm) {
+		for (const [field, value] of Object.entries(values)) {
+			if (frm.fields_dict[field]) frm.set_value(field, value);
+			else frm.doc[field] = value;
+		}
+		if (!values[erpnext.thailand.RD_LOOKUP_KEY]) delete frm.doc[erpnext.thailand.RD_LOOKUP_KEY];
+		return;
+	}
+	const doc = frappe.model.get_new_doc(doctype);
+	Object.assign(doc, values);
+	frappe.set_route("Form", doctype, doc.name);
+};
+
+erpnext.thailand.save_from_preview = function (doctype, data, dialog, frm) {
+	return frappe.call({
+		method: "erpnext.regional.thailand.utils.create_party_from_tax_id",
+		args: { doctype, tax_id: data.tax_id, branch: data.branch_code },
+		freeze: true,
+		callback: (r) => {
+			const out = r.message || {};
+			if (out.name) {
+				dialog && dialog.hide();
+				frappe.set_route("Form", doctype, out.name);
+			} else if (out.missing) {
+				frappe.show_alert(
+					{
+						message: __("{0} has no default set. Check the details before saving.", [
+							out.missing.join(", "),
+						]),
+						indicator: "orange",
+					},
+					10,
+				);
+				dialog && dialog.hide();
+				erpnext.thailand.open_form(doctype, erpnext.thailand.form_values(doctype, data, true), frm);
+			} else if (out.existing) {
+				erpnext.thailand.show_preview(dialog, doctype, { ...data, existing: out.existing });
+			} else {
+				erpnext.thailand.show_preview(dialog, doctype, { ...data, found: false });
+			}
+		},
+	});
+};
+
+// Show an RD answer in the dialog and set its buttons.
+erpnext.thailand.show_preview = function (dialog, doctype, data) {
+	const mode = erpnext.thailand.preview_mode(doctype, data);
+	dialog.__rd_data = data;
+	dialog.__rd_mode = mode;
+	dialog.fields_dict.preview.$wrapper.html(erpnext.thailand.preview_html(doctype, data));
+	const label = { existing: __("Open Existing"), not_found: __("Enter Manually"), found: __("Save") }[mode];
+	dialog.set_primary_action(label, () => erpnext.thailand.preview_primary(dialog, doctype));
+	if (dialog.__rd_edit_button) dialog.__rd_edit_button.toggle(mode === "found");
+	return mode;
+};
+
+erpnext.thailand.preview_primary = function (dialog, doctype) {
+	const data = dialog.__rd_data;
+	const frm = dialog.__rd_frm;
+	if (!data) return erpnext.thailand.preview_fetch(dialog, doctype);
+	if (dialog.__rd_mode === "existing") {
+		dialog.hide();
+		frappe.set_route("Form", doctype, erpnext.thailand.rd_blocking_party(doctype, data).name);
+	} else if (dialog.__rd_mode === "not_found") {
+		dialog.hide();
+		erpnext.thailand.open_form(doctype, erpnext.thailand.form_values(doctype, data, false), frm);
+	} else {
+		erpnext.thailand.save_from_preview(doctype, data, dialog, frm);
+	}
+};
+
+erpnext.thailand.preview_fetch = function (dialog, doctype) {
+	const tax_id = erpnext.thailand.rd_tax_id_digits(dialog.get_value("tax_id"));
+	if (!/^[0-9]{13}$/.test(tax_id)) {
+		frappe.show_alert({ message: __("Type the 13-digit Tax ID first."), indicator: "orange" });
+		return;
+	}
+	const branch = erpnext.thailand.rd_branch(dialog.get_value("branch_code"));
+	return frappe.call({
+		method: "erpnext.regional.thailand.utils.get_party_by_tax_id",
+		args: { doctype, tax_id, branch },
+		freeze: true,
+		callback: (r) => {
+			if (r.message) erpnext.thailand.show_preview(dialog, doctype, r.message);
+		},
+	});
+};
+
+erpnext.thailand.open_tax_id_preview = function (doctype, { tax_id, branch_code, frm } = {}) {
+	const dialog = new frappe.ui.Dialog({
+		title: __("New {0} from Tax ID", [__(doctype)]),
+		fields: [
+			{ label: __("Tax ID"), fieldname: "tax_id", fieldtype: "Data", default: tax_id || "" },
+			{ fieldtype: "Column Break" },
+			{
+				label: __("Branch Code"),
+				fieldname: "branch_code",
+				fieldtype: "Data",
+				default: branch_code || "00000",
+			},
+			{ fieldtype: "Column Break" },
+			{ label: __("Fetch"), fieldname: "fetch", fieldtype: "Button" },
+			{ fieldtype: "Section Break" },
+			{ fieldname: "preview", fieldtype: "HTML" },
+		],
+		secondary_action_label: __("Cancel"),
+		secondary_action: () => dialog.hide(),
+	});
+	dialog.__rd_frm = frm;
+	dialog.fields_dict.fetch.df.click = () => erpnext.thailand.preview_fetch(dialog, doctype);
+	for (const field of ["tax_id", "branch_code"]) {
+		dialog.fields_dict[field].df.onchange = () => {
+			dialog.__rd_data = null;
+			dialog.fields_dict.preview.$wrapper.html("");
+			dialog.set_primary_action(__("Fetch"), () => erpnext.thailand.preview_primary(dialog, doctype));
+			if (dialog.__rd_edit_button) dialog.__rd_edit_button.toggle(false);
+		};
+	}
+	dialog.set_primary_action(__("Fetch"), () => erpnext.thailand.preview_primary(dialog, doctype));
+	dialog.add_custom_action(__("Edit Before Saving"), () => {
+		dialog.hide();
+		erpnext.thailand.open_form(
+			doctype,
+			erpnext.thailand.form_values(doctype, dialog.__rd_data, true),
+			dialog.__rd_frm,
+		);
+	});
+	// add_custom_action returns nothing: the button is the last one it appended
+	dialog.__rd_edit_button = dialog.custom_actions ? dialog.custom_actions.find("button").last() : null;
+	if (dialog.__rd_edit_button) dialog.__rd_edit_button.toggle(false);
+	dialog.show();
+	if (tax_id) erpnext.thailand.preview_fetch(dialog, doctype);
+	return dialog;
+};
+
+// List view (customer_list.js, supplier_list.js): "New from Tax ID" for a user who may create the party.
+erpnext.thailand.add_list_button = function (listview) {
+	const doctype = listview.doctype;
+	if (!erpnext.thailand.RD_PARTY[doctype] || !frappe.model.can_create(doctype)) return;
+	listview.page.add_inner_button(__(erpnext.thailand.LIST_BUTTON), () =>
+		erpnext.thailand.open_tax_id_preview(doctype),
+	);
+};
+
 for (const doctype of Object.keys(erpnext.thailand.RD_PARTY)) {
 	frappe.ui.form.on(doctype, {
 		refresh(frm) {
 			if (!erpnext.thailand.show_rd_button(frm)) return;
-			frm.add_custom_button(__(erpnext.thailand.RD_BUTTON), () => erpnext.thailand.fetch_rd_party(frm));
-		},
-		tax_id(frm) {
-			if (!erpnext.thailand.show_rd_button(frm)) return;
-			erpnext.thailand.on_rd_key_change(erpnext.thailand.form_target(frm));
-		},
-		branch_code(frm) {
-			if (!erpnext.thailand.show_rd_button(frm)) return;
-			erpnext.thailand.on_rd_key_change(erpnext.thailand.form_target(frm));
+			frm.add_custom_button(__(erpnext.thailand.RD_BUTTON), () =>
+				erpnext.thailand.open_tax_id_preview(frm.doctype, {
+					tax_id: frm.doc.tax_id,
+					branch_code: frm.doc.branch_code,
+					frm,
+				}),
+			);
 		},
 	});
 }
