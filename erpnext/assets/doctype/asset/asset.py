@@ -504,10 +504,15 @@ class Asset(AccountsController):
 
 		if is_expensed_conversion_asset(self):
 			if (
-				flt(self.net_purchase_amount) or flt(self.additional_asset_cost) or self.calculate_depreciation
-				or flt(self.opening_accumulated_depreciation) or self.opening_number_of_booked_depreciations
+				flt(self.net_purchase_amount)
+				or flt(self.additional_asset_cost)
+				or self.calculate_depreciation
+				or flt(self.opening_accumulated_depreciation)
+				or self.opening_number_of_booked_depreciations
 			):
-				frappe.throw(_("An immediately expensed Demo Asset must have zero value and no depreciation."))
+				frappe.throw(
+					_("An immediately expensed Demo Asset must have zero value and no depreciation.")
+				)
 			return
 
 		if not flt(self.net_purchase_amount) and self.asset_type != "Composite Asset":
@@ -989,17 +994,23 @@ class Asset(AccountsController):
 		return fixed_asset_account
 
 	def get_cwip_account(self, cwip_enabled=False):
-		cwip_account = None
-		try:
-			cwip_account = get_asset_account(
+		if cwip_enabled:
+			# CWIP accounting is on: a missing account is an error
+			return get_asset_account(
 				"capital_work_in_progress_account", self.name, self.asset_category, self.company
 			)
-		except Exception:
-			# if no cwip account found in category or company and "cwip is enabled" then raise else silently pass
-			if cwip_enabled:
-				raise
-
-		return cwip_account
+		# CWIP not used: look the account up without frappe.throw, whose message would reach the user even though
+		# the error is ignored ("Set Capital Work In Progress Account ..." on a successful submit)
+		return (
+			get_asset_category_account(
+				"capital_work_in_progress_account",
+				asset=self.name,
+				asset_category=self.asset_category,
+				company=self.company,
+			)
+			or frappe.get_cached_value("Company", self.company, "capital_work_in_progress_account")
+			or None
+		)
 
 	def make_gl_entries(self):
 		if self.check_asset_capitalization_gl_entries():
