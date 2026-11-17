@@ -25,6 +25,7 @@
   "total_taxes_and_charges",
   "col_break1",
   "distribute_charges_based_on",
+  "customs_allocation",
   "amended_from",
   "sec_break2",
   "landed_cost_help",
@@ -118,6 +119,16 @@
    "reqd": 1
   },
   {
+   "description": "Customs lines and duty rows of the last Allocate (JSON)",
+   "fieldname": "customs_allocation",
+   "fieldtype": "Long Text",
+   "hidden": 1,
+   "label": "Customs Allocation",
+   "no_copy": 1,
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
    "fieldname": "amended_from",
    "fieldtype": "Link",
    "label": "Amended From",
@@ -161,8 +172,8 @@
    "fieldname": "total_vendor_invoices_cost",
    "fieldtype": "Currency",
    "label": "Total Vendor Invoices Cost (Company Currency)",
-   "options": "Company:company:default_currency",
    "no_copy": 1,
+   "options": "Company:company:default_currency",
    "print_hide": 1,
    "read_only": 1
   },
@@ -216,7 +227,7 @@
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-11-07 16:00:00.000000",
+ "modified": "2026-11-17 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Landed Cost Voucher",
