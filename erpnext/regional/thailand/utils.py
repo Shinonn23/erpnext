@@ -260,7 +260,7 @@ def get_party_by_tax_id(doctype: str, tax_id: str, branch: str | None = "00000")
 
 def finalize_address_dict(data):
 	def get_part(data, key, value):
-		return (data.get(key, "-") != "-" and value % (map[key], data.get(key))) or ""
+		return (_part(data.get(key)) and value % (map[key], _part(data.get(key)))) or ""
 
 	prefix_thambol, prefix_amphur, prefix_province = get_prefix_for_address(data)
 
@@ -278,7 +278,7 @@ def finalize_address_dict(data):
 	}
 
 	name = rd_legal_name(data)
-	house = data.get("vHouseNumber", "")
+	house = _part(data.get("vHouseNumber"))
 	village = get_part(data, "vVillageName", "%s %s")
 	soi = get_part(data, "vSoiName", "%s %s")
 	moo = get_part(data, "vMooNumber", "%s %s")
@@ -289,7 +289,7 @@ def finalize_address_dict(data):
 	thambon = get_part(data, "vThambol", "%s%s")
 	amphur = get_part(data, "vAmphur", "%s%s")
 	province = get_part(data, "vProvince", "%s%s")
-	postal = data.get("vPostCode", "")
+	postal = _part(data.get("vPostCode"))
 
 	address_parts = filter(lambda x: x != "", [house, village, soi, moo, building, floor, room, street])
 	return {

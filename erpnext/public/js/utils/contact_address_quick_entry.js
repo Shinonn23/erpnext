@@ -99,6 +99,11 @@ frappe.ui.form.ContactAddressQuickEntryForm = class ContactAddressQuickEntryForm
 				mandatory_depends_on: "eval:doc.country_address || doc.address_line1",
 			},
 			{
+				label: __("County"),
+				fieldname: "county",
+				fieldtype: "Data",
+			},
+			{
 				label: __("State/Province"),
 				fieldname: "state",
 				fieldtype: "Data",

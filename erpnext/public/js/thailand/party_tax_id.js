@@ -1,6 +1,7 @@
 // New Customer / Supplier from a Tax ID: "Fetch from Revenue Department" fills the legal name, type Company, Tax ID
-// and branch code from RD (regional/thailand/utils.get_party_by_tax_id) and, on save, the server makes the RD
-// address the primary Billing Address (regional/thailand/custom/rd_party.py). A party that already has the Tax ID
+// and branch code from RD (regional/thailand/utils.get_party_by_tax_id) and puts RD's address into the form's
+// address fields at once (address line, ตำบล/แขวง = City, อำเภอ/เขต = County, จังหวัด = State, ZIP, Thailand); on
+// save ERPNext's create_primary_address makes it the linked primary Address. A party that already has the Tax ID
 // (a Customer at any branch, a Supplier at the same branch) is offered instead. RD not knowing the Tax ID (an individual, a non-VAT party) or being down never
 // blocks saving: the user types by hand. Nothing here is mandatory.
 erpnext.thailand = erpnext.thailand || {};
@@ -66,8 +67,6 @@ erpnext.thailand.apply_rd_result = function (target, data) {
 			},
 			10,
 		);
-		target.doc.rd_fill_address = 0;
-		target.doc.rd_filled_key = "";
 		return "not_found";
 	}
 	const key = `${data.tax_id}:${data.branch_code}`;
@@ -76,17 +75,14 @@ erpnext.thailand.apply_rd_result = function (target, data) {
 	target.set_value(fields.type, "Company");
 	target.set_value("tax_id", data.tax_id);
 	if (target.has_field("branch_code")) target.set_value("branch_code", data.branch_code);
-	// Not stored: tells the server to make the RD address after save (it asks RD again itself), only while the
-	// Tax ID and branch are still the pair filled here.
-	target.doc.rd_fill_address = 1;
-	target.doc.rd_filled_key = key;
 	const a = data.address || {};
+	erpnext.thailand.fill_rd_address(target, a);
 	const others = (data.existing || []).filter((party) => !party.same_branch);
 	frappe.show_alert(
 		{
 			message:
 				__(
-					"Filled from the Revenue Department. The address {0} becomes the primary address on save.",
+					"Filled from the Revenue Department, address {0}. It becomes the primary Address on save.",
 					[[a.address_line1, a.city, a.county, a.state, a.pincode].filter(Boolean).join(" ")],
 				) +
 				(others.length
@@ -100,6 +96,26 @@ erpnext.thailand.apply_rd_result = function (target, data) {
 		10,
 	);
 	return "filled";
+};
+
+// RD's address into the form's own address fields (only the ones the form or dialog has). City is required by
+// ERPNext's make_address, so a record without ตำบล falls back to อำเภอ, then จังหวัด.
+erpnext.thailand.RD_ADDRESS_FIELDS = ["address_line1", "city", "county", "state", "pincode"];
+erpnext.thailand.fill_rd_address = function (target, a) {
+	if (!a.address_line1 && !a.city && !a.county && !a.state) return;
+	const values = {
+		address_line1: a.address_line1 || a.name || "",
+		city: a.city || a.county || a.state || "",
+		county: a.county || "",
+		state: a.state || "",
+		pincode: a.pincode || "",
+	};
+	for (const field of erpnext.thailand.RD_ADDRESS_FIELDS) {
+		if (target.has_field(field)) target.set_value(field, values[field]);
+	}
+	for (const field of ["country", "country_address"]) {
+		if (target.has_field(field)) target.set_value(field, "Thailand");
+	}
 };
 
 erpnext.thailand.form_target = function (frm) {
@@ -138,14 +154,9 @@ erpnext.thailand.fetch_rd_party = function (frm) {
 	return erpnext.thailand.lookup_rd(erpnext.thailand.form_target(frm));
 };
 
-// Tax ID or branch changed: a fill for another pair no longer holds (no RD address on save), and a complete new
-// pair is looked up once.
+// Tax ID or branch changed: a complete new pair is looked up once (its RD record replaces the filled values).
 erpnext.thailand.on_rd_key_change = function (target) {
 	const key = erpnext.thailand.rd_key(target.doc);
-	if (target.doc.rd_fill_address && target.doc.rd_filled_key !== key) {
-		target.doc.rd_fill_address = 0;
-		target.doc.rd_filled_key = "";
-	}
 	const tax_id = erpnext.thailand.rd_tax_id_digits(target.doc.tax_id);
 	if (!/^[0-9]{13}$/.test(tax_id)) return;
 	if (target.state.rd_last_lookup === key) return;
@@ -170,7 +181,7 @@ for (const doctype of Object.keys(erpnext.thailand.RD_PARTY)) {
 }
 
 // Quick entry (Customer and Supplier, also "Create new" from a Link field): a Tax ID section with the same button.
-// The RD address is made by the server on save, so the dialog's own address fields stay for a hand-typed one.
+// The RD address goes into the dialog's own Primary Address fields.
 erpnext.thailand.quick_entry_fields = function (doctype) {
 	if (!erpnext.thailand.RD_PARTY[doctype]) return [];
 	return [

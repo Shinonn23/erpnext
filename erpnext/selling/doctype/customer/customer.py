@@ -1012,6 +1012,7 @@ def make_address(args, is_primary_address=1, is_shipping_address=1):
 			"address_line1": args.get("address_line1"),
 			"address_line2": args.get("address_line2"),
 			"city": args.get("city"),
+			"county": args.get("county"),
 			"state": args.get("state"),
 			"pincode": args.get("pincode"),
 			"country": args.get("country"),
