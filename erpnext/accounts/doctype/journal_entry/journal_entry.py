@@ -96,6 +96,7 @@ class JournalEntry(AccountsController):
 		stock_asset_account: DF.Link | None
 		stock_entry: DF.Link | None
 		tax_withholding_category: DF.Link | None
+		thai_withholding_base: DF.Currency
 		tax_withholding_entries: DF.Table[TaxWithholdingEntry]
 		tax_withholding_group: DF.Link | None
 		title: DF.Data | None

@@ -755,6 +755,21 @@ def update_reference_in_journal_entry(d, journal_entry, do_not_save=False):
 	return new_row
 
 
+def _append_reference_row(payment_entry, values=None):
+	"""Append a reference row whose idx no other row of the entry holds.
+
+	Frappe numbers an appended row len(table) + 1. A reconciliation batch removes the emptied source
+	rows between its splits (clear_unallocated_reference_document_rows), so a second split could take
+	the idx of the first one; the exchange gain/loss journal is deduplicated by (doctype, name, idx),
+	so the second split's difference was never booked (an advance allocated partly to a Purchase Order
+	and partly unallocated, both taken by one invoice).
+	"""
+	next_idx = max((row.idx or 0 for row in payment_entry.get("references") or []), default=0) + 1
+	row = payment_entry.append("references", values or {})
+	row.idx = next_idx
+	return row
+
+
 def update_reference_in_payment_entry(
 	d, payment_entry, do_not_save=False, skip_ref_details_update_for_pe=False, dimensions_dict=None
 ):
@@ -806,7 +821,7 @@ def update_reference_in_payment_entry(
 			)
 			existing_row.allocated_amount -= d.allocated_amount
 
-			new_row = payment_entry.append("references")
+			new_row = _append_reference_row(payment_entry)
 			new_row.docstatus = 1
 			for field in list(reference_details):
 				new_row.set(field, reference_details[field])
@@ -825,7 +840,7 @@ def update_reference_in_payment_entry(
 			row = new_row
 
 	else:
-		new_row = payment_entry.append("references")
+		new_row = _append_reference_row(payment_entry)
 		new_row.docstatus = 1
 		new_row.update(reference_details)
 		row = new_row
@@ -860,8 +875,8 @@ def update_reference_in_payment_entry(
 				target = (
 					row
 					if index == 0
-					else payment_entry.append(
-						"references",
+					else _append_reference_row(
+						payment_entry,
 						{key: value for key, value in original.items() if key not in ("name", "idx")},
 					)
 				)
