@@ -141,17 +141,20 @@ class QualityInspection(Document):
 			purchase_snapshot = None
 			if self.reference_name and self.child_row_reference:
 				purchase_snapshot = frappe.db.get_value(
-					self.reference_type + " Item", {"name": self.child_row_reference, "parent": self.reference_name,
-						"docstatus": 1}, "purchase_inspection_granularity"
+					self.reference_type + " Item",
+					{"name": self.child_row_reference, "parent": self.reference_name, "docstatus": 1},
+					"purchase_inspection_granularity",
 				)
-			purchase_required = (purchase_snapshot != "Not Required") if purchase_snapshot else frappe.get_cached_value(
-				"Item", self.item_code, "inspection_required_before_purchase"
+			purchase_required = (
+				(purchase_snapshot != "Not Required")
+				if purchase_snapshot
+				else frappe.get_cached_value("Item", self.item_code, "inspection_required_before_purchase")
 			)
 			if not purchase_required:
 				frappe.throw(
-					_("Item {0} is not inspected when it is received, so it needs no Quality Inspection.").format(
-						get_link_to_form("Item", self.item_code)
-					)
+					_(
+						"Item {0} is not inspected when it is received, so it needs no Quality Inspection."
+					).format(get_link_to_form("Item", self.item_code))
 				)
 
 		if (
@@ -300,7 +303,9 @@ class QualityInspection(Document):
 	def inspect_and_set_status(self):
 		for reading in self.readings:
 			if (
-				self.get("purchase_unit_qty") and cint(reading.manual_inspection) and cint(reading.numeric)
+				self.get("purchase_unit_qty")
+				and cint(reading.manual_inspection)
+				and cint(reading.numeric)
 				and (reading.get("min_value") or reading.get("max_value"))
 				and any(str(reading.get(f"reading_{i}") or "").strip() for i in range(1, 11))
 				and not self.min_max_criteria_passed(reading)
@@ -320,7 +325,8 @@ class QualityInspection(Document):
 					self.set_status_based_on_acceptance_values(reading)
 
 		if self.get("purchase_unit_qty") and (
-			flt(self.get("purchase_rejected_qty")) > 0 or any(reading.status == "Rejected" for reading in self.readings)
+			flt(self.get("purchase_rejected_qty")) > 0
+			or any(reading.status == "Rejected" for reading in self.readings)
 		):
 			self.status = "Rejected"
 		elif not self.manual_inspection:
@@ -345,9 +351,12 @@ class QualityInspection(Document):
 		before_save = self.get_doc_before_save()
 
 		for reading in self.readings:
-			if not cint(reading.numeric) or (cint(reading.manual_inspection) and not (
-				self.get("purchase_unit_qty") and (reading.get("min_value") or reading.get("max_value"))
-			)):
+			if not cint(reading.numeric) or (
+				cint(reading.manual_inspection)
+				and not (
+					self.get("purchase_unit_qty") and (reading.get("min_value") or reading.get("max_value"))
+				)
+			):
 				continue
 
 			stored = before_save and before_save.get("readings", {"name": reading.name})
@@ -475,9 +484,14 @@ def item_query(doctype: Any, txt: str | None, searchfield: Any, start: int, page
 		from connect_diagnostics_setup.workflows.repair_reinspection import _repair
 
 		_, row = _repair(filters["reference_name"])
-		items = frappe.get_list("Item", filters={"name": row.item_code},
+		items = frappe.get_list(
+			"Item",
+			filters={"name": row.item_code},
 			or_filters={"name": ["like", f"%{txt or ''}%"], "item_name": ["like", f"%{txt or ''}%"]},
-			fields=["name", "item_name"], limit_start=start, limit_page_length=page_len)
+			fields=["name", "item_name"],
+			limit_start=start,
+			limit_page_length=page_len,
+		)
 		return [(item.name, item.item_name) for item in items]
 	elif reference_doctype == "Pick List":
 		from connect_diagnostics_setup.stock.outgoing_inspection import required, source_rows
@@ -491,9 +505,15 @@ def item_query(doctype: Any, txt: str | None, searchfield: Any, start: int, page
 		items = sorted({row.item_code for row in source_rows(pick) if required(row)})
 		if not items:
 			return []
-		rows = frappe.get_list("Item", filters={"name": ["in", items]},
+		rows = frappe.get_list(
+			"Item",
+			filters={"name": ["in", items]},
 			or_filters={"name": ["like", f"%{txt or ''}%"], "item_name": ["like", f"%{txt or ''}%"]},
-			fields=["name", "item_name"], order_by="name", limit_start=start, limit_page_length=page_len)
+			fields=["name", "item_name"],
+			order_by="name",
+			limit_start=start,
+			limit_page_length=page_len,
+		)
 		return [(row.name, row.item_name) for row in rows]
 	elif reference_doctype == "Job Card":
 		production_item, item_name = frappe.get_value(

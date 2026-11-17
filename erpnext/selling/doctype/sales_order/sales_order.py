@@ -632,20 +632,21 @@ class SalesOrder(SellingController):
 
 		closed, shared = close_open_picks_of_order(self.name, cancelling=cancelling)
 		if closed:
-			self.add_comment(
-				"Label", _("Pick Lists closed with the order: {0}").format(", ".join(closed))
-			)
+			self.add_comment("Label", _("Pick Lists closed with the order: {0}").format(", ".join(closed)))
 		if shared:
 			self.add_comment(
-				"Label", _("Pick Lists also used by an open order, close them by hand: {0}").format(", ".join(shared))
+				"Label",
+				_("Pick Lists also used by an open order, close them by hand: {0}").format(", ".join(shared)),
 			)
 			names = ", ".join(frappe.bold(name) for name in shared)
 			if cancelling:
-				frappe.throw(_("Close Pick List {0} first: it also serves another open Sales Order.").format(names))
+				frappe.throw(
+					_("Close Pick List {0} first: it also serves another open Sales Order.").format(names)
+				)
 			frappe.msgprint(
-				_("Pick Lists {0} also serve another open Sales Order. Close them by hand when they are not needed.").format(
-					names
-				),
+				_(
+					"Pick Lists {0} also serve another open Sales Order. Close them by hand when they are not needed."
+				).format(names),
 				alert=True,
 			)
 

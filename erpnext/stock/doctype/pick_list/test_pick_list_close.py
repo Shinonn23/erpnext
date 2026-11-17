@@ -179,8 +179,15 @@ class TestReopen(Base):
 	def test_reopen_recreates_the_reservations_the_close_released(self):
 		doc = pick(status="Closed")
 		calls = []
-		for name in ("db_set", "update_status", "update_reference_qty", "update_sales_order_picking_status",
-			"update_prevdoc_status", "add_comment", "reload"):
+		for name in (
+			"db_set",
+			"update_status",
+			"update_reference_qty",
+			"update_sales_order_picking_status",
+			"update_prevdoc_status",
+			"add_comment",
+			"reload",
+		):
 			setattr(doc, name, lambda *args, **kwargs: calls.append("x"))
 		doc.create_stock_reservation_entries = lambda notify=True: calls.append("reserve")
 		with (
@@ -228,8 +235,15 @@ class TestReopenShortages(Base):
 		self.assertEqual(self.shortages([row(storage_location="W / A")], located={"W / A": 5}), [])
 
 	def test_stock_held_by_another_open_pick_is_short(self):
-		other = {"item_code": "ITEM", "warehouse": "W", "storage_location": "W / A", "batch_no": "",
-			"serial_no": "", "serial_and_batch_bundle": "", "picked_qty": 3}
+		other = {
+			"item_code": "ITEM",
+			"warehouse": "W",
+			"storage_location": "W / A",
+			"batch_no": "",
+			"serial_no": "",
+			"serial_and_batch_bundle": "",
+			"picked_qty": 3,
+		}
 		found = self.shortages([row(storage_location="W / A")], others=[other], located={"W / A": 5})
 		self.assertEqual(len(found), 1)
 		self.assertIn("Row 1", found[0])
@@ -271,8 +285,18 @@ class TestCloseOrderPicks(Base):
 			doc.flags = frappe._dict()
 			return doc
 
-		with patch.object(module, "frappe", MagicMock(**{"get_all.side_effect": get_all,
-			"get_doc.side_effect": get_doc, "db.get_value.side_effect": get_value, "_dict": frappe._dict})):
+		with patch.object(
+			module,
+			"frappe",
+			MagicMock(
+				**{
+					"get_all.side_effect": get_all,
+					"get_doc.side_effect": get_doc,
+					"db.get_value.side_effect": get_value,
+					"_dict": frappe._dict,
+				}
+			),
+		):
 			result = module.close_open_picks_of_order(sales_order, cancelling=cancelling)
 		return result, closed_docs
 
@@ -347,7 +371,9 @@ class TestSellingSide(Base):
 	def test_a_cancel_is_never_blocked_by_a_closed_pick(self):
 		from erpnext.controllers.selling_controller import SellingController
 
-		doc = frappe._dict(doctype="Delivery Note", docstatus=2, items=[frappe._dict(against_pick_list="PL-1")])
+		doc = frappe._dict(
+			doctype="Delivery Note", docstatus=2, items=[frappe._dict(against_pick_list="PL-1")]
+		)
 		doc.get = lambda key, default=None: doc[key] if key in doc else default
 		frappe.db.get_value.return_value = "Closed"
 		SellingController.check_pick_list_not_closed(doc)
@@ -355,7 +381,9 @@ class TestSellingSide(Base):
 	def test_an_invoice_that_does_not_move_stock_is_not_checked(self):
 		from erpnext.controllers.selling_controller import SellingController
 
-		doc = frappe._dict(doctype="Sales Invoice", update_stock=0, items=[frappe._dict(against_pick_list="PL-1")])
+		doc = frappe._dict(
+			doctype="Sales Invoice", update_stock=0, items=[frappe._dict(against_pick_list="PL-1")]
+		)
 		doc.get = lambda key, default=None: doc[key] if key in doc else default
 		frappe.db.get_value.return_value = "Closed"
 		SellingController.check_pick_list_not_closed(doc)

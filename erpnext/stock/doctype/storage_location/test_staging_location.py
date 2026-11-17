@@ -51,7 +51,11 @@ class TestPickListNeverTakesStaging(unittest.TestCase):
 			patch.object(pick_list, "get_available_item_locations_for_other_item") as other,
 		):
 			found = pick_list.get_available_item_locations(
-				"ITEM", ["W"], 1, "C", ignore_validation=True,
+				"ITEM",
+				["W"],
+				1,
+				"C",
+				ignore_validation=True,
 				inventory_dimensions_dict={"storage_location": "W / STAGING"},
 			)
 		self.assertEqual(found, [])

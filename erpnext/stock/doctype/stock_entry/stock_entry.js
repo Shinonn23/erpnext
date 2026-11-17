@@ -425,12 +425,17 @@ frappe.ui.form.on("Stock Entry", {
 				frm.doc.purpose == "Material Transfer" &&
 				frm.doc.per_transferred < 100
 			) {
-				frm.add_custom_button(__("End Transit"), function () {
-					frappe.model.open_mapped_doc({
-						method: "erpnext.stock.doctype.stock_entry.stock_entry.make_stock_in_entry",
-						frm: frm,
-					});
-				}, undefined, "Stock Entry");
+				frm.add_custom_button(
+					__("End Transit"),
+					function () {
+						frappe.model.open_mapped_doc({
+							method: "erpnext.stock.doctype.stock_entry.stock_entry.make_stock_in_entry",
+							frm: frm,
+						});
+					},
+					undefined,
+					"Stock Entry"
+				);
 			}
 
 			if (frm.doc.per_transferred > 0) {
@@ -663,7 +668,10 @@ frappe.ui.form.on("Stock Entry", {
 	requires_shipment: function (frm) {
 		if (frm.doc.requires_shipment) {
 			const destination = frm.doc.to_warehouse;
-			frm.set_value("shipment_destination_warehouse", frm.doc.shipment_destination_warehouse || destination);
+			frm.set_value(
+				"shipment_destination_warehouse",
+				frm.doc.shipment_destination_warehouse || destination
+			);
 			frm.set_value("to_warehouse", "");
 			frm.set_value("add_to_transit", 1);
 		} else {

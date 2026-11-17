@@ -312,8 +312,14 @@ def inspection_progress(units, inspections):
 	if legacy:
 		if len(inspections) != 1:
 			raise ValueError("Legacy inspection cannot be safely matched to receipt units")
-		return [{"unit": unit, "inspection": legacy[0],
-			"state": "submitted" if legacy[0].get("docstatus") == 1 else "draft"} for unit in units]
+		return [
+			{
+				"unit": unit,
+				"inspection": legacy[0],
+				"state": "submitted" if legacy[0].get("docstatus") == 1 else "draft",
+			}
+			for unit in units
+		]
 	matched = defaultdict(list)
 	for qi in inspections:
 		unit = inspection_unit(units, qi)
@@ -332,15 +338,28 @@ def inspection_progress(units, inspections):
 				raise ValueError("More than one inspection covers the same serial number")
 			serials.update(unit["serials"])
 			covered += unit["qty"]
-			progress.append({"unit": unit, "inspection": qi,
-				"state": "submitted" if qi.get("docstatus") == 1 else "draft"})
+			progress.append(
+				{
+					"unit": unit,
+					"inspection": qi,
+					"state": "submitted" if qi.get("docstatus") == 1 else "draft",
+				}
+			)
 		remaining = base["qty"] - covered
 		if remaining < -1e-9:
 			raise ValueError("Inspected quantities exceed the received unit")
 		if remaining > 1e-9:
-			progress.append({"unit": {**base, "qty": remaining,
-				"serials": [serial for serial in base["serials"] if serial not in serials]},
-				"inspection": None, "state": "missing"})
+			progress.append(
+				{
+					"unit": {
+						**base,
+						"qty": remaining,
+						"serials": [serial for serial in base["serials"] if serial not in serials],
+					},
+					"inspection": None,
+					"state": "missing",
+				}
+			)
 	return progress
 
 
@@ -411,7 +430,9 @@ def summarize_progress(units, inspections):
 		"rejected_qty": 0,
 	}
 	for entry in progress:
-		count = len(entry["unit"]["serials"]) if entry["state"] == "missing" and entry["unit"]["serials"] else 1
+		count = (
+			len(entry["unit"]["serials"]) if entry["state"] == "missing" and entry["unit"]["serials"] else 1
+		)
 		summary["required"] += count
 		summary[entry["state"]] += count
 		if entry["state"] == "submitted":
@@ -518,21 +539,43 @@ def validate_purchase_unit_inspection(doc, reference, row, method):
 	if flt(doc.get("sample_size")) > unit["qty"]:
 		frappe.throw(_("The sample size cannot exceed the received unit quantity."))
 	previous = doc.get_doc_before_save() if callable(getattr(doc, "get_doc_before_save", None)) else None
-	identity_fields = ("reference_type", "reference_name", "child_row_reference", "item_code", "batch_no",
-		"item_serial_no", "purchase_unit_qty")
+	identity_fields = (
+		"reference_type",
+		"reference_name",
+		"child_row_reference",
+		"item_code",
+		"batch_no",
+		"item_serial_no",
+		"purchase_unit_qty",
+	)
 	if previous and any(previous.get(field) != doc.get(field) for field in identity_fields):
 		frappe.throw(_("The received inspection unit cannot be changed."))
-	if unit["serials"] and not unit["serial_no"] and not previous and doc.get("reference_type") != "Pick List":
+	if (
+		unit["serials"]
+		and not unit["serial_no"]
+		and not previous
+		and doc.get("reference_type") != "Pick List"
+	):
 		amended = frappe.get_doc("Quality Inspection", doc.amended_from) if doc.get("amended_from") else None
-		original_serials = [result.get("serial_no") for result in amended.get("purchase_serial_results") or []] if amended else []
+		original_serials = (
+			[result.get("serial_no") for result in amended.get("purchase_serial_results") or []]
+			if amended
+			else []
+		)
 		serials = [result.get("serial_no") for result in doc.get("purchase_serial_results") or []]
-		if (not amended or cint(amended.docstatus) != 2
+		if (
+			not amended
+			or cint(amended.docstatus) != 2
 			or any(amended.get(field) != doc.get(field) for field in identity_fields)
 			or len(original_serials) != len(set(original_serials))
 			or set(original_serials) != set(unit["serials"])
-			or len(serials) != len(set(serials)) or set(serials) != set(original_serials)):
+			or len(serials) != len(set(serials))
+			or set(serials) != set(original_serials)
+		):
 			frappe.throw(_("Create a separate Quality Inspection for each Serial Number."))
-	others = [other for other in inspections_for_row(reference, row, lock=True) if other.name != doc.get("name")]
+	others = [
+		other for other in inspections_for_row(reference, row, lock=True) if other.name != doc.get("name")
+	]
 	try:
 		inspection_progress(units, [*others, doc])
 	except ValueError as exc:
@@ -580,9 +623,13 @@ def validate_purchase_unit_inspection(doc, reference, row, method):
 		rejected = set(get_serial_nos(doc.get("purchase_rejected_serials") or ""))
 		doc.set("purchase_serial_results", [])
 		for serial in unit["serials"]:
-			doc.append("purchase_serial_results", {
-				"serial_no": serial, "result": "Rejected" if serial in rejected else "Accepted",
-			})
+			doc.append(
+				"purchase_serial_results",
+				{
+					"serial_no": serial,
+					"result": "Rejected" if serial in rejected else "Accepted",
+				},
+			)
 
 
 def _inspected_when_moved(leg, at):
@@ -985,15 +1032,31 @@ def write_off_warehouse(company, source_warehouse=None):
 	if not company:
 		return None
 	if not source_warehouse:
-		matches = frappe.get_all("Warehouse", filters={"company": company, "warehouse_type": "Write-Off", "is_group": 0, "disabled": 0}, pluck="name", limit_page_length=2)
+		matches = frappe.get_all(
+			"Warehouse",
+			filters={"company": company, "warehouse_type": "Write-Off", "is_group": 0, "disabled": 0},
+			pluck="name",
+			limit_page_length=2,
+		)
 		return matches[0] if len(matches) == 1 else None
 	if not frappe.db.has_column("Warehouse", "damage_warehouse"):
 		return None
 	source = frappe.db.get_value("Warehouse", source_warehouse, ["company", "damage_warehouse"], as_dict=True)
 	if not source or source.company != company or not source.damage_warehouse:
 		return None
-	target = frappe.db.get_value("Warehouse", source.damage_warehouse, ["company", "warehouse_type", "is_group", "disabled"], as_dict=True)
-	if not target or target.company != company or target.warehouse_type != "Write-Off" or target.is_group or target.disabled:
+	target = frappe.db.get_value(
+		"Warehouse",
+		source.damage_warehouse,
+		["company", "warehouse_type", "is_group", "disabled"],
+		as_dict=True,
+	)
+	if (
+		not target
+		or target.company != company
+		or target.warehouse_type != "Write-Off"
+		or target.is_group
+		or target.disabled
+	):
 		return None
 	return source.damage_warehouse
 
@@ -1049,10 +1112,17 @@ def build_release_entry(doc, sources, rows):
 			from_location = row["storage_location"]
 		if not target:
 			incomplete = True
-		target_location = _preferred_location(row["item_code"], target, allow_staging=rejected) if target else None
+		target_location = (
+			_preferred_location(row["item_code"], target, allow_staging=rejected) if target else None
+		)
 		if not rejected and target and not target_location:
 			incomplete = True
-		if row.get("staging") and target_location and target == row["quarantine"] and target_location == from_location:
+		if (
+			row.get("staging")
+			and target_location
+			and target == row["quarantine"]
+			and target_location == from_location
+		):
 			target_location = None
 			incomplete = True
 		for part in row["parts"]:
