@@ -38,6 +38,7 @@
   "overwrite_tax_invoice",
   "tax_invoice_number",
   "tax_invoice_date",
+  "months_delayed",
   "column_break_cun7x",
   "supplier",
   "customer",
@@ -356,6 +357,15 @@
    "fieldname": "tax_invoice_date",
    "fieldtype": "Date",
    "label": "Tax Invoice Date"
+  },
+  {
+   "fieldname": "months_delayed",
+   "fieldtype": "Select",
+   "label": "Delayed (months)",
+   "options": "0\n1\n2\n3\n4\n5\n6",
+   "default": "0",
+   "description": "0 = tax invoice month; 1 = the following month.",
+   "depends_on": "eval:doc.supplier || doc.months_delayed > 0"
   },
   {
    "fieldname": "column_break_cun7x",

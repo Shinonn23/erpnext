@@ -60,6 +60,7 @@ frappe.ui.form.on("Purchase Invoice", {
 				defaults: {
 					tax_invoice_number: frm.doc.bill_no,
 					tax_invoice_date: frm.doc.bill_date || frm.doc.posting_date,
+					months_delayed: frm.doc.months_delayed ?? "0",
 				},
 				apply: (values) => frm.set_value(values),
 			});
