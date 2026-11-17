@@ -401,3 +401,42 @@ class TestDirectJournalWithholding(unittest.TestCase):
 				doc.before_submit()
 			self.assertEqual(self.doc.accounts[-1].is_petty_cash_account, 0)
 			self.assert_amounts(300, 10400)
+
+
+class TestWithholdingOnlyJournal(unittest.TestCase):
+	"""A journal that only withholds from a supplier's payable (iDo's 3% on its fee, i-SENS 18 Nov 2026)."""
+
+	cached_value = TestDirectJournalWithholding.cached_value
+	row = TestDirectJournalWithholding.row
+	save = TestDirectJournalWithholding.save
+
+	def setUp(self):
+		TestDirectJournalWithholding.setUp(self)
+		self.doc.update(
+			create_tax_invoice=0,
+			thai_withholding_base=1000,
+			accounts=[self.row("AP", debit=1, party_type="Supplier", party="IDO")],
+		)
+
+	def test_typed_base_withholds_and_debits_the_payable(self):
+		self.save()
+		self.assertEqual(self.doc.tax_withholding_entries[0].taxable_amount, 1000)
+		self.assertEqual(self.doc.tax_withholding_entries[0].party, "IDO")
+		payable, wht = self.doc.accounts
+		self.assertEqual((payable.debit, payable.credit), (30, 0))
+		self.assertEqual((wht.account, wht.credit, wht.is_tax_withholding_account), ("WHT", 30, 1))
+		self.assertEqual(self.doc.difference, 0)
+		self.save()
+		self.assertEqual(len(self.doc.accounts), 2)
+		self.assertEqual(self.doc.accounts[0].debit, 30)
+		self.doc.thai_withholding_base = 2000
+		self.save()
+		self.assertEqual([row.debit or row.credit for row in self.doc.accounts], [60, 60])
+
+	def test_no_base_keeps_the_native_base(self):
+		self.doc.thai_withholding_base = 0
+		self.doc.accounts = [self.row("AP", credit=1000, party_type="Supplier", party="IDO"),
+			self.row("Expense", debit=1000)]
+		self.save()
+		self.assertEqual(self.doc.tax_withholding_entries[0].taxable_amount, 1000)
+		self.assertEqual(self.doc.accounts[0].credit, 970)

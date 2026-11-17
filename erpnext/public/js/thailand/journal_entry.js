@@ -109,7 +109,10 @@ frappe.ui.form.on("Journal Entry", {
 			current: frm.doc.tax_withholding_category,
 			// closing the popup unticks the box, unless a type was chosen before (Withhold Tax opened it again)
 			on_cancel: () => !frm.doc.tax_withholding_category && frm.set_value("apply_tds", 0),
-			on_pick: (choice) => frm.set_value("tax_withholding_category", choice.name),
+			on_pick: async (choice) => {
+				await frm.set_value("tax_withholding_category", choice.name);
+				erpnext.regional.thailand.ask_journal_withholding_base(frm, choice);
+			},
 		});
 	},
 
@@ -124,3 +127,40 @@ frappe.ui.form.on("Journal Entry", {
 		) frappe.validated = false;
 	},
 });
+
+// A journal that only withholds from a supplier's payable (a debit on the supplier, no expense line, e.g. the 3% on
+// a clearing agent's fee before its advance is refunded): ask the base, the server computes the tax, the supplier's
+// debit and the withholding row (Withholding Base, JournalTaxWithholding._is_withholding_only)
+erpnext.regional.thailand.journal_withholding_only_row = function (doc) {
+	const rows = (doc.accounts || []).filter((row) => !row.is_tax_withholding_account);
+	if (doc.voucher_type !== "Journal Entry" || rows.length !== 1) return null;
+	const row = rows[0];
+	return row.party_type === "Supplier" && row.party && !flt(row.credit_in_account_currency) ? row : null;
+};
+
+erpnext.regional.thailand.ask_journal_withholding_base = function (frm, choice) {
+	const row = erpnext.regional.thailand.journal_withholding_only_row(frm.doc);
+	if (!row) return;
+	frappe.prompt(
+		[
+			{
+				fieldtype: "Currency",
+				fieldname: "base",
+				label: __("Withholding Base"),
+				description: __("The amount the tax is withheld on, before VAT."),
+				default: frm.doc.thai_withholding_base,
+				reqd: 1,
+			},
+		],
+		async (values) => {
+			const tax = erpnext.regional.thailand.tax_popups.withholding_amount(choice, values.base);
+			await frm.set_value("thai_withholding_base", values.base);
+			await frappe.model.set_value(row.doctype, row.name, {
+				debit_in_account_currency: flt(tax / (flt(row.exchange_rate) || 1)),
+				credit_in_account_currency: 0,
+			});
+		},
+		__("Withhold Tax"),
+		__("Set")
+	);
+};

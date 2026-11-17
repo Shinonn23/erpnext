@@ -1365,11 +1365,28 @@ class JournalTaxWithholding(TaxWithholdingController):
 
 		return [self.doc.tax_withholding_category]
 
+	def _is_withholding_only(self):
+		"""A journal that only withholds from a supplier's payable (i-SENS, 18 Nov 2026): a debit on the supplier's
+		payable and nothing else but the withholding row; the base is typed (Withholding Base, e.g. the agent's
+		fee before VAT), because the entry has no expense line to take it from."""
+		return bool(
+			self.party_type == "Supplier"
+			and not self.is_direct_payment
+			and flt(self.doc.get("thai_withholding_base")) > 0
+			and all(
+				row is self.party_row or row.get("is_tax_withholding_account")
+				for row in self.doc.get("accounts")
+			)
+		)
+
 	def _update_taxable_amounts(self):
 		if not self.category_details:
 			return
 
-		net_amount = self._calculate_net_total()
+		if self._is_withholding_only():
+			net_amount = flt(self.doc.thai_withholding_base, self.precision)
+		else:
+			net_amount = self._calculate_net_total()
 		category = next(iter(self.category_details.values()))
 		category["taxable_amount"] = net_amount
 
@@ -1414,6 +1431,11 @@ class JournalTaxWithholding(TaxWithholdingController):
 		self._reset_existing_tds()
 		if self.is_direct_payment:
 			self._cleanup_duplicate_tds_rows(None)
+		if self._is_withholding_only():
+			# the supplier's debit is exactly the tax withheld: whatever was typed is replaced
+			self.party_row.update(
+				{"debit": 0, "debit_in_account_currency": 0, "credit": 0, "credit_in_account_currency": 0}
+			)
 
 		for account_head, tax_amount in account_amount_map.items():
 			if not tax_amount:

@@ -25,6 +25,7 @@
   "multi_currency",
   "apply_tds",
   "tax_withholding_category",
+  "thai_withholding_base",
   "is_system_generated",
   "amended_from",
   "section_break_tcvw",
@@ -548,6 +549,15 @@
    "options": "Tax Withholding Category"
   },
   {
+   "depends_on": "eval:doc.apply_tds && doc.voucher_type == 'Journal Entry'",
+   "description": "For a journal that only withholds from a supplier's payable (debit the supplier, no expense line): the amount the tax is withheld on, e.g. the fee before VAT. Leave empty to withhold on the entry's other lines.",
+   "fieldname": "thai_withholding_base",
+   "fieldtype": "Currency",
+   "label": "Withholding Base",
+   "no_copy": 1,
+   "options": "Company:company:default_currency"
+  },
+  {
    "default": "0",
    "depends_on": "eval:['Credit Note', 'Debit Note', 'Journal Entry'].includes(doc.voucher_type)",
    "fieldname": "apply_tds",
@@ -795,7 +805,7 @@
    "table_fieldname": "payment_entries"
   }
  ],
- "modified": "2026-11-08 12:00:00.000000",
+ "modified": "2026-11-18 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Journal Entry",
