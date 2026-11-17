@@ -20,7 +20,7 @@ recipient's form (its Tax Withholding Category, else PND3 for an individual, PND
 
 import frappe
 from frappe import _
-from frappe.utils import flt, get_link_to_form
+from frappe.utils import flt, get_link_to_form, getdate
 
 CERT = "Withholding Tax Cert"
 VOUCHER_TYPES = ("Payment Entry", "Journal Entry", "Purchase Invoice")
@@ -202,7 +202,8 @@ def missing_details(cert, lines):
 		for fieldname, label in (
 			("company_address", "Company Address"),
 			("employee_address", "Employee Address")
-			if cert.get("employee") else ("supplier_address", "Supplier Address"),
+			if cert.get("employee")
+			else ("supplier_address", "Supplier Address"),
 			("date", "Date"),
 		)
 		if not cert.get(fieldname)
@@ -242,7 +243,8 @@ def create_withholding_certificates(doc, method=None):
 	have = {form for form, _docstatus in existing_certificates(doc.doctype, doc.name).values()}
 	supplier_type = (
 		"Individual"
-		if party_type == "Employee" else frappe.db.get_value("Supplier", supplier, "supplier_type")
+		if party_type == "Employee"
+		else frappe.db.get_value("Supplier", supplier, "supplier_type")
 	)
 	made = []
 	for form, lines in certificate_groups(entries, supplier_type).items():
@@ -330,9 +332,10 @@ def invoice_recipient_rows(doc):
 
 
 def recipient_form(supplier):
-	details = frappe.db.get_value(
-		"Supplier", supplier, ["supplier_type", "tax_withholding_category"], as_dict=True
-	) or frappe._dict()
+	details = (
+		frappe.db.get_value("Supplier", supplier, ["supplier_type", "tax_withholding_category"], as_dict=True)
+		or frappe._dict()
+	)
 	category = (
 		frappe.db.get_value(
 			"Tax Withholding Category",
@@ -346,45 +349,79 @@ def recipient_form(supplier):
 	return category.thai_income_tax_form or default_form(details.get("supplier_type")), category
 
 
-def invoice_certificate(doc, row):
-	"""The (unsaved) certificate of one recipient row of a Purchase Invoice."""
-	supplier = row.wht_recipient
-	form, category = recipient_form(supplier)
-	amount = abs(flt(row.get("base_tax_amount_after_discount_amount") or row.get("base_tax_amount")))
-	base = abs(flt(row.get("base_net_amount")))
+def row_base(row, amount):
+	"""The base the tax of a recipient row was withheld on: its own Withholding Tax Base, else amount / rate.
+	Never the row's base_net_amount, which is the invoice's net total for an Actual or On Net Total row."""
+	base = abs(flt(row.get("wht_base_amount")))
 	if not base and flt(row.get("rate")):
 		base = amount / abs(flt(row.get("rate"))) * 100
-	lines = {
-		(category.thai_type_of_income or "", abs(flt(row.get("rate")))): {
-			"tax_base": base,
-			"tax_amount": amount,
-			"kinds": [category.category_name or row.get("description") or row.get("account_head")],
-			"categories": [category.category_name or supplier],
-		}
-	}
+	return base
+
+
+def invoice_certificate(doc, rows):
+	"""The (unsaved) certificate of the recipient rows of a Purchase Invoice that share one recipient and paid-on
+	date: one line per (type of income, rate)."""
+	supplier = rows[0].wht_recipient
+	form, category = recipient_form(supplier)
+	lines = {}
+	for row in rows:
+		amount = abs(flt(row.get("base_tax_amount_after_discount_amount") or row.get("base_tax_amount")))
+		base = row_base(row, amount)
+		line = lines.setdefault(
+			(category.thai_type_of_income or "", abs(flt(row.get("rate")))),
+			{
+				"tax_base": 0,
+				"tax_amount": 0,
+				"kinds": [],
+				"categories": [category.category_name or supplier],
+				"no_base": False,
+			},
+		)
+		line["tax_base"] += base
+		line["tax_amount"] += amount
+		line["no_base"] = line["no_base"] or not base
+		kind = category.category_name or row.get("description") or row.get("account_head")
+		if kind not in line["kinds"]:
+			line["kinds"].append(kind)
 	cert = new_certificate(doc, supplier, form, lines)
-	cert.date = row.get("wht_paid_on") or doc.get("posting_date")
+	cert.date = rows[0].get("wht_paid_on") or doc.get("posting_date")
 	cert.is_agent = 1
 	cert.withholding_agent_for = doc.get("supplier")
 	cert.withholding_agent_for_name = frappe.db.get_value("Supplier", doc.get("supplier"), "supplier_name")
 	return cert, lines
 
 
+def recipient_groups(doc):
+	"""{(recipient, paid-on date): [rows]} of the invoice's recipient rows, in row order."""
+	groups = {}
+	for row in invoice_recipient_rows(doc):
+		key = (row.wht_recipient, str(getdate(row.get("wht_paid_on") or doc.get("posting_date"))))
+		groups.setdefault(key, []).append(row)
+	return groups
+
+
 def create_invoice_withholding_certificates(doc, method=None):
-	"""On submit of a Purchase Invoice: a certificate for each Deduct row that names a third-party recipient
-	(submitted when complete, else a draft and a message; never stops the submit)."""
+	"""On submit of a Purchase Invoice: a certificate for each recipient and paid-on date of the Deduct rows that
+	name a third-party recipient, holding every such row (submitted when complete, else a draft and a message;
+	never stops the submit)."""
 	have = {
-		frappe.db.get_value(CERT, name, "supplier")
-		for name in existing_certificates(doc.doctype, doc.name)
+		(row.supplier, str(getdate(row.date))) if row.date else (row.supplier, None)
+		for row in frappe.get_all(
+			CERT,
+			filters={"voucher_type": doc.doctype, "voucher_no": doc.name, "docstatus": ("<", 2)},
+			fields=["supplier", "date"],
+		)
 	}
 	made = []
-	for row in invoice_recipient_rows(doc):
-		if row.wht_recipient in have:
+	for key, rows in recipient_groups(doc).items():
+		if key in have:
 			continue
 		frappe.db.savepoint(SAVEPOINT)
 		try:
-			cert, lines = invoice_certificate(doc, row)
+			cert, lines = invoice_certificate(doc, rows)
 			missing = missing_details(cert, lines)
+			if any(line.get("no_base") for line in lines.values()):
+				missing.append(_("Withholding Tax Base"))
 			cert.flags.ignore_permissions = True
 			if missing:
 				cert.flags.ignore_mandatory = True
@@ -400,7 +437,7 @@ def create_invoice_withholding_certificates(doc, method=None):
 			else:
 				cert.insert()
 				cert.submit()
-			have.add(row.wht_recipient)
+			have.add(key)
 			made.append(cert.name)
 		except Exception:
 			frappe.db.rollback(save_point=SAVEPOINT)

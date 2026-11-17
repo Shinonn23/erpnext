@@ -18,6 +18,7 @@
   "is_tax_withholding_account",
   "wht_recipient",
   "wht_paid_on",
+  "wht_base_amount",
   "set_by_item_tax_template",
   "allocate_full_amount_to_stock_items",
   "column_break_odzz",
@@ -263,6 +264,14 @@
    "fieldname": "wht_paid_on",
    "fieldtype": "Date",
    "label": "Withholding Paid On"
+  },
+  {
+   "depends_on": "eval:doc.add_deduct_tax=='Deduct' && doc.wht_recipient",
+   "description": "The amount paid to the recipient that the tax was withheld on (the base on the certificate); when empty, the amount divided by the rate",
+   "fieldname": "wht_base_amount",
+   "fieldtype": "Currency",
+   "label": "Withholding Tax Base",
+   "options": "Company:company:default_currency"
   },
   {
    "columns": 2,

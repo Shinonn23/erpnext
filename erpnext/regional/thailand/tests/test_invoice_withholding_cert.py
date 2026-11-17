@@ -24,13 +24,24 @@ def invoice(**values):
 		posting_date="2026-11-10",
 		taxes=[
 			frappe._dict(
-				add_deduct_tax="Deduct", wht_recipient="WFS-PG Cargo", wht_paid_on="2026-11-05",
-				is_tax_withholding_account=1, account_head="2132-02", rate=3, base_tax_amount=58.71,
-				base_net_amount=1957,
+				add_deduct_tax="Deduct",
+				wht_recipient="WFS-PG Cargo",
+				wht_paid_on="2026-11-05",
+				is_tax_withholding_account=1,
+				account_head="2132-02",
+				rate=3,
+				base_tax_amount=58.71,
+				base_net_amount=99999,
+				wht_base_amount=1957,
 			),
 			frappe._dict(
-				add_deduct_tax="Deduct", wht_recipient="Mr Thanakit", wht_paid_on=None,
-				is_tax_withholding_account=0, account_head="2132-02", rate=1, base_tax_amount=15,
+				add_deduct_tax="Deduct",
+				wht_recipient="Mr Thanakit",
+				wht_paid_on=None,
+				is_tax_withholding_account=0,
+				account_head="2132-02",
+				rate=1,
+				base_tax_amount=15,
 				base_net_amount=0,
 			),
 			frappe._dict(add_deduct_tax="Add", account_head="1154-00", base_tax_amount=136.99),
@@ -71,7 +82,7 @@ class TestInvoiceRecipients(unittest.TestCase):
 			patch.object(frappe, "db", Mock(get_value=Mock(side_effect=get_value))),
 			patch.object(certificates, "company_address_of", return_value="Company Address"),
 		):
-			return certificates.invoice_certificate(invoice(), row)
+			return certificates.invoice_certificate(invoice(), row if isinstance(row, list) else [row])
 
 	def test_company_recipient_is_pnd53_dated_paid_on_with_the_agent(self):
 		cert, lines = self.certificate(invoice().taxes[0])
@@ -88,6 +99,28 @@ class TestInvoiceRecipients(unittest.TestCase):
 		self.assertEqual(cert.income_tax_form, "PND3")
 		self.assertEqual(cert.date, "2026-11-10")
 		self.assertAlmostEqual(cert.withholding_tax_items[0].tax_base, 1500)
+
+	def test_base_is_never_the_invoice_net_total(self):
+		row = invoice().taxes[0]
+		row.wht_base_amount = None
+		row.rate = 0
+		_cert, lines = self.certificate(row)
+		line = next(iter(lines.values()))
+		self.assertEqual(line["tax_base"], 0)
+		self.assertTrue(line["no_base"])
+
+	def test_rows_of_one_recipient_and_date_share_a_certificate_other_dates_get_their_own(self):
+		doc = invoice()
+		second = frappe._dict(doc.taxes[0], base_tax_amount=30, wht_base_amount=1000)
+		later = frappe._dict(doc.taxes[0], wht_paid_on="2026-11-07")
+		doc.taxes += [second, later]
+		with patch.object(certificates, "withholding_accounts", return_value={"2132-02"}):
+			groups = certificates.recipient_groups(doc)
+		self.assertEqual(len(groups[("WFS-PG Cargo", "2026-11-05")]), 2)
+		self.assertEqual(len(groups[("WFS-PG Cargo", "2026-11-07")]), 1)
+		_cert, lines = self.certificate(groups[("WFS-PG Cargo", "2026-11-05")])
+		line = lines[("", 3)]
+		self.assertEqual((line["tax_base"], round(line["tax_amount"], 2)), (2957, 88.71))
 
 	def test_purchase_invoice_is_a_voucher_and_hooks_make_and_cancel(self):
 		self.assertIn("Purchase Invoice", certificates.VOUCHER_TYPES)
