@@ -57,6 +57,7 @@ app_include_js = [
 	"/assets/erpnext/js/thailand/print_format.js",
 	"/assets/erpnext/js/thailand/deposit_utils.js",
 	"/assets/erpnext/js/thailand/party_branches.js",
+	"/assets/erpnext/js/thailand/party_tax_id.js",
 ]
 app_include_css = "erpnext.bundle.css"
 web_include_css = "erpnext-web.bundle.css"
@@ -263,8 +264,14 @@ _thailand_doc_events = {
 		"before_validate": "erpnext.regional.thailand.custom.print_format.allow_update_standard"
 	},
 	"Address": {"on_update": "erpnext.regional.thailand.custom.address.update_tax_info_in_linked_doc"},
-	"Customer": {"onload": "erpnext.regional.thailand.custom.branches.onload"},
-	"Supplier": {"onload": "erpnext.regional.thailand.custom.branches.onload"},
+	"Customer": {
+		"onload": "erpnext.regional.thailand.custom.branches.onload",
+		"on_update": "erpnext.regional.thailand.custom.rd_party.create_rd_address",
+	},
+	"Supplier": {
+		"onload": "erpnext.regional.thailand.custom.branches.onload",
+		"on_update": "erpnext.regional.thailand.custom.rd_party.create_rd_address",
+	},
 	"Item": {"validate": "erpnext.regional.thailand.custom.item.validate_deposit_item"},
 	"Currency": {
 		"on_update": "erpnext.regional.thailand.custom.currency_exchange_bot_api.clear_exchange_rate_cache"
