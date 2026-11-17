@@ -10,19 +10,19 @@ frappe.listview_settings["Purchase Receipt"] = {
 		"per_billed",
 		"currency",
 	],
+	// The server keeps `status` (set_status); a user who may not read money fields sees grand_total 0, so the
+	// indicator follows the stored status instead of recomputing it from amounts.
 	get_indicator: function (doc) {
-		if (cint(doc.is_return) == 1 && doc.status == "Return") {
-			return [__("Return"), "gray", "is_return,=,1"];
-		} else if (doc.status === "Closed") {
-			return [__("Closed"), "green", "status,=,Closed"];
-		} else if (flt(doc.per_returned, 2) === 100) {
-			return [__("Return Issued"), "grey", "per_returned,=,100|docstatus,=,1"];
-		} else if (flt(doc.grand_total || doc.base_grand_total) !== 0 && flt(doc.per_billed, 2) == 0) {
-			return [__("To Bill"), "orange", "per_billed,<,100|docstatus,=,1"];
-		} else if (flt(doc.per_billed, 2) > 0 && flt(doc.per_billed, 2) < 100) {
-			return [__("Partly Billed"), "yellow", "per_billed,<,100|docstatus,=,1"];
-		} else if (flt(doc.grand_total) === 0 || flt(doc.per_billed, 2) >= 100) {
-			return [__("Completed"), "green", "per_billed,>=,100|docstatus,=,1"];
+		const colors = {
+			"To Bill": "orange",
+			"Partly Billed": "yellow",
+			Completed: "green",
+			Return: "gray",
+			"Return Issued": "grey",
+			Closed: "green",
+		};
+		if (colors[doc.status]) {
+			return [__(doc.status), colors[doc.status], "status,=," + doc.status];
 		}
 	},
 
