@@ -698,6 +698,16 @@ class PickList(TransactionBase):
 		if self.docstatus != 1 or self.status != "Closed":
 			frappe.throw(_("Only a closed Pick List can be reopened."))
 
+		# the life of a pick follows its order: an order that is Closed or Cancelled cannot deliver
+		for order in sorted(
+			{row.sales_order for row in self.get("locations") if row.get("sales_order")}
+		):
+			order_status = frappe.db.get_value("Sales Order", order, ["status", "docstatus"], as_dict=True)
+			if order_status and (order_status.docstatus == 2 or order_status.status == "Cancelled"):
+				frappe.throw(_("Sales Order {0} is cancelled.").format(frappe.bold(order)))
+			if order_status and order_status.status == "Closed":
+				frappe.throw(_("Reopen Sales Order {0} first.").format(frappe.bold(order)))
+
 		shortages = get_reopen_shortages(self)
 		if shortages:
 			frappe.throw(
@@ -1319,7 +1329,14 @@ def get_reopen_shortages(pick) -> list[str]:
 	Empty when everything is still there."""
 	from erpnext.stock.doctype.storage_location.storage_location import location_stock
 
-	rows = [row for row in pick.get("locations") if flt(row.picked_qty) - flt(row.delivered_qty) > 1e-9]
+	from connect_diagnostics_setup.stock.outgoing_inspection import rejected_moved_by_row
+
+	moved = rejected_moved_by_row(pick.name)
+	rows = [
+		row
+		for row in pick.get("locations")
+		if flt(row.picked_qty) - flt(row.delivered_qty) - moved.get(row.name, 0) > 1e-9
+	]
 	if not rows:
 		return []
 
@@ -1330,7 +1347,7 @@ def get_reopen_shortages(pick) -> list[str]:
 	needed, labels = {}, {}
 	shortages = []
 	for row in rows:
-		remaining = flt(row.picked_qty) - flt(row.delivered_qty)
+		remaining = flt(row.picked_qty) - flt(row.delivered_qty) - moved.get(row.name, 0)
 		place = ", ".join(
 			part for part in (row.warehouse, row.storage_location, row.batch_no) if part
 		)
@@ -1432,7 +1449,13 @@ def close_open_picks_of_order(sales_order, cancelling=False):
 
 		pick = frappe.get_doc("Pick List", name, for_update=True)
 		pick.flags.ignore_permissions = True
-		pick.close()
+		try:
+			pick.close()
+		except frappe.ValidationError:
+			# goods rejected by an outgoing inspection and not yet moved: a Stock User settles those first
+			frappe.clear_last_message()
+			shared.append(name)
+			continue
 		closed.append(name)
 	return closed, shared
 

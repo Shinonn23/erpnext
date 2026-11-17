@@ -156,6 +156,15 @@ class TestReopen(Base):
 		self.assertIn("qty", calls)
 		self.assertNotIn("reserve", calls)
 
+	def test_a_pick_of_a_closed_or_cancelled_order_cannot_reopen(self):
+		for values, word in ((("Closed", 1), "Reopen Sales Order"), (("Cancelled", 2), "cancelled")):
+			doc = pick(status="Closed", locations=[row(sales_order="SO-1")])
+			frappe.db.get_value.return_value = frappe._dict(status=values[0], docstatus=values[1])
+			with patch.object(module, "get_reopen_shortages", return_value=[]):
+				with self.assertRaises(frappe.ValidationError) as caught:
+					PickList.reopen(doc)
+			self.assertIn(word, str(caught.exception))
+
 	def test_reopen_is_refused_naming_each_short_row_and_changes_nothing(self):
 		doc = pick(status="Closed")
 		doc.db_set = MagicMock()
@@ -189,7 +198,7 @@ class TestReopen(Base):
 
 
 class TestReopenShortages(Base):
-	def shortages(self, rows, others=(), located=None, unlocated=None, serials_in_warehouse=()):
+	def shortages(self, rows, others=(), located=None, unlocated=None, serials_in_warehouse=(), moved=None):
 		doc = pick(locations=rows)
 		doc.get = lambda key, default=None: doc.__dict__.get(key, default)
 		doc._get_pick_list_items = lambda items: [frappe._dict(other) for other in others]
@@ -204,8 +213,16 @@ class TestReopenShortages(Base):
 			patch.object(storage_location, "location_stock", side_effect=stock),
 			patch.object(module.frappe, "get_all", return_value=list(serials_in_warehouse)),
 			patch.object(module, "_", side_effect=lambda text: text),
+			patch(
+				"connect_diagnostics_setup.stock.outgoing_inspection.rejected_moved_by_row",
+				return_value=moved or {},
+			),
 		):
 			return module.get_reopen_shortages(doc)
+
+	def test_goods_rejected_and_moved_to_damage_are_not_needed_back(self):
+		rows = [row(name="ROW-1", storage_location="W / A", picked_qty=10, delivered_qty=0)]
+		self.assertEqual(self.shortages(rows, located={"W / A": 8}, moved={"ROW-1": 2}), [])
 
 	def test_free_stock_passes(self):
 		self.assertEqual(self.shortages([row(storage_location="W / A")], located={"W / A": 5}), [])
@@ -325,6 +342,14 @@ class TestSellingSide(Base):
 		with self.assertRaises(frappe.ValidationError):
 			SellingController.check_pick_list_not_closed(doc)
 		frappe.db.get_value.return_value = "Open"
+		SellingController.check_pick_list_not_closed(doc)
+
+	def test_a_cancel_is_never_blocked_by_a_closed_pick(self):
+		from erpnext.controllers.selling_controller import SellingController
+
+		doc = frappe._dict(doctype="Delivery Note", docstatus=2, items=[frappe._dict(against_pick_list="PL-1")])
+		doc.get = lambda key, default=None: doc[key] if key in doc else default
+		frappe.db.get_value.return_value = "Closed"
 		SellingController.check_pick_list_not_closed(doc)
 
 	def test_an_invoice_that_does_not_move_stock_is_not_checked(self):

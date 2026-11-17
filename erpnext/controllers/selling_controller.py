@@ -601,6 +601,9 @@ class SellingController(StockController):
 
 	def check_pick_list_not_closed(self):
 		"""A closed Pick List no longer delivers: its goods are free for another pick (Siwat, 17 Nov 2026)."""
+		if self.docstatus == 2 or self.get("_action") == "cancel":
+			# a cancel always works: it gives the quantity back to the order
+			return
 		if self.doctype == "Sales Invoice" and not self.get("update_stock"):
 			return
 
