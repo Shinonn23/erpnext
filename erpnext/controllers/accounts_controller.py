@@ -257,19 +257,10 @@ class AccountsController(TransactionBase):
 			against_voucher_outstanding = frappe.get_value(
 				self.doctype, self.return_against, "outstanding_amount"
 			)
-			document_type = "Credit Note" if self.doctype == "Sales Invoice" else "Debit Note"
-
+			# ERPNext explained the ticked checkbox on every save (in English); the field says it itself
+			# (Siwat, 17 Nov 2026), so only the automatic change below is told
 			msg = ""
-			if self.get("update_outstanding_for_self"):
-				msg = _(
-					"We can see {0} is made against {1}. If you want {1}'s outstanding to be updated, uncheck the '{2}' checkbox."
-				).format(
-					frappe.bold(document_type),
-					get_link_to_form(self.doctype, self.get("return_against")),
-					frappe.bold(_("Update Outstanding for Self")),
-				)
-
-			elif not self.update_outstanding_for_self and (
+			if not self.update_outstanding_for_self and (
 				abs(flt(self.rounded_total) or flt(self.grand_total)) > flt(against_voucher_outstanding)
 			):
 				self.update_outstanding_for_self = 1
@@ -1513,6 +1504,10 @@ class AccountsController(TransactionBase):
 			return
 
 		tax_master_doctype = self.meta.get_field("taxes_and_charges").options
+
+		# a return takes its taxes from the document it returns, which may have none (Siwat, 17 Nov 2026)
+		if self.get("is_return") and self.get("return_against"):
+			return
 
 		if (self.is_new() or self.is_pos_profile_changed()) and not self.get("taxes"):
 			if self.company and not self.get("taxes_and_charges"):

@@ -1179,12 +1179,12 @@
    "in_standard_filter": 1,
    "label": "Approval Band",
    "no_copy": 1,
-   "options": "\nNo Approval\nItem Group\nManaging Director\nChief Executive Officer",
+   "options": "\nNo Approval\nProduct Group\nManaging Director\nChief Executive Officer",
    "read_only": 1,
    "depends_on": "eval:doc.quotation_approval_band"
   },
   {
-   "depends_on": "eval:doc.quotation_approval_band == 'Item Group'",
+   "depends_on": "eval:doc.quotation_approval_band == 'Product Group'",
    "fieldname": "quotation_group_approver_roles",
    "fieldtype": "Small Text",
    "label": "Item Group Approver Roles",
