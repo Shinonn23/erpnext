@@ -16,6 +16,8 @@
   "description",
   "section_break_mvae",
   "is_tax_withholding_account",
+  "wht_recipient",
+  "wht_paid_on",
   "set_by_item_tax_template",
   "allocate_full_amount_to_stock_items",
   "column_break_odzz",
@@ -248,6 +250,21 @@
    "read_only": 1
   },
   {
+   "depends_on": "eval:doc.add_deduct_tax=='Deduct'",
+   "description": "Who the tax was withheld from when it is not the invoice's supplier (an agent paid them for us); a Withholding Tax Cert is made for them on submit",
+   "fieldname": "wht_recipient",
+   "fieldtype": "Link",
+   "label": "Withholding Recipient",
+   "options": "Supplier"
+  },
+  {
+   "depends_on": "eval:doc.add_deduct_tax=='Deduct' && doc.wht_recipient",
+   "description": "The date the agent paid the recipient: the date of the certificate and its filing month (default the posting date)",
+   "fieldname": "wht_paid_on",
+   "fieldtype": "Date",
+   "label": "Withholding Paid On"
+  },
+  {
    "columns": 2,
    "fieldname": "net_amount",
    "fieldtype": "Currency",
@@ -298,7 +315,7 @@
  "idx": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-06-21 17:08:57.096729",
+ "modified": "2026-11-17 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Purchase Taxes and Charges",
