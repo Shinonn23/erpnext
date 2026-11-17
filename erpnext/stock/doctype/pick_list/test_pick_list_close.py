@@ -1,6 +1,7 @@
 """Status > Close / Reopen of a Delivery Pick List (Siwat, 17 Nov 2026). Offline: mocks, no site."""
 
 import unittest
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import frappe
@@ -195,6 +196,7 @@ class TestReopen(Base):
 			patch.object(module, "get_reopen_shortages", return_value=[]),
 			patch.object(module, "get_reopen_over_picks", return_value=[]),
 			patch.object(module, "was_reserved_by", return_value=True),
+			patch.object(module, "get_reopen_unreserved", return_value=[]),
 			patch.object(module.frappe, "get_cached_value", return_value=1),
 		):
 			PickList.reopen(doc)
@@ -457,3 +459,145 @@ class TestSellingSide(Base):
 			self.assertRaises(frappe.ValidationError),
 		):
 			SalesOrder.close_delivery_picks(doc, cancelling=True)
+
+
+SRE = "Stock Reservation Entry"
+
+
+def sre(docstatus, reserved, delivered, detail="ROW-1"):
+	return frappe._dict(
+		docstatus=docstatus, reserved_qty=reserved, delivered_qty=delivered, from_voucher_detail_no=detail
+	)
+
+
+class TestReopenReservations(Base):
+	def was_reserved(self, entries):
+		with patch.object(module.frappe, "get_all", return_value=entries):
+			return module.was_reserved_by("PL-1")
+
+	def test_a_fully_delivered_entry_does_not_hide_the_cancelled_one(self):
+		# Partly Delivered: one entry delivered (stays submitted), one cancelled by the Close
+		self.assertTrue(self.was_reserved([sre(1, 5, 5), sre(2, 5, 2)]))
+
+	def test_nothing_cancelled_or_something_still_reserved_is_not_reserved_again(self):
+		self.assertFalse(self.was_reserved([sre(1, 5, 5)]))
+		self.assertFalse(self.was_reserved([sre(2, 5, 0), sre(1, 5, 1)]))
+		self.assertFalse(self.was_reserved([]))
+
+	def unreserved(self, entries, rows, moved=None):
+		doc = pick(locations=rows)
+		doc.get = lambda key, default=None: doc.__dict__.get(key, default)
+		with (
+			patch.object(module.frappe, "get_all", return_value=entries),
+			patch.object(module, "_", side_effect=lambda text: text),
+			patch(
+				"connect_diagnostics_setup.stock.outgoing_inspection.rejected_moved_by_row",
+				return_value=moved or {},
+			),
+		):
+			return module.get_reopen_unreserved(doc)
+
+	def so_row(self, **values):
+		return row(name="ROW-1", sales_order="SO-1", sales_order_item="SOI-1", **values)
+
+	def test_a_reservation_that_covers_the_remainder_passes(self):
+		self.assertEqual(self.unreserved([sre(1, 3, 0)], [self.so_row(picked_qty=5, delivered_qty=2)]), [])
+
+	def test_a_partial_reservation_is_named(self):
+		lines = self.unreserved([sre(1, 2, 0)], [self.so_row(picked_qty=5, delivered_qty=2)])
+		self.assertEqual(len(lines), 1)
+		self.assertIn("Row 1", lines[0])
+
+	def test_a_delivered_entry_holds_nothing_and_a_rejected_move_is_not_needed(self):
+		rows = [self.so_row(picked_qty=5, delivered_qty=5)]
+		self.assertEqual(self.unreserved([sre(1, 5, 5)], rows), [])
+		rows = [self.so_row(picked_qty=5, delivered_qty=0)]
+		self.assertEqual(self.unreserved([sre(1, 3, 0)], rows, moved={"ROW-1": 2}), [])
+
+	def test_reopen_throws_when_the_reservation_came_out_short(self):
+		doc = pick(status="Closed")
+		for name in (
+			"db_set",
+			"update_status",
+			"update_reference_qty",
+			"update_sales_order_picking_status",
+			"update_prevdoc_status",
+			"add_comment",
+			"reload",
+		):
+			setattr(doc, name, MagicMock())
+		doc.create_stock_reservation_entries = MagicMock()
+		with (
+			patch.object(module, "get_reopen_shortages", return_value=[]),
+			patch.object(module, "get_reopen_over_picks", return_value=[]),
+			patch.object(module, "recount_bundle_picked_qty"),
+			patch.object(module, "was_reserved_by", return_value=True),
+			patch.object(module, "get_reopen_unreserved", return_value=["Row 1: ITEM"]),
+			patch.object(module.frappe, "get_cached_value", return_value=1),
+		):
+			with self.assertRaises(frappe.ValidationError):
+				PickList.reopen(doc)
+		doc.add_comment.assert_not_called()
+
+
+class TestBundleRecount(Base):
+	def recount(self, pick_rows, status_of, bundle_qty=None):
+		doc = pick(
+			locations=[
+				frappe._dict(sales_order_item="SOI-1", product_bundle_item=r.product_bundle_item)
+				for r in pick_rows
+			]
+		)
+		doc.get = lambda key, default=None: doc.__dict__.get(key, default)
+		bundle = SimpleNamespace(
+			items=[SimpleNamespace(item_code=k, qty=v) for k, v in (bundle_qty or {"A": 1, "B": 2}).items()]
+		)
+		module.frappe.db.get_value.side_effect = lambda doctype, name, field=None, *a, **k: (
+			"BUNDLE" if doctype == "Sales Order Item" else status_of[name]
+		)
+		with (
+			patch.object(module.frappe, "get_last_doc", return_value=bundle),
+			patch.object(module.frappe, "get_all", return_value=pick_rows),
+		):
+			module.recount_bundle_picked_qty(doc)
+		return module.frappe.db.set_value.call_args
+
+	def rows(self, picked, delivered):
+		return [
+			frappe._dict(
+				parent="PL-1",
+				item_code="A",
+				product_bundle_item="PI-A",
+				picked_qty=picked,
+				delivered_qty=delivered,
+			),
+			frappe._dict(
+				parent="PL-1",
+				item_code="B",
+				product_bundle_item="PI-B",
+				picked_qty=picked * 2,
+				delivered_qty=delivered * 2,
+			),
+		]
+
+	def test_a_closed_pick_gives_back_what_it_did_not_deliver(self):
+		call = self.recount(self.rows(5, 2), {"PL-1": "Closed"})
+		self.assertEqual(call.args[:4], ("Sales Order Item", "SOI-1", "picked_qty", 2))
+
+	def test_a_reopened_pick_holds_all_its_bundles_again(self):
+		call = self.recount(self.rows(5, 2), {"PL-1": "Partly Delivered"})
+		self.assertEqual(call.args[3], 5)
+
+	def test_another_pick_still_counts_and_an_incomplete_set_is_not_a_bundle(self):
+		rows = [
+			*self.rows(5, 0),
+			frappe._dict(
+				parent="PL-2", item_code="A", product_bundle_item="PI-A2", picked_qty=3, delivered_qty=0
+			),
+			frappe._dict(
+				parent="PL-2", item_code="B", product_bundle_item="PI-B2", picked_qty=2, delivered_qty=0
+			),
+		]
+		call = self.recount(rows, {"PL-1": "Closed", "PL-2": "Open"})
+		# PL-1 closed delivers nothing; PL-2 holds min(3/1, 2/2) = 1 bundle
+		self.assertEqual(call.args[3], 1)

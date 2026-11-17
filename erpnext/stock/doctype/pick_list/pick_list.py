@@ -747,6 +747,7 @@ class PickList(TransactionBase):
 
 		self.db_set("status", "Closed")
 		self.update_reference_qty()
+		recount_bundle_picked_qty(self)
 		self.update_sales_order_picking_status()
 		self.update_prevdoc_status()
 		self.add_comment("Label", _("Closed"))
@@ -791,11 +792,23 @@ class PickList(TransactionBase):
 		self.db_set("status", "Open")
 		self.update_status()
 		self.update_reference_qty()
+		recount_bundle_picked_qty(self)
 		self.update_sales_order_picking_status()
 		self.update_prevdoc_status()
 		if had_reservations and frappe.get_cached_value("Stock Settings", None, "enable_stock_reservation"):
 			self.reload()
 			self.create_stock_reservation_entries(notify=False)
+			short = get_reopen_unreserved(self)
+			if short:
+				# the reservation is all or nothing: the request is rolled back, nothing stays reserved
+				frappe.throw(
+					_("Pick List {0} cannot be reopened, its stock could not be reserved in full:").format(
+						self.name
+					)
+					+ "<br>"
+					+ "<br>".join(short),
+					title=_("Not Enough Stock"),
+				)
 		self.add_comment("Label", _("Reopened"))
 
 	def update_status(self, status=None, update_modified=True):
@@ -1352,6 +1365,7 @@ def update_pick_list_status(pick_list):
 		if doc.status == "Closed":
 			# a Delivery Note of a closed pick was submitted or cancelled: the order counts what was delivered
 			doc.update_reference_qty()
+			recount_bundle_picked_qty(doc)
 			doc.update_sales_order_picking_status()
 
 
@@ -1374,12 +1388,80 @@ def reopen_pick_list(name):
 
 
 def was_reserved_by(pick_list):
-	"""A Close cancelled this Pick List's Stock Reservation Entries and nothing reserves for it now."""
-	entry = {"from_voucher_type": "Pick List", "from_voucher_no": pick_list}
-	return bool(
-		frappe.db.exists("Stock Reservation Entry", {**entry, "docstatus": 2})
-		and not frappe.db.exists("Stock Reservation Entry", {**entry, "docstatus": 1})
+	"""A Close cancelled Stock Reservation Entries of this Pick List (docstatus 2, not fully delivered) and no
+	submitted one with something left to deliver holds stock for it now. An entry that is fully delivered stays
+	submitted after a Close and does not count either way."""
+	entries = frappe.get_all(
+		"Stock Reservation Entry",
+		filters={"from_voucher_type": "Pick List", "from_voucher_no": pick_list, "docstatus": ["in", [1, 2]]},
+		fields=["docstatus", "reserved_qty", "delivered_qty"],
 	)
+	open_ = [e for e in entries if flt(e.delivered_qty) < flt(e.reserved_qty)]
+	return any(e.docstatus == 2 for e in open_) and not any(e.docstatus == 1 for e in open_)
+
+
+def get_reopen_unreserved(pick) -> list[str]:
+	"""One line for each row of a Pick List whose reservation, after a Reopen, holds less than the row still
+	has to deliver (picked less delivered, less what a rejected movement took out)."""
+	from connect_diagnostics_setup.stock.outgoing_inspection import rejected_moved_by_row
+
+	moved = rejected_moved_by_row(pick.name)
+	held = {}
+	for entry in frappe.get_all(
+		"Stock Reservation Entry",
+		filters={"from_voucher_type": "Pick List", "from_voucher_no": pick.name, "docstatus": 1},
+		fields=["from_voucher_detail_no", "reserved_qty", "delivered_qty"],
+	):
+		held[entry.from_voucher_detail_no] = held.get(entry.from_voucher_detail_no, 0) + (
+			flt(entry.reserved_qty) - flt(entry.delivered_qty)
+		)
+
+	lines = []
+	for row in pick.get("locations"):
+		if not (row.get("warehouse") and row.get("sales_order") and row.get("sales_order_item")):
+			continue
+		needed = flt(row.picked_qty) - flt(row.delivered_qty) - moved.get(row.name, 0)
+		if needed > 1e-9 and held.get(row.name, 0) + 1e-9 < needed:
+			lines.append(
+				_("Row {0}: {1} in {2}: {3} to reserve, {4} reserved").format(
+					row.idx, row.item_code, row.warehouse, flt(needed), flt(held.get(row.name, 0))
+				)
+			)
+	return lines
+
+
+def recount_bundle_picked_qty(pick):
+	"""Product Bundle parents of a Sales Order: `picked_qty` of the parent row is the number of complete bundles
+	its Pick Lists hold. A Closed Pick List holds only what it delivered, so Close gives the rest back and
+	Reopen takes it again (the rows of the Packed Items are recounted by update_reference_qty)."""
+	parents = sorted(
+		{row.sales_order_item for row in pick.get("locations") if row.get("product_bundle_item")}
+	)
+	for parent in parents:
+		item_code = frappe.db.get_value("Sales Order Item", parent, "item_code")
+		bundle = frappe.get_last_doc("Product Bundle", {"new_item_code": item_code, "disabled": 0})
+		ratio = {item.item_code: flt(item.qty) for item in bundle.items}
+
+		total = 0
+		per_pick = {}
+		for row in frappe.get_all(
+			"Pick List Item",
+			filters={"sales_order_item": parent, "docstatus": 1, "product_bundle_item": ["is", "set"]},
+			fields=["parent", "item_code", "product_bundle_item", "picked_qty", "delivered_qty"],
+		):
+			if not ratio.get(row.item_code):
+				continue
+			status = frappe.db.get_value("Pick List", row.parent, "status")
+			qty = flt(row.picked_qty)
+			if status == "Closed":
+				qty = min(qty, flt(row.delivered_qty))
+			packed = per_pick.setdefault(row.parent, {})
+			packed[row.product_bundle_item] = (
+				packed.get(row.product_bundle_item, 0) + qty / ratio[row.item_code]
+			)
+		for packed in per_pick.values():
+			total += int(round(min(packed.values()), 6)) if packed else 0
+		frappe.db.set_value("Sales Order Item", parent, "picked_qty", total, update_modified=False)
 
 
 def _row_serials(row):
