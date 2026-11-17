@@ -76,8 +76,14 @@ def validate_return_against(doc):
 					)
 				)
 
-			# validate update stock
-			if doc.doctype == "Sales Invoice" and doc.update_stock and not ref_doc.update_stock:
+			# validate update stock; the return of a POS closing (consolidated) may be of a sale of a former
+			# shift whose consolidated invoice carries the stock flag of its last receipt only (Siwat, 17 Nov 2026)
+			if (
+				doc.doctype == "Sales Invoice"
+				and doc.update_stock
+				and not ref_doc.update_stock
+				and not doc.get("is_consolidated")
+			):
 				frappe.throw(
 					_("'Update Stock' can not be checked because items are not delivered via {0}").format(
 						doc.return_against

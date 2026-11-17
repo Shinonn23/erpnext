@@ -438,7 +438,10 @@ erpnext.TransactionController = class TransactionController extends erpnext.taxe
 		const me = this;
 		if (
 			!this.frm.is_new() &&
-			!(["Purchase Receipt", "Purchase Invoice"].includes(this.frm.doc.doctype) && !this.frm.doc.is_return) &&
+			!(
+				["Purchase Receipt", "Purchase Invoice"].includes(this.frm.doc.doctype) &&
+				!this.frm.doc.is_return
+			) &&
 			qc_stage_open &&
 			frappe.model.can_create("Quality Inspection") &&
 			show_qc_button
@@ -552,6 +555,11 @@ erpnext.TransactionController = class TransactionController extends erpnext.taxe
 		);
 
 		if (!this.frm.doc.taxes_and_charges && this.frm.doc.taxes && this.frm.doc.taxes.length > 0) {
+			return;
+		}
+
+		// a return takes the taxes of the document it returns, which may have none
+		if (this.frm.doc.is_return && this.frm.doc.return_against) {
 			return;
 		}
 
