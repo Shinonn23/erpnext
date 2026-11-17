@@ -513,15 +513,14 @@ class PickList(TransactionBase):
 			validate_borrowing_pick_list(self, cancelling=True)
 
 	def orders_all_cancelled(self) -> bool:
-		"""A pick closed because its orders were cancelled cannot be reopened, so it may be cancelled as it is."""
+		"""A Closed pick with a cancelled order can never be reopened (Reopen refuses a cancelled order), so it may
+		be cancelled as it is, whatever its other orders are."""
 		orders = {row.sales_order for row in self.get("locations") if row.get("sales_order")}
-		if not orders:
-			return False
 		for order in orders:
 			values = frappe.db.get_value("Sales Order", order, ["status", "docstatus"], as_dict=True)
-			if values and values.docstatus != 2 and values.status != "Cancelled":
-				return False
-		return True
+			if values and (values.docstatus == 2 or values.status == "Cancelled"):
+				return True
+		return False
 
 	def validate_sales_order(self):
 		"""Raises an exception if the `Sales Order` has reserved stock."""
@@ -1635,12 +1634,14 @@ def get_reopen_over_picks(pick) -> list[str]:
 		values = frappe.db.get_value(
 			"Sales Order Item",
 			order_item,
-			["stock_qty", "picked_qty", "delivered_qty", "parent", "item_code"],
+			["stock_qty", "picked_qty", "delivered_qty", "conversion_factor", "parent", "item_code"],
 			as_dict=True,
 		)
 		if not values:
 			continue
-		room = flt(values.stock_qty) - max(flt(values.picked_qty), flt(values.delivered_qty))
+		# picked_qty and stock_qty are in the stock UOM, delivered_qty in the sales UOM
+		delivered_stock = flt(values.delivered_qty) * (flt(values.conversion_factor) or 1)
+		room = flt(values.stock_qty) - max(flt(values.picked_qty), delivered_stock)
 		if room + 1e-9 < quantity:
 			others = frappe.get_all(
 				"Pick List Item",

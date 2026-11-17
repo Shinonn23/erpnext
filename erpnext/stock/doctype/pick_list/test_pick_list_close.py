@@ -188,6 +188,17 @@ class TestReopen(Base):
 		with self.assertRaises(frappe.ValidationError):
 			PickList.before_cancel(doc)
 
+	def test_a_closed_pick_with_one_cancelled_order_may_be_cancelled(self):
+		# closed when SO-1 was cancelled while SO-2 was already delivered: it can never reopen, so it may cancel
+		doc = pick(status="Closed", locations=[row(sales_order="SO-1"), row(sales_order="SO-2")])
+		frappe.db.get_value.side_effect = lambda doctype, name, fields=None, **kw: (
+			frappe._dict(status="Cancelled", docstatus=2)
+			if name == "SO-1"
+			else frappe._dict(status="Completed", docstatus=1)
+		)
+		with patch("erpnext.stock.warehouse_policy.validate_document_policy"):
+			PickList.before_cancel(doc)
+
 	def test_reopen_is_refused_naming_each_short_row_and_changes_nothing(self):
 		doc = pick(status="Closed")
 		doc.db_set = MagicMock()
@@ -286,6 +297,12 @@ class TestReopenOverPicks(Base):
 	def test_what_was_delivered_is_not_held_again(self):
 		rows = [row(name="R", sales_order_item="SOI-1", picked_qty=10, delivered_qty=6)]
 		self.assertEqual(self.over(rows, self.so_item(picked=6)), [])
+
+	def test_a_delivery_in_the_sales_uom_is_counted_in_the_stock_uom(self):
+		# 2 boxes of 10 = 20 stock units; 1 box delivered straight from the order leaves room for 10, not 19
+		rows = [row(name="R", sales_order_item="SOI-1", picked_qty=15)]
+		so_item = {**self.so_item(picked=0, delivered=1), "stock_qty": 20, "conversion_factor": 10}
+		self.assertEqual(len(self.over(rows, so_item)), 1)
 
 
 class TestReopenShortages(Base):
