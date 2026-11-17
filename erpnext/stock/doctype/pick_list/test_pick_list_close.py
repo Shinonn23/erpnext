@@ -171,6 +171,23 @@ class TestReopen(Base):
 					PickList.reopen(doc)
 			self.assertIn(word, str(caught.exception))
 
+	def test_a_pick_of_a_fully_delivered_order_cannot_reopen(self):
+		doc = pick(status="Closed", locations=[row(sales_order="SO-1")])
+		frappe.db.get_value.return_value = frappe._dict(status="To Bill", docstatus=1, per_delivered=100)
+		with patch.object(module, "get_reopen_shortages", return_value=[]):
+			with self.assertRaises(frappe.ValidationError) as caught:
+				PickList.reopen(doc)
+		self.assertIn("fully delivered", str(caught.exception))
+
+	def test_a_closed_pick_of_cancelled_orders_may_be_cancelled(self):
+		doc = pick(status="Closed", locations=[row(sales_order="SO-1")])
+		frappe.db.get_value.return_value = frappe._dict(status="Cancelled", docstatus=2)
+		with patch("erpnext.stock.warehouse_policy.validate_document_policy"):
+			PickList.before_cancel(doc)
+		frappe.db.get_value.return_value = frappe._dict(status="Closed", docstatus=1)
+		with self.assertRaises(frappe.ValidationError):
+			PickList.before_cancel(doc)
+
 	def test_reopen_is_refused_naming_each_short_row_and_changes_nothing(self):
 		doc = pick(status="Closed")
 		doc.db_set = MagicMock()
@@ -243,8 +260,18 @@ class TestReopenOverPicks(Base):
 		):
 			return module.get_reopen_over_picks(doc)
 
-	def so_item(self, picked):
-		return {"stock_qty": 10, "picked_qty": picked, "parent": "SO-1", "item_code": "ITEM"}
+	def so_item(self, picked, delivered=0):
+		return {
+			"stock_qty": 10,
+			"picked_qty": picked,
+			"delivered_qty": delivered,
+			"parent": "SO-1",
+			"item_code": "ITEM",
+		}
+
+	def test_a_delivery_straight_from_the_order_takes_the_room(self):
+		rows = [row(name="R", sales_order_item="SOI-1", picked_qty=10)]
+		self.assertEqual(len(self.over(rows, self.so_item(picked=0, delivered=10))), 1)
 
 	def test_a_second_open_pick_for_the_same_quantity_blocks_the_reopen(self):
 		rows = [row(name="R", sales_order_item="SOI-1", picked_qty=10)]
@@ -334,6 +361,10 @@ class TestCloseOrderPicks(Base):
 		def get_value(doctype, name, fields, as_dict=False):
 			if doctype == "Pick List":
 				return frappe._dict(picks[name])
+			if as_dict:
+				return frappe._dict(
+					status=self.so_status[name], per_delivered=getattr(self, "per_delivered", {}).get(name, 0)
+				)
 			return self.so_status[name]
 
 		def get_doc(doctype, name, for_update=False):
@@ -370,6 +401,16 @@ class TestCloseOrderPicks(Base):
 		self.so_status = {"SO-1": "To Deliver and Bill"}
 		result, _closed = self.run_close({"PL-1": self.open_pick()}, {"PL-1": ["SO-1"]}, cancelling=True)
 		self.assertEqual(result, (["PL-1"], []))
+
+	def test_a_fully_delivered_order_is_not_an_open_order(self):
+		self.so_status = {"SO-A": "To Deliver and Bill", "SO-B": "To Bill"}
+		self.per_delivered = {"SO-B": 100}
+		picks = {"PL-4": self.open_pick(status="Partly Delivered")}
+		result, closed = self.run_close(
+			picks, {"PL-4": ["SO-A", "SO-B"]}, cancelling=True, sales_order="SO-A"
+		)
+		self.assertEqual(result, (["PL-4"], []))
+		self.assertEqual(closed, ["PL-4"])
 
 	def test_a_pick_shared_with_an_open_order_is_left(self):
 		self.so_status = {"SO-1": "Closed", "SO-2": "To Deliver and Bill"}
@@ -564,6 +605,12 @@ class TestReopenReservations(Base):
 		self.assertEqual(doc.qty_to_reserve(doc.locations[0], delivered, {}, {"ROW-1": 3}), 0)
 		self.assertEqual(doc.qty_to_reserve(doc.locations[0], {"ROW-1": 5}, {}, {}), 0)
 
+	def test_a_closed_pick_reserves_nothing(self):
+		doc = pick(status="Closed", locations=[self.so_row(picked_qty=5)])
+		doc.check_permission = MagicMock()
+		with self.assertRaises(frappe.ValidationError):
+			doc.create_stock_reservation_entries(notify=False)
+
 	def test_create_reservations_asks_for_picked_less_delivered(self):
 		doc = pick(
 			status="Open", locations=[self.so_row(picked_qty=5, delivered_qty=2, stock_reserved_qty=0)]
@@ -648,14 +695,20 @@ def bundle_rows(picked, delivered, parent="PL-1"):
 class BundleBase(Base):
 	def setUp(self):
 		super().setUp()
-		bundle = SimpleNamespace(
-			items=[SimpleNamespace(item_code=k, qty=v) for k, v in {"A": 1, "B": 2}.items()]
-		)
 		self.status_of = {}
 		frappe.db.get_value.side_effect = lambda doctype, name, field=None, *a, **k: (
 			"BUNDLE" if doctype == "Sales Order Item" else self.status_of[name]
 		)
-		patch.object(module.frappe, "get_last_doc", return_value=bundle).start()
+		patch.object(module, "bundle_ratio", return_value={"A": 1, "B": 2}).start()
+
+
+class TestBundleRatio(Base):
+	def test_the_ratio_comes_from_the_packed_items_of_the_order(self):
+		frappe.db.get_value.return_value = 2  # stock_qty of the order row: 2 bundles
+		packed = [frappe._dict(item_code="A", qty=2), frappe._dict(item_code="B", qty=4)]
+		with patch.object(module.frappe, "get_all", return_value=packed) as get_all:
+			self.assertEqual(module.bundle_ratio("SOI-1"), {"A": 1, "B": 2})
+		self.assertEqual(get_all.call_args.args[0], "Packed Item")
 
 
 class TestBundleRecount(BundleBase):

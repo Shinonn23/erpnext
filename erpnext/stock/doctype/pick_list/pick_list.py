@@ -501,7 +501,7 @@ class PickList(TransactionBase):
 			validate_borrowing_pick_list(self, require_picked_qty=True)
 
 	def before_cancel(self):
-		if self.status == "Closed":
+		if self.status == "Closed" and not self.orders_all_cancelled():
 			frappe.throw(_("Closed Pick List cannot be cancelled. Reopen it to cancel."))
 
 		from erpnext.stock.warehouse_policy import validate_document_policy
@@ -511,6 +511,17 @@ class PickList(TransactionBase):
 			from erpnext.borrowing.doctype.borrowing.borrowing_core import validate_borrowing_pick_list
 
 			validate_borrowing_pick_list(self, cancelling=True)
+
+	def orders_all_cancelled(self) -> bool:
+		"""A pick closed because its orders were cancelled cannot be reopened, so it may be cancelled as it is."""
+		orders = {row.sales_order for row in self.get("locations") if row.get("sales_order")}
+		if not orders:
+			return False
+		for order in orders:
+			values = frappe.db.get_value("Sales Order", order, ["status", "docstatus"], as_dict=True)
+			if values and values.docstatus != 2 and values.status != "Cancelled":
+				return False
+		return True
 
 	def validate_sales_order(self):
 		"""Raises an exception if the `Sales Order` has reserved stock."""
@@ -767,6 +778,8 @@ class PickList(TransactionBase):
 				frappe.throw(_("Sales Order {0} is cancelled.").format(frappe.bold(order)))
 			if order_status and order_status.status == "Closed":
 				frappe.throw(_("Reopen Sales Order {0} first.").format(frappe.bold(order)))
+			if order_fully_delivered(order):
+				frappe.throw(_("Sales Order {0} is fully delivered.").format(frappe.bold(order)))
 
 		shortages = get_reopen_shortages(self)
 		if shortages:
@@ -910,7 +923,9 @@ class PickList(TransactionBase):
 		self.check_permission("write")
 
 		delivered, moved, held = {}, {}, {}
-		if self.status in ("Open", "Partly Delivered", "Closed"):
+		if self.status == "Closed":
+			frappe.throw(_("Closed Pick List cannot reserve stock. Reopen it first."))
+		if self.status in ("Open", "Partly Delivered"):
 			# what a Close or a delivery left: only what is still to deliver is reserved, never a delivered unit
 			from connect_diagnostics_setup.stock.outgoing_inspection import rejected_moved_by_row
 
@@ -1494,11 +1509,24 @@ def get_reopen_unreserved(pick) -> list[str]:
 	return lines
 
 
+def order_fully_delivered(order) -> bool:
+	values = frappe.db.get_value("Sales Order", order, ["status", "per_delivered"], as_dict=True)
+	return bool(values) and (flt(values.per_delivered) >= 100 or values.status in ("To Bill", "Completed"))
+
+
 def bundle_ratio(parent) -> dict[str, float]:
-	"""Quantity of each part in one bundle, for the Product Bundle of a Sales Order Item."""
-	item_code = frappe.db.get_value("Sales Order Item", parent, "item_code")
-	bundle = frappe.get_last_doc("Product Bundle", {"new_item_code": item_code, "disabled": 0})
-	return {item.item_code: flt(item.qty) for item in bundle.items}
+	"""Quantity of each part in one bundle of a Sales Order Item, read from the Packed Item rows of the order (they
+	record the makeup the order was made with, so a Product Bundle disabled or edited since changes nothing)."""
+	stock_qty = flt(frappe.db.get_value("Sales Order Item", parent, "stock_qty"))
+	ratio = {}
+	if stock_qty:
+		for row in frappe.get_all(
+			"Packed Item",
+			filters={"parent_detail_docname": parent, "parenttype": "Sales Order"},
+			fields=["item_code", "qty"],
+		):
+			ratio[row.item_code] = ratio.get(row.item_code, 0) + flt(row.qty) / stock_qty
+	return ratio
 
 
 def bundle_state(rows, ratio) -> tuple[float, float]:
@@ -1605,11 +1633,14 @@ def get_reopen_over_picks(pick) -> list[str]:
 	lines = []
 	for order_item, quantity in remaining.items():
 		values = frappe.db.get_value(
-			"Sales Order Item", order_item, ["stock_qty", "picked_qty", "parent", "item_code"], as_dict=True
+			"Sales Order Item",
+			order_item,
+			["stock_qty", "picked_qty", "delivered_qty", "parent", "item_code"],
+			as_dict=True,
 		)
 		if not values:
 			continue
-		room = flt(values.stock_qty) - flt(values.picked_qty)
+		room = flt(values.stock_qty) - max(flt(values.picked_qty), flt(values.delivered_qty))
 		if room + 1e-9 < quantity:
 			others = frappe.get_all(
 				"Pick List Item",
@@ -1754,7 +1785,11 @@ def close_open_picks_of_order(sales_order, cancelling=False):
 		states = {
 			order: "Cancelled"
 			if cancelling and order == sales_order
-			else frappe.db.get_value("Sales Order", order, "status")
+			else (
+				"Closed"
+				if order_fully_delivered(order) and order != sales_order
+				else frappe.db.get_value("Sales Order", order, "status")
+			)
 			for order in orders
 		}
 		if any(state not in ("Closed", "Cancelled") for state in states.values()):
