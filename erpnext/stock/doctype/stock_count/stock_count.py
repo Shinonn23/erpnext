@@ -31,6 +31,7 @@ class StockCount(Document):
 			StockCountSelectedItem,
 		)
 
+		amended_from: DF.Link | None
 		company: DF.Link
 		count_template: DF.Link | None
 		count_type: DF.Literal["", "Monthly", "Annual"]

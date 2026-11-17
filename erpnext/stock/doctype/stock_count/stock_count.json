@@ -48,6 +48,7 @@
   "surplus_notes",
   "references_column",
   "stock_reconciliation",
+  "amended_from",
   "connect_approval_section",
   "workflow_state",
   "connect_approval_column",
@@ -364,6 +365,16 @@
    "allow_on_submit": 1
   },
   {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Stock Count",
+   "print_hide": 1,
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
    "fieldname": "connect_approval_section",
    "fieldtype": "Section Break",
    "label": "Approval Status"
@@ -481,7 +492,7 @@
  "is_submittable": 1,
  "grid_page_length": 50,
  "links": [],
- "modified": "2026-11-07 12:00:00.000000",
+ "modified": "2026-11-18 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Stock Count",
