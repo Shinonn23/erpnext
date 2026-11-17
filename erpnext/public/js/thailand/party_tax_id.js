@@ -83,7 +83,7 @@ erpnext.thailand.apply_rd_result = function (target, data) {
 			message:
 				__(
 					"Filled from the Revenue Department, address {0}. It becomes the primary Address on save.",
-					[[a.address_line1, a.city, a.county, a.state, a.pincode].filter(Boolean).join(" ")],
+					[[a.address_line1, a.address_line2, a.city, a.state, a.pincode].filter(Boolean).join(" ")],
 				) +
 				(others.length
 					? " " +
@@ -98,15 +98,16 @@ erpnext.thailand.apply_rd_result = function (target, data) {
 	return "filled";
 };
 
-// RD's address into the form's own address fields (only the ones the form or dialog has). City is required by
-// ERPNext's make_address, so a record without ตำบล falls back to อำเภอ, then จังหวัด.
-erpnext.thailand.RD_ADDRESS_FIELDS = ["address_line1", "city", "county", "state", "pincode"];
+// RD's address into the form's own address fields (only the ones the form or dialog has), international
+// layout (Siwat, 17 Nov 2026): address_line2 = ตำบล/แขวง, city = อำเภอ/เขต, state = จังหวัด, county unused.
+// City is required by ERPNext's make_address, so a record without อำเภอ falls back to จังหวัด.
+erpnext.thailand.RD_ADDRESS_FIELDS = ["address_line1", "address_line2", "city", "state", "pincode"];
 erpnext.thailand.fill_rd_address = function (target, a) {
-	if (!a.address_line1 && !a.city && !a.county && !a.state) return;
+	if (!a.address_line1 && !a.address_line2 && !a.city && !a.state) return;
 	const values = {
 		address_line1: a.address_line1 || a.name || "",
-		city: a.city || a.county || a.state || "",
-		county: a.county || "",
+		address_line2: a.address_line2 || "",
+		city: a.city || a.state || "",
 		state: a.state || "",
 		pincode: a.pincode || "",
 	};

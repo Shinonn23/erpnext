@@ -84,7 +84,7 @@ test("complete Tax ID asks RD once with only tax id and branch, and fills the pa
   const env = load();
   const { frm, values } = form("Supplier", {
     doc: { tax_id: "0105551058581", branch_code: "00000" },
-    fields: ["branch_code", "address_line1", "city", "county", "state", "pincode", "country"],
+    fields: ["branch_code", "address_line1", "address_line2", "city", "state", "pincode", "country"],
   });
   env.handlers.Supplier.tax_id(frm);
   env.handlers.Supplier.tax_id(frm);
@@ -107,8 +107,8 @@ test("complete Tax ID asks RD once with only tax id and branch, and fills the pa
       legal_name: "บริษัท เอ จำกัด",
       address: {
         address_line1: "1/57 Soi วัชรพล 2/7",
-        city: "แขวงท่าแร้ง",
-        county: "เขตบางเขน",
+        address_line2: "แขวงท่าแร้ง",
+        city: "เขตบางเขน",
         state: "กรุงเทพมหานคร",
         pincode: "10220",
       },
@@ -118,8 +118,9 @@ test("complete Tax ID asks RD once with only tax id and branch, and fills the pa
   assert.equal(values.supplier_type, "Company");
   assert.equal(values.branch_code, "00000");
   assert.equal(values.address_line1, "1/57 Soi วัชรพล 2/7");
-  assert.equal(values.city, "แขวงท่าแร้ง");
-  assert.equal(values.county, "เขตบางเขน");
+  assert.equal(values.address_line2, "แขวงท่าแร้ง");
+  assert.equal(values.city, "เขตบางเขน");
+  assert.equal(values.county, undefined);
   assert.equal(values.state, "กรุงเทพมหานคร");
   assert.equal(values.pincode, "10220");
   assert.equal(values.country, "Thailand");
@@ -224,7 +225,7 @@ test("a Supplier at another branch is filled, the same branch is offered", () =>
 test("quick entry dialog: RD address fills its Primary Address fields, City falls back", () => {
   const env = load();
   const values = {};
-  const fields = ["address_line1", "city", "county", "state", "pincode", "country_address"];
+  const fields = ["address_line1", "address_line2", "city", "state", "pincode", "country_address"];
   const target = {
     doctype: "Customer",
     doc: {},
@@ -238,11 +239,11 @@ test("quick entry dialog: RD address fills its Primary Address fields, City fall
     branch_code: "00000",
     existing: [],
     legal_name: "A",
-    address: { address_line1: "9", county: "อำเภอเมือง", state: "ชลบุรี", pincode: "20000" },
+    address: { address_line1: "9", city: "อำเภอเมือง", state: "ชลบุรี", pincode: "20000" },
   };
   env.thailand.apply_rd_result(target, rd);
   assert.equal(values.city, "อำเภอเมือง");
-  assert.equal(values.county, "อำเภอเมือง");
+  assert.equal(values.address_line2, "");
   assert.equal(values.country_address, "Thailand");
   assert.equal(values.address_line1, "9");
 });

@@ -295,8 +295,8 @@ def finalize_address_dict(data):
 	return {
 		"name": name,
 		"address_line1": " ".join(address_parts),
-		"city": thambon,
-		"county": amphur,
+		"address_line2": thambon,
+		"city": amphur,
 		"state": province,
 		"pincode": postal,
 	}

@@ -19,12 +19,13 @@ Addresses), a Supplier only at the same branch (another branch may be another Su
 branch is named as a hint). Otherwise the legal name (title not doubled), type
 Company, Tax ID and branch code are filled and RD's address goes into the form's address fields at once: Address
 Line 1 (house number, village, soi, moo, building, floor, room, road; `utils.finalize_address_dict`, a "-" part is
-skipped), City = ตำบล/แขวง, County = อำเภอ/เขต, State = จังหวัด (with the Company's address prefixes), ZIP Code and
-Country Thailand; a record without ตำบล puts อำเภอ (else จังหวัด) into City, which ERPNext requires. On save ERPNext's
-own `create_primary_address` (`customer.make_address`, which also copies County) makes the linked Address and sets
+skipped), Address Line 2 = ตำบล/แขวง, City = อำเภอ/เขต, State = จังหวัด, County left empty (the international
+layout, Siwat 17 Nov 2026; also the ZIP Code lookup of the Address form and the PND 3 / 53 and tax reports) (with the Company's address prefixes), ZIP Code and
+Country Thailand; a record without อำเภอ puts จังหวัด into City, which ERPNext requires. On save ERPNext's
+own `create_primary_address` (`customer.make_address`, which also copies Address Line 2) makes the linked Address and sets
 the primary address; nothing is fetched again on save. RD knowing nothing (an individual, a non-VAT party) or being
 down only shows a message: the user types by hand and saving is never blocked. The quick entry dialog (also "Create
-new" from a Link field) has the same Tax ID, Branch Code and button, and its Primary Address section (with County)
+new" from a Link field) has the same Tax ID, Branch Code and button, and its Primary Address section (with Address Line 2)
 is filled the same way. Retyping the Tax ID or branch looks the new pair up once. The address fields of the full
 form are the app's Primary Address section of a new Customer / Supplier.
 

@@ -34,11 +34,11 @@ test("Tax ID lookup works after app load and updates its originating Address for
 	assert.equal(request.args.branch, "00000");
 	context.cur_frm = { set_value: () => assert.fail("Updated another form") };
 	request.callback({ message: {
-		name: "Company", address_line1: "123 Road", city: "City", county: "County",
+		name: "Company", address_line1: "123 Road", address_line2: "Tambon", city: "Amphur",
 		state: "Province", pincode: "10100",
 	} });
 	assert.deepEqual(values, {
-		address_title: "Company", address_line1: "123 Road", city: "City", county: "County",
+		address_title: "Company", address_line1: "123 Road", address_line2: "Tambon", city: "Amphur",
 		state: "Province", pincode: "10100", tax_id: "0105550000001",
 		branch_code: "00000", update_tax_branch: 1,
 	});

@@ -107,7 +107,8 @@ class TestRDLookup(unittest.TestCase):
 				}
 			)
 		self.assertEqual(address["address_line1"], "Road พหลโยธิน")
-		self.assertEqual((address["city"], address["county"], address["pincode"]), ("", "เมือง", ""))
+		self.assertEqual((address["address_line2"], address["city"], address["pincode"]), ("", "เมือง", ""))
+		self.assertNotIn("county", address)
 
 	def test_cached_answer_is_not_asked_again(self):
 		with mock.patch.object(utils.requests, "post", return_value=response(RD_OK)) as post:
