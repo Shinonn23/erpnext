@@ -2,6 +2,7 @@
 # For license information, please see license.txt
 
 import json
+import re
 from collections import OrderedDict, defaultdict
 from itertools import groupby
 
@@ -742,6 +743,7 @@ class PickList(TransactionBase):
 				).format(_(self.status))
 			)
 
+		record_released_reservations(self)
 		if self.has_reserved_stock():
 			self.cancel_stock_reservation_entries(notify=False)
 
@@ -907,6 +909,15 @@ class PickList(TransactionBase):
 		"""Creates Stock Reservation Entries for Sales Order Items against Pick List."""
 		self.check_permission("write")
 
+		delivered, moved, held = {}, {}, {}
+		if self.status in ("Open", "Partly Delivered", "Closed"):
+			# what a Close or a delivery left: only what is still to deliver is reserved, never a delivered unit
+			from connect_diagnostics_setup.stock.outgoing_inspection import rejected_moved_by_row
+
+			delivered = delivered_by_row(self)
+			moved = rejected_moved_by_row(self.name)
+			held = open_reservations_by_row(self.name)
+
 		so_items_details_map = {}
 		for location in self.locations:
 			if location.warehouse and location.sales_order and location.sales_order_item:
@@ -914,7 +925,7 @@ class PickList(TransactionBase):
 					"sales_order_item": location.sales_order_item,
 					"item_code": location.item_code,
 					"warehouse": location.warehouse,
-					"qty_to_reserve": (flt(location.picked_qty) - flt(location.stock_reserved_qty)),
+					"qty_to_reserve": self.qty_to_reserve(location, delivered, moved, held),
 					"from_voucher_no": location.parent,
 					"from_voucher_detail_no": location.name,
 					"serial_and_batch_bundle": location.serial_and_batch_bundle,
@@ -929,6 +940,13 @@ class PickList(TransactionBase):
 					from_voucher_type="Pick List",
 					notify=notify,
 				)
+
+	def qty_to_reserve(self, location, delivered, moved, held) -> float:
+		"""Still to deliver (picked less delivered, less what a rejected movement took out) less what is held now."""
+		if location.name in delivered:
+			needed = flt(location.picked_qty) - delivered[location.name] - moved.get(location.name, 0)
+			return max(needed, 0) - held.get(location.name, 0)
+		return flt(location.picked_qty) - flt(location.stock_reserved_qty)
 
 	@frappe.whitelist(methods=["POST"])
 	def cancel_stock_reservation_entries(self, notify=True) -> None:
@@ -1387,41 +1405,87 @@ def reopen_pick_list(name):
 	return pick.status
 
 
+RELEASED_BY_CLOSE = "Reserved stock released by Close:"
+
+
+def record_released_reservations(pick) -> None:
+	"""Close writes which Stock Reservation Entries it is about to cancel (none, when the pick held nothing), so
+	Reopen retakes only what the Close released and never a reservation a user took off by hand."""
+	names = frappe.get_all(
+		"Stock Reservation Entry",
+		filters={"from_voucher_type": "Pick List", "from_voucher_no": pick.name, "docstatus": 1},
+		fields=["name", "reserved_qty", "delivered_qty"],
+	)
+	names = sorted(e.name for e in names if flt(e.delivered_qty) < flt(e.reserved_qty))
+	pick.add_comment("Info", RELEASED_BY_CLOSE + " " + (", ".join(names) or "-"))
+
+
+def released_by_last_close(pick_list) -> list[str]:
+	content = frappe.get_all(
+		"Comment",
+		filters={
+			"reference_doctype": "Pick List",
+			"reference_name": pick_list,
+			"comment_type": "Info",
+			"content": ["like", RELEASED_BY_CLOSE + "%"],
+		},
+		fields=["content"],
+		order_by="creation desc",
+		limit=1,
+	)
+	if not content:
+		return []
+	tail = cstr(content[0].content).split(":", 1)[-1]
+	return [name.strip() for name in re.sub(r"<[^>]+>", "", tail).split(",") if name.strip() not in ("", "-")]
+
+
 def was_reserved_by(pick_list):
-	"""A Close cancelled Stock Reservation Entries of this Pick List (docstatus 2, not fully delivered) and no
-	submitted one with something left to deliver holds stock for it now. An entry that is fully delivered stays
-	submitted after a Close and does not count either way."""
+	"""The last Close of this Pick List cancelled Stock Reservation Entries (it recorded them) and no submitted
+	one with something left to deliver holds stock for it now. An entry that is fully delivered stays submitted
+	after a Close and does not count either way."""
+	released = released_by_last_close(pick_list)
+	if not released:
+		return False
 	entries = frappe.get_all(
 		"Stock Reservation Entry",
 		filters={"from_voucher_type": "Pick List", "from_voucher_no": pick_list, "docstatus": ["in", [1, 2]]},
-		fields=["docstatus", "reserved_qty", "delivered_qty"],
+		fields=["name", "docstatus", "reserved_qty", "delivered_qty"],
 	)
 	open_ = [e for e in entries if flt(e.delivered_qty) < flt(e.reserved_qty)]
-	return any(e.docstatus == 2 for e in open_) and not any(e.docstatus == 1 for e in open_)
+	return any(e.docstatus == 2 and e.name in released for e in open_) and not any(
+		e.docstatus == 1 for e in open_
+	)
 
 
-def get_reopen_unreserved(pick) -> list[str]:
-	"""One line for each row of a Pick List whose reservation, after a Reopen, holds less than the row still
-	has to deliver (picked less delivered, less what a rejected movement took out)."""
-	from connect_diagnostics_setup.stock.outgoing_inspection import rejected_moved_by_row
-
-	moved = rejected_moved_by_row(pick.name)
+def open_reservations_by_row(pick_list) -> dict[str, float]:
+	"""What the submitted Stock Reservation Entries of a Pick List still hold for each of its rows."""
 	held = {}
 	for entry in frappe.get_all(
 		"Stock Reservation Entry",
-		filters={"from_voucher_type": "Pick List", "from_voucher_no": pick.name, "docstatus": 1},
+		filters={"from_voucher_type": "Pick List", "from_voucher_no": pick_list, "docstatus": 1},
 		fields=["from_voucher_detail_no", "reserved_qty", "delivered_qty"],
 	):
 		held[entry.from_voucher_detail_no] = held.get(entry.from_voucher_detail_no, 0) + (
 			flt(entry.reserved_qty) - flt(entry.delivered_qty)
 		)
+	return held
+
+
+def get_reopen_unreserved(pick) -> list[str]:
+	"""One line for each row of a Pick List whose reservation, after a Reopen, holds more or less than the row still
+	has to deliver (picked less delivered, less what a rejected movement took out): it holds exactly that."""
+	from connect_diagnostics_setup.stock.outgoing_inspection import rejected_moved_by_row
+
+	moved = rejected_moved_by_row(pick.name)
+	delivered = delivered_by_row(pick)
+	held = open_reservations_by_row(pick.name)
 
 	lines = []
 	for row in pick.get("locations"):
 		if not (row.get("warehouse") and row.get("sales_order") and row.get("sales_order_item")):
 			continue
-		needed = flt(row.picked_qty) - flt(row.delivered_qty) - moved.get(row.name, 0)
-		if needed > 1e-9 and held.get(row.name, 0) + 1e-9 < needed:
+		needed = max(flt(row.picked_qty) - delivered[row.name] - moved.get(row.name, 0), 0)
+		if abs(held.get(row.name, 0) - needed) > 1e-9:
 			lines.append(
 				_("Row {0}: {1} in {2}: {3} to reserve, {4} reserved").format(
 					row.idx, row.item_code, row.warehouse, flt(needed), flt(held.get(row.name, 0))
@@ -1430,37 +1494,75 @@ def get_reopen_unreserved(pick) -> list[str]:
 	return lines
 
 
+def bundle_ratio(parent) -> dict[str, float]:
+	"""Quantity of each part in one bundle, for the Product Bundle of a Sales Order Item."""
+	item_code = frappe.db.get_value("Sales Order Item", parent, "item_code")
+	bundle = frappe.get_last_doc("Product Bundle", {"new_item_code": item_code, "disabled": 0})
+	return {item.item_code: flt(item.qty) for item in bundle.items}
+
+
+def bundle_state(rows, ratio) -> tuple[float, float]:
+	"""(complete bundles picked, complete bundles delivered) of one Pick List and one bundle parent.
+
+	A Delivery Note writes the number of bundles it delivered to ONE Pick List Item of the bundle
+	(`add_product_bundles_to_target` points the parent row at the last component row), so `delivered_qty` of a
+	component row is bundles, not parts, and the delivered bundles are the sum over the rows of the pick."""
+	packed, delivered = {}, 0
+	for row in rows:
+		if not ratio.get(row.get("item_code")):
+			continue
+		key = row.get("product_bundle_item")
+		packed[key] = packed.get(key, 0) + flt(row.get("picked_qty")) / ratio[row.get("item_code")]
+		delivered += flt(row.get("delivered_qty"))
+	complete = int(round(min(packed.values()), 6)) if packed else 0
+	return complete, min(complete, delivered)
+
+
+def delivered_by_row(pick) -> dict[str, float]:
+	"""Delivered quantity of each Pick List Item row in its own unit. A plain row keeps its `delivered_qty`; the
+	rows of a Product Bundle are given the parts of the delivered bundles (see bundle_state), in row order."""
+	result = {}
+	bundles = {}
+	for row in pick.get("locations"):
+		if row.get("product_bundle_item"):
+			bundles.setdefault(row.get("sales_order_item"), []).append(row)
+		else:
+			result[row.name] = flt(row.delivered_qty)
+
+	for parent, rows in bundles.items():
+		ratio = bundle_ratio(parent)
+		_complete, delivered = bundle_state(rows, ratio)
+		left = {item: delivered * qty for item, qty in ratio.items()}
+		for row in rows:
+			taken = min(flt(row.picked_qty), left.get(row.item_code, 0))
+			left[row.item_code] = left.get(row.item_code, 0) - taken
+			result[row.name] = taken
+	return result
+
+
 def recount_bundle_picked_qty(pick):
 	"""Product Bundle parents of a Sales Order: `picked_qty` of the parent row is the number of complete bundles
-	its Pick Lists hold. A Closed Pick List holds only what it delivered, so Close gives the rest back and
+	its Pick Lists hold. A Closed Pick List holds only the bundles it delivered, so Close gives the rest back and
 	Reopen takes it again (the rows of the Packed Items are recounted by update_reference_qty)."""
 	parents = sorted(
 		{row.sales_order_item for row in pick.get("locations") if row.get("product_bundle_item")}
 	)
 	for parent in parents:
-		item_code = frappe.db.get_value("Sales Order Item", parent, "item_code")
-		bundle = frappe.get_last_doc("Product Bundle", {"new_item_code": item_code, "disabled": 0})
-		ratio = {item.item_code: flt(item.qty) for item in bundle.items}
+		ratio = bundle_ratio(parent)
 
-		total = 0
 		per_pick = {}
 		for row in frappe.get_all(
 			"Pick List Item",
 			filters={"sales_order_item": parent, "docstatus": 1, "product_bundle_item": ["is", "set"]},
 			fields=["parent", "item_code", "product_bundle_item", "picked_qty", "delivered_qty"],
 		):
-			if not ratio.get(row.item_code):
-				continue
-			status = frappe.db.get_value("Pick List", row.parent, "status")
-			qty = flt(row.picked_qty)
-			if status == "Closed":
-				qty = min(qty, flt(row.delivered_qty))
-			packed = per_pick.setdefault(row.parent, {})
-			packed[row.product_bundle_item] = (
-				packed.get(row.product_bundle_item, 0) + qty / ratio[row.item_code]
-			)
-		for packed in per_pick.values():
-			total += int(round(min(packed.values()), 6)) if packed else 0
+			per_pick.setdefault(row.parent, []).append(row)
+
+		total = 0
+		for name, rows in per_pick.items():
+			complete, delivered = bundle_state(rows, ratio)
+			closed = frappe.db.get_value("Pick List", name, "status") == "Closed"
+			total += delivered if closed else complete
 		frappe.db.set_value("Sales Order Item", parent, "picked_qty", total, update_modified=False)
 
 
@@ -1478,15 +1580,27 @@ def get_reopen_over_picks(pick) -> list[str]:
 	from connect_diagnostics_setup.stock.outgoing_inspection import rejected_moved_by_row
 
 	moved = rejected_moved_by_row(pick.name)
+	delivered = delivered_by_row(pick)
 	remaining = {}
 	rows = {}
+	bundles = {}
 	for row in pick.get("locations"):
-		if not row.get("sales_order_item") or row.get("product_bundle_item"):
+		if not row.get("sales_order_item"):
 			continue
-		quantity = flt(row.picked_qty) - flt(row.delivered_qty) - moved.get(row.name, 0)
+		if row.get("product_bundle_item"):
+			bundles.setdefault(row.sales_order_item, []).append(row)
+			continue
+		quantity = flt(row.picked_qty) - delivered[row.name] - moved.get(row.name, 0)
 		if quantity > 1e-9:
 			remaining[row.sales_order_item] = remaining.get(row.sales_order_item, 0) + quantity
 			rows.setdefault(row.sales_order_item, []).append(row.idx)
+
+	# a bundle parent counts complete bundles: what the pick still holds is picked less delivered bundles
+	for parent, parts in bundles.items():
+		complete, done = bundle_state(parts, bundle_ratio(parent))
+		if complete - done > 1e-9:
+			remaining[parent] = complete - done
+			rows[parent] = [part.idx for part in parts]
 
 	lines = []
 	for order_item, quantity in remaining.items():
@@ -1533,10 +1647,11 @@ def get_reopen_shortages(pick) -> list[str]:
 	from erpnext.stock.doctype.storage_location.storage_location import location_stock
 
 	moved = rejected_moved_by_row(pick.name)
+	delivered = delivered_by_row(pick)
 	rows = [
 		row
 		for row in pick.get("locations")
-		if flt(row.picked_qty) - flt(row.delivered_qty) - moved.get(row.name, 0) > 1e-9
+		if flt(row.picked_qty) - delivered[row.name] - moved.get(row.name, 0) > 1e-9
 	]
 	if not rows:
 		return []
@@ -1548,7 +1663,7 @@ def get_reopen_shortages(pick) -> list[str]:
 	needed, labels = {}, {}
 	shortages = []
 	for row in rows:
-		remaining = flt(row.picked_qty) - flt(row.delivered_qty) - moved.get(row.name, 0)
+		remaining = flt(row.picked_qty) - delivered[row.name] - moved.get(row.name, 0)
 		place = ", ".join(part for part in (row.warehouse, row.storage_location, row.batch_no) if part)
 		serials = _row_serials(row)
 		if serials:
