@@ -13,6 +13,7 @@ from erpnext.regional.thailand.utils import (
 	PARTY_DOCTYPES,
 	branch_code_of,
 	clean_branch,
+	clean_tax_id,
 	fetch_rd_vat_record,
 	finalize_address_dict,
 )
@@ -47,11 +48,26 @@ def address_values(doc, data):
 	}
 
 
+def rd_key(tax_id, branch_code):
+	"""``<13 digits>:<5-digit branch>`` of a Tax ID and branch, or "" when the Tax ID is not valid."""
+	try:
+		return f"{clean_tax_id(tax_id)}:{branch_code_of(clean_branch(branch_code or '0'))}"
+	except frappe.ValidationError:
+		if getattr(frappe.local, "message_log", None):
+			frappe.local.message_log.pop()
+		return ""
+
+
 def create_rd_address(doc, method=None):
 	"""Customer / Supplier on_update: make the RD address of a party the form filled from RD."""
 	if doc.doctype not in PARTY_DOCTYPES or not doc.get("rd_fill_address") or not doc.get("tax_id"):
 		return
 	doc.rd_fill_address = None  # once per save
+	# The pair the form filled (non-stored ``rd_filled_key``): a Tax ID or branch retyped after the fill is another
+	# entity or branch, so its RD address is not made under the name typed for the first one.
+	filled = doc.get("rd_filled_key")
+	if not filled or filled != rd_key(doc.tax_id, doc.get("branch_code")):
+		return
 	if _linked_addresses(doc.doctype, doc.name):
 		return
 	try:

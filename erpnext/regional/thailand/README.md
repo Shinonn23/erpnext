@@ -14,11 +14,15 @@ No existing tax invoices are backfilled or moved between report months.
 
 On a new Customer or Supplier the button **Fetch from Revenue Department** (it also runs once when the Tax ID has
 13 digits) calls `utils.get_party_by_tax_id` (`public/js/thailand/party_tax_id.js`). A party that already has the
-same Tax ID (any branch, the same branch first; other branches are its Addresses) is offered instead of a new one. Otherwise the legal name (title not doubled), type
+same Tax ID is offered instead of a new one: a Customer at any branch (one Customer per Tax ID, other branches are its
+Addresses), a Supplier only at the same branch (another branch may be another Supplier; RD is asked and the other
+branch is named as a hint). Otherwise the legal name (title not doubled), type
 Company, Tax ID and branch code are filled and, on save, `custom/rd_party.create_rd_address` asks RD again and
 makes the RD address the primary Billing Address (skipped when the party already has an Address). RD knowing nothing
 (an individual, a non-VAT party) or being down only shows a message: the user types by hand and saving is never
-blocked. Customer and Supplier have no quick entry, so the full form is always used.
+blocked. The quick entry dialog (also "Create new" from a Link field) has the same Tax ID, Branch Code and button.
+The form remembers the Tax ID and branch it filled (non-stored `rd_filled_key`): retyping either clears the fill and
+looks the new pair up, and the server makes no RD address when the saved pair is not the filled one.
 
 `utils.fetch_rd_vat_record` is the one RD call (also behind the Address form's "By Tax ID"): it sends only the Tax ID
 and branch number, verifies the certificate (the RD chain validates with certifi; the old `verify=False` is gone),

@@ -246,7 +246,11 @@ def get_party_by_tax_id(doctype: str, tax_id: str, branch: str | None = "00000")
 		"address": {},
 		"existing": existing_parties(doctype, tax_id, branch_code),
 	}
-	if out["existing"]:
+	# A Customer is one per Tax ID (unique index; another branch is an Address of it). A Supplier may be one per
+	# Tax ID and branch (the app's rule), so only the same branch stops it; another branch is a hint only.
+	if doctype == "Customer" and out["existing"]:
+		return out
+	if any(party["same_branch"] for party in out["existing"]):
 		return out
 	data = fetch_rd_vat_record(tax_id, branch_code)
 	if data:

@@ -153,6 +153,35 @@ class TestRDLookup(unittest.TestCase):
 		self.assertEqual(out["existing"][1]["branch_code"], "00001")
 		self.assertFalse(out["found"])
 
+	def _lookup_with(self, doctype, rows):
+		import frappe
+
+		with (
+			mock.patch.object(utils.frappe, "get_all", return_value=rows),
+			mock.patch.object(utils.frappe, "has_permission", lambda *a, **k: True),
+			mock.patch.object(utils.requests, "post", return_value=response(RD_OK)) as post,
+		):
+			out = utils.get_party_by_tax_id(doctype, "0105551058581", "0")
+		return out, post, frappe
+
+	def test_supplier_at_another_branch_still_asks_rd_and_hints(self):
+		import frappe
+
+		rows = [frappe._dict(name="S-1", supplier_name="A", tax_id="0105551058581", branch_code="00001")]
+		out, post, _f = self._lookup_with("Supplier", rows)
+		post.assert_called_once()
+		self.assertTrue(out["found"])
+		self.assertEqual([p["name"] for p in out["existing"]], ["S-1"])
+		self.assertFalse(out["existing"][0]["same_branch"])
+
+	def test_customer_at_any_branch_is_offered_without_asking_rd(self):
+		import frappe
+
+		rows = [frappe._dict(name="C-1", customer_name="A", tax_id="0105551058581", branch_code="00001")]
+		out, post, _f = self._lookup_with("Customer", rows)
+		post.assert_not_called()
+		self.assertFalse(out["found"])
+
 	def test_only_customer_or_supplier(self):
 		with self.assertRaises(Thrown):
 			utils.get_party_by_tax_id("User", "0105551058581")
@@ -160,3 +189,34 @@ class TestRDLookup(unittest.TestCase):
 
 if __name__ == "__main__":
 	unittest.main()
+
+
+class TestRDAddressKey(unittest.TestCase):
+	def _doc(self, **values):
+		from erpnext.regional.thailand.custom import rd_party
+
+		doc = mock.MagicMock()
+		doc.doctype = "Supplier"
+		data = {"rd_fill_address": 1, "tax_id": "0105551058581", "branch_code": "00000", **values}
+		doc.get.side_effect = data.get
+		doc.tax_id = data["tax_id"]
+		return rd_party, doc
+
+	def test_retyped_tax_id_or_branch_makes_no_address(self):
+		for key in ("0105551058581:00001", "1234567890121:00000", None):
+			rd_party, doc = self._doc(rd_filled_key=key)
+			with (
+				mock.patch.object(rd_party, "_linked_addresses", return_value=[]),
+				mock.patch.object(rd_party, "fetch_rd_vat_record") as fetch,
+			):
+				rd_party.create_rd_address(doc)
+			fetch.assert_not_called()
+
+	def test_filled_pair_fetches(self):
+		rd_party, doc = self._doc(rd_filled_key="0105551058581:00000")
+		with (
+			mock.patch.object(rd_party, "_linked_addresses", return_value=[]),
+			mock.patch.object(rd_party, "fetch_rd_vat_record", return_value=None) as fetch,
+		):
+			rd_party.create_rd_address(doc)
+		fetch.assert_called_once()
