@@ -77,6 +77,14 @@ erpnext.regional.thailand.tax_popups.ask_tax_invoice = function (
 				reqd: 1,
 				default: defaults.tax_invoice_date,
 			},
+			{
+				fieldtype: "Select",
+				fieldname: "months_delayed",
+				label: __("Delayed (months)"),
+				options: "0\n1\n2\n3\n4\n5\n6",
+				default: defaults.months_delayed ?? "0",
+				description: __("0 = tax invoice month; 1 = the following month."),
+			},
 		],
 		primary_action_label: __("Save"),
 		primary_action(values) {
@@ -109,6 +117,7 @@ erpnext.regional.thailand.tax_popups.ask_journal_tax_invoice = async function (f
 				supplier,
 				tax_invoice_number: invoice.tax_invoice_number,
 				tax_invoice_date: invoice.tax_invoice_date || frm.doc.posting_date,
+				months_delayed: invoice.months_delayed ?? row.months_delayed ?? "0",
 			},
 			apply: async (values) => {
 				await frappe.model.set_value(row.doctype, row.name, values);

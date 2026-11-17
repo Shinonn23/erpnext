@@ -362,6 +362,7 @@ def update_voucher_tinv(doctype, voucher, tinv, split_tax_invoice=False):
 			voucher.tax_invoice_date = tinv.date
 			tinv.report_date = tinv.date
 	if doctype == "Purchase Tax Invoice":
+		tinv.months_delayed = cint(voucher.get("months_delayed"))
 		if not (voucher.tax_invoice_number and voucher.tax_invoice_date):
 			frappe.throw(_("Please enter Tax Invoice Number / Tax Invoice Date"))
 		voucher.save()
@@ -822,6 +823,7 @@ def is_tax_reset(doc, tax_accounts):
 					or old_line.customer != new_line.customer
 					or old_line.tax_invoice_number != new_line.tax_invoice_number
 					or str(old_line.tax_invoice_date) != str(new_line.tax_invoice_date)
+					or cint(getattr(old_line, "months_delayed", 0)) != cint(getattr(new_line, "months_delayed", 0))
 				):
 					return True
 	else:
@@ -865,6 +867,7 @@ def prepare_journal_entry_tax_invoice_detail(doc, method):
 					"party_name": party_name,
 					"tax_invoice_number": tax_line.tax_invoice_number,
 					"tax_invoice_date": tax_line.tax_invoice_date,
+					"months_delayed": cint(getattr(tax_line, "months_delayed", 0)),
 					"tax_base_amount": flt(tax_base_amount, precision),
 					"tax_amount": flt(tax_amount, precision),
 				}

@@ -133,6 +133,7 @@
   "tax_invoice_number",
   "column_break_t0qgt",
   "tax_invoice_date",
+  "months_delayed",
   "tax_invoice_ref_type",
   "tax_invoice_ref",
   "payments_tab",
@@ -1834,6 +1835,18 @@
    "fieldname": "tax_invoice_date",
    "fieldtype": "Date",
    "label": "Tax Invoice Date",
+   "no_copy": 1,
+   "read_only_depends_on": "eval:doc.docstatus!=0"
+  },
+  {
+   "fieldname": "months_delayed",
+   "fieldtype": "Select",
+   "label": "Delayed (months)",
+   "options": "0\n1\n2\n3\n4\n5\n6",
+   "default": "0",
+   "description": "0 = tax invoice month; 1 = the following month.",
+   "allow_on_submit": 1,
+   "depends_on": "eval:!doc.split_tax_invoice && (doc.tax_invoice_date || doc.months_delayed > 0)",
    "no_copy": 1,
    "read_only_depends_on": "eval:doc.docstatus!=0"
   },

@@ -91,6 +91,8 @@ class PurchaseTaxInvoice(Document):
 				if not origin_doc.get("split_tax_invoice", False):
 					origin_doc.tax_invoice_number = self.number
 					origin_doc.tax_invoice_date = self.date
+					if origin_doc.meta.has_field("months_delayed"):
+						origin_doc.months_delayed = self.months_delayed
 					origin_doc.save(ignore_permissions=True)
 				else:  # find in Purchase Invoice Detail Tax Invoice
 					dt = {

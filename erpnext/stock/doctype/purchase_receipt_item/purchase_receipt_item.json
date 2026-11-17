@@ -458,7 +458,7 @@
   },
   {
    "depends_on": "eval:doc.is_free_item",
-   "description": "Estimated Buying price, else the latest purchase, else the valuation rate. Type it if none was found.",
+   "description": "Reference price in company currency, restored from the linked Purchase Order when available. If no reference price is found, enter an Allocation Weight.",
    "fieldname": "free_goods_reference_rate",
    "fieldtype": "Currency",
    "label": "Reference Rate (per stock UOM)",

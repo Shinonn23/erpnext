@@ -16,6 +16,7 @@
   "section_break_rpmxt",
   "tax_invoice_number",
   "tax_invoice_date",
+  "months_delayed",
   "column_break_bxvza",
   "tax_base_amount",
   "tax_amount",
@@ -49,6 +50,16 @@
    "fieldtype": "Date",
    "in_list_view": 1,
    "label": "Tax Invoice Date"
+  },
+  {
+   "fieldname": "months_delayed",
+   "fieldtype": "Select",
+   "label": "Delayed (months)",
+   "options": "0\n1\n2\n3\n4\n5\n6",
+   "default": "0",
+   "description": "0 = tax invoice month; 1 = the following month.",
+   "depends_on": "eval:doc.supplier || doc.months_delayed > 0",
+   "allow_on_submit": 1
   },
   {
    "fieldname": "tax_base_amount",
