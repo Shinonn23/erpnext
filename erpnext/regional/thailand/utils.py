@@ -7,6 +7,7 @@ import frappe
 import requests
 from frappe import _
 from frappe.defaults import get_user_default_as_list
+from frappe.rate_limiter import rate_limit
 from lxml import etree
 from num2words import num2words
 from num2words.currency import parse_currency_parts
@@ -33,9 +34,11 @@ def full_thai_date(date_str):
 	if not date_str:
 		return ""
 	date = datetime.datetime.strptime(str(date_str), "%Y-%m-%d")
-	month_name = "x January February March April May June July August September October November December".split()[
-		date.month
-	]
+	month_name = (
+		"x January February March April May June July August September October November December".split()[
+			date.month
+		]
+	)
 	thai_year = date.year + 543
 	return f"{date.day} {month_name} {thai_year}"  # 30 October 2560
 
@@ -43,11 +46,7 @@ def full_thai_date(date_str):
 def get_prefix_for_address(data):
 	prefix_thambol, prefix_amphur, prefix_province = "", "", ""
 	companies = get_user_default_as_list("company", frappe.session.user)
-	company = (
-		companies[0]
-		if companies
-		else frappe.db.get_single_value("Global Defaults", "default_company")
-	)
+	company = companies[0] if companies else frappe.db.get_single_value("Global Defaults", "default_company")
 	company_doc = frappe.get_cached_doc("Company", company)
 	if company_doc.get("enable_prefix_for_address"):
 		prefix_thambol = company_doc.get("prefix_thambol_other_province") or ""
@@ -60,38 +59,37 @@ def get_prefix_for_address(data):
 	return prefix_thambol, prefix_amphur, prefix_province
 
 
-@frappe.whitelist()
-def get_address_by_tax_id(tax_id: str | None = None, branch: str | None = None):
-	"""Get address information from Revenue Department Web Service by Tax ID and Branch number.
+RD_URL = "https://rdws.rd.go.th/serviceRD3/vatserviceRD3.asmx"
+# connect, read (seconds): a slow RD never holds a web worker for long. No retries: the user presses again.
+RD_TIMEOUT = (5, 15)
+RD_CACHE_SECONDS = 60 * 60
+RD_UNREACHABLE = "The Revenue Department service is not reachable now. Type the details by hand."
+RD_NOT_FOUND = (
+	"Tax ID {0} (branch {1}) is not found at the Revenue Department as a VAT registrant. "
+	"Type the details by hand."
+)
 
-	Args:
-	        tax_id (str): Tax ID of the company
-	        branch (str): Branch number of the company
 
-	Returns:
-	        dict: Dictionary containing address information
-	                  Empty dict if there's an error
-
-	Raises:
-	        frappe.ValidationError: If tax_id or branch is not provided, or tax_id is not 13 digits
-	"""
-	if not (tax_id and branch):
-		frappe.throw(_("Please provide both Tax ID and Branch number"))
-	# tax_id is put into the SOAP payload as is, so allow only a 13-digit Thai Tax ID
-	tax_id = re.sub(r"[\s-]", "", tax_id)
+def clean_tax_id(tax_id):
+	"""Digits only; refuse anything but a 13-digit Thai Tax ID (it goes into the SOAP payload)."""
+	tax_id = re.sub(r"[\s-]", "", str(tax_id or ""))
 	if not re.fullmatch(r"[0-9]{13}", tax_id):
 		frappe.throw(_("Tax ID must be 13 digits"))
+	return tax_id
 
-	# API Configuration
-	url = "https://rdws.rd.go.th/serviceRD3/vatserviceRD3.asmx"
-	querystring = {"wsdl": ""}
-	headers = {"content-type": "application/soap+xml; charset=utf-8"}
 
-	# Convert branch number, default to "0" if not numeric
-	branch_number = int(branch if branch.isnumeric() else "0")
+def clean_branch(branch):
+	"""Branch 0-99999 as an int; blank is the head office (0). Anything else is refused, never guessed."""
+	text = re.sub(r"\s", "", str(branch if branch is not None else ""))
+	if not text:
+		return 0
+	if not re.fullmatch(r"[0-9]{1,5}", text):
+		frappe.throw(_("Branch must be 1 to 5 digits (00000 is the head office)"))
+	return int(text)
 
-	# Prepare SOAP payload
-	payload = (
+
+def _soap_payload(tax_id, branch_number):
+	return (
 		"<soap:Envelope xmlns:soap='http://www.w3.org/2003/05/soap-envelope' "
 		"xmlns:vat='https://rdws.rd.go.th/serviceRD3/vatserviceRD3'>"
 		"<soap:Header/>"
@@ -109,17 +107,10 @@ def get_address_by_tax_id(tax_id: str | None = None, branch: str | None = None):
 		"</soap:Envelope>"
 	)
 
-	# Setup session with SSL verification disabled
-	session = requests.Session()
-	session.verify = False
 
-	# Make the API request
-	response = session.post(url, data=payload, headers=headers, params=querystring)
-	response.raise_for_status()  # Raise exception for HTTP errors
-
-	# Parse XML response
-	result = etree.fromstring(response.content)
-	# Process response data
+def parse_rd_response(content):
+	"""The vX -> anyType values of the RD SOAP answer, as a dict of stripped strings."""
+	result = etree.fromstring(content)
 	data = {}
 	value = False
 	for element in result.iter():
@@ -128,18 +119,148 @@ def get_address_by_tax_id(tax_id: str | None = None, branch: str | None = None):
 			value = tag
 			continue
 		if value and tag == "anyType":
-			data[value] = element.text.strip()
+			data[value] = (element.text or "").strip()
 		value = False
+	return data
 
-	if data.get("vmsgerr"):
-		frappe.throw(data.get("vmsgerr"))
 
+def fetch_rd_vat_record(tax_id, branch=None):
+	"""The Revenue Department's VAT registrant record of a Tax ID and branch, or None when RD has none.
+
+	Only the Tax ID and the branch number are sent (anonymous RD login). The certificate is verified
+	(the RD chain validates with certifi), there is a timeout and no retry, and an answer is cached for an
+	hour per Tax ID and branch so a form typing loop never storms RD. An unreachable RD or a broken answer
+	is logged and raised as one friendly message.
+	"""
+	tax_id = clean_tax_id(tax_id)
+	branch_number = clean_branch(branch)
+	cache_key = f"rd_vat_record:{tax_id}:{branch_number}"
+	cached = frappe.cache.get_value(cache_key)
+	if cached is not None:
+		return cached or None
+	try:
+		response = requests.post(
+			RD_URL,
+			data=_soap_payload(tax_id, branch_number).encode("utf-8"),
+			headers={"content-type": "application/soap+xml; charset=utf-8"},
+			params={"wsdl": ""},
+			timeout=RD_TIMEOUT,
+		)
+		response.raise_for_status()
+		data = parse_rd_response(response.content)
+	except (requests.RequestException, etree.XMLSyntaxError, ValueError):
+		frappe.log_error(title="Revenue Department VAT lookup failed")
+		frappe.throw(_(RD_UNREACHABLE), title=_("Revenue Department"))
+	found = bool(data) and not data.get("vmsgerr") and bool(data.get("vName") or data.get("vBranchName"))
+	frappe.cache.set_value(cache_key, data if found else {}, expires_in_sec=RD_CACHE_SECONDS)
+	return data if found else None
+
+
+def _part(value):
+	value = (value or "").strip()
+	return "" if value in ("-", "") else value
+
+
+def rd_legal_name(data):
+	"""Legal name as RD writes it: title + name (+ surname), the title not doubled."""
+	name = _part(data.get("vBranchName")) or _part(data.get("vName"))
+	title = _part(data.get("vBranchTitleName")) or _part(data.get("vtitleName"))
+	if title and not name.startswith(title):
+		name = f"{title} {name}"
+	surname = _part(data.get("vSurname"))
+	if surname:
+		name = f"{name} {surname}"
+	return name.strip()
+
+
+def branch_code_of(branch_number):
+	return str(int(branch_number)).zfill(5)
+
+
+@frappe.whitelist()
+@rate_limit(limit=30, seconds=60)
+def get_address_by_tax_id(tax_id: str | None = None, branch: str | None = None):
+	"""Address of a Tax ID and branch from the Revenue Department (Address form, "By Tax ID")."""
+	if not (tax_id and branch):
+		frappe.throw(_("Please provide both Tax ID and Branch number"))
+	data = fetch_rd_vat_record(tax_id, branch)
+	if not data:
+		frappe.throw(_(RD_NOT_FOUND).format(clean_tax_id(tax_id), branch_code_of(clean_branch(branch))))
 	return finalize_address_dict(data)
+
+
+PARTY_DOCTYPES = {"Customer": "customer_name", "Supplier": "supplier_name"}
+
+
+def existing_parties(doctype, tax_id, branch_code):
+	"""Parties of the DocType with the same Tax ID that the user may read, the same branch first.
+
+	Any branch counts: the branches of one party are its Addresses (``custom/branches.py``), so another branch of
+	a known Tax ID is an Address of that party rather than a new one.
+	"""
+	rows = frappe.get_all(
+		doctype,
+		filters={"tax_id": ["like", f"%{tax_id[-6:]}%"]},
+		fields=["name", PARTY_DOCTYPES[doctype], "tax_id", "branch_code"],
+		ignore_permissions=True,
+	)
+	same = []
+	for row in rows:
+		if re.sub(r"\D", "", row.tax_id or "") != tax_id:
+			continue
+		if not frappe.has_permission(doctype, "read", doc=row.name):
+			continue
+		digits = re.sub(r"\D", "", row.branch_code or "")
+		code = branch_code_of(int(digits)) if digits and len(digits) <= 5 else ""
+		same.append(
+			{
+				"name": row.name,
+				"title": row.get(PARTY_DOCTYPES[doctype]) or row.name,
+				"branch_code": code,
+				"same_branch": code == branch_code,
+			}
+		)
+	same.sort(key=lambda party: not party["same_branch"])
+	return same
+
+
+@frappe.whitelist()
+@rate_limit(limit=30, seconds=60)
+def get_party_by_tax_id(doctype: str, tax_id: str, branch: str | None = "00000"):
+	"""What a new Customer or Supplier needs from a Tax ID: the parties that already have it, and RD's record.
+
+	Returns {"found", "tax_id", "branch_code", "legal_name", "address", "existing"}; found is False for an
+	individual or a party that is not a VAT registrant (the user then types by hand; nothing is blocked).
+	"""
+	if doctype not in PARTY_DOCTYPES:
+		frappe.throw(_("Only a Customer or a Supplier can be filled from a Tax ID"))
+	if not frappe.has_permission(doctype, "create"):
+		frappe.throw(_("Not permitted"), frappe.PermissionError)
+	tax_id = clean_tax_id(tax_id)
+	branch_code = branch_code_of(clean_branch(branch))
+	out = {
+		"found": False,
+		"tax_id": tax_id,
+		"branch_code": branch_code,
+		"legal_name": "",
+		"address": {},
+		"existing": existing_parties(doctype, tax_id, branch_code),
+	}
+	# A Customer is one per Tax ID (unique index; another branch is an Address of it). A Supplier may be one per
+	# Tax ID and branch (the app's rule), so only the same branch stops it; another branch is a hint only.
+	if doctype == "Customer" and out["existing"]:
+		return out
+	if any(party["same_branch"] for party in out["existing"]):
+		return out
+	data = fetch_rd_vat_record(tax_id, branch_code)
+	if data:
+		out.update(found=True, legal_name=rd_legal_name(data), address=finalize_address_dict(data))
+	return out
 
 
 def finalize_address_dict(data):
 	def get_part(data, key, value):
-		return data.get(key, "-") != "-" and value % (map[key], data.get(key)) or ""
+		return (data.get(key, "-") != "-" and value % (map[key], data.get(key))) or ""
 
 	prefix_thambol, prefix_amphur, prefix_province = get_prefix_for_address(data)
 
@@ -156,9 +277,7 @@ def finalize_address_dict(data):
 		"vProvince": prefix_province,
 	}
 
-	name = f"{data.get('vBranchTitleName')} {data.get('vBranchName')}"
-	if "vSurname" in data and data["vSurname"] not in ("-", "", None):
-		name = f"{name} {data['vSurname']}"
+	name = rd_legal_name(data)
 	house = data.get("vHouseNumber", "")
 	village = get_part(data, "vVillageName", "%s %s")
 	soi = get_part(data, "vSoiName", "%s %s")
@@ -172,9 +291,7 @@ def finalize_address_dict(data):
 	province = get_part(data, "vProvince", "%s%s")
 	postal = data.get("vPostCode", "")
 
-	address_parts = filter(
-		lambda x: x != "", [house, village, soi, moo, building, floor, room, street]
-	)
+	address_parts = filter(lambda x: x != "", [house, village, soi, moo, building, floor, room, street])
 	return {
 		"name": name,
 		"address_line1": " ".join(address_parts),
