@@ -1008,6 +1008,7 @@ def make_address(args, is_primary_address=1, is_shipping_address=1):
 	address = frappe.get_doc(
 		{
 			"doctype": "Address",
+			"address_type": "Billing",
 			"address_title": args.get(party_name_key),
 			"address_line1": args.get("address_line1"),
 			"address_line2": args.get("address_line2"),
