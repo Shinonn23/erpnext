@@ -111,7 +111,8 @@
    "options": "Stock Count",
    "read_only": 1,
    "depends_on": "recount_of",
-   "description": "The count whose surplus this count checks again. What both counts find beyond the system quantity is received into the Found Warehouse."
+   "description": "The count whose surplus this count checks again. What both counts find beyond the system quantity is received into the Found Warehouse.",
+   "no_copy": 1
   },
   {
    "fieldname": "naming_series",
@@ -315,7 +316,8 @@
    "label": "Lost Stock Entry",
    "options": "Stock Entry",
    "read_only": 1,
-   "allow_on_submit": 1
+   "allow_on_submit": 1,
+   "no_copy": 1
   },
   {
    "fieldname": "found_stock_entry",
@@ -324,7 +326,8 @@
    "options": "Stock Entry",
    "read_only": 1,
    "allow_on_submit": 1,
-   "description": "Material Receipt into the Found Warehouse of what both counts found, at the Item's current valuation rate."
+   "description": "Material Receipt into the Found Warehouse of what both counts found, at the Item's current valuation rate.",
+   "no_copy": 1
   },
   {
    "fieldname": "found_transfer_entry",
@@ -333,7 +336,8 @@
    "options": "Stock Entry",
    "read_only": 1,
    "allow_on_submit": 1,
-   "description": "Material Transfer back into the counted Warehouse of counted serial numbers the system holds in another warehouse (e.g. LOST)."
+   "description": "Material Transfer back into the counted Warehouse of counted serial numbers the system holds in another warehouse (e.g. LOST).",
+   "no_copy": 1
   },
   {
    "fieldname": "recount_stock_count",
@@ -342,7 +346,8 @@
    "options": "Stock Count",
    "read_only": 1,
    "allow_on_submit": 1,
-   "description": "Draft count of what this count found beyond the system quantity, to be counted again before anything is received."
+   "description": "Draft count of what this count found beyond the system quantity, to be counted again before anything is received.",
+   "no_copy": 1
   },
   {
    "fieldname": "surplus_notes",
@@ -362,7 +367,8 @@
    "label": "Stock Reconciliation",
    "options": "Stock Reconciliation",
    "read_only": 1,
-   "allow_on_submit": 1
+   "allow_on_submit": 1,
+   "no_copy": 1
   },
   {
    "fieldname": "amended_from",
