@@ -83,6 +83,7 @@
   "deductions_or_loss_section",
   "deductions",
   "approval_writeoff_amount",
+  "import_charge_payment",
   "section_tax_withholding_entry",
   "tax_withholding_categories",
   "tax_withholding_group",
@@ -879,6 +880,17 @@
    "depends_on": "eval:doc.approval_writeoff_amount"
   },
   {
+   "default": "0",
+   "description": "Set by the system: every reference is an import-charge Purchase Invoice",
+   "fieldname": "import_charge_payment",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "Import Charge Payment",
+   "no_copy": 1,
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
    "fieldname": "connect_operations_tab",
    "fieldtype": "Tab Break",
    "label": "Operations and Approval"
@@ -1054,7 +1066,7 @@
    "table_fieldname": "payment_entries"
   }
  ],
- "modified": "2026-11-08 12:00:00.000000",
+ "modified": "2026-11-17 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Payment Entry",

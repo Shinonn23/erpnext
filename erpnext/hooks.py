@@ -239,13 +239,17 @@ _thailand_doc_events = {
 	},
 	"Purchase Invoice": {
 		"before_submit": "erpnext.regional.thailand.custom.custom_api.validate_tax_invoice",
+		"on_submit": "erpnext.regional.thailand.custom.withholding_cert.create_invoice_withholding_certificates",
 		"before_cancel": "erpnext.regional.thailand.custom.custom_api.cancel_related_tax_invoice",
 		"before_validate": [
 			"erpnext.regional.thailand.custom.deposit_utils.validate_invoice",
 			"erpnext.regional.thailand.custom.deposit_utils.apply_deposit_deduction",
 			"erpnext.regional.thailand.custom.custom_api.copy_supplier_invoice_to_tax_invoice",
 		],
-		"on_cancel": "erpnext.regional.thailand.custom.deposit_utils.cancel_deposit_invoice",
+		"on_cancel": [
+			"erpnext.regional.thailand.custom.deposit_utils.cancel_deposit_invoice",
+			"erpnext.regional.thailand.custom.withholding_cert.cancel_withholding_certificates",
+		],
 		"on_trash": "erpnext.regional.thailand.custom.deposit_utils.cancel_deposit_invoice",
 	},
 	"Expense Claim": {
