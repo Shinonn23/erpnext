@@ -268,8 +268,14 @@ _thailand_doc_events = {
 		"before_validate": "erpnext.regional.thailand.custom.print_format.allow_update_standard"
 	},
 	"Address": {"on_update": "erpnext.regional.thailand.custom.address.update_tax_info_in_linked_doc"},
-	"Customer": {"onload": "erpnext.regional.thailand.custom.branches.onload"},
-	"Supplier": {"onload": "erpnext.regional.thailand.custom.branches.onload"},
+	"Customer": {
+		"onload": "erpnext.regional.thailand.custom.branches.onload",
+		"before_insert": "erpnext.regional.thailand.utils.fill_rd_address_before_insert",
+	},
+	"Supplier": {
+		"onload": "erpnext.regional.thailand.custom.branches.onload",
+		"before_insert": "erpnext.regional.thailand.utils.fill_rd_address_before_insert",
+	},
 	"Item": {"validate": "erpnext.regional.thailand.custom.item.validate_deposit_item"},
 	"Currency": {
 		"on_update": "erpnext.regional.thailand.custom.currency_exchange_bot_api.clear_exchange_rate_cache"
