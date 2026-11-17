@@ -42,16 +42,16 @@ function load({ canCreate = true } = {}) {
     },
   });
   vm.runInContext(source, context);
-  return { handlers, calls, alerts, confirms, routes };
+  return { handlers, calls, alerts, confirms, routes, thailand: context.erpnext.thailand };
 }
 
-function form(doctype, { isNew = true, doc = {} } = {}) {
+function form(doctype, { isNew = true, doc = {}, fields = ["branch_code"] } = {}) {
   const values = {};
   const buttons = {};
   const frm = {
     doctype,
     doc: { ...doc },
-    fields_dict: { branch_code: {} },
+    fields_dict: Object.fromEntries(fields.map((f) => [f, {}])),
     is_new: () => isNew,
     add_custom_button: (label, cb) => {
       buttons[label] = cb;
@@ -84,6 +84,7 @@ test("complete Tax ID asks RD once with only tax id and branch, and fills the pa
   const env = load();
   const { frm, values } = form("Supplier", {
     doc: { tax_id: "0105551058581", branch_code: "00000" },
+    fields: ["branch_code", "address_line1", "address_line2", "city", "state", "pincode", "country"],
   });
   env.handlers.Supplier.tax_id(frm);
   env.handlers.Supplier.tax_id(frm);
@@ -104,13 +105,26 @@ test("complete Tax ID asks RD once with only tax id and branch, and fills the pa
       branch_code: "00000",
       existing: [],
       legal_name: "บริษัท เอ จำกัด",
-      address: { address_line1: "1 Road", pincode: "10220" },
+      address: {
+        address_line1: "1/57 Soi วัชรพล 2/7",
+        address_line2: "แขวงท่าแร้ง",
+        city: "เขตบางเขน",
+        state: "กรุงเทพมหานคร",
+        pincode: "10220",
+      },
     },
   });
   assert.equal(values.supplier_name, "บริษัท เอ จำกัด");
   assert.equal(values.supplier_type, "Company");
   assert.equal(values.branch_code, "00000");
-  assert.equal(frm.doc.rd_fill_address, 1);
+  assert.equal(values.address_line1, "1/57 Soi วัชรพล 2/7");
+  assert.equal(values.address_line2, "แขวงท่าแร้ง");
+  assert.equal(values.city, "เขตบางเขน");
+  assert.equal(values.county, undefined);
+  assert.equal(values.state, "กรุงเทพมหานคร");
+  assert.equal(values.pincode, "10220");
+  assert.equal(values.country, "Thailand");
+  assert.ok(!("rd_fill_address" in frm.doc));
 });
 
 test("short Tax ID does not call; existing party is offered; not found only warns", () => {
@@ -147,10 +161,9 @@ test("short Tax ID does not call; existing party is offered; not found only warn
   });
   assert.equal(env.alerts.at(-1).indicator, "orange");
   assert.deepEqual(none.values, {});
-  assert.equal(none.frm.doc.rd_fill_address, 0);
 });
 
-test("retyping the Tax ID or branch after a fill clears it and looks the new pair up", () => {
+test("retyping the Tax ID or branch after a fill looks the new pair up", () => {
   const env = load();
   const { frm } = form("Supplier", {
     doc: { tax_id: "0105551058581", branch_code: "00000" },
@@ -166,12 +179,9 @@ test("retyping the Tax ID or branch after a fill clears it and looks the new pai
       address: {},
     },
   });
-  assert.equal(frm.doc.rd_fill_address, 1);
-  assert.equal(frm.doc.rd_filled_key, "0105551058581:00000");
   assert.equal(env.calls.length, 1);
   frm.doc.branch_code = "00001";
   env.handlers.Supplier.branch_code(frm);
-  assert.equal(frm.doc.rd_fill_address, 0);
   assert.equal(env.calls.length, 2);
   assert.equal(env.calls[1].args.branch, "00001");
 });
@@ -210,4 +220,30 @@ test("a Supplier at another branch is filled, the same branch is offered", () =>
   });
   assert.equal(env.confirms.length, 1);
   assert.doesNotMatch(env.confirms[0].message, /Address/);
+});
+
+test("quick entry dialog: RD address fills its Primary Address fields, City falls back", () => {
+  const env = load();
+  const values = {};
+  const fields = ["address_line1", "address_line2", "city", "state", "pincode", "country_address"];
+  const target = {
+    doctype: "Customer",
+    doc: {},
+    state: {},
+    set_value: (f, v) => (values[f] = v),
+    has_field: (f) => fields.includes(f) || f === "branch_code",
+  };
+  const rd = {
+    found: true,
+    tax_id: "0105551058581",
+    branch_code: "00000",
+    existing: [],
+    legal_name: "A",
+    address: { address_line1: "9", city: "อำเภอเมือง", state: "ชลบุรี", pincode: "20000" },
+  };
+  env.thailand.apply_rd_result(target, rd);
+  assert.equal(values.city, "อำเภอเมือง");
+  assert.equal(values.address_line2, "");
+  assert.equal(values.country_address, "Thailand");
+  assert.equal(values.address_line1, "9");
 });

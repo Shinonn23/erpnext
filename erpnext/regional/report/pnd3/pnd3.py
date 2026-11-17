@@ -75,13 +75,13 @@ def get_columns():
 		},
 		{
 			"label": _("Tambon"),
-			"fieldname": "city",
+			"fieldname": "address_line2",
 			"fieldtype": "Data",
 			"width": 0,
 		},
 		{
 			"label": _("Amphur"),
-			"fieldname": "county",
+			"fieldname": "city",
 			"fieldtype": "Data",
 			"width": 0,
 		},
@@ -202,8 +202,8 @@ def get_data(filters):
 			substring_index(recipient_name, " ", -1).as_("lastname"),
 			Case().when(nullif(wht_cert.employee, "").notnull(), wht_cert.employee_address)
 			.else_(address.address_line1).as_("address_line1"),
+			address.address_line2.as_("address_line2"),
 			address.city.as_("city"),
-			address.county.as_("county"),
 			address.state.as_("state"),
 			address.pincode.as_("pincode"),
 			wht_cert.date.as_("date"),

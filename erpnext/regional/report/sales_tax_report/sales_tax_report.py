@@ -127,7 +127,6 @@ def get_data(filters):
 			addr_company.address_line1.as_("company_address_line1"),
 			addr_company.address_line2.as_("company_address_line2"),
 			addr_company.city.as_("company_city"),
-			addr_company.county.as_("company_county"),
 			addr_company.state.as_("company_state"),
 			addr_company.pincode.as_("company_pincode"),
 			# our branch: the snapshot on the tax invoice, the live address only for old documents

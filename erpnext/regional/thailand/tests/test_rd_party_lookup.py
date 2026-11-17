@@ -93,6 +93,23 @@ class TestRDLookup(unittest.TestCase):
 		self.assertEqual(address["address_line1"], "1/57-58 Village เวนิส ดี ไอริส Soi วัชรพล 2/7")
 		self.assertEqual(address["pincode"], "10220")
 
+	def test_dash_parts_are_skipped(self):
+		with mock.patch.object(utils, "get_prefix_for_address", return_value=("", "", "")):
+			address = utils.finalize_address_dict(
+				{
+					"vHouseNumber": "-",
+					"vSoiName": "-",
+					"vStreetName": "พหลโยธิน",
+					"vThambol": "-",
+					"vAmphur": "เมือง",
+					"vProvince": "ชลบุรี",
+					"vPostCode": "-",
+				}
+			)
+		self.assertEqual(address["address_line1"], "Road พหลโยธิน")
+		self.assertEqual((address["address_line2"], address["city"], address["pincode"]), ("", "เมือง", ""))
+		self.assertNotIn("county", address)
+
 	def test_cached_answer_is_not_asked_again(self):
 		with mock.patch.object(utils.requests, "post", return_value=response(RD_OK)) as post:
 			utils.fetch_rd_vat_record("0105551058581", "0")
@@ -189,34 +206,3 @@ class TestRDLookup(unittest.TestCase):
 
 if __name__ == "__main__":
 	unittest.main()
-
-
-class TestRDAddressKey(unittest.TestCase):
-	def _doc(self, **values):
-		from erpnext.regional.thailand.custom import rd_party
-
-		doc = mock.MagicMock()
-		doc.doctype = "Supplier"
-		data = {"rd_fill_address": 1, "tax_id": "0105551058581", "branch_code": "00000", **values}
-		doc.get.side_effect = data.get
-		doc.tax_id = data["tax_id"]
-		return rd_party, doc
-
-	def test_retyped_tax_id_or_branch_makes_no_address(self):
-		for key in ("0105551058581:00001", "1234567890121:00000", None):
-			rd_party, doc = self._doc(rd_filled_key=key)
-			with (
-				mock.patch.object(rd_party, "_linked_addresses", return_value=[]),
-				mock.patch.object(rd_party, "fetch_rd_vat_record") as fetch,
-			):
-				rd_party.create_rd_address(doc)
-			fetch.assert_not_called()
-
-	def test_filled_pair_fetches(self):
-		rd_party, doc = self._doc(rd_filled_key="0105551058581:00000")
-		with (
-			mock.patch.object(rd_party, "_linked_addresses", return_value=[]),
-			mock.patch.object(rd_party, "fetch_rd_vat_record", return_value=None) as fetch,
-		):
-			rd_party.create_rd_address(doc)
-		fetch.assert_called_once()

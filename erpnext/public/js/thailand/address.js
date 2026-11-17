@@ -53,8 +53,8 @@ frappe.ui.form.on("Address", {
 									// Only one result, set the fields directly
 									const location = r.message[0];
 									frm.set_value("pincode", location.zip_code);
-									frm.set_value("city", location.tambon);
-									frm.set_value("county", location.amphur);
+									frm.set_value("address_line2", location.tambon);
+									frm.set_value("city", location.amphur);
 									frm.set_value("state", location.province);
 								} else if (r.message.length > 1) {
 									// Multiple results, prompt the user to select one
@@ -75,8 +75,8 @@ frappe.ui.form.on("Address", {
 												(loc) => loc.id === selection.location_id
 											);
 											frm.set_value("pincode", selected_location.zip_code);
-											frm.set_value("city", selected_location.tambon);
-											frm.set_value("county", selected_location.amphur);
+											frm.set_value("address_line2", selected_location.tambon);
+											frm.set_value("city", selected_location.amphur);
 											frm.set_value("state", selected_location.province);
 										},
 										__("Select Location"),
@@ -111,8 +111,8 @@ function get_address_by_tax_id(frm, filters) {
 			if (!r.message) return;
 			frm.set_value("address_title", r.message["name"]);
 			frm.set_value("address_line1", r.message["address_line1"]);
+			frm.set_value("address_line2", r.message["address_line2"]);
 			frm.set_value("city", r.message["city"]);
-			frm.set_value("county", r.message["county"]);
 			frm.set_value("state", r.message["state"]);
 			frm.set_value("pincode", r.message["pincode"]);
 			frm.set_value("tax_id", filters.tax_id);
