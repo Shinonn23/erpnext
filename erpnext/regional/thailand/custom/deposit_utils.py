@@ -170,9 +170,7 @@ def cancel_deposit_invoice(doc, method):
 	if existing_invoices:
 		link = get_link_to_form(order_doctype, linked_doc)
 		frappe.throw(
-			"Unable to cancel the deposit invoice for order {}.<br/>Please cancel the normal invoice first.".format(
-				link
-			)
+			f"Unable to cancel the deposit invoice for order {link}.<br/>Please cancel the normal invoice first."
 		)
 	# TODO: please make sure it is not cancelled if it already used as deposit deduction
 

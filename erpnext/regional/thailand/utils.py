@@ -256,7 +256,7 @@ def get_party_by_tax_id(doctype: str, tax_id: str, branch: str | None = "00000")
 
 def finalize_address_dict(data):
 	def get_part(data, key, value):
-		return data.get(key, "-") != "-" and value % (map[key], data.get(key)) or ""
+		return (data.get(key, "-") != "-" and value % (map[key], data.get(key))) or ""
 
 	prefix_thambol, prefix_amphur, prefix_province = get_prefix_for_address(data)
 
