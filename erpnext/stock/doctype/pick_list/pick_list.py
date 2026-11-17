@@ -776,6 +776,17 @@ class PickList(TransactionBase):
 				title=_("Not Enough Stock"),
 			)
 
+		over = get_reopen_over_picks(self)
+		if over:
+			frappe.throw(
+				_("Pick List {0} cannot be reopened, its Sales Order needs less than is picked:").format(
+					self.name
+				)
+				+ "<br>"
+				+ "<br>".join(over),
+				title=_("Already Picked"),
+			)
+
 		had_reservations = was_reserved_by(self.name)
 		self.db_set("status", "Open")
 		self.update_status()
@@ -1376,6 +1387,59 @@ def _row_serials(row):
 	if not serials and row.get("serial_and_batch_bundle"):
 		serials = list(get_serial_nos_from_bundle(row.get("serial_and_batch_bundle")) or [])
 	return serials
+
+
+def get_reopen_over_picks(pick) -> list[str]:
+	"""One line for each Sales Order Item that an open Pick List (another one, made after this was closed) already
+	picks for, so that the remaining quantity of this closed pick would make the order picked twice. The Sales Order
+	Item's picked quantity no longer counts this pick's remainder while it is closed."""
+	from connect_diagnostics_setup.stock.outgoing_inspection import rejected_moved_by_row
+
+	moved = rejected_moved_by_row(pick.name)
+	remaining = {}
+	rows = {}
+	for row in pick.get("locations"):
+		if not row.get("sales_order_item") or row.get("product_bundle_item"):
+			continue
+		quantity = flt(row.picked_qty) - flt(row.delivered_qty) - moved.get(row.name, 0)
+		if quantity > 1e-9:
+			remaining[row.sales_order_item] = remaining.get(row.sales_order_item, 0) + quantity
+			rows.setdefault(row.sales_order_item, []).append(row.idx)
+
+	lines = []
+	for order_item, quantity in remaining.items():
+		values = frappe.db.get_value(
+			"Sales Order Item", order_item, ["stock_qty", "picked_qty", "parent", "item_code"], as_dict=True
+		)
+		if not values:
+			continue
+		room = flt(values.stock_qty) - flt(values.picked_qty)
+		if room + 1e-9 < quantity:
+			others = frappe.get_all(
+				"Pick List Item",
+				filters={
+					"sales_order_item": order_item,
+					"docstatus": 1,
+					"parent": ["!=", pick.name],
+				},
+				pluck="parent",
+			)
+			others = [
+				name
+				for name in sorted(set(others))
+				if frappe.db.get_value("Pick List", name, "status") in ("Open", "Partly Delivered")
+			]
+			lines.append(
+				_("Row {0}: {1} of {2}: {3} to hold, {4} still needed{5}").format(
+					", ".join(str(idx) for idx in rows[order_item]),
+					values.item_code,
+					values.parent,
+					flt(quantity),
+					flt(max(room, 0)),
+					(" (" + _("picked by {0}").format(", ".join(others)) + ")") if others else "",
+				)
+			)
+	return lines
 
 
 def get_reopen_shortages(pick) -> list[str]:

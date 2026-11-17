@@ -145,6 +145,7 @@ class TestReopen(Base):
 		doc.create_stock_reservation_entries = lambda notify=True: calls.append("reserve")
 		with (
 			patch.object(module, "get_reopen_shortages", return_value=shortages),
+			patch.object(module, "get_reopen_over_picks", return_value=[]),
 			patch.object(module, "was_reserved_by", return_value=False),
 		):
 			PickList.reopen(doc)
@@ -192,16 +193,66 @@ class TestReopen(Base):
 		doc.create_stock_reservation_entries = lambda notify=True: calls.append("reserve")
 		with (
 			patch.object(module, "get_reopen_shortages", return_value=[]),
+			patch.object(module, "get_reopen_over_picks", return_value=[]),
 			patch.object(module, "was_reserved_by", return_value=True),
 			patch.object(module.frappe, "get_cached_value", return_value=1),
 		):
 			PickList.reopen(doc)
 		self.assertIn("reserve", calls)
 
+	def test_reopen_is_refused_when_another_open_pick_already_holds_the_order(self):
+		doc = pick(status="Closed")
+		doc.db_set = MagicMock()
+		with (
+			patch.object(module, "get_reopen_shortages", return_value=[]),
+			patch.object(
+				module, "get_reopen_over_picks", return_value=["Row 1: ITEM of SO-1 (picked by PL-2)"]
+			),
+			self.assertRaises(frappe.ValidationError) as caught,
+		):
+			PickList.reopen(doc)
+		self.assertIn("PL-2", str(caught.exception))
+		doc.db_set.assert_not_called()
+
 	def test_only_a_closed_submitted_pick_reopens(self):
 		doc = pick(status="Open")
 		with self.assertRaises(frappe.ValidationError):
 			PickList.reopen(doc)
+
+
+class TestReopenOverPicks(Base):
+	def over(self, rows, so_item, others=(), moved=None):
+		doc = pick(locations=rows)
+		doc.get = lambda key, default=None: doc.__dict__.get(key, default)
+		frappe.db.get_value.side_effect = lambda doctype, name, fields=None, **kw: (
+			frappe._dict(so_item) if doctype == "Sales Order Item" else "Open"
+		)
+		with (
+			patch.object(module.frappe, "get_all", return_value=list(others)),
+			patch.object(module, "_", side_effect=lambda text: text),
+			patch(
+				"connect_diagnostics_setup.stock.outgoing_inspection.rejected_moved_by_row",
+				return_value=moved or {},
+			),
+		):
+			return module.get_reopen_over_picks(doc)
+
+	def so_item(self, picked):
+		return {"stock_qty": 10, "picked_qty": picked, "parent": "SO-1", "item_code": "ITEM"}
+
+	def test_a_second_open_pick_for_the_same_quantity_blocks_the_reopen(self):
+		rows = [row(name="R", sales_order_item="SOI-1", picked_qty=10)]
+		found = self.over(rows, self.so_item(picked=10), others=["PL-2"])
+		self.assertEqual(len(found), 1)
+		self.assertIn("PL-2", found[0])
+
+	def test_room_left_on_the_order_passes(self):
+		rows = [row(name="R", sales_order_item="SOI-1", picked_qty=10)]
+		self.assertEqual(self.over(rows, self.so_item(picked=0)), [])
+
+	def test_what_was_delivered_is_not_held_again(self):
+		rows = [row(name="R", sales_order_item="SOI-1", picked_qty=10, delivered_qty=6)]
+		self.assertEqual(self.over(rows, self.so_item(picked=6)), [])
 
 
 class TestReopenShortages(Base):
