@@ -1034,6 +1034,8 @@ erpnext.TransactionController = class TransactionController extends erpnext.taxe
 
 	set_default_internal_warehouse() {
 		let me = this;
+		// A Borrowing document carries the warehouse its Borrowing names; the in-transit default never replaces it.
+		if (this.frm.doc.is_borrowing_transaction) return;
 		if (
 			(this.frm.doc.doctype === "Sales Invoice" && me.frm.doc.update_stock) ||
 			this.frm.doc.doctype == "Delivery Note"
@@ -2892,11 +2894,12 @@ erpnext.TransactionController = class TransactionController extends erpnext.taxe
 						dialog_items.df.data.push({
 							item_code: item.item_code,
 							item_name: item.item_name,
-							qty: item.qty,
+							// a return row is negative; the inspection counts the units received
+							qty: Math.abs(item.qty),
 							description: item.description,
 							serial_no: item.serial_no,
 							batch_no: item.batch_no,
-							sample_size: item.sample_quantity,
+							sample_size: item.sample_quantity || (item.qty < 0 ? Math.abs(item.qty) : undefined),
 							child_row_reference: item.name,
 						});
 						dialog_items.grid.refresh();
