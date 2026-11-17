@@ -286,6 +286,18 @@ class TestRDLookup(unittest.TestCase):
 		post.assert_not_called()
 		self.assertIsNone(changed.get("address_line1"))
 
+	def test_edit_before_saving_normalises_the_branch_and_skips_a_changed_one(self):
+		doc = Doc(doctype="Supplier", tax_id="0105551058581", branch_code="00001", rd_address_lookup="0105551058581: 1")
+		with mock.patch.object(utils.requests, "post", return_value=response(RD_OK)) as post:
+			utils.fill_rd_address_before_insert(doc)
+		self.assertIn(b"<vat:BranchNumber>1</vat:BranchNumber>", post.call_args.kwargs["data"])
+		self.assertEqual(doc.city, "บางเขน")
+		moved = Doc(doctype="Supplier", tax_id="0105551058581", branch_code="00002", rd_address_lookup="0105551058581:1")
+		with mock.patch.object(utils.requests, "post") as post:
+			utils.fill_rd_address_before_insert(moved)
+		post.assert_not_called()
+		self.assertIsNone(moved.get("address_line1"))
+
 	def test_rd_down_on_insert_never_blocks_saving(self):
 		import frappe
 

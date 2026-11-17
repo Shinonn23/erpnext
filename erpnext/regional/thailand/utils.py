@@ -352,7 +352,11 @@ def fill_rd_address_before_insert(doc, method=None):
 	if len(tax_id) != 13 or tax_id != re.sub(r"\D", "", doc.tax_id or ""):
 		return  # the user changed the Tax ID: RD's address of the old one does not belong to this party
 	try:
-		data = fetch_rd_vat_record(tax_id, branch or "00000")
+		branch_code = branch_code_of(clean_branch(branch))
+		if doc.get("branch_code"):
+			if branch_code_of(clean_branch(doc.branch_code)) != branch_code:
+				return  # the user changed the branch: RD's address of the old branch does not belong here
+		data = fetch_rd_vat_record(tax_id, branch_code)
 	except frappe.ValidationError:
 		# RD down or a bad branch never blocks saving: the party is saved without the address
 		frappe.clear_last_message()
