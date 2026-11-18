@@ -461,11 +461,11 @@ class StockController(AccountsController):
 			if (
 				not via_landed_cost_voucher
 				and row.serial_and_batch_bundle
-				and (row.serial_no or row.batch_no)
+				and (row.get("serial_no") or row.get("batch_no"))
 			):
 				self.validate_serial_nos_and_batches_with_bundle(row)
 
-			if not row.serial_no and not row.batch_no and not row.get("rejected_serial_no"):
+			if not row.get("serial_no") and not row.get("batch_no") and not row.get("rejected_serial_no"):
 				continue
 
 			if not row.use_serial_batch_fields and (

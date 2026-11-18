@@ -11,6 +11,7 @@ from erpnext.stock.doctype.item.item import Item
 from erpnext.stock.doctype.putaway_rule.putaway_rule import apply_putaway_rule
 from erpnext.stock.doctype.stock_settings.stock_settings import is_putaway_rule_enabled
 from erpnext.stock.doctype.storage_location.storage_location import (
+	set_default_storage_locations,
 	storage_location_query,
 	validate_item_storage_condition,
 	validate_storage_location,
@@ -20,6 +21,34 @@ MODULE = "erpnext.stock.doctype.storage_location.storage_location"
 
 
 class TestStorageLocationSelection(unittest.TestCase):
+	def test_rejected_return_draft_clears_unused_location_and_preserves_selected_source(self):
+		for selected in (None, "Chosen Shelf"):
+			for is_return, rejected_return, rejected_qty, rejected_warehouse, docstatus in (
+				(1, 1, 0, None, 0),
+				(0, 1, 0, None, 0),
+				(1, 0, 0, None, 0),
+				(1, 1, -1, "Rejected", 0),
+				(1, 1, 0, None, 2),
+			):
+				with self.subTest(selected=selected, is_return=is_return, flag=rejected_return,
+					qty=rejected_qty, warehouse=rejected_warehouse, status=docstatus):
+					row = frappe._dict(
+						storage_location=selected, rejected_storage_location="Rejected Shelf",
+						return_qty_from_rejected_warehouse=rejected_return,
+						rejected_qty=rejected_qty, rejected_warehouse=rejected_warehouse,
+						meta=Mock(has_field=Mock(return_value=False)),
+					)
+					doc = Mock(doctype="Purchase Receipt", docstatus=docstatus)
+					doc.get.side_effect = {"is_return": is_return, "items": [row]}.get
+					doc.meta.get_table_fields.return_value = [frappe._dict(fieldname="items")]
+					set_default_storage_locations(doc)
+					if is_return and rejected_return and not rejected_qty and docstatus == 0:
+						self.assertEqual(row.storage_location, selected or "Rejected Shelf")
+						self.assertIsNone(row.rejected_storage_location)
+					else:
+						self.assertEqual(row.storage_location, selected)
+						self.assertEqual(row.rejected_storage_location, "Rejected Shelf")
+
 	def setUp(self):
 		self.enterContext(patch(f"{MODULE}._", side_effect=lambda text: text))
 		self.enterContext(

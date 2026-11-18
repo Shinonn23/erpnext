@@ -1096,7 +1096,7 @@ class StocktoAssetConversion(StockController):
 
 	@frappe.whitelist(methods=["POST"])
 	def create_assets(self):
-		"""Accounting explicitly generates the approved table, atomically and safely on retries."""
+		"""Generate the approved Asset table atomically and safely on retries."""
 		self.check_permission("write")
 		frappe.has_permission("Asset", "create", throw=True)
 		if self.is_new():

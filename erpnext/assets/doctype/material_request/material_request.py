@@ -167,6 +167,9 @@ def get_customer_delivery_snapshot(
 	)
 
 
+# Borrowing stages a request shows while they last, the earliest first
+BORROWING_WAITING_STATES = ("Pending Pick", "Pending Delivery", "Pending Quality Inspection", "Pending Receipt")
+
 class CustomerMaterialRequest(MaterialRequest):
 	def is_auto_created_by_reorder(self):
 		return bool(
@@ -252,14 +255,24 @@ class CustomerMaterialRequest(MaterialRequest):
 		if purpose in BORROW_TYPES:
 			# derived from the request type, never asked; a different stored type is refused in validate
 			self.loan_recipient_type = self.loan_recipient_type or BORROWER_TYPE_OF[purpose]
+			if purpose == "Borrow":
+				# the Employee who borrows is the one who answers for the items (Siwat, 18 Nov 2026)
+				self.loan_recipient = self.responsible_employee
 			if self.loan_recipient_type == "Customer":
 				self.loan_recipient = self.loan_recipient or self.customer
 				self.customer = self.loan_recipient
 			else:
 				self.clear_customer_details()
 			stock_rows = [row for row in self.items if row.item_type == "Stock Item"]
-			# derived, never asked: the Stock Item rows are lent from the Customer Loan Warehouse
-			self.borrow_item_type = "Stock Item" if stock_rows else "Asset"
+			if purpose == "Borrow":
+				self.borrow_item_type = self.borrow_item_type or ("Stock Item" if stock_rows else "Asset")
+				if self.borrow_item_type not in ("Stock Item", "Asset"):
+					frappe.throw(_("Choose Stock Item or Asset as the Borrow Item Type."))
+				expected = "Stock Item" if self.borrow_item_type == "Stock Item" else "Fixed Asset"
+				if any(row.item_type != expected for row in self.items):
+					frappe.throw(_("Every item must match Borrow Item Type {0}.").format(self.borrow_item_type))
+			else:
+				self.borrow_item_type = "Stock Item" if stock_rows else "Asset"
 			if not stock_rows:
 				self.customer_loan_warehouse = None
 			else:
@@ -874,12 +887,16 @@ class CustomerMaterialRequest(MaterialRequest):
 
 		if self.request_progress_status in ("On Hold", "Closed"):
 			return
+		loan_states = {item.status for item in loan_items}
+		# the request shows the Borrowing's own stage while it is picked, delivered or received back (Siwat, 18 Nov 2026)
+		waiting = next((state for state in BORROWING_WAITING_STATES if state in loan_states), None)
 		if not fulfilled_total:
-			self.request_progress_status = "Pending"
+			self.request_progress_status = waiting if waiting in ("Pending Pick", "Pending Delivery") else "Pending"
 		elif fulfilled_total < requested_total:
 			self.request_progress_status = "Partially Fulfilled"
+		elif waiting in ("Pending Quality Inspection", "Pending Receipt"):
+			self.request_progress_status = waiting
 		else:
-			loan_states = {item.status for item in loan_items}
 			if loan_states and loan_states.issubset({"Returned", "Closed"}):
 				self.request_progress_status = "Closed" if "Closed" in loan_states else "Returned"
 			elif returned_total or loan_states.intersection({"Partially Returned", "Closed", "Returned"}):
