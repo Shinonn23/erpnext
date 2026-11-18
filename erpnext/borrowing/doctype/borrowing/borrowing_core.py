@@ -1602,18 +1602,12 @@ def asset_awaiting_inspection(asset):
 
 
 def is_quarantine_warehouse(warehouse, company):
-	"""A Quarantine (or QA) warehouse of the company: returned goods that fail inspection are received there."""
-	values = frappe.db.get_value(
-		"Warehouse", warehouse, ["warehouse_type", "warehouse_name", "company"], as_dict=True
-	)
-	return bool(
-		values
-		and values.company == company
-		and (
-			values.warehouse_type in ("Quarantine", "QA")
-			or (values.warehouse_name or "").casefold() in ("qa", "quarantine")
-		)
-	)
+	"""A warehouse of the company whose Warehouse Type is Quarantine (by the type alone, WP10): returned goods that fail
+	inspection are received there."""
+	from erpnext.stock.warehouse_policy import is_quarantine_type
+
+	values = frappe.db.get_value("Warehouse", warehouse, ["warehouse_type", "company"], as_dict=True)
+	return bool(values and values.company == company and is_quarantine_type(values.warehouse_type))
 
 
 def receive_row_into(row, warehouse):
@@ -1738,11 +1732,10 @@ def update_borrowing_return_status_from_quality_inspection(quality_inspection):
 
 
 def is_quarantine_row(row):
-	"""Whether a Warehouse row (warehouse_type, warehouse_name) is a Quarantine (or QA) warehouse."""
-	return row.warehouse_type in ("Quarantine", "QA") or (row.warehouse_name or "").casefold() in (
-		"qa",
-		"quarantine",
-	)
+	"""Whether a Warehouse row (with ``warehouse_type``) is a Quarantine warehouse: by the type alone (WP10)."""
+	from erpnext.stock.warehouse_policy import is_quarantine_type
+
+	return is_quarantine_type(row.get("warehouse_type"))
 
 
 def own_quarantine_warehouse(warehouse):
@@ -1756,8 +1749,8 @@ def own_quarantine_warehouse(warehouse):
 
 def quarantine_warehouse_for(company, near=None):
 	"""The Quarantine warehouse that holds the goods of warehouse ``near``: its own ``quarantine_warehouse`` when it
-	names an enabled leaf of the company, else the company's one (an enabled leaf of type Quarantine or QA, or named so,
-	that no warehouse names as its own; the one beside ``near`` first). Without ``near`` the company's one, else any
+	names an enabled leaf of the company, else the company's one (an enabled leaf of Warehouse Type Quarantine that no
+	warehouse names as its own; the one beside ``near`` first). Without ``near`` the company's one, else any
 	enabled quarantine leaf of the company. None when there is none."""
 	if not company:
 		return None
@@ -1771,7 +1764,7 @@ def quarantine_warehouse_for(company, near=None):
 		for row in frappe.get_all(
 			"Warehouse",
 			filters={"company": company, "is_group": 0, "disabled": 0},
-			fields=["name", "parent_warehouse", "warehouse_type", "warehouse_name"],
+			fields=["name", "parent_warehouse", "warehouse_type"],
 			order_by="name",
 		)
 		if is_quarantine_row(row)
@@ -2813,18 +2806,21 @@ def make_borrowing_from_request(request, loan_type, ignore_permissions=False, sa
 
 def stocked_warehouse(request, item_code):
 	"""The warehouse of the company that holds the most of the Item, when the request and the Item name none (the
-	Stock team is not asked to type what the system can read). Not the loan or a quarantine warehouse."""
+	Stock team is not asked to type what the system can read). Only a warehouse whose Warehouse Type lets stock be
+	sold or issued (``warehouse_policy.sellable_warehouse_sql``, WP10): never the loan, a quarantine, Lost, Found,
+	Write-Off, Frozen, Transit or another Borrowed warehouse."""
+	from erpnext.stock.warehouse_policy import sellable_warehouse_sql
+
 	rows = frappe.db.sql(
-		"""select bin.warehouse from `tabBin` bin join `tabWarehouse` wh on wh.name = bin.warehouse
+		f"""select bin.warehouse from `tabBin` bin join `tabWarehouse` wh on wh.name = bin.warehouse
 		where bin.item_code = %(item)s and bin.actual_qty > 0 and wh.company = %(company)s and wh.is_group = 0
 		and wh.disabled = 0 and bin.warehouse != %(loan)s
-		and coalesce(wh.warehouse_type, '') not like %(quarantine)s
+		and {sellable_warehouse_sql("wh")}
 		order by bin.actual_qty desc limit 1""",
 		{
 			"item": item_code,
 			"company": request.company,
 			"loan": request.get("customer_loan_warehouse") or "",
-			"quarantine": "%uarantine%",
 		},
 	)
 	return rows[0][0] if rows else None

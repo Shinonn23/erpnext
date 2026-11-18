@@ -328,8 +328,8 @@ test("native layout keeps counting controls outside Monthly Count Setup", () => 
         }
         for (const fieldname of [
           "item_count",
-          "quarantine_warehouse",
-          "quarantine_storage_location",
+          "lost_warehouse",
+          "lost_storage_location",
         ]) {
           assert.equal(
             visible(fieldname, doc),
@@ -423,11 +423,12 @@ test("a failed scan names the scanned code and the location", async () => {
   assert.match(none.messages[0].message, /Code barcode was not found\./);
 });
 
-test("the Lost and Found Warehouses are read-only: the system fills them", () => {
+test("the Lost Warehouse is read-only: the system fills it; no Found field is left", () => {
   const fixture = setup([], null, "");
   fixture.handlers.refresh(fixture.frm);
-  assert.equal(fixture.properties["quarantine_warehouse.read_only"], 1);
-  assert.equal(fixture.properties["found_warehouse.read_only"], 1);
+  assert.equal(fixture.properties["lost_warehouse.read_only"], 1);
+  assert.equal(fixture.properties["found_warehouse.read_only"], undefined);
+  assert.equal(fixture.properties["quarantine_warehouse.read_only"], undefined);
 });
 
 test("the variance summary counts rows and units short and over, never money", () => {

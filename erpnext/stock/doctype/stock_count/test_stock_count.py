@@ -28,7 +28,7 @@ class TestStockCount(ERPNextTestSuite):
 	def setUp(self):
 		super().setUp()
 		self.warehouse = create_warehouse("_Test Count Warehouse")
-		self.quarantine_warehouse = create_warehouse("_Test Count Quarantine")
+		self.lost_warehouse = create_warehouse("_Test Count Lost")
 		self.locations = [
 			frappe.get_doc(
 				{
@@ -66,7 +66,7 @@ class TestStockCount(ERPNextTestSuite):
 					}
 				],
 				"item_count": 10,
-				"quarantine_warehouse": self.quarantine_warehouse,
+				"lost_warehouse": self.lost_warehouse,
 			}
 		)
 		self.assertEqual(count.get_item_codes_to_count(now_datetime()), [self.items[0].name])
@@ -238,8 +238,9 @@ class TestStockCountLineValidation(unittest.TestCase):
 			frappe._dict(warehouse="Other Warehouse", disabled=0),
 			frappe._dict(warehouse="Count Warehouse", disabled=1),
 		):
-			with self.subTest(location=location), patch.object(
-				frappe, "get_cached_value", return_value=location
+			with (
+				self.subTest(location=location),
+				patch.object(frappe, "get_cached_value", return_value=location),
 			):
 				with self.assertRaises(frappe.ValidationError):
 					StockCount.validate(count)
@@ -357,23 +358,18 @@ class TestStockCountLineValidation(unittest.TestCase):
 				StockCount.on_cancel(count)
 
 	def test_count_cancels_the_stock_entries_it_posted(self):
-		# the count posts its transfers and receipt itself (5 Nov 2026), so cancelling it cancels them, last posted first
+		# the count posts its transfer to Lost itself (5 Nov 2026), so cancelling it cancels it
 		posted = []
 		count = SimpleNamespace(
 			name="COUNT-001",
 			stock_entry="LOST-SE",
-			found_transfer_entry="BACK-SE",
-			found_stock_entry="FOUND-SE",
 			stock_reconciliation=None,
 			cancel_posted=lambda entry: posted.append(entry.name),
 		)
-		entries = {
-			name: frappe._dict(name=name, docstatus=1, stock_count=count.name)
-			for name in ("LOST-SE", "BACK-SE", "FOUND-SE")
-		}
+		entries = {"LOST-SE": frappe._dict(name="LOST-SE", docstatus=1, stock_count=count.name)}
 		with patch.object(frappe, "get_doc", side_effect=lambda doctype, name: entries[name]):
 			StockCount.on_cancel(count)
-		self.assertEqual(posted, ["FOUND-SE", "BACK-SE", "LOST-SE"])
+		self.assertEqual(posted, ["LOST-SE"])
 
 	def test_unrelated_draft_voucher_is_never_deleted_on_count_cancellation(self):
 		for link_field in ("stock_entry", "stock_reconciliation"):

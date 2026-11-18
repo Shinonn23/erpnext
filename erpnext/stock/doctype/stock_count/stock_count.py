@@ -42,11 +42,8 @@ class StockCount(Document):
 		variance_account_snapshot: DF.Link | None
 		items: DF.Table[StockCountItem]
 		naming_series: DF.Literal["STOCK-COUNT-.YYYY.-"]
-		quarantine_storage_location: DF.Link | None
-		found_stock_entry: DF.Link | None
-		found_transfer_entry: DF.Link | None
-		found_warehouse: DF.Link | None
-		quarantine_warehouse: DF.Link | None
+		lost_storage_location: DF.Link | None
+		lost_warehouse: DF.Link | None
 		recount_of: DF.Link | None
 		recount_stock_count: DF.Link | None
 		surplus_notes: DF.SmallText | None
@@ -75,7 +72,7 @@ class StockCount(Document):
 				frappe.throw(_("Warehouse must belong to Company {0}.").format(self.company))
 			if warehouse.is_group or warehouse.disabled:
 				frappe.throw(_("Select an enabled, non-group Warehouse."))
-			self.validate_quarantine_storage_location()
+			self.validate_lost_storage_location()
 			self.validate_dimensions()
 
 		if self.docstatus == 0 and not self.snapshot_datetime and self.items:
@@ -91,7 +88,7 @@ class StockCount(Document):
 		if self.count_type == "Monthly":
 			if not self.selects_items() and flt(self.item_count) <= 0:
 				frappe.throw(_("Number of Item Codes to Sample must be greater than zero."))
-			self.validate_quarantine_if_needed()
+			self.validate_lost_if_needed()
 
 		if self.docstatus == 0 and self.status == "In Progress" and not self.snapshot_datetime:
 			frappe.throw(_("Press Prepare Count first. It lists the stock to count."))
@@ -178,49 +175,37 @@ class StockCount(Document):
 			self.posts_variance_snapshot = 0
 			self.variance_account_snapshot = None
 
-	def validate_quarantine_if_needed(self):
-		# The fields keep their names (quarantine_*) but hold the Lost Warehouse: a monthly count moves the quantity
-		# it did not find there (Connect Diagnostics, 5 Nov 2026). A count that posts its differences as a Stock
-		# Reconciliation moves nothing.
-		if not self.uses_variance() and not self.quarantine_warehouse and self.company:
-			self.quarantine_warehouse = get_lost_warehouse(
+	def validate_lost_if_needed(self):
+		# A monthly count moves the quantity it did not find to the Lost Warehouse (Connect Diagnostics, 5 Nov 2026).
+		# A count that posts its differences as a Stock Reconciliation moves nothing.
+		if not self.uses_variance() and not self.lost_warehouse and self.company:
+			self.lost_warehouse = get_lost_warehouse(
 				self.company, exclude=self.warehouse, counted=self.warehouse
 			)
-		if self.quarantine_warehouse or not self.uses_variance():
-			self.validate_quarantine_warehouse()
+		if self.lost_warehouse or not self.uses_variance():
+			self.validate_lost_warehouse()
 
-	def validate_found_warehouse(self):
-		if self.found_warehouse in (self.warehouse, self.quarantine_warehouse):
-			frappe.throw(_("Found Warehouse must differ from the counted and the Lost Warehouse."))
-		warehouse = frappe.db.get_value(
-			"Warehouse", self.found_warehouse, ["company", "is_group", "disabled"], as_dict=True
-		)
-		if not warehouse or warehouse.company != self.company or warehouse.is_group or warehouse.disabled:
-			frappe.throw(
-				_("The Found Warehouse must be an active warehouse (not a group) of the same company.")
-			)
-
-	def validate_quarantine_warehouse(self):
-		if not self.quarantine_warehouse:
+	def validate_lost_warehouse(self):
+		if not self.lost_warehouse:
 			frappe.throw(
 				_(
 					"This company has no Lost Warehouse. Ask the Stock Manager to create one (Warehouse Type Lost), then choose it here."
 				)
 			)
-		if self.warehouse == self.quarantine_warehouse:
+		if self.warehouse == self.lost_warehouse:
 			frappe.throw(_("Lost Warehouse must be different from the counted Warehouse."))
 
 		warehouse = frappe.db.get_value(
-			"Warehouse", self.quarantine_warehouse, ["company", "is_group", "disabled"], as_dict=True
+			"Warehouse", self.lost_warehouse, ["company", "is_group", "disabled"], as_dict=True
 		)
 		if not warehouse or warehouse.company != self.company or warehouse.is_group or warehouse.disabled:
 			frappe.throw(
 				_("The Lost Warehouse must be an active warehouse (not a group) of the same company.")
 			)
-		self.validate_quarantine_storage_location()
+		self.validate_lost_storage_location()
 
-	def validate_quarantine_storage_location(self):
-		location = self.quarantine_storage_location
+	def validate_lost_storage_location(self):
+		location = self.lost_storage_location
 		if not location:
 			return
 		if not frappe.db.exists("DocType", "Storage Location"):
@@ -228,11 +213,7 @@ class StockCount(Document):
 		location_data = frappe.db.get_value(
 			"Storage Location", location, ["warehouse", "disabled"], as_dict=True
 		)
-		if (
-			not location_data
-			or location_data.disabled
-			or location_data.warehouse != self.quarantine_warehouse
-		):
+		if not location_data or location_data.disabled or location_data.warehouse != self.lost_warehouse:
 			frappe.throw(_("Lost Storage Location must belong to the Lost Warehouse."))
 
 	def get_countable_dimensions(self):
@@ -428,7 +409,7 @@ class StockCount(Document):
 		if not self.company or not self.warehouse or not self.count_type:
 			frappe.throw(_("Choose the Company, Count Type and Warehouse first."))
 		if self.count_type == "Monthly":
-			self.validate_quarantine_if_needed()
+			self.validate_lost_if_needed()
 			if not self.selects_items() and flt(self.item_count) <= 0:
 				frappe.throw(_("Number of Item Codes to Sample must be greater than zero."))
 
@@ -686,7 +667,7 @@ class StockCount(Document):
 	def on_submit(self):
 		"""Post shortages; keep surplus as count evidence for later review."""
 		if self.count_type == "Monthly" and not self.posts_variance():
-			stock_entry = self.make_quarantine_stock_entry()
+			stock_entry = self.make_lost_stock_entry()
 			if stock_entry:
 				self.db_set("stock_entry", stock_entry.name)
 		else:
@@ -721,8 +702,6 @@ class StockCount(Document):
 					frappe.delete_doc("Stock Count", name, ignore_permissions=True)
 		# the documents the count posted are cancelled with it, the last posted first; a draft is deleted
 		for fieldname, doctype in (
-			("found_stock_entry", "Stock Entry"),
-			("found_transfer_entry", "Stock Entry"),
 			("stock_entry", "Stock Entry"),
 			("stock_reconciliation", "Stock Reconciliation"),
 		):
@@ -788,9 +767,9 @@ class StockCount(Document):
 			)
 		)
 
-	def make_quarantine_stock_entry(self):
+	def make_lost_stock_entry(self):
 		"""The draft Material Transfer of what the count did not find (system quantity above the counted one, a serial
-		no that was not counted) from the counted warehouse to the Lost Warehouse (``quarantine_warehouse``;
+		no that was not counted) from the counted warehouse to the Lost Warehouse (``lost_warehouse``;
 		Connect Diagnostics, 5 Nov 2026: the found stock stays where it is)."""
 		different_items = self.has_differences()
 		if not different_items:
@@ -830,7 +809,7 @@ class StockCount(Document):
 		if not stock_entry.stock_entry_type:
 			frappe.throw(_("Create a standard Material Transfer Stock Entry Type before closing this count."))
 		stock_entry.from_warehouse = self.warehouse
-		stock_entry.to_warehouse = self.quarantine_warehouse
+		stock_entry.to_warehouse = self.lost_warehouse
 		stock_entry.remarks = _("Not found by Stock Count {0}: moved to the Lost Warehouse.").format(
 			self.name
 		)
@@ -842,7 +821,7 @@ class StockCount(Document):
 				"item_code": item_code,
 				"qty": values["qty"],
 				"s_warehouse": self.warehouse,
-				"t_warehouse": self.quarantine_warehouse,
+				"t_warehouse": self.lost_warehouse,
 				"batch_no": batch_no,
 				"serial_no": "\n".join(values["serial_nos"]),
 			}
@@ -852,7 +831,7 @@ class StockCount(Document):
 				transfer_field = f"to_{fieldname}"
 				if stock_entry_item_meta.has_field(transfer_field):
 					entry_row[transfer_field] = (
-						self.quarantine_storage_location if fieldname == "storage_location" else value
+						self.lost_storage_location if fieldname == "storage_location" else value
 					)
 			stock_entry.append("items", entry_row)
 
@@ -908,237 +887,6 @@ class StockCount(Document):
 			else:
 				notes.append(serial_note(serial_no))
 		return pending, transfers, notes
-
-	def handle_surplus(self):
-		"""What the count found beyond the system quantity (Connect Diagnostics, 5 Nov 2026), posted on approval.
-
-		* A serial number the system holds in another warehouse (e.g. LOST): a Material Transfer back into the counted
-		  warehouse (``found_transfer_entry``); in the counted warehouse itself it is only misplaced.
-		* A serial number the system shows as delivered, lent or issued: noted (``surplus_notes``), the return
-		  document is made, not a receipt.
-		* Any other surplus (a quantity, an unknown serial number): on a first count, a draft recount of those Items
-		  and locations (``recount_stock_count``, a My Tasks "Recount" for the stock team);
-		  on the recount, what both counts found is first moved back from the Lost Warehouse as far as it holds the same
-		  Item and batch (the same transfer, no new value), and only the rest is received into the Found Warehouse
-		  (``found_stock_entry``) at the Item's current valuation rate."""
-		pending, transfers, notes = self.split_surplus()
-		if notes:
-			self.db_set("surplus_notes", "\n".join(notes))
-		if pending and not self.recount_of:
-			if transfers:
-				self.make_found_transfer(transfers, {})
-			self.db_set("recount_stock_count", self.make_recount(pending).name)
-			return
-
-		receipt_rows, back_rows = defaultdict(lambda: {"qty": 0.0, "serial_nos": []}), {}
-		if pending:
-			confirmed = confirmed_surplus(pending, frappe.get_doc("Stock Count", self.recount_of).surplus())
-			for (item_code, batch_no, serial_no, dimension_key), qty in confirmed.items():
-				values = receipt_rows[(item_code, batch_no, dimension_key)]
-				values["qty"] += qty
-				if serial_no:
-					values["serial_nos"].append(serial_no)
-			back_rows = self.take_back_from_lost(receipt_rows)
-		if transfers or back_rows:
-			self.make_found_transfer(transfers, back_rows)
-		receipt_rows = {key: values for key, values in receipt_rows.items() if values["qty"] > 0.000001}
-		if receipt_rows:
-			if not self.found_warehouse:
-				frappe.throw(
-					_(
-						"The recount found stock that the system does not hold, but this count has no Found Warehouse. "
-						"Ask the Stock Manager to set one on the Stock Count and approve it again."
-					)
-				)
-			self.db_set("found_stock_entry", self.make_found_receipt(receipt_rows).name)
-
-	def lost_balance(self, item_code, batch_no):
-		"""What the Lost Warehouse (at the Lost Storage Location, when the count names one) holds of an Item and batch."""
-		if not self.quarantine_warehouse:
-			return 0
-		location = self.quarantine_storage_location
-		field = None
-		if location:
-			field = next(
-				(
-					dimension.fieldname
-					for dimension in self.get_countable_dimensions()
-					if dimension.dimension_name == STORAGE_LOCATION_DIMENSION
-				),
-				None,
-			)
-		if batch_no:
-			from erpnext.stock.doctype.batch.batch import get_batch_qty
-
-			return flt(
-				get_batch_qty(
-					batch_no,
-					self.quarantine_warehouse,
-					item_code,
-					inventory_dimensions_dict={field: location} if field else None,
-				)
-			)
-		sle = DocType("Stock Ledger Entry")
-		query = (
-			frappe.qb.from_(sle)
-			.select(Sum(sle.actual_qty))
-			.where(
-				(sle.item_code == item_code)
-				& (sle.warehouse == self.quarantine_warehouse)
-				& (sle.company == self.company)
-				& (sle.is_cancelled == 0)
-			)
-		)
-		if field:
-			query = query.where(sle[field] == location)
-		return flt(query.run()[0][0])
-
-	def take_back_from_lost(self, receipt_rows):
-		"""Reduce ``receipt_rows`` (what the recount confirmed beyond the system quantity) by what the Lost Warehouse holds
-		of the same Item and batch, and return that as ``{(item, batch, dimensions): quantity}`` to move back. Goods an
-		earlier count moved to Lost return at their old value; only the rest is new stock. Serial numbers are not netted
-		(a known one is transferred back on its own, an unknown one is new)."""
-		available = {}
-		back = {}
-		for key, values in receipt_rows.items():
-			item_code, batch_no, _dimension_key = key
-			if values["serial_nos"] or flt(values["qty"]) <= 0:
-				continue
-			if frappe.get_cached_value("Item", item_code, "has_serial_no"):
-				continue
-			stock_key = (item_code, batch_no or "")
-			if stock_key not in available:
-				available[stock_key] = self.lost_balance(item_code, batch_no)
-			move = min(flt(values["qty"]), available[stock_key])
-			if move <= 0.000001:
-				continue
-			available[stock_key] -= move
-			values["qty"] -= move
-			back[key] = move
-		return back
-
-	def make_recount(self, pending):
-		"""A draft Monthly count of the Items and storage locations of ``pending``, linked to this one."""
-		recount = frappe.new_doc("Stock Count")
-		recount.company = self.company
-		recount.warehouse = self.warehouse
-		recount.count_type = "Monthly"
-		recount.item_selection = "Selected Items"
-		recount.recount_of = self.name
-		recount.quarantine_warehouse = self.quarantine_warehouse
-		recount.quarantine_storage_location = self.quarantine_storage_location
-		recount.found_warehouse = self.found_warehouse
-		for item_code in sorted({key[0] for key in pending}):
-			recount.append("selected_items", {"item_code": item_code})
-		locations = sorted(
-			{
-				value
-				for key in pending
-				for fieldname, value in key[3]
-				if fieldname == "storage_location" and value
-			}
-		)
-		for location in locations:
-			recount.append(
-				"dimensions",
-				{
-					"inventory_dimension": STORAGE_LOCATION_DIMENSION,
-					"reference_document": "Storage Location",
-					"dimension_value": location,
-				},
-			)
-		recount.insert(ignore_permissions=True)
-		recount.add_comment(
-			"Info",
-			_("Recount of the surplus found by {0}.").format(self.name),
-		)
-		return recount
-
-	def new_found_entry(self, purpose, remarks):
-		stock_entry = frappe.new_doc("Stock Entry")
-		stock_entry.company = self.company
-		stock_entry.purpose = purpose
-		stock_entry.stock_entry_type = frappe.db.get_value(
-			"Stock Entry Type", {"purpose": purpose, "is_standard": 1}, "name"
-		) or frappe.db.get_value("Stock Entry Type", {"purpose": purpose}, "name")
-		if not stock_entry.stock_entry_type:
-			frappe.throw(_("Create a {0} Stock Entry Type before closing this count.").format(_(purpose)))
-		stock_entry.to_warehouse = self.found_warehouse
-		stock_entry.remarks = remarks
-		stock_entry.stock_count = self.name
-		return stock_entry
-
-	def make_found_receipt(self, rows):
-		if not rows:
-			return None
-		stock_entry = self.new_found_entry(
-			"Material Receipt", _("Found by Stock Count {0} beyond the system quantity.").format(self.name)
-		)
-		# the count is the receipt's supporting document (a site may require a reference and an attachment)
-		if stock_entry.meta.has_field("operation_receipt_reference"):
-			stock_entry.operation_receipt_reference = _("Stock Count {0}").format(self.name)
-		adjustment_account = frappe.get_cached_value("Company", self.company, "stock_adjustment_account")
-		for (item_code, batch_no, _dimension_key), values in rows.items():
-			rate = found_valuation_rate(item_code, self.warehouse, self.company, batch_no)
-			entry_row = {
-				"item_code": item_code,
-				"qty": values["qty"],
-				"t_warehouse": self.found_warehouse,
-				"basic_rate": rate,
-				"set_basic_rate_manually": 1,
-				"allow_zero_valuation_rate": 0 if rate else 1,
-				"use_serial_batch_fields": 1 if (batch_no or values["serial_nos"]) else 0,
-				"batch_no": batch_no,
-				"serial_no": "\n".join(values["serial_nos"]),
-			}
-			if adjustment_account:
-				entry_row["expense_account"] = adjustment_account
-			stock_entry.append("items", entry_row)
-		# The rates are the system's (found_valuation_rate), not typed by the approver: the one document passes the cost
-		# guards by its identity (``is_count_posting``), as the ledger policy does for a landed cost voucher's entries.
-		return self.post_entry(stock_entry, _("the receipt into the Found Warehouse"))
-
-	def make_found_transfer(self, rows, back_rows):
-		"""One Material Transfer into the counted warehouse: serial numbers the system held elsewhere (``rows``) and
-		quantities taken back from the Lost Warehouse (``back_rows``)."""
-		stock_entry = self.new_found_entry(
-			"Material Transfer",
-			_("Found by Stock Count {0}: stock the system held in another warehouse.").format(self.name),
-		)
-		stock_entry.to_warehouse = self.warehouse
-		item_meta = frappe.get_meta("Stock Entry Detail")
-		for (item_code, batch_no, held_in, dimension_key), serial_nos in rows.items():
-			entry_row = {
-				"item_code": item_code,
-				"qty": len(serial_nos),
-				"s_warehouse": held_in,
-				"t_warehouse": self.warehouse,
-				"use_serial_batch_fields": 1,
-				"batch_no": batch_no,
-				"serial_no": "\n".join(serial_nos),
-			}
-			for fieldname, value in dimension_key:
-				if value and item_meta.has_field(f"to_{fieldname}"):
-					entry_row[f"to_{fieldname}"] = value
-			stock_entry.append("items", entry_row)
-		for (item_code, batch_no, dimension_key), qty in back_rows.items():
-			entry_row = {
-				"item_code": item_code,
-				"qty": qty,
-				"s_warehouse": self.quarantine_warehouse,
-				"t_warehouse": self.warehouse,
-				"use_serial_batch_fields": 1 if batch_no else 0,
-				"batch_no": batch_no,
-			}
-			if self.quarantine_storage_location and item_meta.has_field("storage_location"):
-				entry_row["storage_location"] = self.quarantine_storage_location
-			for fieldname, value in dimension_key:
-				if value and item_meta.has_field(f"to_{fieldname}"):
-					entry_row[f"to_{fieldname}"] = value
-			stock_entry.append("items", entry_row)
-		self.post_entry(stock_entry, _("the transfer back into {0}").format(self.warehouse))
-		self.db_set("found_transfer_entry", stock_entry.name)
-		return stock_entry
 
 	def set_variance_account(self, reconciliation):
 		# The account known at Prepare Count: a later change on the warehouse neither flips nor sticks the count.
@@ -1219,19 +967,11 @@ class StockCount(Document):
 
 
 LOST_WAREHOUSE_TYPE = "Lost"
-FOUND_WAREHOUSE_TYPE = "Found"
 GENERATED_LINK_FIELDS = (
 	"stock_entry",
-	"found_stock_entry",
-	"found_transfer_entry",
 	"recount_stock_count",
 	"stock_reconciliation",
 )
-
-
-def confirmed_surplus(recounted, first):
-	"""What both counts found beyond the system quantity, key by key (the smaller quantity)."""
-	return {key: min(qty, first[key]) for key, qty in recounted.items() if first.get(key, 0) > 0}
 
 
 def serial_note(serial_no):
@@ -1374,12 +1114,9 @@ def get_storage_location_zones(warehouse: str):
 
 @frappe.whitelist()
 def get_loss_warehouses(company, warehouse=None):
-	"""The company's Lost and Found warehouses a Monthly count would name by default (the form fills them)."""
+	"""The Lost warehouse a Monthly count would name by default (the form fills it)."""
 	frappe.has_permission("Stock Count", "read", throw=True)
-	return {
-		"lost": get_lost_warehouse(company, exclude=warehouse, counted=warehouse),
-		"found": None,
-	}
+	return {"lost": get_lost_warehouse(company, exclude=warehouse, counted=warehouse)}
 
 
 def get_lost_warehouse(company, exclude=None, counted=None):
@@ -1389,14 +1126,8 @@ def get_lost_warehouse(company, exclude=None, counted=None):
 	return _holding_warehouse(company, LOST_WAREHOUSE_TYPE, "lost_warehouse", exclude, counted)
 
 
-def get_found_warehouse(company, exclude=None, counted=None):
-	"""The Found warehouse a count of ``counted`` receives its confirmed surplus into: its own ``found_warehouse``, else
-	the company's Found warehouse (same rules as ``get_lost_warehouse``), else None."""
-	return _holding_warehouse(company, FOUND_WAREHOUSE_TYPE, "found_warehouse", exclude, counted)
-
-
 def own_holding_warehouse(warehouse, fieldname="lost_warehouse"):
-	"""The Lost (or Found) warehouse a counted warehouse names itself, or None. The fields are on the Warehouse
+	"""The Lost warehouse a counted warehouse names itself, or None. The fields are on the Warehouse
 	DocType of this fork; a site that has not migrated yet has none."""
 	if not warehouse or not frappe.db.has_column("Warehouse", fieldname):
 		return None
@@ -1422,44 +1153,9 @@ def _holding_warehouse(company, warehouse_type, fieldname, exclude=None, counted
 	return _typed_warehouse(company, warehouse_type, exclude, fieldname)
 
 
-def found_valuation_rate(item_code, warehouse, company, batch_no=None):
-	"""The rate found stock is received at: the Item's current valuation rate in the counted warehouse, else the
-	usual fallbacks (other warehouses, last purchase rate, standard rate); 0 only when the Item has none."""
-	from erpnext.stock.stock_ledger import get_valuation_rate
-
-	rate = flt(
-		get_valuation_rate(
-			item_code,
-			warehouse,
-			"Stock Entry",
-			None,
-			allow_zero_rate=True,
-			company=company,
-			raise_error_if_no_rate=False,
-			batch_no=batch_no or None,
-		)
-	)
-	if rate > 0:
-		return rate
-	# a serialised Item is valued serial by serial: take the warehouse's average, else the company's
-	bins = frappe.qb.DocType("Bin")
-	warehouses = frappe.qb.DocType("Warehouse")
-	for condition in (bins.warehouse == warehouse, warehouses.company == company):
-		row = (
-			frappe.qb.from_(bins)
-			.join(warehouses)
-			.on(warehouses.name == bins.warehouse)
-			.select(Sum(bins.stock_value) / Sum(bins.actual_qty))
-			.where((bins.item_code == item_code) & (bins.actual_qty > 0) & condition)
-		).run()
-		if row and flt(row[0][0]) > 0:
-			return flt(row[0][0])
-	return flt(frappe.db.get_value("Item", item_code, "last_purchase_rate"))
-
-
 def _typed_warehouse(company, warehouse_type, exclude=None, owned_field=None):
 	"""The first enabled leaf of the type in the company. A warehouse that another warehouse names in ``owned_field``
-	(its own Lost or Found warehouse) is not the company's: it serves that warehouse alone."""
+	(its own Lost warehouse) is not the company's: it serves that warehouse alone."""
 	not_in = [exclude or ""]
 	if owned_field and frappe.db.has_column("Warehouse", owned_field):
 		not_in += frappe.get_all(
@@ -1566,7 +1262,7 @@ def allow_generated_stock_count_cancellation(doc):
 		(
 			field
 			for field in (
-				("stock_entry", "found_stock_entry", "found_transfer_entry")
+				("stock_entry",)
 				if doc.doctype == "Stock Entry"
 				else ("stock_reconciliation",)
 				if doc.doctype == "Stock Reconciliation"

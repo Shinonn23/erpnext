@@ -10,6 +10,13 @@ from erpnext.accounts.doctype.pos_invoice_merge_log.pos_invoice_merge_log import
 WRITE_OFF_ENTRY_TYPE = "Stock Write-Off"
 LOST_WAREHOUSE_TYPE = "Lost"
 WRITE_OFF_WAREHOUSE_TYPE = "Write-Off"
+QUARANTINE_WAREHOUSE_TYPE = "Quarantine"
+STOCK_WAREHOUSE_TYPE = "Stock"
+TRANSIT_WAREHOUSE_TYPE = "Transit"
+# "Stock may leave or be sold from here": the warehouse's type allows a sale or an issue (Connect Diagnostics, WP10,
+# 18 Nov 2026). Only the Stock type does on the company's sites; Quarantine, Lost, Found, Borrowed, Write-Off, Frozen
+# and Transit hold stock that is not sellable.
+SELLABLE_OPERATIONS = ("sales", "issue")
 
 MOVEMENT_DOCTYPES = {
 	"Stock Entry",
@@ -107,6 +114,105 @@ OPERATION_DOCUMENTS = {
 }
 OPERATION_ORDER = ("receipt", "issue", "transfer", "sales", "loan", "reconciliation")
 
+# The exits the code opens although the Warehouse Type's flags or outgoing role would refuse them, as
+# (warehouse type, what is lifted, text). The Warehouse form lists them under the type's summary, so the form tells the
+# whole rule (WP10, 18 Nov 2026). Apps add theirs with the hook `warehouse_policy_waivers` (dicts with the same keys).
+CODE_WAIVERS = (
+	(
+		LOST_WAREHOUSE_TYPE,
+		"issue",
+		"A Stock Entry of type Stock Write-Off (Material Issue) writes off what the Lost warehouse holds, without the"
+		" outgoing role",
+	),
+	(
+		WRITE_OFF_WAREHOUSE_TYPE,
+		"issue",
+		"A Material Issue with Issue Type Disposal disposes of what the warehouse holds, without the outgoing role",
+	),
+	(
+		QUARANTINE_WAREHOUSE_TYPE,
+		"issue",
+		"A Purchase Return of goods whose Quality Inspection is Rejected sends them back to the supplier, without the"
+		" outgoing role",
+	),
+	(
+		None,
+		"outgoing_role",
+		"The Stock Entry a Stock Count posts when it is approved moves stock without the outgoing role",
+	),
+)
+
+
+def _warehouse_values(warehouse):
+	return frappe.get_cached_value("Warehouse", warehouse, ["is_group", "warehouse_type"], as_dict=True)
+
+
+def _type_flags(warehouse_type):
+	return frappe.get_cached_value(
+		"Warehouse Type",
+		warehouse_type,
+		[f"allow_{operation}" for operation in OPERATION_ORDER],
+		as_dict=True,
+	)
+
+
+def warehouse_allows(warehouse, operation):
+	"""Whether the Warehouse Type of ``warehouse`` allows ``operation`` (one of ``OPERATION_ORDER``), read from the type's
+	flags alone: never from the warehouse's name or a list of types. A warehouse without a type allows everything (as
+	``validate_warehouse_operation``); an unknown or group warehouse allows nothing; a Borrowing movement of a Transit
+	warehouse counts as a transfer. The code waivers (``CODE_WAIVERS``) open exits for single documents and are not
+	answered here."""
+	if operation not in OPERATION_ORDER:
+		raise ValueError(f"Unknown warehouse operation {operation!r}")
+	if not warehouse:
+		return False
+	values = _warehouse_values(warehouse)
+	if not values or cint(values.is_group):
+		return False
+	if not values.warehouse_type:
+		return True
+	if operation == "loan" and values.warehouse_type == TRANSIT_WAREHOUSE_TYPE:
+		operation = "transfer"
+	flags = _type_flags(values.warehouse_type)
+	return bool(flags and cint(flags.get(f"allow_{operation}")))
+
+
+def is_sellable_warehouse(warehouse):
+	"""Whether stock may be sold or issued from ``warehouse``: its type allows a sale or an issue."""
+	return any(warehouse_allows(warehouse, operation) for operation in SELLABLE_OPERATIONS)
+
+
+def sellable_warehouse_sql(alias):
+	"""The SQL condition, on the Warehouse row ``alias``, that is ``is_sellable_warehouse``: no type, or a type that
+	allows a sale or an issue. The same answer as the Python helper (``tests``: test_warehouse_allows)."""
+	flags = " or ".join(f"sellable_wt.allow_{operation} = 1" for operation in SELLABLE_OPERATIONS)
+	return (
+		f"(coalesce({alias}.warehouse_type, '') = '' or exists (select 1 from `tabWarehouse Type` sellable_wt "
+		f"where sellable_wt.name = {alias}.warehouse_type and ({flags})))"
+	)
+
+
+def is_quarantine_type(warehouse_type):
+	"""Whether a Warehouse Type is the quarantine one: by the type alone, never by the warehouse's name."""
+	return warehouse_type == QUARANTINE_WAREHOUSE_TYPE
+
+
+def warehouse_is_quarantine(warehouse):
+	"""Whether ``warehouse`` is of the Quarantine type."""
+	return bool(warehouse) and is_quarantine_type(
+		frappe.get_cached_value("Warehouse", warehouse, "warehouse_type")
+	)
+
+
+def waivers_of(warehouse_type):
+	"""The texts of the code waivers that apply to a warehouse of ``warehouse_type`` (``CODE_WAIVERS`` and the apps'
+	``warehouse_policy_waivers`` hook)."""
+	rows = [{"warehouse_type": wtype, "lifts": lifts, "text": text} for wtype, lifts, text in CODE_WAIVERS]
+	for row in frappe.get_hooks("warehouse_policy_waivers") or []:
+		if isinstance(row, dict) and row.get("text"):
+			rows.append(row)
+	return [_(row["text"]) for row in rows if row.get("warehouse_type") in (None, "", warehouse_type)]
+
 
 def _current_doc(doctype, name):
 	"""Current (shared-lock) read, so a policy cannot change while the ledger is being posted."""
@@ -156,7 +262,7 @@ def validate_warehouse_operation(
 	# Reversals restore the original transaction even if its type policy has since changed.
 	if cancellation:
 		return
-	if operation == "loan" and location.warehouse_type == "Transit":
+	if operation == "loan" and location.warehouse_type == TRANSIT_WAREHOUSE_TYPE:
 		operation = "transfer"
 	# not tied to `outgoing`: a review-only workflow transition of the unchanged draft passes outgoing=False (the role
 	# check is skipped) but the issue out of Lost is still the write-off's own
@@ -182,7 +288,7 @@ def validate_warehouse_operation(
 		message = _("Moving stock out of warehouse {0} requires the {1} role.").format(
 			warehouse, policy.outgoing_role
 		)
-		if location.warehouse_type in ("Quarantine", "QA"):
+		if is_quarantine_type(location.warehouse_type):
 			# the same way out as the app's refusal of a manual move out (Connect Diagnostics, 5 Nov 2026)
 			message += " " + _(
 				"Goods inspected by the Quality Inspection team leave quarantine with the Stock team's own Material Transfer to a "
@@ -199,7 +305,7 @@ def is_rejected_return_from_quarantine(doc, warehouse):
 		doc is None
 		or doc.doctype != "Purchase Receipt"
 		or not doc.get("is_return")
-		or warehouse.get("warehouse_type") not in ("Quarantine", "QA")
+		or not is_quarantine_type(warehouse.get("warehouse_type"))
 	):
 		return False
 	rows = [row for row in doc.get("items") or [] if row.get("warehouse") == warehouse.get("name")]
@@ -585,7 +691,13 @@ def validate_document(doc):
 def get_warehouse_type_summary(warehouse_type=None):
 	"""What a Warehouse Type allows, for display on the Warehouse form. No type means no restriction."""
 	if not warehouse_type:
-		return {"warehouse_type": None, "restricted": False, "operations": [], "outgoing_role": None}
+		return {
+			"warehouse_type": None,
+			"restricted": False,
+			"operations": [],
+			"outgoing_role": None,
+			"waivers": [],
+		}
 	if not (
 		frappe.has_permission("Warehouse Type", "read", warehouse_type)
 		or frappe.has_permission("Warehouse", "read")
@@ -608,5 +720,7 @@ def get_warehouse_type_summary(warehouse_type=None):
 		"operations": operations,
 		"outgoing_role": policy.outgoing_role or None,
 		# validate_warehouse_operation treats loan as transfer for this type
-		"loan_counts_as_transfer": policy.name == "Transit",
+		"loan_counts_as_transfer": policy.name == TRANSIT_WAREHOUSE_TYPE,
+		# the exits the code opens for single documents, so the form tells the whole rule (WP10)
+		"waivers": waivers_of(policy.name),
 	}
