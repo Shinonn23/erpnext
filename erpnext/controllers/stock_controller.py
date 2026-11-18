@@ -46,7 +46,9 @@ from erpnext.stock.doctype.serial_and_batch_bundle.serial_and_batch_bundle impor
 	get_type_of_transaction,
 )
 from erpnext.stock.doctype.storage_location.storage_location import (
+	LOCATION_FIELDS,
 	get_storage_location_warehouses,
+	validate_receiving_source,
 	validate_storage_location_warehouse,
 )
 from erpnext.stock.stock_ledger import get_items_to_be_repost
@@ -1379,13 +1381,21 @@ class StockController(AccountsController):
 		for table in self.meta.get_table_fields():
 			for row in self.get(table.fieldname) or []:
 				item_code = row.get("item_code") or row.get("rm_item_code")
-				if not item_code or not frappe.get_cached_value("Item", item_code, "is_stock_item"):
+				if not item_code:
+					continue
+				if not frappe.get_cached_value("Item", item_code, "is_stock_item"):
+					# a row that moves no stock has no place: what the screen hides is not stored either
+					for fieldname in LOCATION_FIELDS:
+						if row.meta.has_field(fieldname) and row.get(fieldname):
+							row.set(fieldname, None)
 					continue
 				for fieldname, warehouse in get_storage_location_warehouses(self, row).items():
 					if row.meta.has_field(fieldname) and row.get(fieldname):
 						validate_storage_location_warehouse(
 							row.get(fieldname), warehouse, item_code=item_code
 						)
+				# stock leaves a Receiving location only by a Stock Entry (Siwat, 17 Nov 2026)
+				validate_receiving_source(self, row)
 
 	def update_storage_location(self, row, sl_dict):
 		"""Copy the native stock location independently of configurable Inventory Dimensions."""
@@ -1847,8 +1857,15 @@ class StockController(AccountsController):
 
 	def validate_qi_rejection(self, row):
 		"""Check if QI is rejected on row level, during submission"""
-		if self.doctype == "Delivery Note" and row.get("against_pick_list") and row.get("quality_inspection") and frappe.db.get_value("Quality Inspection", row.quality_inspection, "reference_type") == "Pick List":
+		if (
+			self.doctype == "Delivery Note"
+			and row.get("against_pick_list")
+			and row.get("quality_inspection")
+			and frappe.db.get_value("Quality Inspection", row.quality_inspection, "reference_type")
+			== "Pick List"
+		):
 			from connect_diagnostics_setup.stock.outgoing_inspection import validate_delivery
+
 			validate_delivery(self)
 			return
 		action = frappe.get_single_value("Stock Settings", "action_if_quality_inspection_is_rejected")

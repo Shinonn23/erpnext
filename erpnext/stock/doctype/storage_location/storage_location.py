@@ -10,38 +10,91 @@ from frappe.utils import cint, cstr, flt, get_time, getdate
 # Every active leaf Warehouse gets this location as its default, so stock rows are filled in.
 DEFAULT_LOCATION_CODE = "STAGING"
 
+# What the bin is for (Location Type). The Warehouse Type says what the stock is; the Location Type says what the bin is
+# for. A Receiving location is where goods land; they leave it only by a Stock Entry: never sold, issued, lent, converted
+# or picked from it (Connect Diagnostics, Siwat 17 Nov 2026).
+RECEIVING = "Receiving"
+STORAGE = "Storage"
+SALES_COUNTER = "Sales Counter"
+HOLDING = "Holding"
+LOCATION_TYPES = (RECEIVING, STORAGE, SALES_COUNTER, HOLDING)
+STOCK_WAREHOUSE_TYPE = "Stock"
+# every native location field of a stock voucher row (cleared on a row whose Item is not a stock Item)
+LOCATION_FIELDS = (
+	"storage_location",
+	"to_storage_location",
+	"from_storage_location",
+	"rejected_storage_location",
+)
 
-def is_staging_code(location_code):
-	"""A receiving location: ``STAGING`` or ``STAGING-<anything>``."""
-	code = cstr(location_code)
-	return code == DEFAULT_LOCATION_CODE or code.startswith(f"{DEFAULT_LOCATION_CODE}-")
 
-
-def is_staging_location(location, warehouse=None):
-	"""The Storage Location is an enabled receiving (STAGING) location, of ``warehouse`` when given. Stock at such a
-	location is never picked by a Pick List; it leaves only by a Stock Entry (Siwat, 17 Nov 2026)."""
+def is_receiving_location(location, warehouse=None):
+	"""The Storage Location is an enabled Receiving location, of ``warehouse`` when given. Exactly the test of
+	``receiving_location_sql``."""
 	if not location:
 		return False
 	values = frappe.db.get_value(
-		"Storage Location", location, ["warehouse", "location_code", "disabled"], as_dict=True
+		"Storage Location", location, ["warehouse", "location_type", "disabled"], as_dict=True
 	)
 	return bool(
 		values
 		and (not warehouse or values.warehouse == warehouse)
 		and not cint(values.disabled)
-		and is_staging_code(values.location_code)
+		and values.location_type == RECEIVING
 	)
 
 
-def staging_location_sql(expression):
-	"""SQL condition that is true when the Storage Location named by ``expression`` is NOT a STAGING location. An
-	empty or unknown location passes (it is not a receiving location). Put it in a WHERE with the ledger tables
-	joined; ``expression`` is trusted code, never user input."""
+def receiving_location_sql(expression, warehouse_expression=None):
+	"""SQL condition that is true when the Storage Location named by ``expression`` is an enabled Receiving location
+	(of the warehouse named by ``warehouse_expression`` when given): the test of ``is_receiving_location``. An empty or
+	unknown location is not one. ``expression`` and ``warehouse_expression`` are trusted code, never user input."""
+	own = f" and receiving_sl.warehouse = ({warehouse_expression})" if warehouse_expression else ""
 	return (
-		"not exists (select 1 from `tabStorage Location` staging_sl "
-		f"where staging_sl.name = ({expression}) "
-		"and (staging_sl.location_code = 'STAGING' or staging_sl.location_code like 'STAGING-%%'))"
+		"exists (select 1 from `tabStorage Location` receiving_sl "
+		f"where receiving_sl.name = ({expression}) and receiving_sl.location_type = 'Receiving' "
+		f"and receiving_sl.disabled = 0{own})"
 	)
+
+
+def is_stock_type_warehouse(warehouse):
+	"""The warehouse holds ordinary stock (Warehouse Type Stock, or none): not a holding warehouse such as Quarantine,
+	Lost, Found, Borrowed, Write-Off, Frozen or Transit."""
+	if not warehouse:
+		return False
+	return (
+		frappe.get_cached_value("Warehouse", warehouse, "warehouse_type") or STOCK_WAREHOUSE_TYPE
+	) == STOCK_WAREHOUSE_TYPE
+
+
+def sales_counter_location(warehouse):
+	"""The enabled Sales Counter location of ``warehouse`` (the first by name), else None."""
+	if not warehouse:
+		return None
+	return frappe.db.get_value(
+		"Storage Location",
+		{"warehouse": warehouse, "location_type": SALES_COUNTER, "disabled": 0},
+		"name",
+		order_by="name asc",
+	)
+
+
+def preferred_location(item_code, warehouse):
+	"""The Item's first preferred Storage Location of ``warehouse`` that is enabled and not a Receiving location."""
+	if not item_code or not warehouse:
+		return None
+	rows = frappe.db.sql(
+		"""select location.name
+		from `tabItem Storage Location` preference
+		join `tabStorage Location` location on location.name = preference.storage_location
+		where preference.parent = %(item)s and preference.parenttype = 'Item'
+			and preference.parentfield = 'preferred_storage_locations'
+			and location.warehouse = %(warehouse)s and location.disabled = 0
+			and location.location_type != 'Receiving'
+		order by preference.idx
+		limit 1""",
+		{"item": item_code, "warehouse": warehouse},
+	)
+	return rows[0][0] if rows else None
 
 
 class StorageLocation(Document):
@@ -223,7 +276,8 @@ def remove_loan_inventory_dimension_custom_fields():
 
 
 def ensure_default_storage_location(warehouse):
-	"""Give an active leaf Warehouse a STAGING location and make it the default when none is set."""
+	"""Give an active leaf Warehouse a STAGING location and make it the default when none is set: a Receiving location
+	in a stock warehouse (goods land there and are put away), the Holding bin of any other warehouse."""
 	if warehouse.is_group or warehouse.disabled or warehouse.default_storage_location:
 		return None
 	location = frappe.db.get_value(
@@ -242,6 +296,9 @@ def ensure_default_storage_location(warehouse):
 				"doctype": "Storage Location",
 				"warehouse": warehouse.name,
 				"location_code": DEFAULT_LOCATION_CODE,
+				"location_type": RECEIVING
+				if (warehouse.get("warehouse_type") or STOCK_WAREHOUSE_TYPE) == STOCK_WAREHOUSE_TYPE
+				else HOLDING,
 			}
 		).insert(ignore_permissions=True)
 	warehouse.db_set("default_storage_location", location.name, update_modified=False)
@@ -324,11 +381,33 @@ def get_storage_location_warehouses(doc, row):
 
 
 def is_outgoing_row(doc, row):
-	"""The row takes goods out of its source warehouse: a Stock Entry row with a source warehouse, a Delivery Note or
-	a Sales Invoice (with stock) that is not a return."""
+	"""The row takes goods out of its source warehouse: a Stock Entry row with a source warehouse (Material Issue,
+	the source leg of a transfer ...), a Delivery Note, Sales Invoice or POS Invoice (with stock) that is not a return,
+	and a Stock to Asset Conversion."""
 	if doc.doctype == "Stock Entry":
 		return bool(row.get("s_warehouse"))
-	return doc.doctype in ("Delivery Note", "Sales Invoice") and not cint(doc.get("is_return"))
+	if doc.doctype == "Stock to Asset Conversion":
+		return True
+	return doc.doctype in ("Delivery Note", "Sales Invoice", "POS Invoice") and not cint(doc.get("is_return"))
+
+
+def refuses_receiving_source(doc, row):
+	"""The row may not take its goods from a Receiving location: stock leaves a Receiving location only by a Stock Entry
+	that puts it away or holds it (Siwat, 17 Nov 2026). A non-return Delivery Note, a Sales Invoice or POS Invoice with
+	Update Stock, a Stock to Asset Conversion, a Material Issue and the source leg of a transfer to another stock
+	warehouse. A put-away inside one warehouse and a move into a holding warehouse (Quarantine, Write-Off ...) may."""
+	if doc.doctype == "Delivery Note":
+		return not cint(doc.get("is_return"))
+	if doc.doctype in ("Sales Invoice", "POS Invoice"):
+		return not cint(doc.get("is_return")) and bool(cint(doc.get("update_stock")))
+	if doc.doctype == "Stock to Asset Conversion":
+		return True
+	if doc.doctype != "Stock Entry" or not row.get("s_warehouse"):
+		return False
+	target = row.get("t_warehouse")
+	if not target:
+		return doc.get("purpose") == "Material Issue"
+	return target != row.get("s_warehouse") and is_stock_type_warehouse(target)
 
 
 def row_stock_qty(doc, row):
@@ -350,10 +429,11 @@ def source_storage_location(doc, row, warehouse, item_code):
 	Diagnostics, Siwat, 5 Nov 2026: never a silent STAGING). The location that holds the stock when exactly one
 	location holds enough of it (the row's Serial Nos, its Batch No, or the Item); when located stock exists but no
 	single location holds enough, or several do, the row is refused, naming the row and the locations that hold the
-	stock. None, so the warehouse default applies, when no location holds any of it (no stock, or lab stock and
-	legacy balances without a Storage Location), when the warehouse holds enough of it without a Storage Location,
-	and when the stock cannot be read per location (not a stock Item, a row with a Serial and Batch Bundle,
-	negative stock allowed)."""
+	stock. A row that may not take from a Receiving location (``refuses_receiving_source``) never counts the stock lying
+	there. None, so the row stays empty and the user chooses (WP1, 18 Nov 2026: never the warehouse default of a stock
+	warehouse), when no location holds any of it (no stock, or lab stock and legacy balances without a Storage
+	Location), when the warehouse holds enough of it without a Storage Location, and when the stock cannot be read per
+	location (not a stock Item, a row with a Serial and Batch Bundle, negative stock allowed)."""
 	item = frappe.get_cached_value(
 		"Item", item_code, ["is_stock_item", "has_serial_no", "has_batch_no"], as_dict=True
 	)
@@ -367,21 +447,24 @@ def source_storage_location(doc, row, warehouse, item_code):
 	needed = row_stock_qty(doc, row)
 	if needed <= 0:
 		return None
+	exclude_receiving = refuses_receiving_source(doc, row)
 	serials = _row_serial_nos(row) if cint(item.has_serial_no) else []
 	if serials:
-		places = serial_locations(serials, warehouse)
+		places = serial_locations(serials, warehouse, exclude_receiving=exclude_receiving)
 		needed = len(serials)
 	else:
-		places = location_stock(item_code, warehouse, row.get("batch_no") or None)
+		places = location_stock(
+			item_code, warehouse, row.get("batch_no") or None, exclude_receiving=exclude_receiving
+		)
 	location, enough = choose_source_location(places, needed)
 	if location:
 		return location
 	if not places:
-		# no stock sits at any Storage Location (none at all, or lab stock and legacy balances without one): the
-		# warehouse default applies and the stock check of the submit decides
+		# no stock sits at any Storage Location it may take from (none at all, only at a Receiving location, or lab
+		# stock and legacy balances without one): the user chooses and the submit decides
 		return None
 	if not enough and not serials:
-		# a balance that carries no Storage Location is enough: the warehouse default applies
+		# a balance that carries no Storage Location is enough: the user chooses
 		unlocated = location_stock(item_code, warehouse, row.get("batch_no") or None, unlocated=True)
 		if flt(unlocated.get("")) + 1e-9 >= flt(needed):
 			return None
@@ -402,7 +485,17 @@ def source_storage_location(doc, row, warehouse, item_code):
 
 
 def set_default_storage_locations(doc, method=None):
-	"""Persist warehouse defaults before stock valuation and serial/batch processing."""
+	"""Fill the empty Storage Location fields of a stock voucher before stock valuation and serial/batch processing,
+	with what the save will store, so the screen never shows one value and the save another (WP1, 18 Nov 2026):
+
+	- a row whose Item is not a stock Item gets none;
+	- an outgoing row takes the one location that holds its stock (``source_storage_location``), else stays empty for the
+	  user to choose; it is never filled from the default of a stock warehouse (its Receiving location). The one bin of a
+	  holding warehouse (Quarantine, Lost, Borrowed ...) is still its default;
+	- the target of a Stock Entry transfer into a stock warehouse stays empty (a put-away inside one warehouse, a move out
+	  of quarantine, a transfer into a normal warehouse), except into a warehouse with a Sales Counter location (a lab):
+	  the Item's preferred location there, else the Sales Counter; into a holding warehouse it is that warehouse's bin;
+	- an incoming leg (a receipt, a return, a Material Receipt, a count) gets the warehouse default."""
 	# Historical submissions and cancellations must retain their original dimensions.
 	if doc.docstatus == 2 or (
 		not doc.is_new() and doc.get_doc_before_save() and doc.get_doc_before_save().docstatus == 1
@@ -424,26 +517,124 @@ def set_default_storage_locations(doc, method=None):
 				row.rejected_storage_location = None
 			if doc.doctype == "Stock Reconciliation" and doc.is_warehouse_revaluation_row(row):
 				continue
+			item_code = row.get("item_code") or row.get("rm_item_code")
+			if item_code and not cint(frappe.get_cached_value("Item", item_code, "is_stock_item")):
+				continue
 			for fieldname, warehouse in get_storage_location_warehouses(doc, row).items():
 				if not warehouse or not row.meta.has_field(fieldname) or row.get(fieldname):
 					continue
-				item_code = row.get("item_code") or row.get("rm_item_code")
-				location = None
-				if fieldname == "storage_location" and is_outgoing_row(doc, row):
-					try:
-						location = source_storage_location(doc, row, warehouse, item_code)
-					except frappe.ValidationError:
-						# the Packing List of a Delivery Note appears only after its first save: the user cannot choose
-						# before it, so a draft leaves the location empty and the submit refuses it
-						if table.fieldname == "packed_items" and not doc.docstatus:
-							if frappe.local.message_log:
-								frappe.local.message_log.pop()
-							continue
-						raise
-				location = location or get_default_storage_location(warehouse, item_code)
+				try:
+					location = default_row_location(doc, row, fieldname, warehouse, item_code)
+				except frappe.ValidationError:
+					# the Packing List of a Delivery Note appears only after its first save: the user cannot choose
+					# before it, so a draft leaves the location empty and the submit refuses it
+					if table.fieldname == "packed_items" and not doc.docstatus:
+						if frappe.local.message_log:
+							frappe.local.message_log.pop()
+						continue
+					raise
 				if location:
 					validate_storage_location_warehouse(location, warehouse, item_code=item_code)
 					row.set(fieldname, location)
+
+
+def default_row_location(doc, row, fieldname, warehouse, item_code):
+	"""The location ``set_default_storage_locations`` stores in an empty ``fieldname`` of ``row``, or None (left to the
+	user). The source of a POS Invoice row of a register (``pos_profile``) is the register's own Sales Storage Location,
+	set by the Connect Diagnostics app after this hook (``workflows/pos_location.set_sale_location``): it is left empty
+	here and never computed, so a cashier, who cannot choose a location on the POS page, is never refused for stock held
+	at several locations."""
+	if fieldname == "storage_location" and doc.doctype == "POS Invoice" and doc.get("pos_profile"):
+		return None
+	if fieldname == "storage_location" and is_outgoing_row(doc, row):
+		location = source_storage_location(doc, row, warehouse, item_code)
+		if location or is_stock_type_warehouse(warehouse):
+			return location
+		return get_default_storage_location(warehouse, item_code)
+	if (
+		fieldname == "to_storage_location"
+		and doc.doctype == "Stock Entry"
+		and doc.get("purpose") == "Material Transfer"
+		and row.get("s_warehouse")
+	):
+		# only a Material Transfer: a transfer for manufacture or to a subcontractor keeps the target's default
+		return transfer_target_location(row, warehouse, item_code)
+	return get_default_storage_location(warehouse, item_code)
+
+
+def transfer_target_location(row, warehouse, item_code):
+	"""Where a Stock Entry transfer row puts its goods when the user named no place: the bin of a holding warehouse;
+	in a stock warehouse nothing for a put-away inside one warehouse, a move out of quarantine (``against_stock_entry``
+	/ ``ste_detail``) and a transfer into a warehouse without a Sales Counter; into a lab (a warehouse with a Sales
+	Counter location) the Item's preferred location there, else the Sales Counter, when it meets the Item's Storage
+	Condition. Never a Receiving location."""
+	if not is_stock_type_warehouse(warehouse):
+		return get_default_storage_location(warehouse, item_code)
+	if row.get("s_warehouse") == warehouse or row.get("against_stock_entry") or row.get("ste_detail"):
+		return None
+	counter = sales_counter_location(warehouse)
+	if not counter:
+		return None
+	for location in (preferred_location(item_code, warehouse), counter):
+		if location and _meets_condition(location, item_code):
+			return location
+	return None
+
+
+def _meets_condition(location, item_code):
+	try:
+		validate_item_storage_condition(location, item_code)
+	except frappe.ValidationError:
+		if frappe.local.message_log:
+			frappe.local.message_log.pop()
+		return False
+	return True
+
+
+def receiving_source_locations(row, warehouse):
+	"""The Receiving locations of ``warehouse`` a row takes goods from: its Storage Location and the locations of its
+	Serial and Batch Bundle entries."""
+	locations = [row.get("storage_location")]
+	bundle = row.get("serial_and_batch_bundle")
+	if bundle:
+		locations += frappe.get_all(
+			"Serial and Batch Entry", filters={"parent": bundle}, pluck="storage_location", order_by="idx"
+		)
+	return [
+		location
+		for location in dict.fromkeys(location for location in locations if location)
+		if is_receiving_location(location, warehouse)
+	]
+
+
+def validate_receiving_source(doc, row):
+	"""Refuse a row that may not take from a Receiving location (``refuses_receiving_source``) and does; at the submit,
+	also an outgoing stock row with no Storage Location, naming the row."""
+	warehouse = get_storage_location_warehouses(doc, row).get("storage_location")
+	if not warehouse or not row.meta.has_field("storage_location"):
+		return
+	item_code = row.get("item_code") or row.get("rm_item_code")
+	if refuses_receiving_source(doc, row):
+		for location in receiving_source_locations(row, warehouse):
+			frappe.throw(
+				_(
+					"Row {0}: {1} is at the receiving location {2}; put it away with a Stock Entry first, or choose the Storage Location."
+				).format(row.get("idx"), item_code, location),
+				title=_("Receiving Location"),
+			)
+	if (
+		cint(doc.get("docstatus")) == 1
+		and is_outgoing_row(doc, row)
+		and not row.get("storage_location")
+		and not row.get("serial_and_batch_bundle")
+		and flt(row_stock_qty(doc, row)) > 0
+	):
+		frappe.throw(
+			_("Row {0}: choose the Storage Location of {1} in {2} the goods are taken from.").format(
+				row.get("idx"), item_code, warehouse
+			),
+			title=_("Choose the Storage Location"),
+		)
 
 
 def is_warehouse_revaluation_entry(entry):
@@ -578,35 +769,38 @@ def validate_item_storage_condition(storage_location, item_code=None, storage_co
 		)
 
 
-def location_stock(item_code, warehouse, batch_no=None, unlocated=False):
+def location_stock(item_code, warehouse, batch_no=None, unlocated=False, exclude_receiving=False):
 	"""{Storage Location: qty} of ``item_code`` in ``warehouse`` now (submitted, not cancelled ledger), only locations
 	with a balance. With ``batch_no``, the batch's own balance (bundle rows and legacy ledger batch). With
-	``unlocated``, the balance that carries no Storage Location (lab stock, legacy balances) instead."""
+	``unlocated``, the balance that carries no Storage Location (lab stock, legacy balances) instead. With
+	``exclude_receiving``, the stock at a Receiving location is left out."""
 	if not item_code or not warehouse:
 		return {}
 	if batch_no:
+		bundle_location = "coalesce(nullif(entry.storage_location, ''), sle.storage_location)"
 		rows = frappe.db.sql(
-			"""select coalesce(nullif(entry.storage_location, ''), sle.storage_location) location,
-				sum(entry.qty) qty
+			f"""select {bundle_location} location, sum(entry.qty) qty
 			from `tabStock Ledger Entry` sle
 			join `tabSerial and Batch Entry` entry on entry.parent = sle.serial_and_batch_bundle
 			where sle.item_code = %(item)s and sle.warehouse = %(warehouse)s and sle.is_cancelled = 0
-				and entry.batch_no = %(batch)s
+				and entry.batch_no = %(batch)s{_not_receiving(bundle_location, exclude_receiving)}
 			group by location
 			union all
 			select sle.storage_location location, sum(sle.actual_qty) qty
 			from `tabStock Ledger Entry` sle
 			where sle.item_code = %(item)s and sle.warehouse = %(warehouse)s and sle.is_cancelled = 0
 				and ifnull(sle.serial_and_batch_bundle, '') = '' and sle.batch_no = %(batch)s
+				{_not_receiving("sle.storage_location", exclude_receiving)}
 			group by location""",
 			{"item": item_code, "warehouse": warehouse, "batch": batch_no},
 			as_dict=True,
 		)
 	else:
 		rows = frappe.db.sql(
-			"""select storage_location location, sum(actual_qty) qty
+			f"""select storage_location location, sum(actual_qty) qty
 			from `tabStock Ledger Entry`
 			where item_code = %(item)s and warehouse = %(warehouse)s and is_cancelled = 0
+				{_not_receiving("`tabStock Ledger Entry`.storage_location", exclude_receiving)}
 			group by storage_location""",
 			{"item": item_code, "warehouse": warehouse},
 			as_dict=True,
@@ -618,18 +812,24 @@ def location_stock(item_code, warehouse, batch_no=None, unlocated=False):
 	return {location: qty for location, qty in totals.items() if qty > 0}
 
 
-def serial_locations(serial_nos, warehouse):
+def _not_receiving(expression, exclude_receiving):
+	"""`` and not <receiving>`` for a WHERE when ``exclude_receiving``, else nothing."""
+	return f" and not {receiving_location_sql(expression)}" if exclude_receiving else ""
+
+
+def serial_locations(serial_nos, warehouse, exclude_receiving=False):
 	"""{Storage Location: count} where the given serial nos are now in ``warehouse`` (the serial's own location on
-	its bundle row, else the ledger row's)."""
+	its bundle row, else the ledger row's); with ``exclude_receiving``, not at a Receiving location."""
 	serial_nos = [serial for serial in (serial_nos or []) if serial]
 	if not serial_nos or not warehouse:
 		return {}
+	bundle_location = "coalesce(nullif(entry.storage_location, ''), sle.storage_location)"
 	rows = frappe.db.sql(
-		"""select entry.serial_no, coalesce(nullif(entry.storage_location, ''), sle.storage_location) location,
-			sum(entry.qty) qty
+		f"""select entry.serial_no, {bundle_location} location, sum(entry.qty) qty
 		from `tabStock Ledger Entry` sle
 		join `tabSerial and Batch Entry` entry on entry.parent = sle.serial_and_batch_bundle
 		where sle.warehouse = %(warehouse)s and sle.is_cancelled = 0 and entry.serial_no in %(serials)s
+			{_not_receiving(bundle_location, exclude_receiving)}
 		group by entry.serial_no, location""",
 		{"warehouse": warehouse, "serials": tuple(serial_nos)},
 		as_dict=True,
@@ -662,7 +862,9 @@ def storage_location_query(doctype, txt, searchfield, start, page_len, filters):
 	"""Rank Item preferences before other active locations satisfying the same condition, each with the Item's
 	quantity there. A row that names serial nos is offered only the locations holding them; a source field
 	(``only_stock``) only the locations holding the Item (and batch) when any does (Connect Diagnostics, 5 Nov
-	2026)."""
+	2026). ``exclude_receiving``: "1" never offers a Receiving location (a source the goods may not leave from);
+	"stock" only when ``warehouse`` is a stock warehouse (the target of a transfer); "target" only when the filter
+	``target_warehouse`` is one (the source of a transfer to another warehouse)."""
 	filters = frappe.parse_json(filters) or {}
 	warehouse = filters.get("warehouse")
 	if doctype != "Storage Location" or not warehouse:
@@ -685,11 +887,22 @@ def storage_location_query(doctype, txt, searchfield, start, page_len, filters):
 		# An Item's persisted requirement cannot be overridden by request filters.
 		condition = item.get("storage_condition")
 
-	stock = location_stock(item_code, warehouse, filters.get("batch_no")) if item_code else {}
+	exclude = cstr(filters.get("exclude_receiving"))
+	exclude_receiving = (
+		exclude == "1"
+		or (exclude == "stock" and is_stock_type_warehouse(warehouse))
+		or (exclude == "target" and is_stock_type_warehouse(filters.get("target_warehouse")))
+	)
+	stock = (
+		location_stock(item_code, warehouse, filters.get("batch_no"), exclude_receiving=exclude_receiving)
+		if item_code
+		else {}
+	)
 	serials = _row_serial_nos(filters)
-	holding = serial_locations(serials, warehouse) if serials else {}
+	holding = serial_locations(serials, warehouse, exclude_receiving=exclude_receiving) if serials else {}
 	candidates = frappe.db.sql(
 		"""select `tabStorage Location`.name, `tabStorage Location`.location_code,
+			`tabStorage Location`.location_type,
 			case when preference.idx is null then 0 else 1 end preferred, preference.idx
 		from `tabStorage Location`
 		left join `tabItem Storage Location` preference
@@ -716,6 +929,8 @@ def storage_location_query(doctype, txt, searchfield, start, page_len, filters):
 		},
 		as_dict=True,
 	)
+	if exclude_receiving:
+		candidates = [row for row in candidates if row.location_type != RECEIVING]
 	if serials:
 		candidates = [row for row in candidates if row.name in holding]
 	elif cint(filters.get("only_stock")) and stock:

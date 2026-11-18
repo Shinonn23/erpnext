@@ -95,7 +95,11 @@ test("Stock Entry source and target use their own warehouse and the same Item", 
     "Item"
   );
   const source = f.queries["storage_location:items"]({}, "Row", "row").filters;
-  const target = f.queries["to_storage_location:items"]({}, "Row", "row").filters;
+  const target = f.queries["to_storage_location:items"](
+    {},
+    "Row",
+    "row"
+  ).filters;
   assert.equal(source.serial_no, "SN-1");
   assert.equal(source.serial_and_batch_bundle, "BUNDLE-1");
   assert.equal(source.only_stock, 1);
@@ -242,12 +246,17 @@ test("Item row Warehouse search goes through the Storage Condition query", () =>
   const ControlLink = link_control({
     Row: { row: { parenttype: "Stock Entry", item_code: "Cold Item" } },
   });
-  const control = Object.assign(new ControlLink(), { doctype: "Row", docname: "row" });
+  const control = Object.assign(new ControlLink(), {
+    doctype: "Row",
+    docname: "row",
+  });
   const args = { doctype: "Warehouse" };
   control.set_custom_query(args);
   assert.match(args.query, /storage_location\.warehouse_query$/);
   assert.equal(args.filters.storage_condition_item, "Cold Item");
-  assert.deepEqual(JSON.parse(JSON.stringify(args.filters.filters)), { company: "Company" });
+  assert.deepEqual(JSON.parse(JSON.stringify(args.filters.filters)), {
+    company: "Company",
+  });
   assert.deepEqual(
     JSON.parse(JSON.stringify(control.get_filter_description(args.filters))),
     { company: "Company" }
@@ -269,11 +278,105 @@ test("Warehouse search keeps native queries outside Item rows and custom form qu
     control.set_custom_query(args);
     assert.equal(args.query, undefined);
   }
-  const row = Object.assign(new ControlLink(), { doctype: "ItemRow", docname: "row" });
+  const row = Object.assign(new ControlLink(), {
+    doctype: "ItemRow",
+    docname: "row",
+  });
   const custom = { doctype: "Warehouse", query: "custom.query" };
   row.set_custom_query(custom);
   assert.equal(custom.query, "custom.query");
   const other = { doctype: "Item" };
   row.set_custom_query(other);
   assert.equal(other.query, undefined);
+});
+
+test("a sale, an issue and a conversion never offer a Receiving location", () => {
+  for (const doctype of [
+    "Delivery Note",
+    "Sales Invoice",
+    "POS Invoice",
+    "Stock to Asset Conversion",
+  ]) {
+    const f = fixture(doctype);
+    const filters = f.queries["storage_location:items"](
+      {},
+      "Row",
+      "row"
+    ).filters;
+    assert.equal(filters.exclude_receiving, "1", doctype);
+    assert.equal(filters.only_stock, 1, doctype);
+  }
+  // a return brings the goods back: it may land at the Receiving location
+  const back = fixture("Delivery Note");
+  const filters = back.queries["storage_location:items"](
+    { is_return: 1 },
+    "Row",
+    "row"
+  ).filters;
+  assert.equal(filters.exclude_receiving, undefined);
+});
+
+test("Stock Entry: the put-away source may be the Receiving location, a transfer target never", () => {
+  const exclude =
+    fixture("Stock Entry").context.erpnext.storage_location_exclude_receiving;
+  assert.equal(
+    exclude(
+      "Stock Entry",
+      "storage_location",
+      { s_warehouse: "A" },
+      { purpose: "Material Issue" }
+    ),
+    "1"
+  );
+  // a Repack / Manufacture source is not refused a Receiving location by the server: the picker offers it too
+  assert.equal(
+    exclude(
+      "Stock Entry",
+      "storage_location",
+      { s_warehouse: "A" },
+      { purpose: "Repack" }
+    ),
+    ""
+  );
+  assert.equal(
+    exclude("Stock Entry", "storage_location", {
+      s_warehouse: "A",
+      t_warehouse: "A",
+    }),
+    ""
+  );
+  assert.equal(
+    exclude("Stock Entry", "storage_location", {
+      s_warehouse: "A",
+      t_warehouse: "B",
+    }),
+    "target"
+  );
+  assert.equal(
+    exclude("Stock Entry", "to_storage_location", {
+      s_warehouse: "A",
+      t_warehouse: "B",
+    }),
+    "stock"
+  );
+  assert.equal(
+    exclude("Stock Entry", "to_storage_location", { t_warehouse: "B" }),
+    ""
+  );
+  assert.equal(
+    exclude("Purchase Receipt", "storage_location", { warehouse: "A" }),
+    ""
+  );
+});
+
+test("a transfer source sends its target warehouse so the server decides", () => {
+  const f = fixture("Stock Entry");
+  f.context.locals.Row.row = {
+    item_code: "Item",
+    s_warehouse: "A",
+    t_warehouse: "B",
+  };
+  const filters = f.queries["storage_location:items"]({}, "Row", "row").filters;
+  assert.equal(filters.exclude_receiving, "target");
+  assert.equal(filters.target_warehouse, "B");
 });

@@ -22,9 +22,11 @@
   "against_fg",
   "section_break_2",
   "s_warehouse",
+  "is_stock_item",
   "storage_location",
   "col_break1",
   "t_warehouse",
+  "t_warehouse_type",
   "to_storage_location",
   "inventory_dimension",
   "inventory_dimension_col_break",
@@ -534,7 +536,7 @@
    "label": "Inventory Dimension"
   },
   {
-   "depends_on": "eval:doc.s_warehouse",
+   "depends_on": "eval:doc.s_warehouse && (doc.is_stock_item || doc.storage_location)",
    "fieldname": "storage_location",
    "fieldtype": "Link",
    "label": "Storage Location",
@@ -546,12 +548,13 @@
    "fieldtype": "Column Break"
   },
   {
-   "depends_on": "eval:doc.t_warehouse",
+   "depends_on": "eval:doc.t_warehouse && (doc.is_stock_item || doc.to_storage_location)",
    "fieldname": "to_storage_location",
    "fieldtype": "Link",
    "label": "Target Storage Location",
    "options": "Storage Location",
-   "search_index": 1
+   "search_index": 1,
+   "mandatory_depends_on": "eval:parent.purpose === 'Material Transfer' && doc.s_warehouse && doc.t_warehouse && doc.is_stock_item && (doc.t_warehouse_type || 'Stock') === 'Stock'"
   },
   {
    "fetch_from": "item_code.item_group",
@@ -814,6 +817,26 @@
    "label": "Coverage Date",
    "no_copy": 1,
    "read_only": 1
+  },
+  {
+   "fieldname": "is_stock_item",
+   "fieldtype": "Check",
+   "label": "Is Stock Item",
+   "fetch_from": "item_code.is_stock_item",
+   "hidden": 1,
+   "read_only": 1,
+   "print_hide": 1,
+   "description": "Fetched from the Item: the Storage Location fields apply only to a stock Item."
+  },
+  {
+   "fieldname": "t_warehouse_type",
+   "fieldtype": "Link",
+   "options": "Warehouse Type",
+   "label": "Target Warehouse Type",
+   "fetch_from": "t_warehouse.warehouse_type",
+   "hidden": 1,
+   "read_only": 1,
+   "print_hide": 1
   }
  ],
  "grid_page_length": 50,
@@ -821,7 +844,7 @@
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-11-11 08:24:52.523385",
+ "modified": "2026-11-18 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Stock Entry Detail",

@@ -152,11 +152,6 @@ frappe.ui.form.on("Pick List", {
 			return erpnext.queries.item({ is_stock_item: 1 });
 		});
 
-		frm.set_query("storage_location", "locations", (doc, cdt, cdn) => {
-			const row = locals[cdt][cdn];
-			return erpnext.queries.storage_location(row.warehouse, row.item_code);
-		});
-
 		frm.set_query("batch_no", "locations", (frm, cdt, cdn) => {
 			const row = locals[cdt][cdn];
 			return {

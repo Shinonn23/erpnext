@@ -52,3 +52,41 @@ stock and has no selection.
 - **Stock Ledger Entry**: the inventory-dimension shortage reads "Only N of ITEM at LOCATION on DATE; M more needed".
 - **Warehouse**: the Warehouse Type intro is one line (the groups of operations), not every document name.
 - **Item**: the Regulatory Affairs headline is cleared before it is set, so it shows once.
+
+## Storage Location: Location Type, and the screen shows what the save stores (Connect Diagnostics, WP1, 18 Nov 2026)
+
+The Warehouse Type says what the stock is (Stock, Quarantine, Lost, Found, Borrowed, Write-Off, Frozen, Transit); the
+**Location Type** of a Storage Location (`location_type`, required, default Storage) says what the bin is for:
+**Receiving** (goods land here and leave only by a Stock Entry), **Storage** (shelves goods are picked from), **Sales
+Counter** (where a lab sells from) and **Holding** (the one bin of a holding warehouse). The code of a location
+(`STAGING`, `LAB MACHINE`) no longer decides anything. A new warehouse's default location (`ensure_default_storage_location`)
+is Receiving in a stock warehouse, Holding in any other.
+
+- One rule, the same in Python and SQL: `storage_location.is_receiving_location(name, warehouse=None)` and
+  `receiving_location_sql(expression, warehouse_expression=None)` (enabled, type Receiving; `test_receiving_location`
+  runs both on the same rows).
+- `refuses_receiving_source(doc, row)`: a non-return Delivery Note, a Sales / POS Invoice with Update Stock, a Stock to
+  Asset Conversion, a Material Issue and the source of a transfer to another stock warehouse may not take goods from a
+  Receiving location. `StockController.validate_storage_locations` refuses such a row (or a bundle entry there): "Row
+  N: X is at the receiving location L; put it away with a Stock Entry first, or choose the Storage Location", and at the
+  submit an outgoing stock row with no location ("Row N: choose the Storage Location ..."). A put-away inside one
+  warehouse and a move into a holding warehouse may take from it. The Pick List never picks it.
+- `set_default_storage_locations` (before_validate) fills only what the user would not choose otherwise: an outgoing
+  row takes the one location that holds its stock (`source_storage_location`, Receiving stock not counted for the rows
+  above), else stays empty, never the Receiving default of a stock warehouse (a holding warehouse keeps its one bin); a
+  row of a non-stock Item gets none and `validate_storage_locations` clears what it carries; the target of a Stock
+  Entry transfer into a stock warehouse stays empty (put-away, move out of quarantine, normal warehouse), except into a
+  warehouse with a Sales Counter location (a lab): the Item's preferred non-Receiving location there, else the Sales
+  Counter (`transfer_target_location`; only a Material Transfer: a transfer for manufacture or to a subcontractor
+  keeps the target's default); an incoming leg gets the warehouse default. The source of a POS Invoice row of a
+  register (`pos_profile`) is left empty and never computed: the Connect Diagnostics app sets the register's Sales
+  Storage Location after this hook, and a cashier cannot choose a location on the POS page.
+- `storage_location_query` takes `exclude_receiving`: `1` never offers a Receiving location, `stock` not when the
+  field's warehouse is a stock warehouse, `target` not when `target_warehouse` is one. `public/js/storage_location.js`
+  passes it on every source field of a sale, conversion or Material Issue (not on a return, a Repack or a Manufacture) and on a transfer's source and
+  target (`erpnext.storage_location_exclude_receiving`), and also serves POS Invoice and Stock to Asset Conversion.
+  The Pick List keeps only the app's picker query (the fork's duplicate `set_query` is gone).
+- Delivery Note Item, Purchase Receipt Item, Purchase Invoice Item, Stock Entry Detail, Packed Item and Stock to Asset
+  Conversion Item fetch a hidden `is_stock_item`; their location fields show only for a stock Item (or when they hold a
+  value). Stock Entry Detail fetches `t_warehouse_type`, and its To Storage Location is mandatory on a Material Transfer
+  into a stock warehouse. Stock to Asset Conversion Item shows its Storage Location as a column.

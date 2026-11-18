@@ -5,12 +5,42 @@ erpnext.queries.storage_location = (warehouse, item_code) => ({
 	filters: { warehouse: warehouse || "", item_code: item_code || "" },
 });
 
+// Stock leaves a Receiving location only by a Stock Entry (Siwat, 17 Nov 2026): what the picker offers follows the rule
+// the server enforces (storage_location.refuses_receiving_source).
+const OUTGOING_DOCTYPES = [
+	"Stock Entry",
+	"Delivery Note",
+	"Sales Invoice",
+	"POS Invoice",
+	"Stock to Asset Conversion",
+];
+// "1": never offer a Receiving location; "stock": not when the field's warehouse is a stock warehouse (the target of
+// a transfer); "target": not when the row's target warehouse is a stock warehouse (the source of a transfer); "": all.
+erpnext.storage_location_exclude_receiving = (doctype, fieldname, row, doc) => {
+	if (doctype === "Stock Entry") {
+		if (fieldname === "storage_location") {
+			if (!row.s_warehouse) return "";
+			// only a Material Issue is refused a Receiving source (refuses_receiving_source)
+			if (!row.t_warehouse) return doc?.purpose === "Material Issue" ? "1" : "";
+			return row.t_warehouse === row.s_warehouse ? "" : "target";
+		}
+		if (fieldname === "to_storage_location") return row.s_warehouse ? "stock" : "";
+		return "";
+	}
+	// a return brings goods back in: it may land at the Receiving location
+	if (fieldname === "storage_location" && OUTGOING_DOCTYPES.includes(doctype) && !doc?.is_return) {
+		return "1";
+	}
+	return "";
+};
+
 for (const doctype of [
 	"BOM",
 	"Delivery Note",
 	"Job Card",
 	"Material Request",
 	"Item",
+	"POS Invoice",
 	"Plant Floor",
 	"Production Plan",
 	"Purchase Invoice",
@@ -19,6 +49,7 @@ for (const doctype of [
 	"Stock Entry",
 	"Stock Reconciliation",
 	"Stock Reservation Entry",
+	"Stock to Asset Conversion",
 	"Subcontracting Receipt",
 	"Work Order",
 ]) {
@@ -61,8 +92,7 @@ for (const doctype of [
 			const is_source_field = (fieldname) =>
 				fieldname.startsWith("from_") ||
 				fieldname.startsWith("source_") ||
-				(fieldname === "storage_location" &&
-					["Stock Entry", "Delivery Note", "Sales Invoice"].includes(doctype));
+				(fieldname === "storage_location" && OUTGOING_DOCTYPES.includes(doctype));
 
 			const set_storage_location_query = (fieldname, get_row) => {
 				const query = (doc, cdt, cdn) => {
@@ -91,9 +121,19 @@ for (const doctype of [
 						// Sources stay limited to available stock; targets show all compatible locations.
 						const restrict_source = is_source_field(fieldname);
 						result.filters.serial_no = restrict_source ? row.serial_no || "" : "";
-						result.filters.serial_and_batch_bundle = restrict_source ? row.serial_and_batch_bundle || "" : "";
+						result.filters.serial_and_batch_bundle = restrict_source
+							? row.serial_and_batch_bundle || ""
+							: "";
 						result.filters.batch_no = row.batch_no || "";
 						result.filters.only_stock = restrict_source ? 1 : 0;
+						const exclude = erpnext.storage_location_exclude_receiving(
+							doctype,
+							fieldname,
+							row,
+							doc
+						);
+						if (exclude) result.filters.exclude_receiving = exclude;
+						if (exclude === "target") result.filters.target_warehouse = row.t_warehouse || "";
 					}
 					return result;
 				};
