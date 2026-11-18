@@ -91,6 +91,7 @@
    "read_only": 1
   },
   {
+   "depends_on": "eval:!in_list([\"Issue\", \"Reassignment\"], parent.purpose) || doc.service_equipment || parent.is_borrowing_transaction",
    "fieldname": "source_location",
    "fieldtype": "Link",
    "in_list_view": 1,
@@ -98,6 +99,7 @@
    "options": "Location"
   },
   {
+   "depends_on": "eval:!in_list([\"Issue\", \"Reassignment\"], parent.purpose) || doc.service_equipment || parent.is_borrowing_transaction",
    "fieldname": "target_location",
    "fieldtype": "Link",
    "in_list_view": 1,
@@ -123,6 +125,7 @@
   },
   {
    "default": "0",
+   "depends_on": "eval:parent.purpose == \"Reassignment\"",
    "description": "Select this to change the current Custodian. Leave To Employee empty to unassign it.",
    "fieldname": "change_custodian",
    "fieldtype": "Check",
@@ -139,6 +142,7 @@
   },
   {
    "default": "0",
+   "depends_on": "eval:parent.purpose == \"Reassignment\"",
    "description": "Select this to change the current Department. Leave Target Department empty to unassign it.",
    "fieldname": "change_department",
    "fieldtype": "Check",
@@ -245,7 +249,7 @@
  ],
  "istable": 1,
  "links": [],
- "modified": "2026-11-10 12:00:00.000000",
+ "modified": "2026-11-19 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Assets",
  "name": "Asset Movement Item",

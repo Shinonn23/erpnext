@@ -935,13 +935,13 @@
    "options": "Cost Center"
   },
   {
-   "depends_on": "eval:doc.purpose == 'Material Issue' || doc.operation_requester || doc.workflow_department || doc.maintenance_visit",
+   "depends_on": "eval:(doc.purpose == 'Material Issue' || doc.operation_requester || doc.workflow_department || doc.maintenance_visit) && doc.stock_entry_type != 'Stock Write-Off'",
    "fieldname": "operation_request_section",
    "fieldtype": "Section Break",
    "label": "Request and Operation"
   },
   {
-   "depends_on": "eval:(doc.purpose == 'Material Issue' && doc.operation_issue_type != 'Disposal') || doc.operation_requester",
+   "depends_on": "eval:((doc.purpose == 'Material Issue' && doc.operation_issue_type != 'Disposal') || doc.operation_requester) && doc.stock_entry_type != 'Stock Write-Off'",
    "fieldname": "operation_requester",
    "fieldtype": "Link",
    "label": "Requesting Employee",
@@ -949,7 +949,7 @@
    "read_only_depends_on": "eval:(doc.items || []).some(row => row.material_request)"
   },
   {
-   "depends_on": "eval:(doc.purpose == 'Material Issue' && doc.operation_issue_type != 'Disposal') || doc.workflow_department",
+   "depends_on": "eval:((doc.purpose == 'Material Issue' && doc.operation_issue_type != 'Disposal') || doc.workflow_department) && doc.stock_entry_type != 'Stock Write-Off'",
    "fieldname": "workflow_department",
    "fieldtype": "Link",
    "label": "Requesting Department",
@@ -961,12 +961,11 @@
    "fieldtype": "Column Break"
   },
   {
-   "default": "Internal Use",
-   "depends_on": "eval:doc.purpose == 'Material Issue'",
+   "depends_on": "eval:doc.purpose == 'Material Issue' && doc.stock_entry_type != 'Stock Write-Off'",
    "fieldname": "operation_issue_type",
    "fieldtype": "Select",
    "label": "Issue Type",
-   "options": "Internal Use\nDemo\nMaintenance Spare Parts\nDisposal"
+   "options": "\nInternal Use\nMaintenance Spare Parts\nDisposal"
   },
   {
    "depends_on": "eval:(doc.purpose == 'Material Issue' && doc.operation_issue_type == 'Maintenance Spare Parts') || doc.maintenance_visit",
@@ -1046,7 +1045,7 @@
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-11-07 22:30:00.000000",
+ "modified": "2026-11-19 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Stock Entry",
