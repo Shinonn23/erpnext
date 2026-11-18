@@ -126,6 +126,7 @@ frappe.ui.form.on("Asset Movement", {
 	refresh: async (frm) => {
 		await set_material_request_purpose_lock(frm);
 		frm.trigger("set_required_fields");
+		add_borrowing_return_button(frm);
 	},
 
 	purpose: async (frm) => {
@@ -290,6 +291,32 @@ frappe.ui.form.on("Asset Movement", {
 		frm.refresh_field("assets");
 	},
 });
+
+// The Assets of a borrowing come back on the return movement made from its issue movement (UX WP4, Siwat 18 Nov
+// 2026: documents chain like selling): only the Assets still with the borrower, each to the Location it left.
+function add_borrowing_return_button(frm) {
+	if (
+		frm.doc.docstatus !== 1 ||
+		!frm.doc.borrowing ||
+		frm.doc.purpose === "Receipt" ||
+		!frappe.model.can_create("Asset Movement")
+	)
+		return;
+	frm.add_custom_button(
+		__("Return Movement"),
+		() =>
+			frappe.model.open_mapped_doc({
+				method: "erpnext.borrowing.doctype.borrowing.borrowing_core.make_borrowing_return_movement",
+				frm,
+			}),
+		__("Create")
+	);
+	frm.add_custom_button(
+		__("Borrowing"),
+		() => frappe.set_route("Form", "Borrowing", frm.doc.borrowing),
+		__("View")
+	);
+}
 
 frappe.ui.form.on("Asset Movement Item", {
 	request_item(frm, cdt, cdn) {

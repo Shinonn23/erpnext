@@ -157,7 +157,6 @@ class TestMaterialRequestActions(unittest.TestCase):
 		for doctype_path, fieldname in (
 			(doctype_root / "assets/doctype/asset/asset.json", "demo_loan_status"),
 			(doctype_root / "borrowing/doctype/borrowing/borrowing.json", "status"),
-			(doctype_root / "borrowing/doctype/borrowing_return/borrowing_return.json", "status"),
 		):
 			with doctype_path.open() as source:
 				doctype_fields = json.load(source)["fields"]
@@ -706,24 +705,22 @@ class TestCustomerMaterialRequestIntegration(ERPNextTestSuite):
 			"Delivery Note", delivery_note.name
 		), shipment if loan.requires_shipment else None
 
-	def complete_stock_loan_return(self, return_doc):
-		# received first, inspected after (Siwat, 9 Nov 2026): the system receives the return at once; a shipment
-		# or an unsubmitted draft is submitted here, and no inspection is asked before it
-		return_doc.reload()
-		delivery_note = frappe.get_doc("Delivery Note", return_doc.delivery_note)
-		if delivery_note.docstatus == 0:
-			delivery_note.submit()
-		return_doc.reload()
-		self.assertEqual(return_doc.status, "Received")
+	def complete_stock_loan_return(self, return_note):
+		"""Save and submit the return Delivery Note made from the issue note (UX WP4): it receives the goods."""
+		if return_note.is_new():
+			return_note.insert()
+		return_note.reload()
+		if return_note.docstatus == 0:
+			return_note.submit()
 		self.assertGreater(
 			frappe.db.count(
 				"Stock Ledger Entry",
-				{"voucher_type": "Delivery Note", "voucher_no": delivery_note.name},
+				{"voucher_type": "Delivery Note", "voucher_no": return_note.name},
 			),
 			0,
-			"Submitting Borrowing Receive must post stock through Delivery Note",
+			"Submitting the borrowing return must post stock through its Delivery Note",
 		)
-		return return_doc
+		return return_note
 
 	def create_shipment(self, source_doctype, source_name):
 		result = make_shipment_from_document(source_doctype, source_name)
@@ -777,11 +774,10 @@ class TestCustomerMaterialRequestIntegration(ERPNextTestSuite):
 			self.assertEqual(frappe.db.get_value("Asset", asset.name, "location"), self.customer_location)
 
 		asset_return = loan.make_return()
+		asset_return.insert()
 		asset_return.submit()
-		asset_return.reload()
 		loan.reload()
 		request.reload()
-		self.assertEqual(asset_return.status, "Received")
 		self.assertEqual(loan.status, "Returned")
 		self.assertEqual(request.request_progress_status, "Returned")
 		for asset in demo_assets:
@@ -808,56 +804,13 @@ class TestCustomerMaterialRequestIntegration(ERPNextTestSuite):
 		self.assertEqual(asset_movement.assets[0].request_item, request.items[0].name)
 		self.assertEqual(frappe.db.get_value("Asset", asset.name, "location"), self.customer_location)
 		asset_return = asset_loan.make_return()
+		asset_return.insert()
 		asset_return.submit()
 		asset_loan.reload()
 		request.reload()
 		self.assertEqual(asset_loan.status, "Returned")
 		self.assertEqual(request.request_progress_status, "Returned")
 		self.assertEqual(frappe.db.get_value("Asset", asset.name, "location"), self.source_location)
-
-	def test_stock_loan_return_waits_for_shipment_and_quality_inspection(self):
-		stock_item = self.make_stock_item(qty=5)
-		request = self.make_request("Customer Borrow", [{"item_code": stock_item}])
-
-		stock_loan = self.make_borrowing(request, "Stock", requires_shipment=True)
-		stock_loan.submit()
-		stock_issue, stock_issue_shipment = self.complete_stock_loan_issue(stock_loan)
-		self.assertEqual(stock_issue.docstatus, 1)
-		stock_loan.reload()
-		self.assertEqual(stock_loan.status, "Pending Shipment")
-		self.assertFalse(stock_loan.stock_entry, "Borrowing issue stock must be posted by the Delivery Note")
-		ledger_rows = frappe.get_all(
-			"Stock Ledger Entry",
-			filters={"voucher_type": "Delivery Note", "voucher_no": stock_issue.name},
-			fields=["warehouse", "actual_qty"],
-		)
-		self.assertEqual(len(ledger_rows), 2)
-		self.assertEqual(
-			{(row.warehouse, row.actual_qty) for row in ledger_rows},
-			{(self.source_warehouse, -1.0), (self.loan_warehouse, 1.0)},
-		)
-		self.confirm_shipment_delivery(stock_issue_shipment)
-		stock_loan.reload()
-		self.assertEqual(stock_loan.status, "Active")
-
-		stock_return = stock_loan.make_return()
-		stock_return.requires_shipment = 1
-		stock_return.save()
-		stock_return.submit()
-		stock_return_dn = frappe.get_doc("Delivery Note", stock_return.delivery_note)
-		stock_shipment = self.create_shipment("Delivery Note", stock_return_dn.name)
-		stock_return.reload()
-		self.assertEqual(stock_return.status, "Pending Receipt")
-		request.reload()
-		self.assertEqual(request.request_progress_status, "Fulfilled")
-		self.confirm_shipment_delivery(stock_shipment)
-		stock_return.reload()
-		stock_loan.reload()
-		self.assertIn(stock_return.status, ("Pending Receipt", "Received"))
-		self.complete_stock_loan_return(stock_return)
-		stock_loan.reload()
-		self.assertEqual(stock_return.status, "Received")
-		self.assertEqual(stock_loan.status, "Returned")
 
 	def test_asset_loan_cannot_use_shipment(self):
 		asset_item_code = f"Direct Borrowing Asset {test_id()}"
@@ -880,12 +833,10 @@ class TestCustomerMaterialRequestIntegration(ERPNextTestSuite):
 		request.reload()
 		self.assertEqual(request.request_progress_status, "Fulfilled")
 
-		return_doc = stock_loan.make_return()
-		return_doc.items[0].returned_qty = 1
-		return_doc.submit()
-		return_doc.reload()
-		self.assertIn(return_doc.status, ("Pending Receipt", "Received"))
-		self.complete_stock_loan_return(return_doc)
+		return_note = stock_loan.make_return()
+		return_note.items[0].qty = -1
+		return_note.items[0].stock_qty = -1
+		self.complete_stock_loan_return(return_note)
 		stock_loan.reload()
 		request.reload()
 
@@ -909,12 +860,8 @@ class TestCustomerMaterialRequestIntegration(ERPNextTestSuite):
 			loan.submit()
 			self.complete_stock_loan_issue(loan)
 
-			return_doc = loan.make_return()
-			return_doc.submit()
-			self.complete_stock_loan_return(return_doc)
-
-			delivery_note = frappe.get_doc("Delivery Note", return_doc.delivery_note)
-			self.assertEqual(len(delivery_note.items), 2)
+			return_note = self.complete_stock_loan_return(loan.make_return())
+			self.assertEqual(len(return_note.items), 2)
 		finally:
 			for doc, value in zip(settings, previous, strict=True):
 				doc.allow_multiple_items = value
@@ -952,13 +899,13 @@ class TestCustomerMaterialRequestIntegration(ERPNextTestSuite):
 				self.assertEqual(loan.borrower_type, recipient_type)
 				self.assertEqual(loan.borrower, recipient)
 				self.assertEqual(loan.status, "Active")
-				return_doc = loan.make_return()
-				return_doc.submit()
-				self.complete_stock_loan_return(return_doc)
+				self.complete_stock_loan_return(loan.make_return())
 				loan.reload()
 				self.assertEqual(loan.status, "Returned")
 
-	def test_stock_batch_return_requires_original_batch_and_adjustment_closes_loan(self):
+	def test_another_batch_coming_back_is_swapped_and_the_loan_closes(self):
+		"""UX WP4: the batch typed on the return Delivery Note row may differ from the one lent (same Item); its submit
+		posts the value-preserving swap in the Borrowed warehouse and the borrowing is returned."""
 		from erpnext.stock.doctype.batch.test_batch import make_new_batch
 
 		item = make_item(properties={"is_stock_item": 1, "stock_uom": "Nos", "has_batch_no": 1})
@@ -976,23 +923,16 @@ class TestCustomerMaterialRequestIntegration(ERPNextTestSuite):
 		loan.items[0].batch_no = issued_batch.name
 		loan.submit()
 		self.complete_stock_loan_issue(loan)
-		frappe.db.set_value("Company", self.company, "stock_adjustment_account", "Stock Adjustment - _TC")
 
 		returned = loan.make_return()
 		returned.items[0].batch_no = replacement_batch.name
-		with self.assertRaises(frappe.ValidationError):
-			returned.submit()
-		self.assertFalse(frappe.db.exists("Borrowing Return", returned.name))
-		self.assertEqual(loan.items[0].outstanding_qty, 1)
-		self.assertEqual(loan.status, "Active")
-
-		adjustment = loan.make_adjustment()
-		adjustment.items[0].reason = "Write off the outstanding issued Batch"
-		adjustment.submit()
+		returned = self.complete_stock_loan_return(returned)
+		swap = frappe.get_all(
+			"Stock Entry", filters={"delivery_note_no": returned.name, "purpose": "Repack", "docstatus": 1}
+		)
+		self.assertEqual(len(swap), 1)
 		loan.reload()
-		self.assertEqual(adjustment.status, "Submitted")
-		self.assertEqual(loan.status, "Closed")
-		self.assertEqual(loan.items[0].outstanding_qty, 0)
+		self.assertEqual(loan.status, "Returned")
 
 	def test_cancelling_return_then_loan_cancels_generated_delivery_note_and_pick_list(self):
 		stock_item = self.make_stock_item(qty=2)
@@ -1001,13 +941,11 @@ class TestCustomerMaterialRequestIntegration(ERPNextTestSuite):
 		loan.submit()
 		self.complete_stock_loan_issue(loan)
 
-		return_doc = loan.make_return()
-		return_doc.submit()
+		return_note = self.complete_stock_loan_return(loan.make_return())
 		with self.assertRaises(frappe.ValidationError):
 			loan.cancel()
 
-		return_delivery_note = return_doc.delivery_note
-		return_doc.cancel()
+		return_note.cancel()
 		loan.reload()
 		self.assertEqual(loan.status, "Active")
 		loan.cancel()
@@ -1016,7 +954,7 @@ class TestCustomerMaterialRequestIntegration(ERPNextTestSuite):
 		self.assertEqual(loan.status, "Cancelled")
 		self.assertEqual(frappe.db.get_value("Delivery Note", loan.delivery_note, "docstatus"), 2)
 		self.assertEqual(frappe.db.get_value("Pick List", loan.pick_list, "docstatus"), 2)
-		self.assertFalse(frappe.db.exists("Delivery Note", return_delivery_note))
+		self.assertEqual(frappe.db.get_value("Delivery Note", return_note.name, "docstatus"), 2)
 
 	def test_asset_transfer_partial_and_full_movements_update_request_status(self):
 		asset_item_code = f"Transfer Asset {test_id()}"

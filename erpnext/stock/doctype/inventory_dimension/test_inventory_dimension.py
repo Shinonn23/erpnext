@@ -73,7 +73,10 @@ class TestInventoryDimension(ERPNextTestSuite):
 
 		self.assertNotIn("inventory_dimension", fields_by_name)
 		self.assertEqual(fields_by_name[dimension.source_fieldname]["insert_after"], "inventory_dimension")
-		self.assertEqual(fields_by_name[f"to_{dimension.source_fieldname}"]["insert_after"], "inventory_dimension_col_break")
+		self.assertEqual(
+			fields_by_name[f"to_{dimension.source_fieldname}"]["insert_after"],
+			"inventory_dimension_col_break",
+		)
 		self.assertNotIn("inventory_dimension_col_break", fields_by_name)
 
 		dimension.document_type = "Purchase Receipt Item"
@@ -81,9 +84,15 @@ class TestInventoryDimension(ERPNextTestSuite):
 		dimension.add_transfer_field("Purchase Receipt Item", fields)
 		fields_by_name = {field["fieldname"]: field for field in fields}
 
-		self.assertEqual(fields_by_name[dimension.source_fieldname]["insert_after"], "inventory_dimension_col_break")
-		self.assertEqual(fields_by_name[f"rejected_{dimension.source_fieldname}"]["insert_after"], "inventory_dimension")
-		self.assertEqual(fields_by_name[f"from_{dimension.source_fieldname}"]["insert_after"], "inventory_dimension")
+		self.assertEqual(
+			fields_by_name[dimension.source_fieldname]["insert_after"], "inventory_dimension_col_break"
+		)
+		self.assertEqual(
+			fields_by_name[f"rejected_{dimension.source_fieldname}"]["insert_after"], "inventory_dimension"
+		)
+		self.assertEqual(
+			fields_by_name[f"from_{dimension.source_fieldname}"]["insert_after"], "inventory_dimension"
+		)
 
 		dimension.document_type = "Packed Item"
 		fields = dimension.get_dimension_fields()
@@ -173,7 +182,9 @@ class TestInventoryDimension(ERPNextTestSuite):
 			field_order = schema["field_order"]
 			section_index = field_order.index("inventory_dimension")
 			if doctype == "Job Card":
-				self.assertEqual(field_order[section_index : section_index + len(expected)], expected, doctype)
+				self.assertEqual(
+					field_order[section_index : section_index + len(expected)], expected, doctype
+				)
 				self.assertLess(section_index, field_order.index("scheduled_time_tab"), doctype)
 			else:
 				self.assertEqual(field_order[section_index:], expected, doctype)
@@ -183,12 +194,13 @@ class TestInventoryDimension(ERPNextTestSuite):
 			self.assertIn("inventory_dimension", doctype_schemas[doctype]["field_order"], doctype)
 			field_order = doctype_schemas[doctype]["field_order"]
 			section_index = field_order.index("inventory_dimension")
-			self.assertEqual(field_order[section_index:], ["inventory_dimension", "storage_location"], doctype)
+			self.assertEqual(
+				field_order[section_index:], ["inventory_dimension", "storage_location"], doctype
+			)
 
 		loan_item_doctypes = {
 			"Borrowing Adjustment Item",
 			"Borrowing Item",
-			"Borrowing Return Item",
 		}
 		self.assertTrue(loan_item_doctypes.isdisjoint(frappe.get_hooks("inventory_dimension_doctypes")))
 		for doctype in loan_item_doctypes:
@@ -231,7 +243,9 @@ class TestInventoryDimension(ERPNextTestSuite):
 					"Stock Ledger Entry-inventory_dimension_col_break",
 				],
 			),
-			patch("erpnext.patches.v16_0.migrate_inventory_dimension_layout_anchors.frappe.delete_doc") as delete_doc,
+			patch(
+				"erpnext.patches.v16_0.migrate_inventory_dimension_layout_anchors.frappe.delete_doc"
+			) as delete_doc,
 			patch("erpnext.patches.v16_0.migrate_inventory_dimension_layout_anchors.frappe.clear_cache"),
 		):
 			execute()

@@ -222,53 +222,96 @@ def permission_query(user=None, doctype=None):
 		return ""
 	if doctype == "Asset Repair":
 		conditions = [EQUIPMENT_CONDITIONS[doctype]]
-		assets = (frappe.get_list("Asset", user=user, pluck="name", limit_page_length=0)
-			if frappe.has_permission("Asset", "read", user=user) else [])
+		assets = (
+			frappe.get_list("Asset", user=user, pluck="name", limit_page_length=0)
+			if frappe.has_permission("Asset", "read", user=user)
+			else []
+		)
 		if assets:
-			conditions.append("`tabAsset Repair`.asset in (" + ", ".join(
-				frappe.db.escape(asset) for asset in assets) + ")")
+			conditions.append(
+				"`tabAsset Repair`.asset in (" + ", ".join(frappe.db.escape(asset) for asset in assets) + ")"
+			)
 		conditions.append(failed_asset_return_condition(user))
 		return "(" + " or ".join(conditions) + ")"
 	return EQUIPMENT_CONDITIONS[doctype]
 
 
 def failed_asset_return_condition(user=None):
-	"""List the same exact rejected returns allowed by readable_failed_asset_return."""
-	if not frappe.has_permission("Borrowing Return", "read", user=user):
+	"""List the same exact rejected returns allowed by readable_failed_asset_return: the Asset came back on a submitted
+	return Asset Movement of a borrowing the user may read (UX WP4) and the inspection of that row was Rejected."""
+	if not frappe.has_permission("Asset Movement", "read", user=user):
 		return "1=0"
-	returns = frappe.get_list("Borrowing Return", user=user, filters={"docstatus": 1},
-		pluck="name", limit_page_length=0)
-	if not returns:
+	movements = frappe.get_list(
+		"Asset Movement",
+		user=user,
+		filters={"docstatus": 1, "purpose": "Receipt", "borrowing_source_doctype": "Borrowing"},
+		pluck="name",
+		limit_page_length=0,
+	)
+	if not movements:
 		return "1=0"
-	names = ", ".join(frappe.db.escape(name) for name in returns)
-	return f"""exists (select 1 from `tabBorrowing Return` loan_return
-		join `tabBorrowing Return Item` returned on returned.parent = loan_return.name
+	names = ", ".join(frappe.db.escape(name) for name in movements)
+	return f"""exists (select 1 from `tabAsset Movement` movement
+		join `tabAsset Movement Item` returned on returned.parent = movement.name
 		join `tabQuality Inspection` qi on qi.name = returned.quality_inspection
-		join `tabAsset Movement` movement on movement.name = loan_return.asset_movement
-		where loan_return.name in ({names}) and loan_return.docstatus = 1 and movement.docstatus = 1
-		and loan_return.name = `tabAsset Repair`.borrowing_return
-		and loan_return.company = `tabAsset Repair`.company
-		and returned.name = `tabAsset Repair`.borrowing_return_item
+		where movement.name in ({names}) and movement.docstatus = 1
+		and movement.name = `tabAsset Repair`.return_movement
+		and movement.company = `tabAsset Repair`.company
+		and returned.name = `tabAsset Repair`.return_movement_item
 		and returned.asset = `tabAsset Repair`.asset
-		and qi.docstatus = 1 and qi.status = 'Rejected' and qi.reference_type = 'Borrowing Return'
-		and qi.reference_name = loan_return.name and qi.child_row_reference = returned.name)"""
+		and qi.docstatus = 1 and qi.status = 'Rejected' and qi.reference_type = 'Asset Movement'
+		and qi.reference_name = movement.name and qi.child_row_reference = returned.name)"""
 
 
 def readable_failed_asset_return(doc, user=None):
 	"""A returned asset is eligible only through the exact submitted rejected return row."""
-	return_name, row_name, asset = doc.get("borrowing_return"), doc.get("borrowing_return_item"), doc.get("asset")
-	if not return_name or not row_name or not asset or not frappe.has_permission("Borrowing Return", "read", doc=return_name, user=user):
+	movement_name, row_name, asset = (
+		doc.get("return_movement"),
+		doc.get("return_movement_item"),
+		doc.get("asset"),
+	)
+	if not movement_name or not row_name or not asset:
 		return False
-	parent = frappe.db.get_value("Borrowing Return", return_name, ["docstatus", "company", "asset_movement"], as_dict=True)
-	row = frappe.db.get_value("Borrowing Return Item", row_name, ["parent", "asset", "quality_inspection"], as_dict=True)
-	if not parent or parent.docstatus != 1 or parent.company != doc.get("company") or not row or row.parent != return_name or row.asset != asset:
+	if not frappe.has_permission("Asset Movement", "read", doc=movement_name, user=user):
 		return False
-	if not parent.asset_movement or frappe.db.get_value("Asset Movement", parent.asset_movement, "docstatus") != 1:
+	parent = frappe.db.get_value(
+		"Asset Movement",
+		movement_name,
+		["docstatus", "company", "purpose", "borrowing_source_doctype"],
+		as_dict=True,
+	)
+	row = frappe.db.get_value(
+		"Asset Movement Item", row_name, ["parent", "asset", "quality_inspection"], as_dict=True
+	)
+	if (
+		not parent
+		or parent.docstatus != 1
+		or parent.purpose != "Receipt"
+		or parent.borrowing_source_doctype != "Borrowing"
+		or parent.company != doc.get("company")
+		or not row
+		or row.parent != movement_name
+		or row.asset != asset
+	):
 		return False
-	qi = frappe.db.get_value("Quality Inspection", row.quality_inspection,
-		["docstatus", "status", "reference_type", "reference_name", "child_row_reference"], as_dict=True) if row.quality_inspection else None
-	return bool(qi and qi.docstatus == 1 and qi.status == "Rejected" and qi.reference_type == "Borrowing Return"
-		and qi.reference_name == return_name and qi.child_row_reference == row_name)
+	qi = (
+		frappe.db.get_value(
+			"Quality Inspection",
+			row.quality_inspection,
+			["docstatus", "status", "reference_type", "reference_name", "child_row_reference"],
+			as_dict=True,
+		)
+		if row.quality_inspection
+		else None
+	)
+	return bool(
+		qi
+		and qi.docstatus == 1
+		and qi.status == "Rejected"
+		and qi.reference_type == "Asset Movement"
+		and qi.reference_name == movement_name
+		and qi.child_row_reference == row_name
+	)
 
 
 def has_permission(doc, ptype="read", user=None, **kwargs):
@@ -276,8 +319,14 @@ def has_permission(doc, ptype="read", user=None, **kwargs):
 		return False
 	if doc.doctype not in EQUIPMENT_CONDITIONS or not equipment_only(doc.doctype, user, ptype):
 		return True
-	if doc.doctype == "Asset Repair" and doc.get("asset") and ptype in ("read", "select", "write", "create", "print", "report"):
-		return frappe.has_permission("Asset", "read", doc=doc.asset, user=user) or readable_failed_asset_return(doc, user)
+	if (
+		doc.doctype == "Asset Repair"
+		and doc.get("asset")
+		and ptype in ("read", "select", "write", "create", "print", "report")
+	):
+		return frappe.has_permission(
+			"Asset", "read", doc=doc.asset, user=user
+		) or readable_failed_asset_return(doc, user)
 	if (
 		doc.is_new()
 		and ptype in ("read", "write", "create")
@@ -291,8 +340,11 @@ def refuse_company_asset(doc, method=None):
 	"""A user who works on equipment only cannot put a company Asset into a shared document."""
 	if doc.doctype not in EQUIPMENT_CONDITIONS or not equipment_only(doc.doctype):
 		return
-	if doc.doctype == "Asset Repair" and doc.get("asset") and (frappe.has_permission("Asset", "read", doc=doc.asset)
-		or readable_failed_asset_return(doc)):
+	if (
+		doc.doctype == "Asset Repair"
+		and doc.get("asset")
+		and (frappe.has_permission("Asset", "read", doc=doc.asset) or readable_failed_asset_return(doc))
+	):
 		return
 	if not is_equipment_document(doc):
 		frappe.throw(_("You may only record Service Equipment here."), frappe.PermissionError)

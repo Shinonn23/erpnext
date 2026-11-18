@@ -41,6 +41,9 @@ frappe.ui.form.on("Borrowing", {
 			};
 		});
 	},
+	loan_type(frm) {
+		configure_item_columns(frm);
+	},
 	refresh(frm) {
 		frm.set_intro("");
 		show_loan_summary(frm);
@@ -60,7 +63,7 @@ frappe.ui.form.on("Borrowing", {
 		} else if (["Active", "Partially Returned"].includes(frm.doc.status)) {
 			frm.set_intro(
 				__(
-					"Select Create → Borrowing Return, review what came back, then Save and Submit. Record used-up stock separately with Create → Write Off."
+					"Select Create → Return: it opens the return document of the issue document (as a sales return is made from its Delivery Note). Review what came back, then Save and Submit. Record used-up stock separately with Create → Write Off."
 				),
 				"blue"
 			);
@@ -109,12 +112,9 @@ frappe.ui.form.on("Borrowing", {
 			}
 		}
 		if (!["Active", "Partially Returned"].includes(frm.doc.status)) return;
-		if (frappe.model.can_create("Borrowing Return")) {
-			frm.add_custom_button(
-				__("Borrowing Return"),
-				() => open_generated_doc(frm, "make_return"),
-				__("Create")
-			);
+		const return_doctype = frm.doc.loan_type === "Asset" ? "Asset Movement" : "Delivery Note";
+		if (frappe.model.can_create(return_doctype)) {
+			frm.add_custom_button(__("Return"), () => make_borrowing_return(frm), __("Create"));
 		}
 		if (frm.doc.loan_type === "Stock" && frappe.model.can_create("Borrowing Adjustment")) {
 			frm.add_custom_button(
@@ -134,15 +134,39 @@ frappe.ui.form.on("Borrowing", {
 	},
 });
 
+// The Items grid shows the columns of the borrowing's type only (UX WP4): a depends_on blanks a cell but keeps its
+// column, so the column itself is switched on the docfield (in_list_view and hidden) and the grid is drawn again.
+const STOCK_COLUMNS = ["source_warehouse", "batch_no", "serial_no"];
+const ASSET_COLUMNS = ["asset", "target_location"];
+const LISTED = ["source_warehouse", "asset"];
+
+function configure_item_columns(frm) {
+	const grid = frm.fields_dict.items?.grid;
+	if (!grid) return;
+	const stock = frm.doc.loan_type !== "Asset";
+	for (const [fields, shown] of [
+		[STOCK_COLUMNS, stock],
+		[ASSET_COLUMNS, !stock],
+	]) {
+		for (const fieldname of fields) {
+			grid.update_docfield_property(fieldname, "hidden", shown ? 0 : 1);
+			if (LISTED.includes(fieldname)) {
+				grid.update_docfield_property(fieldname, "in_list_view", shown ? 1 : 0);
+			}
+		}
+	}
+	grid.visible_columns = null;
+	grid.setup_visible_columns?.();
+	grid.refresh();
+}
+
 // Who answers for the items, how many are still out, and the grid columns that fit the loan type.
 function show_loan_summary(frm) {
 	const stock = frm.doc.loan_type !== "Asset";
 	// refresh runs more than once: start the headline and the figures over, never add them twice
 	frm.dashboard.clear_headline();
 	frm.dashboard.stats_area_row?.empty();
-	const grid = frm.fields_dict.items.grid;
-	grid.toggle_display("source_warehouse", stock);
-	grid.toggle_display("asset", !stock);
+	configure_item_columns(frm);
 	if (frm.doc.docstatus === 0 && !frm.is_new()) {
 		frm.set_intro(__("Check the Borrowed Qty, selected Assets and source of each item, then submit to prepare this borrowing. Nothing is sent until the outgoing Delivery Note or Asset Movement is submitted."), "blue");
 	}
@@ -174,8 +198,41 @@ function show_loan_summary(frm) {
 	}
 }
 
-function open_generated_doc(frm, method) {
-	frm.call(method).then((r) => {
+// Create > Return (UX WP4, Siwat 18 Nov 2026: borrowing documents chain like selling): the return document of the
+// issue document; with several issue documents the user picks one.
+function make_borrowing_return(frm) {
+	const asset = frm.doc.loan_type === "Asset";
+	const doctype = asset ? "Asset Movement" : "Delivery Note";
+	const filters = asset
+		? { borrowing: frm.doc.name, purpose: ["!=", "Receipt"], docstatus: 1 }
+		: { borrowing: frm.doc.name, is_return: 0, docstatus: 1 };
+	frappe.db.get_list(doctype, { filters, fields: ["name"], limit: 20 }).then((rows) => {
+		const open = (source_name) => open_generated_doc(frm, "make_return", { source_name });
+		if (rows.length <= 1) return open(rows[0]?.name);
+		const dialog = new frappe.ui.Dialog({
+			title: __("Return against"),
+			fields: [
+				{
+					fieldname: "source_name",
+					fieldtype: "Select",
+					label: __(doctype),
+					options: rows.map((row) => row.name),
+					default: rows[0].name,
+					reqd: 1,
+				},
+			],
+			primary_action_label: __("Create"),
+			primary_action(values) {
+				dialog.hide();
+				open(values.source_name);
+			},
+		});
+		dialog.show();
+	});
+}
+
+function open_generated_doc(frm, method, args) {
+	frm.call(method, args || {}).then((r) => {
 		const doc = r.message;
 		if (!doc?.doctype) return;
 		frappe.model.sync(doc);

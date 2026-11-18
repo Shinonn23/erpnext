@@ -28,13 +28,13 @@ class TestManualLoanDocuments(TestCase):
 
 	def source(self):
 		return Doc(
-			doctype="Borrowing Return",
-			name="RET-1",
+			doctype="Borrowing",
+			name="LOAN-1",
 			borrowing="LOAN-1",
 			company="CD",
 			docstatus=1,
 			loan_type="Stock",
-			status="Pending Receipt",
+			status="Active",
 			reload=Mock(),
 			check_permission=Mock(),
 		)
@@ -43,17 +43,10 @@ class TestManualLoanDocuments(TestCase):
 		asset_loan = self.source()
 		asset_loan.loan_type = "Asset"
 		asset_loan.asset_movement = "AM-1"
-		stock_return = self.source()
-		stock_return.delivery_note = "DN-1"
-		asset_return = self.source()
-		asset_return.loan_type = "Asset"
-		asset_return.asset_movement = "AM-1"
 		adjustment = self.source()
 		adjustment.stock_entry = "STE-1"
 		return (
 			(core.Borrowing.prepare_asset_movement, asset_loan),
-			(core.BorrowingReturn.prepare_receipt, stock_return),
-			(core.BorrowingReturn.prepare_receipt, asset_return),
 			(core.BorrowingAdjustment.prepare_stock_entry, adjustment),
 		)
 
@@ -84,21 +77,6 @@ class TestManualLoanDocuments(TestCase):
 				):
 					self.assertEqual(method(source), {"name": "EXISTING"})
 				target.check_permission.assert_called_once_with("read")
-
-	def test_reused_batch_exchange_requires_read_permission(self):
-		target = Mock(docstatus=0)
-		target.check_permission.side_effect = frappe.PermissionError
-		with (
-			patch.object(frappe, "has_permission", return_value=True),
-			patch.object(frappe, "get_doc", return_value=Doc(name="LOAN-1")),
-			patch.object(core, "lock_borrowing"),
-			patch.object(core, "other_lot_swaps", return_value=[(Doc(), "BATCH", 1)]),
-			patch.object(core, "find_batch_exchange", return_value=target),
-			self.assertRaises(frappe.PermissionError),
-		):
-			core.BorrowingReturn.prepare_batch_exchange(self.source())
-		target.check_permission.assert_called_once_with("read")
-		target.as_dict.assert_not_called()
 
 	def test_reused_pick_list_requires_read_permission(self):
 		source = Doc(pick_list="PL-1")
@@ -173,34 +151,11 @@ class TestManualLoanDocuments(TestCase):
 		frappe.db.get_value.side_effect = None
 		frappe.db.set_value.assert_not_called()
 
-	def test_batch_exchange_opens_one_unsaved_value_preserving_pair(self):
-		source = self.source()
-		row = Doc(item_code="ITEM", borrowing_item="ROW", batch_no="NEW")
-		loan = Doc(name="LOAN-1", customer_loan_warehouse="LOAN-WH")
-		entry = Mock(flags=frappe._dict())
-		entry.as_dict.return_value = {"doctype": "Stock Entry"}
-		with (
-			patch.object(frappe, "has_permission", return_value=True),
-			patch.object(frappe, "get_doc", return_value=loan),
-			patch.object(core, "other_lot_swaps", return_value=[(row, "OLD", 2)]),
-			patch.object(core, "find_batch_exchange", return_value=None),
-			patch.object(core, "new_stock_entry", return_value=entry),
-			patch.object(core, "get_default_storage_location", return_value="LOC"),
-		):
-			self.assertEqual(
-				core.BorrowingReturn.prepare_batch_exchange(source), {"doctype": "Stock Entry"}
-			)
-		self.assertEqual(entry.append.call_args_list[0].args[1]["batch_no"], "OLD")
-		self.assertEqual(entry.append.call_args_list[1].args[1]["batch_no"], "NEW")
-		self.assertEqual([call.args[1]["qty"] for call in entry.append.call_args_list], [2, 2])
-		entry.insert.assert_not_called()
-		entry.submit.assert_not_called()
-		self.assertEqual(entry.borrowing_source_name, "RET-1")
-
 	def exchange(self):
 		return Doc(
 			name="STE-1",
-			borrowing_source_name="RET-1",
+			borrowing_source_name="LOAN-1",
+			delivery_note_no="DN-RET-1",
 			purpose="Repack",
 			additional_costs=[],
 			items=[
@@ -233,19 +188,12 @@ class TestManualLoanDocuments(TestCase):
 			],
 		)
 
-	def validate_exchange(self, document, existing=None):
-		with (
-			patch.object(frappe, "get_doc", return_value=self.source()),
-			patch.object(
-				core,
-				"other_lot_swaps",
-				return_value=[(Doc(item_code="ITEM", borrowing_item="ROW", batch_no="NEW"), "OLD", 2)],
-			),
-			patch.object(core, "find_batch_exchange", return_value=existing),
-		):
-			core.validate_manual_batch_exchange(
-				document, Doc(name="LOAN-1", customer_loan_warehouse="LOAN-WH")
-			)
+	def validate_exchange(self, document, return_note=None):
+		"""The batch swap a return Delivery Note posts (UX WP4): checked against its return note and the loan."""
+		frappe.db.get_value.return_value = return_note or frappe._dict(
+			borrowing="LOAN-1", is_return=1, is_borrowing_transaction=1, docstatus=0
+		)
+		core.validate_batch_swap(document, Doc(name="LOAN-1", customer_loan_warehouse="LOAN-WH"))
 
 	def test_exact_batch_exchange_is_allowed(self):
 		self.validate_exchange(self.exchange())
@@ -257,30 +205,31 @@ class TestManualLoanDocuments(TestCase):
 				setattr(document.items[0], field, value)
 				with self.assertRaises(frappe.ValidationError):
 					self.validate_exchange(document)
-		with self.assertRaises(frappe.ValidationError):
-			self.validate_exchange(self.exchange(), existing=Doc(name="OTHER"))
-
-	def test_receipt_requires_the_batch_exchange_to_be_submitted(self):
-		source = self.source()
-		source.validate_items = Mock()
-		document = Doc(
-			is_return=1,
-			is_borrowing_transaction=1,
-			borrowing_source_doctype="Borrowing Return",
-			borrowing_source_name="RET-1",
-		)
-		with (
-			patch.object(frappe, "get_doc", return_value=source),
-			patch.object(core, "other_lot_swaps", return_value=[(Doc(), "OLD", 2)]),
-			patch.object(core, "find_batch_exchange", return_value=Doc(docstatus=0)),
-			self.assertRaises(frappe.ValidationError),
+		for note in (
+			frappe._dict(borrowing="OTHER-LOAN", is_return=1, is_borrowing_transaction=1, docstatus=0),
+			frappe._dict(borrowing="LOAN-1", is_return=0, is_borrowing_transaction=1, docstatus=1),
+			frappe._dict(borrowing="LOAN-1", is_return=1, is_borrowing_transaction=1, docstatus=2),
 		):
-			core.validate_borrowing_return_receipt(document)
+			with self.subTest(note=note), self.assertRaises(frappe.ValidationError):
+				self.validate_exchange(self.exchange(), return_note=note)
+		document = self.exchange()
+		document.delivery_note_no = None
+		with self.assertRaises(frappe.ValidationError):
+			self.validate_exchange(document)
 
 	def test_own_pending_return_is_excluded_from_reservations(self):
-		with patch.object(frappe, "get_all", return_value=[]) as get_all:
-			self.assertEqual(core.get_loan_item_reserved_qty("LOAN-1", "ROW", exclude_return="RET-1"), 0)
-		self.assertEqual(get_all.call_args_list[0].kwargs["filters"]["name"], ["!=", "RET-1"])
+		with (
+			patch.object(core, "return_rows", return_value=[]) as rows,
+			patch.object(frappe, "get_all", return_value=[]),
+			patch.object(core, "loan_conversion_rows", return_value=[]),
+		):
+			self.assertEqual(
+				core.get_loan_item_reserved_qty(
+					"LOAN-1", "ROW", exclude_return=("Delivery Note", "DN-RET-1")
+				),
+				0,
+			)
+		rows.assert_called_once_with("LOAN-1", "ROW", docstatus=(0,), exclude=("Delivery Note", "DN-RET-1"))
 
 	def test_stock_uom_conversion_transfer_qty_and_manual_rates_are_guarded(self):
 		for field, value in (
@@ -303,7 +252,6 @@ class TestManualLoanDocuments(TestCase):
 		for kind, movement, receipt in (
 			("Asset", None, None),
 			("Asset", "AM-1", None),
-			("Stock", "DN-1", "Pending Receipt"),
 		):
 			loan = Doc(
 				loan_type=kind,

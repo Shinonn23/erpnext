@@ -1,5 +1,5 @@
 // FL05 walk (17 Nov 2026): the Borrowing Delivery Note keeps its Borrowed warehouse on the form, the native
-// Create > Quality Inspection(s) works on a return row, and the Receiving Delivery Note button names its DocType.
+// Create > Quality Inspection(s) works on a return row, and the return documents chain from the issue documents (UX WP4).
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -33,17 +33,24 @@ test("a Borrowing Return inspection is never refused for the Manual Inspection t
 	assert.match(core, /self\.manual_inspection = 1/);
 });
 
-test("Create > Receiving Delivery Note / Asset Movement names the DocType it creates", () => {
-	const source = read("../borrowing_return/borrowing_return.js");
-	assert.match(
-		source,
-		/open_generated_doc\(r\.message\)\),\s*__\("Create"\),\s*receipt_type\s*\)/
-	);
+test("the return documents chain from the issue documents (UX WP4)", () => {
+	const borrowing = read("./borrowing.js");
+	assert.match(borrowing, /add_custom_button\(__\("Return"\), \(\) => make_borrowing_return\(frm\), __\("Create"\)\)/);
+	assert.doesNotMatch(borrowing, /Borrowing Return/);
+	const note = read("../../../stock/doctype/delivery_note/delivery_note.js");
+	assert.match(note, /borrowing_core\.make_borrowing_return_delivery_note/);
+	const movement = read("../../../assets/doctype/asset_movement/asset_movement.js");
+	assert.match(movement, /__\("Return Movement"\)[\s\S]*?borrowing_core\.make_borrowing_return_movement/);
+});
+
+test("the Items grid shows the columns of the borrowing type only", () => {
+	const borrowing = read("./borrowing.js");
+	assert.match(borrowing, /function configure_item_columns\(frm\)/);
+	assert.match(borrowing, /update_docfield_property\(fieldname, "in_list_view"/);
+	assert.match(borrowing, /loan_type\(frm\) \{\s*configure_item_columns\(frm\);/);
 });
 
 test("Borrowing Create buttons whose label is not a DocType name say which DocType they create", () => {
-	const ret = read("../borrowing_return/borrowing_return.js");
-	assert.match(ret, /__\("Batch Exchange"\)[\s\S]*?__\("Create"\), "Stock Entry"\)/);
 	const adj = read("../borrowing_adjustment/borrowing_adjustment.js");
 	assert.match(adj, /__\("Consumption Invoice"\)[\s\S]*?\}, __\("Create"\), "Sales Invoice"\);/);
 });

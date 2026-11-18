@@ -574,13 +574,17 @@ class TestWarehousePolicy(unittest.TestCase):
 				warehouse_policy.is_loan_movement(doc)
 
 	def test_return_lot_swap_repack_is_a_loan_movement_and_nothing_else_is(self):
+		"""The batch swap a borrowing return Delivery Note posts (UX WP4) is a loan movement once
+		``validate_batch_swap`` accepts it; any other Repack of a Borrowing is refused."""
+
 		def make(**extra):
 			doc = frappe._dict(
 				doctype="Stock Entry",
 				purpose="Repack",
 				borrowing="Borrowing",
-				borrowing_source_doctype="Borrowing Return",
-				borrowing_source_name="Return",
+				borrowing_source_doctype="Borrowing",
+				borrowing_source_name="Borrowing",
+				delivery_note_no="DN-RET",
 				items=[
 					frappe._dict(item_code="I", qty=2, s_warehouse="Borrowing WH", t_warehouse=None),
 					frappe._dict(item_code="I", qty=2, s_warehouse=None, t_warehouse="Borrowing WH"),
@@ -590,26 +594,19 @@ class TestWarehousePolicy(unittest.TestCase):
 			return doc
 
 		loan = frappe._dict(name="Borrowing", customer_loan_warehouse="Borrowing WH")
-		core = SimpleNamespace(validate_generated_transaction=Mock())
-		state = frappe._dict(docstatus=1, borrowing="Borrowing")
+		core = SimpleNamespace(validate_generated_transaction=Mock(), validate_batch_swap=Mock())
 		with (
 			patch.dict(sys.modules, {"erpnext.borrowing.doctype.borrowing.borrowing_core": core}),
 			patch.object(frappe, "get_doc", return_value=loan),
-			patch.object(frappe, "db", SimpleNamespace(get_value=lambda *args, **kw: state)),
 		):
 			self.assertTrue(warehouse_policy.is_loan_movement(make()))
-			state.docstatus = 0
+			core.validate_batch_swap.assert_called_once()
+			core.validate_batch_swap.side_effect = frappe.ValidationError
 			with self.assertRaises(frappe.ValidationError):
 				warehouse_policy.is_loan_movement(make())
-			state.docstatus = 1
-			other = make()
-			other["items"][1].t_warehouse = "Other WH"
+			core.validate_batch_swap.side_effect = None
 			with self.assertRaises(frappe.ValidationError):
-				warehouse_policy.is_loan_movement(other)
-			unequal = make()
-			unequal["items"][1].qty = 3
-			with self.assertRaises(frappe.ValidationError):
-				warehouse_policy.is_loan_movement(unequal)
+				warehouse_policy.is_loan_movement(make(borrowing_source_doctype="Borrowing Adjustment"))
 
 	def test_landed_cost_reversal_still_checks_the_warehouse(self):
 		doc = frappe._dict(doctype="Purchase Receipt", docstatus=1, items=[])
@@ -836,7 +833,8 @@ class TestRejectedLoanReturnIntoQuarantine(unittest.TestCase):
 			company="CD",
 			is_return=1,
 			is_borrowing_transaction=1,
-			borrowing_source_doctype="Borrowing Return",
+			borrowing="LOAN-1",
+			borrowing_source_doctype="Borrowing",
 		)
 		# the return of a stock loan is an internal-customer Delivery Note leaving the customer's loan warehouse
 		self.doc.is_internal_customer = 1

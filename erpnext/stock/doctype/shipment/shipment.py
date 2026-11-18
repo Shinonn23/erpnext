@@ -94,7 +94,9 @@ class Shipment(Document):
 			if not self.received_on:
 				self.received_on = now_datetime()
 			if not self.received_by or not self.delivery_signature:
-				frappe.throw(_("Record the receiver, receipt time, and signature to mark this Shipment as Delivered."))
+				frappe.throw(
+					_("Record the receiver, receipt time, and signature to mark this Shipment as Delivered.")
+				)
 		if self.docstatus == 0:
 			self.status = "Draft"
 
@@ -135,7 +137,9 @@ class Shipment(Document):
 						elif item.s_warehouse == loan_warehouse:
 							directions.add("Pickup")
 					if len(directions) != 1:
-						frappe.throw(_("A Customer Borrowing Stock Entry Shipment must move in one direction."))
+						frappe.throw(
+							_("A Customer Borrowing Stock Entry Shipment must move in one direction.")
+						)
 					sources.append((request_name, directions.pop(), stock_entry))
 			elif row.reference_doctype == "Delivery Note":
 				delivery_note = frappe.get_doc("Delivery Note", row.reference_name)
@@ -150,7 +154,9 @@ class Shipment(Document):
 					)
 		if borrowing_sources:
 			if sources:
-				frappe.throw(_("A Shipment cannot combine Borrowing transactions with other source documents"))
+				frappe.throw(
+					_("A Shipment cannot combine Borrowing transactions with other source documents")
+				)
 			loan_names = {source[0] for source in borrowing_sources}
 			directions = {source[1] for source in borrowing_sources}
 			if len(loan_names) != 1 or len(directions) != 1:
@@ -167,7 +173,11 @@ class Shipment(Document):
 		if self.material_request and request_names and self.material_request not in request_names:
 			frappe.throw(_("A Shipment cannot combine different Material Requests"))
 		if len(request_names) > 1 or len(directions) > 1:
-			frappe.throw(_("A Shipment can contain documents for one Customer Demo / Borrowing Material Request and one direction."))
+			frappe.throw(
+				_(
+					"A Shipment can contain documents for one Customer Demo / Borrowing Material Request and one direction."
+				)
+			)
 		request_name, direction, source = sources[0]
 		from erpnext.assets.doctype.material_request.material_request import (
 			get_customer_delivery_snapshot,
@@ -288,7 +298,10 @@ class Shipment(Document):
 		for entry in self.get("shipment_documents"):
 			if entry.reference_doctype == "Delivery Note":
 				# a Shipment of a Delivery Note can be cancelled whatever the note's state: it changes nothing in it
-				if frappe.db.get_value("Delivery Note", entry.reference_name, "borrowing_shipment") == self.name:
+				if (
+					frappe.db.get_value("Delivery Note", entry.reference_name, "borrowing_shipment")
+					== self.name
+				):
 					frappe.db.set_value("Delivery Note", entry.reference_name, "borrowing_shipment", None)
 				continue
 			if entry.reference_doctype != "Stock Entry":
@@ -296,7 +309,9 @@ class Shipment(Document):
 			stock_entry = frappe.get_doc("Stock Entry", entry.reference_name)
 			if stock_entry.requires_shipment and stock_entry.docstatus == 1:
 				frappe.throw(
-					_("A Shipment with posted in-transit stock cannot be cancelled. Record a return or receipt movement first.")
+					_(
+						"A Shipment with posted in-transit stock cannot be cancelled. Record a return or receipt movement first."
+					)
 				)
 			if stock_entry.requires_shipment and stock_entry.shipment == self.name:
 				stock_entry.db_set("shipment", None)
@@ -368,11 +383,14 @@ class Shipment(Document):
 					row.reference_doctype == "Delivery Note"
 					and docstatus == 0
 					and frappe.db.get_value("Delivery Note", row.reference_name, "requires_shipment")
-					and frappe.db.get_value("Delivery Note", row.reference_name, "borrowing_shipment") == self.name
+					and frappe.db.get_value("Delivery Note", row.reference_name, "borrowing_shipment")
+					== self.name
 					and frappe.db.get_value("Delivery Note", row.reference_name, "is_borrowing_transaction")
 				)
 				if not (can_link_stock_entry_draft or can_link_delivery_note_draft):
-					frappe.throw(_("Only submitted documents can be linked to a Shipment: {0} {1}").format(*key))
+					frappe.throw(
+						_("Only submitted documents can be linked to a Shipment: {0} {1}").format(*key)
+					)
 			frappe.has_permission(row.reference_doctype, "read", doc=row.reference_name, throw=True)
 
 
@@ -430,9 +448,7 @@ def set_borrowing_shipment_party(shipment, loan, direction, source):
 		or request.customer_contact_display
 	)
 	recipient_contact_email = (
-		loan.recipient_contact_email
-		or request.loan_recipient_contact_email
-		or request.customer_contact_email
+		loan.recipient_contact_email or request.loan_recipient_contact_email or request.customer_contact_email
 	)
 	company_address = get_party_shipping_address("Company", loan.company)
 	party_type = loan.borrower_type
@@ -473,7 +489,9 @@ def set_borrowing_shipment_party(shipment, loan, direction, source):
 		shipment.delivery_to = party_name
 		shipment.delivery_address_name = recipient_address
 		shipment.delivery_address = recipient_address_display
-		shipment.delivery_contact_name = recipient_contact or (loan.borrower if loan.borrower_type == "Contact" else None)
+		shipment.delivery_contact_name = recipient_contact or (
+			loan.borrower if loan.borrower_type == "Contact" else None
+		)
 		shipment.delivery_contact = recipient_contact_display
 		shipment.delivery_contact_email = recipient_contact_email
 	else:
@@ -484,7 +502,9 @@ def set_borrowing_shipment_party(shipment, loan, direction, source):
 		shipment.pickup = party_name
 		shipment.pickup_address_name = recipient_address
 		shipment.pickup_address = recipient_address_display
-		shipment.pickup_contact_name = recipient_contact or (loan.borrower if loan.borrower_type == "Contact" else None)
+		shipment.pickup_contact_name = recipient_contact or (
+			loan.borrower if loan.borrower_type == "Contact" else None
+		)
 		shipment.pickup_contact = recipient_contact_display
 		shipment.pickup_contact_email = recipient_contact_email
 		shipment.delivery_to_type = "Company"
@@ -499,38 +519,6 @@ def set_borrowing_shipment_party(shipment, loan, direction, source):
 			or getattr(source, "to_warehouse", None)
 		)
 		shipment.delivery_address_name = get_party_shipping_address("Warehouse", warehouse) or company_address
-
-
-def append_borrowing_return_documents(shipment, source):
-	if source.get("borrowing_source_doctype") != "Borrowing Return":
-		return
-
-	return_doc = frappe.get_doc("Borrowing Return", source.borrowing_source_name)
-	if not return_doc.requires_shipment:
-		return
-
-	for doctype, fieldname in (
-		("Stock Entry", "stock_entry"),
-		("Stock Entry", "replacement_stock_entry"),
-	):
-		name = return_doc.get(fieldname)
-		if not name or (doctype == source.doctype and name == source.name):
-			continue
-		doc = frappe.get_doc(doctype, name)
-		if not doc.get("requires_shipment"):
-			continue
-		if doc.docstatus != 0:
-			frappe.throw(_("All generated return documents must be Draft before creating their Shipment."))
-		if doc.shipment and doc.shipment != shipment.name:
-			frappe.throw(_("All generated return documents must use the same Shipment."))
-		doc.check_permission("write")
-		if not frappe.db.exists(
-			"Shipment Document",
-			{"parent": shipment.name, "reference_doctype": doctype, "reference_name": name},
-		):
-			shipment.append("shipment_documents", {"reference_doctype": doctype, "reference_name": name})
-		doc.db_set("shipment", shipment.name)
-
 
 
 def get_document_value_field(doctype):
@@ -573,14 +561,11 @@ def make_shipment_from_document(source_doctype, source_name):
 	docstatus = frappe.db.get_value(source_doctype, source_name, "docstatus")
 	if source_doctype == "Stock Entry" and docstatus == 0:
 		source = frappe.get_doc(source_doctype, source_name)
-		is_replacement_receipt = (
-			source.purpose == "Material Receipt"
-			and source.get("is_borrowing_transaction")
-			and source.get("borrowing_source_doctype") == "Borrowing Return"
-		)
 		if source.get("is_borrowing_transaction"):
-			if not source.requires_shipment or (source.purpose != "Material Transfer" and not is_replacement_receipt):
-				frappe.throw(_("Only a draft Borrowing transfer or replacement receipt marked Ship via Shipment can create a Shipment."))
+			if not source.requires_shipment or source.purpose != "Material Transfer":
+				frappe.throw(
+					_("Only a draft Borrowing transfer marked Ship via Shipment can create a Shipment.")
+				)
 			if source.shipment and frappe.db.exists("Shipment", source.shipment):
 				return frappe.get_doc("Shipment", source.shipment).as_dict()
 			source.check_permission("write")
@@ -594,9 +579,10 @@ def make_shipment_from_document(source_doctype, source_name):
 				if direction == "Pickup"
 				else _("Borrowing delivery to {0}").format(loan.borrower)
 			)
-			shipment.append("shipment_documents", {"reference_doctype": "Stock Entry", "reference_name": source.name})
+			shipment.append(
+				"shipment_documents", {"reference_doctype": "Stock Entry", "reference_name": source.name}
+			)
 			source.db_set("shipment", shipment.name)
-			append_borrowing_return_documents(shipment, source)
 			shipment.insert(ignore_permissions=True, ignore_mandatory=True)
 			return shipment.as_dict()
 
@@ -613,7 +599,9 @@ def make_shipment_from_document(source_doctype, source_name):
 		shipment.pickup_from_type = "Company"
 		shipment.pickup_company = source.company
 		shipment.pickup_contact_person = frappe.session.user
-		shipment.pickup_address_name = get_party_shipping_address("Warehouse", source_warehouse) or get_party_shipping_address("Company", source.company)
+		shipment.pickup_address_name = get_party_shipping_address(
+			"Warehouse", source_warehouse
+		) or get_party_shipping_address("Company", source.company)
 		shipment.delivery_to_type = "Company"
 		shipment.delivery_company = source.company
 		shipment.delivery_address_name = get_party_shipping_address(
@@ -664,7 +652,9 @@ def make_shipment_from_document(source_doctype, source_name):
 		frappe.throw(_("This Stock Entry does not represent a transportable stock movement"))
 	shipment = frappe.new_doc("Shipment")
 	shipment.shipment_type = "Goods"
-	shipment.append("shipment_documents", {"reference_doctype": source_doctype, "reference_name": source_name})
+	shipment.append(
+		"shipment_documents", {"reference_doctype": source_doctype, "reference_name": source_name}
+	)
 	shipment.value_of_goods = get_transaction_value(source_doctype, source_name)
 
 	if source_doctype == "Delivery Note":
@@ -673,21 +663,21 @@ def make_shipment_from_document(source_doctype, source_name):
 		shipment.pickup_address_name = getattr(source, "company_address", None)
 		shipment.delivery_to_type = "Customer"
 		shipment.delivery_customer = source.customer
-		shipment.delivery_address_name = (
-			getattr(source, "shipping_address_name", None) or getattr(source, "customer_address", None)
+		shipment.delivery_address_name = getattr(source, "shipping_address_name", None) or getattr(
+			source, "customer_address", None
 		)
 	elif source_doctype == "Purchase Receipt":
 		shipment.pickup_from_type = "Supplier"
 		shipment.pickup_supplier = source.supplier
-		shipment.pickup_address_name = getattr(source, "supplier_address", None) or get_party_shipping_address(
-			"Supplier", source.supplier
-		)
+		shipment.pickup_address_name = getattr(
+			source, "supplier_address", None
+		) or get_party_shipping_address("Supplier", source.supplier)
 		shipment.pickup_contact_name = get_default_contact("Supplier", source.supplier)
 		shipment.delivery_to_type = "Company"
 		shipment.delivery_company = source.company
-		shipment.delivery_address_name = getattr(source, "company_address", None) or get_party_shipping_address(
-			"Company", source.company
-		)
+		shipment.delivery_address_name = getattr(
+			source, "company_address", None
+		) or get_party_shipping_address("Company", source.company)
 		shipment.delivery_contact_name = None
 	else:
 		shipment.pickup_from_type = "Company"
@@ -705,9 +695,7 @@ def make_shipment_from_document(source_doctype, source_name):
 				else None
 			) or company_address
 			shipment.delivery_address_name = (
-				get_party_shipping_address("Warehouse", source.to_warehouse)
-				if source.to_warehouse
-				else None
+				get_party_shipping_address("Warehouse", source.to_warehouse) if source.to_warehouse else None
 			) or company_address
 			if source.purpose == "Send to Subcontractor" and source.supplier:
 				shipment.delivery_to_type = "Supplier"

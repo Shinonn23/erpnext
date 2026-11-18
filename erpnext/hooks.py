@@ -78,7 +78,6 @@ doctype_js = {
 	"Material Request": "assets/doctype/material_request/material_request.js",
 	"Asset Movement": "assets/doctype/asset_movement/asset_movement.js",
 	"Borrowing": "borrowing/doctype/borrowing/borrowing.js",
-	"Borrowing Return": "borrowing/doctype/borrowing_return/borrowing_return.js",
 	"Borrowing Adjustment": "borrowing/doctype/borrowing_adjustment/borrowing_adjustment.js",
 	"Communication": "public/js/communication.js",
 	"Event": "public/js/event.js",
@@ -680,10 +679,13 @@ doc_events = {
 	"Delivery Note": {
 		"on_trash": "erpnext.borrowing.doctype.borrowing.borrowing_core.unlink_deleted_loan_transaction",
 		"validate": "erpnext.borrowing.doctype.borrowing.borrowing_core.validate_generated_transaction",
-		"before_submit": "erpnext.borrowing.doctype.borrowing.borrowing_core.validate_borrowing_return_receipt",
+		"before_submit": "erpnext.borrowing.doctype.borrowing.borrowing_core.post_return_batch_swaps",
 		"before_cancel": "erpnext.borrowing.doctype.borrowing.borrowing_core.validate_generated_transaction_cancellation",
 		"on_submit": "erpnext.borrowing.doctype.borrowing.borrowing_core.update_borrowing_status",
-		"on_cancel": "erpnext.borrowing.doctype.borrowing.borrowing_core.update_borrowing_status",
+		"on_cancel": [
+			"erpnext.borrowing.doctype.borrowing.borrowing_core.update_borrowing_status",
+			"erpnext.borrowing.doctype.borrowing.borrowing_core.cancel_return_batch_swaps",
+		],
 	},
 	"User": {
 		"after_insert": "frappe.contacts.doctype.contact.contact.update_contact",

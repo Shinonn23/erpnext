@@ -304,6 +304,7 @@ class DeliveryNote(SellingController):
 
 		make_packing_list(self)
 		from connect_diagnostics_setup.stock.outgoing_inspection import allocate_service_components
+
 		allocate_service_components(self)
 		self.update_current_stock()
 
@@ -503,12 +504,15 @@ class DeliveryNote(SellingController):
 
 		self.make_gl_entries_on_cancel()
 		self.repost_future_sle_and_gle()
-		self.ignore_linked_doctypes = tuple(set(self.get("ignore_linked_doctypes") or ()) | {
-			"GL Entry",
-			"Stock Ledger Entry",
-			"Repost Item Valuation",
-			"Serial and Batch Bundle",
-		})
+		self.ignore_linked_doctypes = tuple(
+			set(self.get("ignore_linked_doctypes") or ())
+			| {
+				"GL Entry",
+				"Stock Ledger Entry",
+				"Repost Item Valuation",
+				"Serial and Batch Bundle",
+			}
+		)
 
 		self.delete_auto_created_batches()
 
@@ -1178,8 +1182,11 @@ def make_shipment(source_name, target_doc=None):
 def make_sales_return(source_name, target_doc=None):
 	from erpnext.controllers.sales_and_purchase_return import make_return_doc
 
-	if frappe.get_doc("Delivery Note", source_name).get("is_borrowing_transaction"):
-		frappe.throw(_("Use the Borrowing to return borrowed items."))
+	if frappe.db.get_value("Delivery Note", source_name, "is_borrowing_transaction"):
+		# the return of a borrowing is made from its issue Delivery Note too, with only the units still out (UX WP4)
+		from erpnext.borrowing.doctype.borrowing.borrowing_core import make_borrowing_return_delivery_note
+
+		return make_borrowing_return_delivery_note(source_name)
 	return make_return_doc("Delivery Note", source_name, target_doc)
 
 

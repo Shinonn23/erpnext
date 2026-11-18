@@ -217,7 +217,22 @@ class SalesInvoice(SellingController):
 		shipping_address: DF.TextEditor | None
 		shipping_address_name: DF.Link | None
 		shipping_rule: DF.Link | None
-		status: DF.Literal["", "Draft", "Return", "Credit Note Issued", "Submitted", "Paid", "Partly Paid", "Unpaid", "Unpaid and Discounted", "Partly Paid and Discounted", "Overdue and Discounted", "Overdue", "Cancelled", "Internal Transfer"]
+		status: DF.Literal[
+			"",
+			"Draft",
+			"Return",
+			"Credit Note Issued",
+			"Submitted",
+			"Paid",
+			"Partly Paid",
+			"Unpaid",
+			"Unpaid and Discounted",
+			"Partly Paid and Discounted",
+			"Overdue and Discounted",
+			"Overdue",
+			"Cancelled",
+			"Internal Transfer",
+		]
 		subscription: DF.Link | None
 		tax_category: DF.Link | None
 		tax_id: DF.Data | None
@@ -679,9 +694,7 @@ class SalesInvoice(SellingController):
 		)
 		if self.get("is_borrowing_transaction") and self.flags.get("borrowing_cancellation"):
 			# The Loan cancellation hook has checked these source backlinks.
-			self.ignore_linked_doctypes += (
-				"Borrowing", "Borrowing Return", "Borrowing Adjustment", "Material Request"
-			)
+			self.ignore_linked_doctypes += ("Borrowing", "Borrowing Adjustment", "Material Request")
 
 		self.delete_auto_created_batches()
 

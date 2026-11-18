@@ -23,7 +23,6 @@ UI_PROPERTIES = (
 ROOTS = (
 	"Material Request",
 	"Borrowing",
-	"Borrowing Return",
 	"Borrowing Adjustment",
 	"Pick List",
 	"Delivery Note",

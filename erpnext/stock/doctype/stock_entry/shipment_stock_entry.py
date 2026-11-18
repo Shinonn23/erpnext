@@ -9,23 +9,8 @@ def prepare_stock_entry_for_shipment(doc, method=None):
 	if not doc.get("requires_shipment"):
 		return
 
-	if doc.purpose == "Material Receipt" and doc.get("is_borrowing_transaction"):
-		if doc.get("borrowing_source_doctype") != "Borrowing Return":
-			frappe.throw(_("Only a Borrowing Return can receive replacement stock through a Shipment."))
-		destinations = {row.t_warehouse for row in doc.items if row.t_warehouse}
-		destination = doc.shipment_destination_warehouse or doc.to_warehouse or next(iter(destinations), None)
-		if not destination or destinations != {destination}:
-			frappe.throw(_("A shipped Borrowing replacement receipt must use one final Destination Warehouse."))
-		warehouse = frappe.db.get_value(
-			"Warehouse", destination, ["company", "is_group", "warehouse_type"], as_dict=True
-		)
-		if not warehouse or warehouse.company != doc.company or warehouse.is_group or warehouse.warehouse_type == "Transit":
-			frappe.throw(_("The final Destination Warehouse must be a non-Transit leaf warehouse in the same company."))
-		doc.shipment_destination_warehouse = destination
-		return
-
 	if doc.purpose != "Material Transfer":
-		frappe.throw(_("Shipment tracking is available for Material Transfer and Borrowing replacement receipts only."))
+		frappe.throw(_("Shipment tracking is available for Material Transfer only."))
 
 	if not doc.shipment_destination_warehouse:
 		doc.shipment_destination_warehouse = doc.to_warehouse
@@ -38,7 +23,9 @@ def prepare_stock_entry_for_shipment(doc, method=None):
 		["company", "is_group", "warehouse_type"],
 	)
 	if not destination or destination[0] != doc.company or destination[1] or destination[2] == "Transit":
-		frappe.throw(_("The final Destination Warehouse must be a non-Transit leaf warehouse in the same company."))
+		frappe.throw(
+			_("The final Destination Warehouse must be a non-Transit leaf warehouse in the same company.")
+		)
 
 	source_warehouse = doc.from_warehouse or next(
 		(row.s_warehouse for row in doc.items if row.s_warehouse), None
@@ -67,7 +54,9 @@ def prepare_stock_entry_for_shipment(doc, method=None):
 	transit = frappe.db.get_value("Warehouse", transit_warehouse, ["company", "warehouse_type", "is_group"])
 	if not transit or transit[0] != doc.company or transit[1] != "Transit" or transit[2]:
 		frappe.throw(
-			_("The configured In-Transit Warehouse must be a non-group Transit warehouse in the same company.")
+			_(
+				"The configured In-Transit Warehouse must be a non-group Transit warehouse in the same company."
+			)
 		)
 
 	if transit_warehouse == doc.shipment_destination_warehouse:
@@ -98,10 +87,6 @@ def validate_stock_entry_shipment(doc, method=None):
 		},
 	):
 		frappe.throw(_("This Stock Entry is not linked to the selected Shipment."))
-	if doc.purpose == "Material Receipt" and frappe.db.get_value(
-		"Shipment", doc.shipment, "tracking_status"
-	) != "Delivered":
-		frappe.throw(_("A Borrowing replacement receipt can only be submitted after the Shipment is delivered."))
 
 
 def validate_stock_entry_shipment_cancel(doc, method=None):
@@ -133,7 +118,9 @@ def make_transit_receipt(stock_entry_name, shipment_name):
 	receipt = make_stock_in_entry(source.name)
 	if not receipt or not receipt.get("items"):
 		frappe.throw(
-			_("No remaining quantity is available to receive from Transit for Stock Entry {0}.").format(source.name)
+			_("No remaining quantity is available to receive from Transit for Stock Entry {0}.").format(
+				source.name
+			)
 		)
 
 	receipt.requires_shipment = 0
@@ -163,13 +150,13 @@ def make_transit_receipt(stock_entry_name, shipment_name):
 	for row in receipt.items:
 		row.t_warehouse = source.shipment_destination_warehouse
 		if row.ste_detail:
-			row.material_request = frappe.db.get_value("Stock Entry Detail", row.ste_detail, "material_request")
+			row.material_request = frappe.db.get_value(
+				"Stock Entry Detail", row.ste_detail, "material_request"
+			)
 			row.material_request_item = frappe.db.get_value(
 				"Stock Entry Detail", row.ste_detail, "material_request_item"
 			)
-			row.borrowing_item = frappe.db.get_value(
-				"Stock Entry Detail", row.ste_detail, "borrowing_item"
-			)
+			row.borrowing_item = frappe.db.get_value("Stock Entry Detail", row.ste_detail, "borrowing_item")
 
 	receipt.flags.ignore_permissions = True
 	receipt.insert(ignore_permissions=True)

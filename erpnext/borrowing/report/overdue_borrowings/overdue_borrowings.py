@@ -17,7 +17,7 @@ def execute(filters=None):
 	conditions = [
 		"loan.docstatus = 1",
 		# items on a return not yet received are still the requester's responsibility
-		"loan.status IN ('Active', 'Partially Returned', 'Pending Quality Inspection', 'Pending Receipt')",
+		"loan.status IN ('Active', 'Partially Returned')",
 		"loan.expected_return_date < CURDATE()",
 		"item.outstanding_qty > 0",
 	]
@@ -29,11 +29,29 @@ def execute(filters=None):
 	add_requester_filter(filters, conditions, values)
 
 	columns = [
-		{"label": "Borrowing", "fieldname": "loan", "fieldtype": "Link", "options": "Borrowing", "width": 165},
-		{"label": "Material Request", "fieldname": "material_request", "fieldtype": "Link", "options": "Material Request", "width": 165},
+		{
+			"label": "Borrowing",
+			"fieldname": "loan",
+			"fieldtype": "Link",
+			"options": "Borrowing",
+			"width": 165,
+		},
+		{
+			"label": "Material Request",
+			"fieldname": "material_request",
+			"fieldtype": "Link",
+			"options": "Material Request",
+			"width": 165,
+		},
 		{"label": "Borrowing Type", "fieldname": "loan_type", "fieldtype": "Data", "width": 90},
 		{"label": "Borrower Type", "fieldname": "borrower_type", "fieldtype": "Data", "width": 110},
-		{"label": "Borrower", "fieldname": "borrower", "fieldtype": "Dynamic Link", "options": "borrower_type", "width": 170},
+		{
+			"label": "Borrower",
+			"fieldname": "borrower",
+			"fieldtype": "Dynamic Link",
+			"options": "borrower_type",
+			"width": 170,
+		},
 		{"label": "Expected Return", "fieldname": "expected_return_date", "fieldtype": "Date", "width": 115},
 		{"label": "Overdue Days", "fieldname": "overdue_days", "fieldtype": "Int", "width": 95},
 		{"label": "Item", "fieldname": "item_code", "fieldtype": "Link", "options": "Item", "width": 140},
@@ -60,7 +78,7 @@ def execute(filters=None):
 		FROM `tabBorrowing` loan
 		JOIN `tabBorrowing Item` item ON item.parent = loan.name
 		{REQUEST_JOIN}
-		WHERE {' AND '.join(conditions)}
+		WHERE {" AND ".join(conditions)}
 		ORDER BY loan.expected_return_date, loan.borrower, item.item_code""",
 		values,
 		as_dict=True,
