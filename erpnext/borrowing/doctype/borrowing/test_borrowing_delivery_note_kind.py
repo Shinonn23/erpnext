@@ -3,6 +3,7 @@
 import json
 import unittest
 from pathlib import Path
+from typing import ClassVar
 from unittest.mock import MagicMock, patch
 
 import frappe
@@ -262,6 +263,57 @@ class TestBorrowingLayout(unittest.TestCase):
 				self.assertFalse(fields[name].get("hidden"))
 				self.assertIn("parent.is_borrowing_transaction", fields[name]["depends_on"])
 				self.assertEqual(fields[name]["read_only_depends_on"], "eval:parent.is_borrowing_transaction")
+
+
+class TestBorrowingAddressAndContact(unittest.TestCase):
+	"""The real DeliveryNote.validate_party_address_and_contact: a Borrowing Delivery Note is made out to the
+	internal customer but carries the recipient's address and contact (MUST-FIX of the WP3 review)."""
+
+	LINKS: ClassVar[dict] = {
+		("Address", "ADDR-RECIPIENT"): ("Customer", "Hospital A"),
+		("Contact", "CON-RECIPIENT"): ("Customer", "Hospital A"),
+		("Address", "ADDR-OTHER"): ("Customer", "Someone Else"),
+	}
+
+	def exists(self, doctype, filters=None, *args, **kwargs):
+		self.assertEqual(doctype, "Dynamic Link")
+		linked = self.LINKS.get((filters["parenttype"], filters["parent"]))
+		return bool(linked and linked == (filters["link_doctype"], filters["link_name"]))
+
+	def check(self, **values):
+		from erpnext.stock.doctype.delivery_note.delivery_note import DeliveryNote
+
+		doc = MagicMock(spec=DeliveryNote)
+		values = {"customer": "Internal CD", "borrowing": "CL-0001", **values}
+		doc.get.side_effect = lambda key, default=None: values.get(key, default)
+		for key, value in values.items():
+			setattr(doc, key, value)
+		loan = frappe._dict(recipient_customer="Hospital A", borrower_type="Customer", borrower="Hospital A")
+		with (
+			patch.object(
+				core.frappe, "db", MagicMock(get_value=MagicMock(return_value=loan), exists=self.exists)
+			),
+			patch.object(core.frappe, "throw", side_effect=refuse),
+			patch(
+				"erpnext.controllers.accounts_controller.AccountsController.validate_party_address_and_contact"
+			) as native,
+		):
+			DeliveryNote.validate_party_address_and_contact(doc)
+		return native
+
+	def test_the_recipient_address_and_contact_pass(self):
+		native = self.check(
+			is_borrowing_transaction=1, shipping_address_name="ADDR-RECIPIENT", contact_person="CON-RECIPIENT"
+		)
+		native.assert_not_called()
+
+	def test_an_address_of_another_party_is_refused(self):
+		with self.assertRaises(frappe.ValidationError):
+			self.check(is_borrowing_transaction=1, shipping_address_name="ADDR-OTHER")
+
+	def test_a_sale_keeps_the_native_check(self):
+		native = self.check(is_borrowing_transaction=0, shipping_address_name="ADDR-RECIPIENT")
+		native.assert_called_once()
 
 
 if __name__ == "__main__":

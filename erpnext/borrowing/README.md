@@ -68,7 +68,9 @@ sales team, terms, UTM, auto repeat, Customer PO, the internal customer and its 
 responsible employee, recipient, location, address, contact and custody warehouse. The rows show item, quantity,
 warehouse, Storage Location, batch, serial and the target warehouse (read-only); a return names the place
 "Receiving Storage Location". `_make_delivery_note` and the return maker set `ignore_pricing_rule` and copy the
-recipient address and contact (`set_borrowing_recipient`). `DeliveryNote.validate` calls
+recipient address and contact (`set_borrowing_recipient`); the native party address / contact check is replaced by
+`validate_borrowing_address_and_contact` (they belong to the internal customer, the recipient customer or the
+borrower). `DeliveryNote.validate` calls
 `prepare_borrowing_delivery_note` (a selling value typed into a saved one is refused; pricing rules and automatic taxes
 off) and `clear_borrowing_selling_fields` (what ERPNext filled by itself is emptied and the totals computed again).
 `get_status` never gives To Bill / Partially Billed (Completed instead); the list indicator and the non-billed reports

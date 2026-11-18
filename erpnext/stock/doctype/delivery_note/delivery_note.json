@@ -1683,7 +1683,7 @@
   {
    "fetch_from": "borrowing.recipient_address_display",
    "fieldname": "borrowing_recipient_address",
-   "fieldtype": "Small Text",
+   "fieldtype": "Text Editor",
    "label": "Recipient Address",
    "no_copy": 1,
    "read_only": 1
@@ -1691,7 +1691,7 @@
   {
    "fetch_from": "borrowing.recipient_contact_display",
    "fieldname": "borrowing_recipient_contact",
-   "fieldtype": "Small Text",
+   "fieldtype": "Text Editor",
    "label": "Recipient Contact",
    "no_copy": 1,
    "read_only": 1
@@ -1701,7 +1701,7 @@
  "idx": 146,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-11-19 00:00:00.000000",
+ "modified": "2026-11-19 01:00:00.000000",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Delivery Note",

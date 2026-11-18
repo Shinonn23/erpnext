@@ -325,6 +325,16 @@ class DeliveryNote(SellingController):
 		self.validate_against_stock_reservation_entries()
 		self.reset_default_field_value("set_warehouse", "items", "warehouse")
 
+	def validate_party_address_and_contact(self):
+		"""A Borrowing / Demo Delivery Note is made out to the company's internal customer but delivered to the
+		Borrowing's recipient (UX WP3): its address and contact belong to the internal customer, the recipient
+		customer or the borrower."""
+		if not self.get("is_borrowing_transaction"):
+			return super().validate_party_address_and_contact()
+		from erpnext.borrowing.doctype.borrowing.borrowing_core import validate_borrowing_address_and_contact
+
+		validate_borrowing_address_and_contact(self)
+
 	def get_status(self):
 		"""A Borrowing / Demo Delivery Note is never invoiced (UX WP3): once submitted it is Completed (or Return,
 		Return Issued, Closed, Cancelled as any other), never To Bill or Partially Billed."""

@@ -2332,6 +2332,56 @@ def set_borrowing_recipient(delivery_note, loan):
 		delivery_note.contact_email = loan.get("recipient_contact_email")
 
 
+def borrowing_delivery_parties(delivery_note):
+	"""(party type, party) pairs whose addresses and contacts a Borrowing Delivery Note may name: the internal
+	customer it is made out to, the Borrowing's recipient customer and its borrower."""
+	parties = []
+	if delivery_note.get("customer"):
+		parties.append(("Customer", delivery_note.customer))
+	if delivery_note.get("borrowing"):
+		loan = frappe.db.get_value(
+			"Borrowing",
+			delivery_note.borrowing,
+			["recipient_customer", "borrower_type", "borrower"],
+			as_dict=True,
+		)
+		if loan:
+			if loan.recipient_customer:
+				parties.append(("Customer", loan.recipient_customer))
+			if loan.borrower_type and loan.borrower:
+				parties.append((loan.borrower_type, loan.borrower))
+	return list(dict.fromkeys(parties))
+
+
+def _linked_to_parties(parenttype, name, parties):
+	for party_type, party in parties:
+		if frappe.db.exists(
+			"Dynamic Link",
+			{"parenttype": parenttype, "parent": name, "link_doctype": party_type, "link_name": party},
+		):
+			return True
+	return False
+
+
+def validate_borrowing_address_and_contact(delivery_note):
+	"""Replaces the native party address / contact check on a Borrowing Delivery Note: the address and contact
+	of the recipient are not the internal customer's, they must belong to one of `borrowing_delivery_parties`."""
+	parties = borrowing_delivery_parties(delivery_note)
+	if not parties:
+		return
+	names = ", ".join(party for _party_type, party in parties)
+	for fieldname, label in (
+		("customer_address", _("Billing Address")),
+		("shipping_address_name", _("Shipping Address")),
+	):
+		address = delivery_note.get(fieldname)
+		if address and not _linked_to_parties("Address", address, parties):
+			frappe.throw(_("{0} does not belong to {1}").format(label, names))
+	contact = delivery_note.get("contact_person")
+	if contact and not _linked_to_parties("Contact", contact, parties):
+		frappe.throw(_("Contact Person does not belong to {0}").format(names))
+
+
 def _table_key(rows):
 	return [
 		(row.get("charge_type"), row.get("account_head"), flt(row.get("rate")), flt(row.get("tax_amount")))
