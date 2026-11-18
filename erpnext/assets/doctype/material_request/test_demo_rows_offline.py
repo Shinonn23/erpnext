@@ -77,3 +77,31 @@ class TestDemoRows(TestCase):
 		self.assertEqual(row.item_type, "Fixed Asset")
 		for field in ("warehouse", "from_warehouse", "storage_location", "from_storage_location"):
 			self.assertIsNone(row.get(field), field)
+
+	def test_a_customer_demo_asset_row_keeps_no_warehouse_or_storage_location(self):
+		doc = self.request(
+			[
+				{
+					"item_code": "MODEL",
+					"asset": "ASSET-A",
+					"warehouse": "CD STOCK - CD",
+					"from_warehouse": "CD STOCK - CD",
+					"storage_location": "CD STOCK - CD / A1",
+					"from_storage_location": "CD STOCK - CD / A1",
+				}
+			]
+		)
+		for name in (
+			"reset_amended_workflow_state",
+			"clear_loan_recipient_details",
+			"set_responsible_employee",
+		):
+			setattr(doc, name, lambda: None)
+		doc.before_validate()
+		row = doc.items[0]
+		self.assertEqual(row.item_type, "Fixed Asset")
+		self.assertEqual(row.asset, "ASSET-A")
+		for field in ("warehouse", "from_warehouse", "storage_location", "from_storage_location"):
+			self.assertIsNone(row.get(field), field)
+		# the customer's Location stays on the header for an Asset row too
+		self.assertEqual(doc.customer_location, "Customer Site")
