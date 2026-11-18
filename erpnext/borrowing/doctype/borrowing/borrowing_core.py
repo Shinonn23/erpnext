@@ -17,6 +17,7 @@ from erpnext.borrowing.doctype.borrowing.borrowing_tracking import (
 	transaction_row_entries,
 	validate_tracked_rows,
 )
+from erpnext.stock.doctype.pick_list.pick_identity import refuse_mismatch
 from erpnext.stock.doctype.serial_no.serial_no import get_serial_nos
 from erpnext.stock.doctype.storage_location.storage_location import get_default_storage_location
 from erpnext.stock.get_item_details import get_item_details
@@ -2335,6 +2336,9 @@ def validate_borrowing_delivery_note(doc, loan, source_doctype, source_name):
 				frappe.throw(
 					_("Borrowing issue Delivery Note row does not match the Borrowing item and warehouses")
 				)
+			if frappe.get_cached_value("Item", row.item_code, "is_stock_item"):
+				# the place, batch and serial nos picked are the ones delivered (UX WP2)
+				refuse_mismatch(row, pick_row)
 			seen_pick_rows.add(pick_row.name)
 			delivered_by_item[loan_item.name] = delivered_by_item.get(loan_item.name, 0) + flt(row.qty)
 		if set(delivered_by_item) != set(loan_items) or any(

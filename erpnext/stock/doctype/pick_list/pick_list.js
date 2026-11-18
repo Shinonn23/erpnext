@@ -66,18 +66,24 @@ class PickListBarcodeScanner extends erpnext.utils.BarcodeScanner {
 
 	async set_serial_no(row, serial_no) {
 		if (serial_no && this.serial_scan) {
-			await frappe.model.set_value(
-				row.doctype,
-				row.name,
-				"warehouse",
-				this.serial_scan.serial_warehouse
-			);
-			await frappe.model.set_value(
-				row.doctype,
-				row.name,
-				"storage_location",
-				this.serial_scan.serial_storage_location
-			);
+			// the scanned serial is at that warehouse and place: the place it sets clears nothing
+			this.frm.__auto_location = true;
+			try {
+				await frappe.model.set_value(
+					row.doctype,
+					row.name,
+					"warehouse",
+					this.serial_scan.serial_warehouse
+				);
+				await frappe.model.set_value(
+					row.doctype,
+					row.name,
+					"storage_location",
+					this.serial_scan.serial_storage_location
+				);
+			} finally {
+				this.frm.__auto_location = false;
+			}
 		}
 		return super.set_serial_no(row, serial_no);
 	}
@@ -529,16 +535,13 @@ frappe.ui.form.on("Pick List Item", {
 		);
 	},
 
+	// A new place keeps the batch, serial nos and bundle it holds and drops only what it does not hold, so a batch
+	// or serial chosen first stays when its place is filled in after it (UX WP2). A place set by the system (the
+	// app's location fill, a serial scan: frm.__auto_location) is where those already are: nothing is cleared.
 	storage_location: (frm, cdt, cdn) => {
 		const row = frappe.get_doc(cdt, cdn);
-		if (row.serial_and_batch_bundle) {
-			frappe.model.set_value(cdt, cdn, "serial_and_batch_bundle", null);
-		}
-		if (row.serial_no) {
-			frappe.model.set_value(cdt, cdn, "serial_no", null);
-		}
-		if (row.batch_no) {
-			frappe.model.set_value(cdt, cdn, "batch_no", null);
+		if (!frm.__auto_location) {
+			drop_identity_not_held(frm, row);
 		}
 		if (!row.item_code || !row.warehouse) return;
 		get_item_details(row.item_code, row.uom, row.warehouse, frm.doc.company, row.storage_location).then(
@@ -588,6 +591,43 @@ frappe.ui.form.on("Pick List Item", {
 		});
 	},
 });
+
+// What the row's new Storage Location does not hold goes; the rest stays (pick_identity.identity_at_location, which
+// the app may override with its own count of pickable stock).
+function drop_identity_not_held(frm, row) {
+	if (!row.storage_location || !(row.batch_no || row.serial_no || row.serial_and_batch_bundle)) {
+		return Promise.resolve();
+	}
+	const location = row.storage_location;
+	return frappe
+		.xcall("erpnext.stock.doctype.pick_list.pick_identity.identity_at_location", {
+			item_code: row.item_code,
+			warehouse: row.warehouse,
+			storage_location: location,
+			batch_no: row.batch_no || "",
+			serial_no: row.serial_no || "",
+			serial_and_batch_bundle: row.serial_and_batch_bundle || "",
+			pick_list: frm.is_new() ? "" : frm.doc.name,
+		})
+		.then((held) => {
+			if (!held || row.storage_location !== location) return;
+			const values = {};
+			if (row.serial_and_batch_bundle && !held.bundle) values.serial_and_batch_bundle = null;
+			if (row.batch_no && !held.batch_no) values.batch_no = null;
+			if (row.serial_no) {
+				const kept = (held.serial_nos || []).join("\n");
+				const now = (row.serial_no || "")
+					.split("\n")
+					.map((s) => s.trim())
+					.filter(Boolean)
+					.join("\n");
+				if (kept !== now) values.serial_no = kept || null;
+			}
+			if (Object.keys(values).length) {
+				return frappe.model.set_value(row.doctype, row.name, values);
+			}
+		});
+}
 
 function get_item_details(item_code, uom = null, warehouse = null, company = null, storage_location = null) {
 	if (item_code) {
