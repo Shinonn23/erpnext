@@ -77,13 +77,16 @@ is Receiving in a stock warehouse, Holding in any other.
   row of a non-stock Item gets none and `validate_storage_locations` clears what it carries; the target of a Stock
   Entry transfer into a stock warehouse stays empty (put-away, move out of quarantine, normal warehouse), except into a
   warehouse with a Sales Counter location (a lab): the Item's preferred non-Receiving location there, else the Sales
-  Counter (`transfer_target_location`); an incoming leg gets the warehouse default.
+  Counter (`transfer_target_location`; only a Material Transfer: a transfer for manufacture or to a subcontractor
+  keeps the target's default); an incoming leg gets the warehouse default. The source of a POS Invoice row of a
+  register (`pos_profile`) is left empty and never computed: the Connect Diagnostics app sets the register's Sales
+  Storage Location after this hook, and a cashier cannot choose a location on the POS page.
 - `storage_location_query` takes `exclude_receiving`: `1` never offers a Receiving location, `stock` not when the
   field's warehouse is a stock warehouse, `target` not when `target_warehouse` is one. `public/js/storage_location.js`
-  passes it on every source field of a sale, conversion or issue (not on a return) and on a transfer's source and
+  passes it on every source field of a sale, conversion or Material Issue (not on a return, a Repack or a Manufacture) and on a transfer's source and
   target (`erpnext.storage_location_exclude_receiving`), and also serves POS Invoice and Stock to Asset Conversion.
   The Pick List keeps only the app's picker query (the fork's duplicate `set_query` is gone).
 - Delivery Note Item, Purchase Receipt Item, Purchase Invoice Item, Stock Entry Detail, Packed Item and Stock to Asset
   Conversion Item fetch a hidden `is_stock_item`; their location fields show only for a stock Item (or when they hold a
-  value). Stock Entry Detail fetches `t_warehouse_type`, and its To Storage Location is mandatory on a transfer into a
-  stock warehouse. Stock to Asset Conversion Item shows its Storage Location as a column.
+  value). Stock Entry Detail fetches `t_warehouse_type`, and its To Storage Location is mandatory on a Material Transfer
+  into a stock warehouse. Stock to Asset Conversion Item shows its Storage Location as a column.

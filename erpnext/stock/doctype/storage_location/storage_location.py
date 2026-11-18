@@ -540,13 +540,24 @@ def set_default_storage_locations(doc, method=None):
 
 def default_row_location(doc, row, fieldname, warehouse, item_code):
 	"""The location ``set_default_storage_locations`` stores in an empty ``fieldname`` of ``row``, or None (left to the
-	user)."""
+	user). The source of a POS Invoice row of a register (``pos_profile``) is the register's own Sales Storage Location,
+	set by the Connect Diagnostics app after this hook (``workflows/pos_location.set_sale_location``): it is left empty
+	here and never computed, so a cashier, who cannot choose a location on the POS page, is never refused for stock held
+	at several locations."""
+	if fieldname == "storage_location" and doc.doctype == "POS Invoice" and doc.get("pos_profile"):
+		return None
 	if fieldname == "storage_location" and is_outgoing_row(doc, row):
 		location = source_storage_location(doc, row, warehouse, item_code)
 		if location or is_stock_type_warehouse(warehouse):
 			return location
 		return get_default_storage_location(warehouse, item_code)
-	if fieldname == "to_storage_location" and doc.doctype == "Stock Entry" and row.get("s_warehouse"):
+	if (
+		fieldname == "to_storage_location"
+		and doc.doctype == "Stock Entry"
+		and doc.get("purpose") == "Material Transfer"
+		and row.get("s_warehouse")
+	):
+		# only a Material Transfer: a transfer for manufacture or to a subcontractor keeps the target's default
 		return transfer_target_location(row, warehouse, item_code)
 	return get_default_storage_location(warehouse, item_code)
 

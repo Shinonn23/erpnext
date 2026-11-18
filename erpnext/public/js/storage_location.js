@@ -20,7 +20,8 @@ erpnext.storage_location_exclude_receiving = (doctype, fieldname, row, doc) => {
 	if (doctype === "Stock Entry") {
 		if (fieldname === "storage_location") {
 			if (!row.s_warehouse) return "";
-			if (!row.t_warehouse) return "1";
+			// only a Material Issue is refused a Receiving source (refuses_receiving_source)
+			if (!row.t_warehouse) return doc?.purpose === "Material Issue" ? "1" : "";
 			return row.t_warehouse === row.s_warehouse ? "" : "target";
 		}
 		if (fieldname === "to_storage_location") return row.s_warehouse ? "stock" : "";

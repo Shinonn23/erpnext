@@ -554,7 +554,7 @@
    "label": "Target Storage Location",
    "options": "Storage Location",
    "search_index": 1,
-   "mandatory_depends_on": "eval:doc.s_warehouse && doc.t_warehouse && doc.is_stock_item && (doc.t_warehouse_type || 'Stock') === 'Stock'"
+   "mandatory_depends_on": "eval:parent.purpose === 'Material Transfer' && doc.s_warehouse && doc.t_warehouse && doc.is_stock_item && (doc.t_warehouse_type || 'Stock') === 'Stock'"
   },
   {
    "fetch_from": "item_code.item_group",

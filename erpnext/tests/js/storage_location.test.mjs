@@ -320,8 +320,23 @@ test("Stock Entry: the put-away source may be the Receiving location, a transfer
   const exclude =
     fixture("Stock Entry").context.erpnext.storage_location_exclude_receiving;
   assert.equal(
-    exclude("Stock Entry", "storage_location", { s_warehouse: "A" }),
+    exclude(
+      "Stock Entry",
+      "storage_location",
+      { s_warehouse: "A" },
+      { purpose: "Material Issue" }
+    ),
     "1"
+  );
+  // a Repack / Manufacture source is not refused a Receiving location by the server: the picker offers it too
+  assert.equal(
+    exclude(
+      "Stock Entry",
+      "storage_location",
+      { s_warehouse: "A" },
+      { purpose: "Repack" }
+    ),
+    ""
   );
   assert.equal(
     exclude("Stock Entry", "storage_location", {
