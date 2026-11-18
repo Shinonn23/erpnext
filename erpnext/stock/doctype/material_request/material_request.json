@@ -412,7 +412,7 @@
    "depends_on": "eval:in_list(['Borrow', 'Customer Borrow'], doc.material_request_type)",
    "fieldname": "loan_recipient_section",
    "fieldtype": "Section Break",
-   "label": "Borrower"
+   "label": "Borrowing Details"
   },
   {
    "depends_on": "eval:in_list(['Borrow', 'Customer Borrow'], doc.material_request_type)",
@@ -424,7 +424,7 @@
    "options": "Employee\nCustomer"
   },
   {
-   "depends_on": "eval:in_list(['Borrow', 'Customer Borrow'], doc.material_request_type)",
+   "depends_on": "eval:doc.material_request_type == 'Customer Borrow' || (doc.material_request_type == 'Borrow' && doc.loan_recipient && doc.loan_recipient != doc.responsible_employee)",
    "fieldname": "loan_recipient",
    "fieldtype": "Dynamic Link",
    "label": "Recipient",
@@ -549,7 +549,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Request Progress Status",
-   "options": "Draft\nPending\nOn Hold\nPartially Fulfilled\nFulfilled\nPartially Returned\nReturned\nClosed\nCancelled",
+   "options": "Draft\nPending\nPending Pick\nPending Delivery\nOn Hold\nPartially Fulfilled\nFulfilled\nPending Quality Inspection\nPending Receipt\nPartially Returned\nReturned\nClosed\nCancelled",
    "read_only": 1
   },
   {
@@ -580,12 +580,13 @@
   },
   {
    "default": "Stock Item",
+   "depends_on": "eval:doc.material_request_type == 'Borrow'",
+   "description": "Choose stock to return by quantity, or assets to return by individual Asset. The Stock team selects the physical Assets after approval.",
    "fieldname": "borrow_item_type",
    "fieldtype": "Select",
    "label": "Borrow Item Type",
-   "options": "Stock Item\nAsset",
-   "hidden": 1,
-   "read_only": 1
+   "mandatory_depends_on": "eval:doc.material_request_type == 'Borrow'",
+   "options": "Stock Item\nAsset"
   },
   {
    "depends_on": "eval:doc.material_request_type == 'Asset Transfer'",

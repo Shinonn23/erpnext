@@ -86,7 +86,7 @@ class MaterialRequest(BuyingController):
 		naming_series: DF.Literal["MAT-MR-.YYYY.-"]
 		per_ordered: DF.Percent
 		per_received: DF.Percent
-		request_progress_status: DF.Literal["Draft", "Pending", "On Hold", "Partially Fulfilled", "Fulfilled", "Partially Returned", "Returned", "Closed", "Cancelled"]
+		request_progress_status: DF.Literal["Draft", "Pending", "Pending Pick", "Pending Delivery", "On Hold", "Partially Fulfilled", "Fulfilled", "Pending Quality Inspection", "Pending Receipt", "Partially Returned", "Returned", "Closed", "Cancelled"]
 		request_remarks: DF.SmallText | None
 		recipient_address: DF.Link | None
 		recipient_address_display: DF.TextEditor | None

@@ -60,6 +60,13 @@ frappe.ui.form.on("Material Request", {
 		set_stock_item_query(frm);
 		configure_material_request_item_columns(frm);
 	},
+	onload_post_render(frm) {
+		set_stock_item_query(frm);
+		if (
+			frm.is_new() && !frm.doc.responsible_employee &&
+			["Customer Demo", "Borrow", "Customer Borrow"].includes(frm.doc.material_request_type)
+		) set_responsible_employee(frm);
+	},
 	material_request_type(frm) {
 		const purpose = frm.doc.material_request_type;
 		const previous = frm.__last_material_request_type;
@@ -108,7 +115,9 @@ frappe.ui.form.on("Material Request", {
 		if (purpose !== "Asset Transfer") values.asset_item_filter = null;
 		const is_loan = purpose === "Customer Demo" || ["Borrow", "Customer Borrow"].includes(purpose);
 		return frm.set_value(values).then(() => {
+			if (purpose === "Borrow" && !frm.doc.borrow_item_type) frm.set_value("borrow_item_type", "Stock Item");
 			if (is_loan && !frm.doc.responsible_employee) set_responsible_employee(frm);
+			sync_borrow_recipient(frm);
 			set_stock_item_query(frm);
 			configure_material_request_item_columns(frm);
 			frm.refresh_fields();
@@ -205,6 +214,13 @@ frappe.ui.form.on("Material Request", {
 			customer: null,
 		});
 	},
+	responsible_employee(frm) {
+		sync_borrow_recipient(frm);
+	},
+	borrow_item_type(frm) {
+		set_stock_item_query(frm);
+		frm.refresh_fields();
+	},
 	loan_recipient(frm) {
 		if (frm.doc.loan_recipient_type === "Customer" && frm.doc.customer !== frm.doc.loan_recipient) {
 			frm.set_value("customer", frm.doc.loan_recipient);
@@ -277,6 +293,7 @@ frappe.ui.form.on("Material Request", {
 		});
 	},
 	refresh(frm) {
+		sync_borrow_recipient(frm);
 		set_stock_item_query(frm);
 		configure_material_request_item_columns(frm);
 		// a Series with a single choice is not asked
@@ -428,7 +445,10 @@ function set_stock_item_query(frm) {
 		query: "erpnext.controllers.queries.item_query",
 		filters:
 			// A Demo or Borrow request names any Item (Stock or Fixed Asset); the Stock team decides how it is supplied.
-			["Customer Demo", "Borrow", "Customer Borrow"].includes(doc.material_request_type)
+			doc.material_request_type === "Borrow"
+				? { ...(doc.borrow_item_type === "Asset" ? { is_fixed_asset: 1 } : { is_stock_item: 1 }),
+					disabled: 0, has_variants: 0 }
+				: ["Customer Demo", "Customer Borrow"].includes(doc.material_request_type)
 				? { disabled: 0, has_variants: 0 }
 				: doc.material_request_type === "Asset Transfer"
 				? { is_fixed_asset: 1, disabled: 0 }
@@ -507,6 +527,20 @@ function set_responsible_employee(frm) {
 				frm.set_value("responsible_employee", message.name);
 			}
 		});
+}
+
+// The Employee who borrows is the Responsible Employee (Siwat, 18 Nov 2026): a Borrow's Recipient follows it.
+function sync_borrow_recipient(frm) {
+	const is_borrow = frm.doc.material_request_type === "Borrow";
+	frm.set_df_property("loan_recipient", "read_only", is_borrow ? 1 : 0);
+	if (
+		is_borrow &&
+		frm.doc.docstatus === 0 &&
+		frm.doc.loan_recipient_type === "Employee" &&
+		frm.doc.loan_recipient !== frm.doc.responsible_employee
+	) {
+		frm.set_value("loan_recipient", frm.doc.responsible_employee || null);
+	}
 }
 
 function borrower_type_of(purpose) {

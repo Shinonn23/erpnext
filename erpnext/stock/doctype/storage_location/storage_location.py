@@ -413,6 +413,15 @@ def set_default_storage_locations(doc, method=None):
 
 	for table in doc.meta.get_table_fields():
 		for row in doc.get(table.fieldname) or []:
+			if (
+				cint(doc.get("is_return"))
+				and cint(row.get("return_qty_from_rejected_warehouse"))
+				and not row.get("rejected_warehouse")
+				and not flt(row.get("rejected_qty"))
+			):
+				# Older return drafts copied the unused rejected leg after moving its warehouse to the main leg.
+				row.storage_location = row.get("storage_location") or row.get("rejected_storage_location")
+				row.rejected_storage_location = None
 			if doc.doctype == "Stock Reconciliation" and doc.is_warehouse_revaluation_row(row):
 				continue
 			for fieldname, warehouse in get_storage_location_warehouses(doc, row).items():

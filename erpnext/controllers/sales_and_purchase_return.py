@@ -712,6 +712,10 @@ def make_return_doc(doctype: str, source_name: str, target_doc=None, return_agai
 				target_doc.received_qty = target_doc.qty
 				target_doc.return_qty_from_rejected_warehouse = 1
 
+			if return_against_rejected_qty:
+				target_doc.storage_location = source_doc.get("rejected_storage_location")
+				target_doc.rejected_storage_location = None
+
 		elif doctype == "Purchase Invoice":
 			returned_qty_map = get_returned_qty_map_for_row(
 				source_parent.name, source_parent.supplier, source_doc.name, doctype

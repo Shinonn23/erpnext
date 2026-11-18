@@ -37,6 +37,22 @@ class StockDocument(frappe._dict):
 
 
 class TestStockControllerStorageLocation(unittest.TestCase):
+	def test_conversion_bundle_rows_do_not_require_legacy_serial_or_batch_fields(self):
+		class BundleRow(dict):
+			def __getattr__(self, name):
+				try:
+					return self[name]
+				except KeyError:
+					raise AttributeError(name) from None
+
+		row = BundleRow(item_code="Serial Item", serial_and_batch_bundle="BUNDLE-1")
+		doc = Mock(doctype="Stock to Asset Conversion")
+		doc.get.return_value = [row]
+		with patch.object(frappe, "in_test", False):
+			StockController.make_bundle_using_old_serial_batch_fields(doc)
+		doc.get.assert_any_call("stock_items")
+		doc.validate_serial_nos_and_batches_with_bundle.assert_not_called()
+
 	def setUp(self):
 		self.doc = StockDocument(
 			doctype="Stock Entry",

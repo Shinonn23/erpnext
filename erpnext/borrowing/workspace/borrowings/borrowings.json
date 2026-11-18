@@ -107,6 +107,17 @@
    "dependencies": "",
    "hidden": 0,
    "is_query_report": 0,
+   "label": "Borrowing Item Details",
+   "link_count": 0,
+   "link_to": "Borrowing Item Details",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
    "label": "Borrowing Asset Balance",
    "link_count": 0,
    "link_to": "Borrowing Asset Balance",
@@ -126,7 +137,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-11-16 12:00:00.000000",
+ "modified": "2026-11-18 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Borrowing",
  "name": "Borrowings",
