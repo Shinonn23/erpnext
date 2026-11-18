@@ -244,7 +244,7 @@ frappe.ui.form.on("Asset Movement", {
 		);
 		frm.toggle_display("address_and_contact_tab", has_material_request_recipient);
 		const visible_fields = movement_fields(frm.doc.purpose);
-		const movement_fields = [
+		const movement_fieldnames = [
 			"source_location",
 			"target_location",
 			"from_employee",
@@ -254,12 +254,12 @@ frappe.ui.form.on("Asset Movement", {
 			"source_department",
 			"target_department",
 		];
-		for (const fieldname of movement_fields) {
+		for (const fieldname of movement_fieldnames) {
 			grid.toggle_display(fieldname, visible_fields.has(fieldname));
 		}
 		grid.set_column_disp_in_list_view(["is_demo_asset", "demo_loan_status"], false);
-		const hidden_columns = movement_fields.filter((fieldname) => !visible_fields.has(fieldname));
-		const shown_columns = movement_fields.filter((fieldname) => visible_fields.has(fieldname));
+		const hidden_columns = movement_fieldnames.filter((fieldname) => !visible_fields.has(fieldname));
+		const shown_columns = movement_fieldnames.filter((fieldname) => visible_fields.has(fieldname));
 		grid.set_column_disp_in_list_view(hidden_columns, false);
 		grid.set_column_disp_in_list_view(shown_columns, true);
 		for (const fieldname of ["request_item", "branch", "department", "location"]) {

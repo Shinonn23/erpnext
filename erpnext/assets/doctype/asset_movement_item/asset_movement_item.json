@@ -91,7 +91,7 @@
    "read_only": 1
   },
   {
-   "depends_on": "eval:!in_list([\"Issue\", \"Reassignment\"], parent.purpose) || doc.service_equipment || parent.is_borrowing_transaction",
+   "depends_on": "eval:!in_list([\"Issue\", \"Reassignment\"], parent.purpose) || doc.service_equipment || parent.is_borrowing_transaction || parent.borrowing",
    "fieldname": "source_location",
    "fieldtype": "Link",
    "in_list_view": 1,
@@ -99,7 +99,7 @@
    "options": "Location"
   },
   {
-   "depends_on": "eval:!in_list([\"Issue\", \"Reassignment\"], parent.purpose) || doc.service_equipment || parent.is_borrowing_transaction",
+   "depends_on": "eval:!in_list([\"Issue\", \"Reassignment\"], parent.purpose) || doc.service_equipment || parent.is_borrowing_transaction || parent.borrowing",
    "fieldname": "target_location",
    "fieldtype": "Link",
    "in_list_view": 1,

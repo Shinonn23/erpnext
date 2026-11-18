@@ -119,3 +119,54 @@ test("every purpose shows the custodian it moves from and an Issue shows no loca
   assert.equal(movement_fields("Issue").has("target_location"), false);
   assert.equal(movement_fields("Receipt").has("change_custodian"), false);
 });
+
+// runs the real set_required_fields handler of the Asset Movement form (the whole script, a stub frappe)
+function asset_movement_events() {
+  const source = read("../../assets/doctype/asset_movement/asset_movement.js");
+  const forms = {};
+  const frappe = {
+    ui: { form: { on: (doctype, events) => (forms[doctype] = events) } },
+  };
+  vm.runInNewContext(source, { frappe, __: (text) => text, locals: {} });
+  return forms["Asset Movement"];
+}
+
+function movement_columns(purpose) {
+  const events = asset_movement_events();
+  const columns = {};
+  const displayed = {};
+  const grid = {
+    toggle_display(field, value) {
+      displayed[field] = Boolean(value);
+    },
+    set_column_disp_in_list_view(fields, value) {
+      for (const field of [].concat(fields)) columns[field] = value;
+    },
+    get_docfield: () => ({}),
+    update_docfield_property() {},
+  };
+  events.set_required_fields({
+    doc: { purpose },
+    fields_dict: { assets: { grid } },
+    toggle_display() {},
+    refresh_field() {},
+  });
+  return { columns, displayed };
+}
+
+test("the Asset Movement form shows the columns of its purpose", () => {
+  for (const purpose of ["Issue", "Reassignment"]) {
+    const { columns, displayed } = movement_columns(purpose);
+    assert.equal(columns.source_location, false, purpose);
+    assert.equal(columns.target_location, false, purpose);
+    assert.equal(displayed.target_location, false, purpose);
+    assert.equal(columns.from_employee, true, purpose);
+  }
+  assert.equal(movement_columns("Reassignment").columns.change_custodian, true);
+  for (const purpose of ["Transfer", "Receipt"]) {
+    const { columns } = movement_columns(purpose);
+    assert.equal(columns.target_location, true, purpose);
+    assert.equal(columns.source_location, true, purpose);
+    assert.equal(columns.change_custodian, false, purpose);
+  }
+});
