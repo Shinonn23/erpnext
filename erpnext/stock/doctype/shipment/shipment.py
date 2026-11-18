@@ -247,7 +247,14 @@ class Shipment(Document):
 
 	def before_update_after_submit(self):
 		# the type may be corrected after submit (Stock team), but never into a kind the documents contradict
+		self.set_new_row_kinds()
 		self.validate_miscellaneous()
+
+	def set_new_row_kinds(self):
+		"""A document row added after submit gets its kind on the server; rows saved before keep theirs."""
+		for row in self.get("shipment_documents") or []:
+			if row.is_new() and row.reference_doctype and row.reference_name and not row.document_kind:
+				row.document_kind = purpose_of_document(row.reference_doctype, row.reference_name)
 
 	def on_submit(self):
 		miscellaneous = self.shipment_purpose == MISCELLANEOUS
@@ -605,8 +612,10 @@ def preview_documents(documents):
 		frappe.has_permission(doctype, "read", doc=name, throw=True)
 		references.append((doctype, name))
 	kinds = [[doctype, name, purpose_of_document(doctype, name)] for doctype, name in references]
+	# the value of the goods is a stock value (level 101): only a user who may read the field gets it
+	may_read_value = "value_of_goods" in frappe.model.get_permitted_fields("Shipment", permission_type="read")
 	return {
-		"value_of_goods": documents_value(references),
+		"value_of_goods": documents_value(references) if may_read_value else None,
 		"kinds": kinds,
 		"purpose": next((kind for _doctype, _name, kind in kinds if kind), None),
 	}

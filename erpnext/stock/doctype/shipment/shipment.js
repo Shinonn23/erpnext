@@ -417,7 +417,9 @@ frappe.ui.form.on("Shipment", {
 	},
 	refresh_documents: function (frm) {
 		// the value of the goods, each row's kind and the suggested Shipment Type come from the server, which
-		// recomputes them on save (shipment.preview_documents); the browser adds nothing up itself
+		// recomputes them on save (shipment.preview_documents); the browser adds nothing up itself.
+		// After submit neither field may change: the server fills the kind of a row added then.
+		if (frm.doc.docstatus !== 0) return;
 		const rows = (frm.doc.shipment_documents || []).filter(
 			(row) => row.reference_doctype && row.reference_name
 		);
