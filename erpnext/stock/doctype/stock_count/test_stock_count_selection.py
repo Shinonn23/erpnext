@@ -222,6 +222,18 @@ class StockCountSelectionTest(unittest.TestCase):
 		with self.assertRaises(frappe.ValidationError):
 			StockCount.validate_lost_if_needed(doc)
 
+	def test_the_lost_warehouse_must_be_of_the_type_lost(self):
+		# the form offers only Lost warehouses; an import or API call is held to the same rule (WP10)
+		good = {"company": "C", "is_group": 0, "disabled": 0, "warehouse_type": "Lost"}
+		doc = count(lost_warehouse="LOST - C", company="C", warehouse="CD STOCK")
+		doc.validate_lost_storage_location = Mock()
+		with patch.object(stock_count.frappe, "db", fake_db(get_value=frappe._dict(good))):
+			StockCount.validate_lost_warehouse(doc)
+		for kind in ("Quarantine", "Stock", None):
+			db = fake_db(get_value=frappe._dict(good, warehouse_type=kind))
+			with patch.object(stock_count.frappe, "db", db), self.assertRaises(frappe.ValidationError):
+				StockCount.validate_lost_warehouse(doc)
+
 	def test_a_monthly_count_defaults_to_the_companys_lost_warehouse(self):
 		# the field is the Lost Warehouse (Connect Diagnostics, 5 Nov 2026; named lost_warehouse since WP10)
 		doc = count(lost_warehouse=None, company="C", warehouse="CD STOCK")

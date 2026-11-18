@@ -196,11 +196,21 @@ class StockCount(Document):
 			frappe.throw(_("Lost Warehouse must be different from the counted Warehouse."))
 
 		warehouse = frappe.db.get_value(
-			"Warehouse", self.lost_warehouse, ["company", "is_group", "disabled"], as_dict=True
+			"Warehouse",
+			self.lost_warehouse,
+			["company", "is_group", "disabled", "warehouse_type"],
+			as_dict=True,
 		)
 		if not warehouse or warehouse.company != self.company or warehouse.is_group or warehouse.disabled:
 			frappe.throw(
 				_("The Lost Warehouse must be an active warehouse (not a group) of the same company.")
+			)
+		# the form offers only Lost warehouses; the server holds the same rule for an import or an API call
+		if warehouse.warehouse_type != LOST_WAREHOUSE_TYPE:
+			frappe.throw(
+				_("The Lost Warehouse {0} must be a warehouse of the Warehouse Type {1}.").format(
+					self.lost_warehouse, _(LOST_WAREHOUSE_TYPE)
+				)
 			)
 		self.validate_lost_storage_location()
 

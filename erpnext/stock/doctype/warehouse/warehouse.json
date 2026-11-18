@@ -264,7 +264,7 @@
    "fieldname": "holding_section",
    "fieldtype": "Section Break",
    "label": "Related Warehouses",
-   "depends_on": "eval:!!(doc.lost_warehouse || doc.quarantine_warehouse || doc.damage_warehouse) || (!doc.is_group && !['Lost', 'Quarantine', 'Transit', 'Write-Off'].includes(doc.warehouse_type)) || (!doc.is_group && doc.warehouse_type === 'Quarantine')"
+   "depends_on": "eval:!!(doc.lost_warehouse || doc.quarantine_warehouse || doc.damage_warehouse) || (!doc.is_group && ['Stock', 'Quarantine'].includes(doc.warehouse_type))"
   },
   {
    "description": "A Monthly Stock Count of this warehouse moves what it did not find here. Leave empty for the company's Lost warehouse.",
