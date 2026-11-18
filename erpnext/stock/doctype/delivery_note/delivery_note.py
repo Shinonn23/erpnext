@@ -1096,6 +1096,9 @@ def make_shipment(source_name, target_doc=None):
 			"shipment_documents",
 			{"reference_doctype": "Delivery Note", "reference_name": source.name},
 		)
+		from erpnext.stock.doctype.shipment.shipment import purpose_of_document
+
+		target.shipment_purpose = purpose_of_document("Delivery Note", source.name)
 		user = frappe.db.get_value(
 			"User", frappe.session.user, ["email", "full_name", "phone", "mobile_no"], as_dict=1
 		)
@@ -1157,15 +1160,7 @@ def make_shipment(source_name, target_doc=None):
 				},
 				"validation": {"docstatus": ["=", 1]},
 			},
-			"Delivery Note Item": {
-				"doctype": "Shipment Delivery Note",
-				"field_map": {
-					"name": "prevdoc_detail_docname",
-					"parent": "prevdoc_docname",
-					"parenttype": "prevdoc_doctype",
-					"base_amount": "grand_total",
-				},
-			},
+			# the Delivery Note is one row of Stock Transactions (postprocess), never a Shipment Delivery Note row
 		},
 		target_doc,
 		postprocess,
