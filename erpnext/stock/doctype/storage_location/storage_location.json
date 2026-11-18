@@ -9,6 +9,7 @@
   "location_code",
   "warehouse_column",
   "warehouse",
+  "location_type",
   "disabled",
   "supported_storage_conditions",
   "physical_position_section",
@@ -102,6 +103,17 @@
    "label": "Supported Storage Conditions",
    "options": "Storage Location Condition",
    "description": "Select every storage condition supported by this location. A location without conditions is excluded for items with a required condition."
+  },
+  {
+   "fieldname": "location_type",
+   "fieldtype": "Select",
+   "label": "Location Type",
+   "options": "Receiving\nStorage\nSales Counter\nHolding",
+   "default": "Storage",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "What the bin is for. Receiving: goods land here and leave only by a Stock Entry (never sold, issued or picked). Storage: shelves goods are picked from. Sales Counter: the place a lab sells from. Holding: the one bin of a holding warehouse (Quarantine, Lost, Found, Borrowed, Write-Off ...)."
   }
  ],
  "permissions": [
@@ -154,6 +166,6 @@
  "actions": [],
  "links": [],
  "states": [],
- "modified": "2026-10-05 02:39:15.898779",
+ "modified": "2026-11-18 12:00:00.000000",
  "modified_by": "Administrator"
 }

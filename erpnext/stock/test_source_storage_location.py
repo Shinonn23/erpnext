@@ -34,10 +34,15 @@ class TestSourceStorageLocation(unittest.TestCase):
 		patch.object(module, "frappe", fake).start()
 		self.places = {}
 		self.unlocated = {}
+		self.excluded = []
+
+		def location_stock(*args, unlocated=False, exclude_receiving=False):
+			self.excluded.append(exclude_receiving)
+			return self.unlocated if unlocated else self.places
+
+		patch.object(module, "location_stock", side_effect=location_stock).start()
 		patch.object(
-			module,
-			"location_stock",
-			side_effect=lambda *args, unlocated=False: self.unlocated if unlocated else self.places,
+			module, "is_stock_type_warehouse", side_effect=lambda warehouse: warehouse != "HOLD"
 		).start()
 		patch.object(module, "_", side_effect=lambda text: text).start()
 
@@ -63,10 +68,10 @@ class TestSourceStorageLocation(unittest.TestCase):
 		with self.assertRaisesRegex(frappe.ValidationError, r"Row 2.*no single Storage Location.*A-01 \(3\)"):
 			module.source_storage_location(doc(), self.row(), "WH", "ITEM")
 
-	def test_no_stock_at_any_location_keeps_the_default(self):
+	def test_no_stock_at_any_location_leaves_the_row_empty(self):
 		self.assertIsNone(module.source_storage_location(doc(), self.row(), "WH", "ITEM"))
 
-	def test_stock_without_any_location_keeps_the_default(self):
+	def test_stock_without_any_location_leaves_the_row_empty(self):
 		self.unlocated = {"": 8}
 		self.assertIsNone(module.source_storage_location(doc(), self.row(), "WH", "ITEM"))
 		self.places = {"WH / A-01": 1}
@@ -84,7 +89,7 @@ class TestSourceStorageLocation(unittest.TestCase):
 		with self.assertRaisesRegex(frappe.ValidationError, "more than one"):
 			module.source_storage_location(doc(), self.row(), "WH", "ITEM")
 
-	def test_negative_stock_allowed_and_non_stock_items_keep_the_default(self):
+	def test_negative_stock_allowed_and_non_stock_items_leave_the_row_empty(self):
 		self.item.is_stock_item = 0
 		self.assertIsNone(module.source_storage_location(doc(), self.row(), "WH", "ITEM"))
 		self.item.is_stock_item = 1
@@ -111,6 +116,8 @@ class TestSourceStorageLocation(unittest.TestCase):
 		self.assertFalse(module.is_outgoing_row(doc("Stock Entry"), frappe._dict(t_warehouse="B")))
 		self.assertTrue(module.is_outgoing_row(doc(), self.row()))
 		self.assertTrue(module.is_outgoing_row(doc("Sales Invoice"), self.row()))
+		self.assertTrue(module.is_outgoing_row(doc("POS Invoice"), self.row()))
+		self.assertTrue(module.is_outgoing_row(doc("Stock to Asset Conversion"), self.row()))
 		self.assertFalse(module.is_outgoing_row(doc(is_return=1), self.row()))
 		self.assertFalse(module.is_outgoing_row(doc("Purchase Receipt"), self.row()))
 
@@ -118,3 +125,19 @@ class TestSourceStorageLocation(unittest.TestCase):
 		row = frappe._dict(transfer_qty=12, qty=1, conversion_factor=12)
 		self.assertEqual(module.row_stock_qty(doc("Stock Entry"), row), 12)
 		self.assertEqual(module.row_stock_qty(doc(), frappe._dict(qty=3, conversion_factor=4)), 12)
+
+	def test_a_sale_never_counts_the_stock_at_a_receiving_location(self):
+		self.places = {"WH / A-01": 8}
+		module.source_storage_location(doc(), self.row(), "WH", "ITEM")
+		self.assertEqual(self.excluded, [True])
+
+	def test_a_put_away_inside_one_warehouse_takes_from_the_receiving_location(self):
+		self.places = {"WH / STAGING": 8}
+		row = self.row(s_warehouse="WH", t_warehouse="WH", transfer_qty=5)
+		self.assertEqual(
+			module.source_storage_location(
+				doc("Stock Entry", purpose="Material Transfer"), row, "WH", "ITEM"
+			),
+			"WH / STAGING",
+		)
+		self.assertEqual(self.excluded, [False])

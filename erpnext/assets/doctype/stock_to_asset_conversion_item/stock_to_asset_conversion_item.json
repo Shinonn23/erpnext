@@ -17,6 +17,7 @@
   "valuation_rate",
   "amount",
   "inventory_dimension",
+  "is_stock_item",
   "storage_location"
  ],
  "fields": [
@@ -123,12 +124,25 @@
    "fieldtype": "Link",
    "label": "Source Storage Location",
    "options": "Storage Location",
-   "search_index": 1
+   "search_index": 1,
+   "depends_on": "eval:doc.is_stock_item || doc.storage_location",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "is_stock_item",
+   "fieldtype": "Check",
+   "label": "Is Stock Item",
+   "fetch_from": "item_code.is_stock_item",
+   "hidden": 1,
+   "read_only": 1,
+   "print_hide": 1,
+   "description": "Fetched from the Item: the Storage Location fields apply only to a stock Item."
   }
  ],
  "istable": 1,
  "module": "Assets",
  "name": "Stock to Asset Conversion Item",
  "permissions": [],
- "track_changes": 1
+ "track_changes": 1,
+ "modified": "2026-11-18 12:00:00.000000"
 }

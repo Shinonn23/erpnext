@@ -27,7 +27,7 @@ from erpnext.stock.doctype.serial_and_batch_bundle.serial_and_batch_bundle impor
 	get_auto_batch_nos,
 	get_available_serial_nos,
 )
-from erpnext.stock.doctype.storage_location.storage_location import is_staging_location
+from erpnext.stock.doctype.storage_location.storage_location import is_receiving_location
 from erpnext.stock.get_item_details import get_company_total_stock, get_conversion_factor
 from erpnext.stock.serial_batch_bundle import (
 	SerialBatchCreation,
@@ -1961,8 +1961,8 @@ def get_available_item_locations(
 	has_serial_no = frappe.get_cached_value("Item", item_code, "has_serial_no")
 	has_batch_no = frappe.get_cached_value("Item", item_code, "has_batch_no")
 
-	if is_staging_location((inventory_dimensions_dict or {}).get("storage_location")):
-		# Stock at a receiving (STAGING) location is never picked: it leaves only by a Stock Entry (Siwat, 17 Nov 2026)
+	if is_receiving_location((inventory_dimensions_dict or {}).get("storage_location")):
+		# Stock at a Receiving location is never picked: it leaves only by a Stock Entry (Siwat, 17 Nov 2026)
 		pass
 	elif has_batch_no and has_serial_no:
 		locations = get_available_item_locations_for_serial_and_batched_item(

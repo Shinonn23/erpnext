@@ -1063,13 +1063,13 @@ def write_off_warehouse(company, source_warehouse=None):
 
 def _preferred_location(item_code, warehouse, allow_staging=False):
 	"""The Item's preferred Storage Location in ``warehouse`` (the first of its list that belongs there), else the
-	warehouse's default one that fits its Storage Condition. Never a receiving (STAGING) location unless
+	warehouse's default one that fits its Storage Condition. Never a Receiving location unless
 	``allow_staging`` (goods thrown away into a damage warehouse): None when there is none, so the team chooses."""
 	if not warehouse:
 		return None
 	from erpnext.stock.doctype.storage_location.storage_location import (
 		get_default_storage_location,
-		is_staging_location,
+		is_receiving_location,
 	)
 
 	for row in frappe.get_all(
@@ -1081,11 +1081,11 @@ def _preferred_location(item_code, warehouse, allow_staging=False):
 		if (
 			row.storage_location
 			and frappe.db.get_value("Storage Location", row.storage_location, "warehouse") == warehouse
-			and (allow_staging or not is_staging_location(row.storage_location))
+			and (allow_staging or not is_receiving_location(row.storage_location))
 		):
 			return row.storage_location
 	location = get_default_storage_location(warehouse, item_code)
-	if location and not allow_staging and is_staging_location(location):
+	if location and not allow_staging and is_receiving_location(location):
 		return None
 	return location
 
@@ -1165,14 +1165,6 @@ def build_release_entry(doc, sources, rows):
 	# complete when the team chooses it.
 	entry.flags.save_incomplete = incomplete
 	return entry
-
-
-def is_staging_location(location, warehouse):
-	if not warehouse:
-		return False
-	from erpnext.stock.doctype.storage_location.storage_location import is_staging_location as is_staging
-
-	return is_staging(location, warehouse)
 
 
 def _blocked_by_tracking(waiting, want, source, item_code, location=None, current=False):

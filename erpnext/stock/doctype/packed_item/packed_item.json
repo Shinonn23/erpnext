@@ -42,6 +42,7 @@
   "prevdoc_doctype",
   "parent_detail_docname",
   "inventory_dimension",
+  "is_stock_item",
   "storage_location",
   "inventory_dimension_col_break",
   "to_storage_location"
@@ -325,26 +326,37 @@
    "fieldtype": "Link",
    "label": "Source Storage Location",
    "options": "Storage Location",
-   "search_index": 1
+   "search_index": 1,
+   "depends_on": "eval:doc.is_stock_item || doc.storage_location"
   },
   {
    "fieldname": "inventory_dimension_col_break",
    "fieldtype": "Column Break"
   },
   {
-   "depends_on": "eval:doc.target_warehouse",
+   "depends_on": "eval:doc.target_warehouse && (doc.is_stock_item || doc.to_storage_location)",
    "fieldname": "to_storage_location",
    "fieldtype": "Link",
    "label": "Target Storage Location",
    "options": "Storage Location",
    "search_index": 1
+  },
+  {
+   "fieldname": "is_stock_item",
+   "fieldtype": "Check",
+   "label": "Is Stock Item",
+   "fetch_from": "item_code.is_stock_item",
+   "hidden": 1,
+   "read_only": 1,
+   "print_hide": 1,
+   "description": "Fetched from the Item: the Storage Location fields apply only to a stock Item."
   }
  ],
  "idx": 1,
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-09-30 23:24:44.044604",
+ "modified": "2026-11-18 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Packed Item",
