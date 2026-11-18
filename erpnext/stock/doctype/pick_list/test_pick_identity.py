@@ -44,6 +44,17 @@ class TestPickMismatch(unittest.TestCase):
 	def test_a_part_of_the_picked_serials_passes(self):
 		self.assertIsNone(module.pick_mismatch(row(serial_no="S2"), row(serial_no="S1\nS2")))
 
+	def test_comma_separated_serials_are_read_as_erpnext_reads_them(self):
+		self.bundles["PICK-B"] = [
+			entry(serial_no="S1", storage_location="L1"),
+			entry(serial_no="S2", storage_location="L1"),
+		]
+		self.assertIsNone(
+			module.pick_mismatch(row(serial_no="S1, S2"), row(serial_and_batch_bundle="PICK-B"))
+		)
+		self.assertIsNone(module.pick_mismatch(row(serial_no="S1,S2"), row(serial_no="S1\nS2")))
+		self.assertIn("S9", module.pick_mismatch(row(serial_no="S1, S9"), row(serial_no="S1\nS2")))
+
 	def test_another_warehouse_or_place_is_refused(self):
 		self.assertIn("warehouse", module.pick_mismatch(row(warehouse="W2"), row()))
 		self.assertIn("Storage Location", module.pick_mismatch(row(storage_location="L2"), row()))

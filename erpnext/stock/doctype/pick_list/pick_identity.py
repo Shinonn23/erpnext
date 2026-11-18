@@ -18,7 +18,10 @@ from frappe.utils import cstr, flt
 
 
 def _serials(text):
-	return [serial.strip() for serial in cstr(text).splitlines() if serial.strip()]
+	"""The Serial Nos of a row's text, split as ERPNext splits them (new lines or commas)."""
+	from erpnext.stock.doctype.serial_no.serial_no import get_serial_nos
+
+	return [serial for serial in get_serial_nos(cstr(text)) if serial]
 
 
 def bundle_entries(bundle):
