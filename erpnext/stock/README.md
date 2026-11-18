@@ -90,3 +90,21 @@ is Receiving in a stock warehouse, Holding in any other.
   Conversion Item fetch a hidden `is_stock_item`; their location fields show only for a stock Item (or when they hold a
   value). Stock Entry Detail fetches `t_warehouse_type`, and its To Storage Location is mandatory on a Material Transfer
   into a stock warehouse. Stock to Asset Conversion Item shows its Storage Location as a column.
+
+## Fixed-asset receipt rows and the bin of a quarantined row (Connect Diagnostics, WP6, 19 Nov 2026)
+
+- Purchase Receipt Item and Purchase Invoice Item: a fixed-asset row (`is_fixed_asset`) hides Storage Location,
+  Rejected Quantity, Rejected Warehouse and Rejected Storage Location (`depends_on eval:!doc.is_fixed_asset`; Rejected
+  Storage Location also only with a Rejected Warehouse), and its Asset Location is `mandatory_depends_on` (a Purchase
+  Receipt that is not a return; a Purchase Invoice with Update Stock that is not a return). The server checks the same on
+  save: `BuyingController.validate_asset_locations` ("Row #N: enter the Asset Location of the asset item X"), not only
+  when `make_asset` makes the Asset at submit.
+- A row the Connect Diagnostics app received into Quarantine (`putaway_warehouse`, "Receive for Warehouse") keeps the bin
+  the user chose before in the no_copy, read-only `putaway_storage_location` ("Receive for Storage Location"), and its
+  Storage Location is read-only (`read_only_depends_on eval:doc.putaway_warehouse`).
+  `purchase_inspection_units.build_release_entry` sends accepted goods there (`_putaway_location`: a non-Receiving
+  location of the target warehouse), else to the Item's preferred location; rejected goods never.
+- The header `set_warehouse` of Purchase Receipt and Purchase Invoice is labelled "Receive for Warehouse", and
+  `TransactionBase.reset_default_field_value` reads a row's `putaway_warehouse` for it, so a receipt whose rows are held
+  in Quarantine keeps the warehouse they are for.
+- Offline tests: `stock/doctype/purchase_receipt/test_receipt_asset_rows.py`.
