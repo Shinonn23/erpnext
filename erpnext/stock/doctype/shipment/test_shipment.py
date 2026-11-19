@@ -17,8 +17,30 @@ class TestShipment(ERPNextTestSuite):
 		shipment.submit()
 		second_shipment = make_shipment(delivery_note.name)
 		self.assertEqual(second_shipment.value_of_goods, delivery_note.grand_total)
-		self.assertEqual(len(second_shipment.shipment_delivery_note), 1)
-		self.assertEqual(second_shipment.shipment_delivery_note[0].delivery_note, delivery_note.name)
+		self.assertEqual(second_shipment.shipment_purpose, "Sale Delivery")
+		self.assertEqual(
+			[(row.reference_doctype, row.reference_name) for row in second_shipment.shipment_documents],
+			[("Delivery Note", delivery_note.name)],
+		)
+		# the legacy Delivery Note table moves into Stock Transactions on save
+		self.assertFalse(shipment.shipment_delivery_note)
+		self.assertEqual(shipment.shipment_documents[0].document_kind, "Sale Delivery")
+
+	def test_miscellaneous_shipment_submits_without_documents_or_addresses(self):
+		shipment = frappe.new_doc("Shipment")
+		shipment.shipment_purpose = "Miscellaneous"
+		shipment.pickup_from_type = "Company"
+		shipment.pickup_company = get_shipment_company().name
+		shipment.pickup_contact_person = "Administrator"
+		shipment.delivery_to_type = "Company"
+		shipment.delivery_company = get_shipment_company().name
+		shipment.pickup_type = "Self delivery"
+		shipment.pickup_date = date.today().strftime("%Y-%m-%d")
+		shipment.description_of_content = "Documents to the bank"
+		shipment.recipient_details = "Bank branch, 1 Main Road"
+		shipment.insert()
+		shipment.submit()
+		self.assertEqual(shipment.docstatus, 1)
 
 	def test_get_total_weight(self):
 		shipment = frappe.new_doc("Shipment")
