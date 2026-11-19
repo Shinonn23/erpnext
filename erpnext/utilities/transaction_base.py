@@ -245,7 +245,11 @@ class TransactionBase(StatusUpdater):
 			if default_field == "set_warehouse" and row.get("delivered_by_supplier"):
 				continue
 
-			child_table_values.add(row.get(child_table_field))
+			value = row.get(child_table_field)
+			if default_field == "set_warehouse" and row.get("putaway_warehouse"):
+				# a receipt row held in Quarantine is still received for its own warehouse (Receive for Warehouse)
+				value = row.get("putaway_warehouse")
+			child_table_values.add(value)
 
 		if len(child_table_values) > 1:
 			self.set(default_field, None)

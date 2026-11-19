@@ -451,9 +451,10 @@
    "fieldname": "set_warehouse",
    "fieldtype": "Link",
    "in_import_template": 1,
-   "label": "Accepted Warehouse",
+   "label": "Receive for Warehouse",
    "options": "Warehouse",
-   "print_hide": 1
+   "print_hide": 1,
+   "description": "The warehouse the goods are received for. A row whose Item is inspected on receipt is held in that warehouse's Quarantine until the Quality Inspection team has inspected it."
   },
   {
    "fieldname": "rejected_warehouse",
@@ -1368,7 +1369,7 @@
  "idx": 261,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-11-07 23:00:00.000000",
+ "modified": "2026-11-19 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Purchase Receipt",

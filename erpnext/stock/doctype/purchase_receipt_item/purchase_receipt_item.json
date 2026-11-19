@@ -85,6 +85,7 @@
   "warehouse_and_reference",
   "warehouse",
   "putaway_warehouse",
+  "putaway_storage_location",
   "rejected_warehouse",
   "from_warehouse",
   "material_request",
@@ -278,7 +279,8 @@
    "oldfieldtype": "Currency",
    "print_hide": 1,
    "print_width": "100px",
-   "width": "100px"
+   "width": "100px",
+   "depends_on": "eval:!doc.is_fixed_asset"
   },
   {
    "fieldname": "col_break2",
@@ -610,6 +612,17 @@
    "read_only": 1
   },
   {
+   "depends_on": "eval:doc.putaway_storage_location",
+   "description": "The Storage Location chosen for this row before it was received into Quarantine: the Stock team puts the goods there once they are inspected.",
+   "fieldname": "putaway_storage_location",
+   "fieldtype": "Link",
+   "label": "Receive for Storage Location",
+   "no_copy": 1,
+   "options": "Storage Location",
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
    "fieldname": "rejected_warehouse",
    "fieldtype": "Link",
    "label": "Rejected Warehouse",
@@ -619,7 +632,8 @@
    "options": "Warehouse",
    "print_hide": 1,
    "print_width": "100px",
-   "width": "100px"
+   "width": "100px",
+   "depends_on": "eval:!doc.is_fixed_asset"
   },
   {
    "depends_on": "eval:doc.docstatus==1",
@@ -932,7 +946,8 @@
    "fieldtype": "Link",
    "label": "Asset Location",
    "options": "Location",
-   "print_hide": 1
+   "print_hide": 1,
+   "mandatory_depends_on": "eval:doc.is_fixed_asset && !parent.is_return"
   },
   {
    "depends_on": "is_fixed_asset",
@@ -1269,7 +1284,7 @@
    "label": "Rejected Storage Location",
    "options": "Storage Location",
    "search_index": 1,
-   "depends_on": "eval:doc.is_stock_item || doc.rejected_storage_location"
+   "depends_on": "eval:!doc.is_fixed_asset && doc.rejected_warehouse && (doc.is_stock_item || doc.rejected_storage_location)"
   },
   {
    "depends_on": "eval:parent.is_internal_supplier == 1 && (doc.is_stock_item || doc.from_storage_location)",
@@ -1285,7 +1300,8 @@
    "label": "Target Storage Location",
    "options": "Storage Location",
    "search_index": 1,
-   "depends_on": "eval:doc.is_stock_item || doc.storage_location"
+   "depends_on": "eval:!doc.is_fixed_asset && (doc.is_stock_item || doc.storage_location)",
+   "read_only_depends_on": "eval:doc.putaway_warehouse"
   },
   {
    "collapsible": 1,
@@ -1380,7 +1396,7 @@
  "idx": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-11-18 12:00:00.000000",
+ "modified": "2026-11-19 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Purchase Receipt Item",

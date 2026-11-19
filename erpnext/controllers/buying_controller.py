@@ -49,6 +49,7 @@ class BuyingController(SubcontractingController):
 		self.validate_from_warehouse()
 		self.set_supplier_address()
 		self.validate_asset_return()
+		self.validate_asset_locations()
 		self.validate_auto_repeat_subscription_dates()
 		self.create_package_for_transfer()
 
@@ -72,6 +73,27 @@ class BuyingController(SubcontractingController):
 		if self.doctype in ("Purchase Receipt", "Purchase Invoice"):
 			self.update_valuation_rate()
 			self.set_serial_and_batch_bundle()
+
+	def validate_asset_locations(self):
+		"""A fixed-asset row of a receipt that makes its Assets on submit names the Asset Location on save (UX WP6,
+		19 Nov 2026), not only when the Asset is made: the form marks the field mandatory on the row
+		(``mandatory_depends_on``), the server refuses the save without it. A return makes no Asset."""
+		if self.doctype not in ("Purchase Receipt", "Purchase Invoice") or cint(self.get("is_return")):
+			return
+		if self.doctype == "Purchase Invoice" and not cint(self.get("update_stock")):
+			return
+		missing = [
+			row
+			for row in self.get("items") or []
+			if row.get("is_fixed_asset") and not row.get("asset_location")
+		]
+		if missing:
+			frappe.throw(
+				_("Row #{0}: enter the Asset Location of the asset item {1}.").format(
+					missing[0].idx, frappe.bold(missing[0].item_code)
+				),
+				title=_("Asset Location"),
+			)
 
 	def onload(self):
 		super().onload()
@@ -876,7 +898,8 @@ class BuyingController(SubcontractingController):
 							{
 								"actual_qty": -1 * source_qty,
 								"warehouse": d.from_warehouse,
-								"storage_location": d.get("from_storage_location") or d.get("storage_location"),
+								"storage_location": d.get("from_storage_location")
+								or d.get("storage_location"),
 								"outgoing_rate": d.rate,
 								"recalculate_rate": 1,
 								"dependant_sle_voucher_detail_no": d.name,
@@ -953,7 +976,8 @@ class BuyingController(SubcontractingController):
 							{
 								"actual_qty": -1 * source_qty,
 								"warehouse": d.from_warehouse,
-								"storage_location": d.get("from_storage_location") or d.get("storage_location"),
+								"storage_location": d.get("from_storage_location")
+								or d.get("storage_location"),
 								"recalculate_rate": 1,
 								"serial_and_batch_bundle": (
 									self.get_package_for_target_warehouse(d, d.from_warehouse, "Inward")

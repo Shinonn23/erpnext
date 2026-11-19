@@ -1061,6 +1061,18 @@ def write_off_warehouse(company, source_warehouse=None):
 	return source.damage_warehouse
 
 
+def _putaway_location(location, warehouse):
+	"""The Storage Location the receipt row was meant for (``putaway_storage_location``, kept when the row was received
+	into Quarantine), when it is a location of ``warehouse`` that is not a Receiving one; else None."""
+	if not location or not warehouse:
+		return None
+	from erpnext.stock.doctype.storage_location.storage_location import is_receiving_location
+
+	if frappe.db.get_value("Storage Location", location, "warehouse") != warehouse:
+		return None
+	return None if is_receiving_location(location) else location
+
+
 def _preferred_location(item_code, warehouse, allow_staging=False):
 	"""The Item's preferred Storage Location in ``warehouse`` (the first of its list that belongs there), else the
 	warehouse's default one that fits its Storage Condition. Never a Receiving location unless
@@ -1112,9 +1124,12 @@ def build_release_entry(doc, sources, rows):
 			from_location = row["storage_location"]
 		if not target:
 			incomplete = True
-		target_location = (
-			_preferred_location(row["item_code"], target, allow_staging=rejected) if target else None
-		)
+		# accepted goods go to the location the receipt row was meant for, else the Item's preferred one
+		target_location = None
+		if target and not rejected:
+			target_location = _putaway_location(row.get("putaway_location"), target)
+		if target and not target_location:
+			target_location = _preferred_location(row["item_code"], target, allow_staging=rejected)
 		if not rejected and target and not target_location:
 			incomplete = True
 		if (
