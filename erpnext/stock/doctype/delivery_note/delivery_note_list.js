@@ -10,6 +10,7 @@ frappe.listview_settings["Delivery Note"] = {
 		"is_return",
 		"status",
 		"currency",
+		"is_borrowing_transaction",
 	],
 	get_indicator: function (doc) {
 		if (cint(doc.is_return) == 1 && doc.status == "Return") {
@@ -18,6 +19,9 @@ frappe.listview_settings["Delivery Note"] = {
 			return [__("Closed"), "green", "status,=,Closed"];
 		} else if (doc.status === "Return Issued") {
 			return [__("Return Issued"), "grey", "status,=,Return Issued"];
+		} else if (cint(doc.is_borrowing_transaction)) {
+			// a Borrowing / Demo Delivery Note is never billed (UX WP3): never "To Bill"
+			return [__(doc.status || "Completed"), "green", `status,=,${doc.status || "Completed"}`];
 		} else if (flt(doc.per_billed) == 0) {
 			return [__("To Bill"), "orange", "status,=,To Bill"];
 		} else if (flt(doc.per_billed, 2) > 0 && flt(doc.per_billed, 2) < 100) {
@@ -65,6 +69,10 @@ frappe.listview_settings["Delivery Note"] = {
 
 		if (frappe.model.can_create("Sales Invoice")) {
 			doclist.page.add_action_item(__("Sales Invoice"), () => {
+				// a Borrowing / Demo Delivery Note is never invoiced (UX WP3)
+				if (doclist.get_checked_items().some((doc) => cint(doc.is_borrowing_transaction))) {
+					frappe.throw(__("A Borrowing Delivery Note is not invoiced."));
+				}
 				erpnext.bulk_transaction_processing.create(doclist, "Delivery Note", "Sales Invoice");
 			});
 		}

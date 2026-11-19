@@ -90,3 +90,9 @@ is Receiving in a stock warehouse, Holding in any other.
   Conversion Item fetch a hidden `is_stock_item`; their location fields show only for a stock Item (or when they hold a
   value). Stock Entry Detail fetches `t_warehouse_type`, and its To Storage Location is mandatory on a Material Transfer
   into a stock warehouse. Stock to Asset Conversion Item shows its Storage Location as a column.
+
+## Delivery Note by kind (Connect Diagnostics, UX WP3, 18 Nov 2026)
+
+A Borrowing / Demo Delivery Note has its own layout, status and makers: see `borrowing/README.md` "The Borrowing
+Delivery Note is its own kind". `accounts/report/non_billed_report.py` leaves it out of "Delivered Items To Be
+Billed", and `delivery_note_list.js` never shows it To Bill and refuses it in the bulk Sales Invoice action.

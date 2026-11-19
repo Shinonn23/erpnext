@@ -25,6 +25,19 @@
   "issue_credit_note",
   "return_against",
   "return_reason",
+  "borrowing_section",
+  "borrowing",
+  "borrowing_request_type",
+  "borrowing_borrower_type",
+  "borrowing_borrower",
+  "borrowing_requested_by_name",
+  "borrowing_column",
+  "borrowing_recipient",
+  "borrowing_recipient_location",
+  "borrowing_custody_warehouse",
+  "borrowing_recipient_column",
+  "borrowing_recipient_address",
+  "borrowing_recipient_contact",
   "accounting_dimensions_section",
   "cost_center",
   "column_break_18",
@@ -168,7 +181,6 @@
   "is_internal_customer",
   "represents_company",
   "inter_company_reference",
-  "borrowing",
   "is_system_generated",
   "is_borrowing_transaction",
   "borrowing_source_doctype",
@@ -202,6 +214,7 @@
    "set_only_once": 1
   },
   {
+   "depends_on": "eval:!doc.is_borrowing_transaction",
    "fieldname": "customer",
    "fieldtype": "Link",
    "in_standard_filter": 1,
@@ -215,7 +228,7 @@
   },
   {
    "bold": 1,
-   "depends_on": "customer",
+   "depends_on": "eval:(doc.customer) && !doc.is_borrowing_transaction",
    "fetch_from": "customer.customer_name",
    "fieldname": "customer_name",
    "fieldtype": "Data",
@@ -305,6 +318,7 @@
    "depends_on": "is_return",
    "fieldname": "issue_credit_note",
    "fieldtype": "Check",
+   "hidden": 1,
    "label": "Issue Credit Note"
   },
   {
@@ -320,6 +334,7 @@
   },
   {
    "collapsible": 1,
+   "depends_on": "eval:!doc.is_borrowing_transaction",
    "fieldname": "customer_po_details",
    "fieldtype": "Section Break",
    "label": "Customer PO Details"
@@ -352,7 +367,7 @@
    "width": "100px"
   },
   {
-   "depends_on": "customer",
+   "depends_on": "eval:doc.customer && !doc.is_borrowing_transaction",
    "fieldname": "contact_info",
    "fieldtype": "Section Break",
    "label": "Billing Address",
@@ -416,6 +431,7 @@
    "print_hide": 1
   },
   {
+   "depends_on": "eval:!doc.is_borrowing_transaction",
    "fieldname": "tax_id",
    "fieldtype": "Data",
    "label": "Tax Id",
@@ -442,6 +458,7 @@
   {
    "collapsible": 1,
    "collapsible_depends_on": "eval:doc.currency && doc.currency != erpnext.get_currency(doc.company)",
+   "depends_on": "eval:!doc.is_borrowing_transaction",
    "fieldname": "currency_and_price_list",
    "fieldtype": "Section Break",
    "label": "Currency and Price List",
@@ -546,6 +563,7 @@
    "reqd": 1
   },
   {
+   "depends_on": "eval:!doc.is_borrowing_transaction",
    "fieldname": "pricing_rule_details",
    "fieldtype": "Section Break",
    "label": "Pricing Rules"
@@ -595,6 +613,7 @@
    "read_only": 1
   },
   {
+   "depends_on": "eval:!doc.is_borrowing_transaction",
    "fieldname": "base_total",
    "fieldtype": "Currency",
    "label": "Total (Company Currency)",
@@ -603,6 +622,7 @@
    "read_only": 1
   },
   {
+   "depends_on": "eval:!doc.is_borrowing_transaction",
    "fieldname": "base_net_total",
    "fieldtype": "Currency",
    "label": "Net Total (Company Currency)",
@@ -619,6 +639,7 @@
    "fieldtype": "Column Break"
   },
   {
+   "depends_on": "eval:!doc.is_borrowing_transaction",
    "fieldname": "total",
    "fieldtype": "Currency",
    "label": "Total",
@@ -626,6 +647,7 @@
    "read_only": 1
   },
   {
+   "depends_on": "eval:!doc.is_borrowing_transaction",
    "fieldname": "net_total",
    "fieldtype": "Currency",
    "label": "Net Total",
@@ -642,6 +664,7 @@
    "read_only": 1
   },
   {
+   "depends_on": "eval:!doc.is_borrowing_transaction",
    "fieldname": "taxes_section",
    "fieldtype": "Section Break",
    "hide_border": 1,
@@ -669,6 +692,7 @@
    "print_hide": 1
   },
   {
+   "depends_on": "eval:!doc.is_borrowing_transaction",
    "fieldname": "section_break_41",
    "fieldtype": "Section Break",
    "hide_border": 1
@@ -692,6 +716,7 @@
   },
   {
    "collapsible": 1,
+   "depends_on": "eval:!doc.is_borrowing_transaction",
    "fieldname": "sec_tax_breakup",
    "fieldtype": "Section Break",
    "label": "Tax Breakup"
@@ -706,6 +731,7 @@
    "read_only": 1
   },
   {
+   "depends_on": "eval:!doc.is_borrowing_transaction",
    "fieldname": "section_break_44",
    "fieldtype": "Section Break"
   },
@@ -735,6 +761,7 @@
   },
   {
    "collapsible": 1,
+   "depends_on": "eval:!doc.is_borrowing_transaction",
    "fieldname": "section_break_49",
    "fieldtype": "Section Break",
    "label": "Additional Discount"
@@ -1155,6 +1182,7 @@
   {
    "collapsible": 1,
    "collapsible_depends_on": "total_commission",
+   "depends_on": "eval:!doc.is_borrowing_transaction",
    "fieldname": "sales_team_section_break",
    "fieldtype": "Section Break",
    "label": "Commission",
@@ -1204,6 +1232,7 @@
   {
    "collapsible": 1,
    "collapsible_depends_on": "sales_team",
+   "depends_on": "eval:!doc.is_borrowing_transaction",
    "fieldname": "section_break1",
    "fieldtype": "Section Break",
    "label": "Sales Team",
@@ -1237,7 +1266,7 @@
   {
    "fieldname": "borrowing",
    "fieldtype": "Link",
-   "hidden": 1,
+   "in_standard_filter": 1,
    "label": "Borrowing",
    "options": "Borrowing",
    "read_only": 1
@@ -1372,6 +1401,7 @@
    "label": "Address & Contact"
   },
   {
+   "depends_on": "eval:!doc.is_borrowing_transaction",
    "fieldname": "terms_tab",
    "fieldtype": "Tab Break",
    "label": "Terms"
@@ -1405,6 +1435,7 @@
    "fieldtype": "Column Break"
   },
   {
+   "depends_on": "eval:!doc.is_borrowing_transaction",
    "fieldname": "shipping_address_section",
    "fieldtype": "Section Break",
    "label": "Shipping Address"
@@ -1414,6 +1445,7 @@
    "fieldtype": "Column Break"
   },
   {
+   "depends_on": "eval:!doc.is_borrowing_transaction",
    "fieldname": "company_address_section",
    "fieldtype": "Section Break",
    "label": "Company Address"
@@ -1504,6 +1536,7 @@
    "print_hide": 1
   },
   {
+   "depends_on": "eval:!doc.is_borrowing_transaction",
    "fieldname": "totals_section",
    "fieldtype": "Section Break",
    "label": "Totals",
@@ -1511,6 +1544,7 @@
    "options": "fa fa-money"
   },
   {
+   "depends_on": "eval:!doc.is_borrowing_transaction",
    "fieldname": "base_totals_section",
    "fieldtype": "Section Break",
    "label": "Totals (Company Currency)",
@@ -1518,6 +1552,7 @@
   },
   {
    "collapsible": 1,
+   "depends_on": "eval:!doc.is_borrowing_transaction",
    "fieldname": "utm_analytics_section",
    "fieldtype": "Section Break",
    "label": "UTM Analytics"
@@ -1527,6 +1562,7 @@
    "fieldtype": "Column Break"
   },
   {
+   "depends_on": "eval:!doc.is_borrowing_transaction",
    "fieldname": "auto_repeat_section",
    "fieldtype": "Section Break",
    "label": "Auto Repeat"
@@ -1544,6 +1580,7 @@
    "fieldname": "return_reason",
    "fieldtype": "Small Text",
    "label": "Return Reason",
+   "mandatory_depends_on": "eval:doc.is_return && !doc.is_borrowing_transaction",
    "no_copy": 1
   },
   {
@@ -1568,13 +1605,103 @@
   {
    "fieldname": "connect_approval_column",
    "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:doc.is_borrowing_transaction",
+   "fieldname": "borrowing_section",
+   "fieldtype": "Section Break",
+   "label": "Borrowing"
+  },
+  {
+   "fetch_from": "borrowing.material_request_type",
+   "fieldname": "borrowing_request_type",
+   "fieldtype": "Data",
+   "label": "Borrowing Kind",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fetch_from": "borrowing.borrower_type",
+   "fieldname": "borrowing_borrower_type",
+   "fieldtype": "Data",
+   "label": "Borrower Type",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fetch_from": "borrowing.borrower",
+   "fieldname": "borrowing_borrower",
+   "fieldtype": "Dynamic Link",
+   "label": "Borrower",
+   "no_copy": 1,
+   "options": "borrowing_borrower_type",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "borrowing.requested_by_name",
+   "fieldname": "borrowing_requested_by_name",
+   "fieldtype": "Data",
+   "label": "Responsible Employee",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "borrowing_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fetch_from": "borrowing.recipient_customer",
+   "fieldname": "borrowing_recipient",
+   "fieldtype": "Link",
+   "label": "Recipient",
+   "no_copy": 1,
+   "options": "Customer",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "borrowing.recipient_location",
+   "fieldname": "borrowing_recipient_location",
+   "fieldtype": "Link",
+   "label": "Recipient Location",
+   "no_copy": 1,
+   "options": "Location",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "borrowing.customer_loan_warehouse",
+   "fieldname": "borrowing_custody_warehouse",
+   "fieldtype": "Link",
+   "label": "Custody Warehouse",
+   "no_copy": 1,
+   "options": "Warehouse",
+   "read_only": 1
+  },
+  {
+   "fieldname": "borrowing_recipient_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fetch_from": "borrowing.recipient_address_display",
+   "fieldname": "borrowing_recipient_address",
+   "fieldtype": "Text Editor",
+   "label": "Recipient Address",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fetch_from": "borrowing.recipient_contact_display",
+   "fieldname": "borrowing_recipient_contact",
+   "fieldtype": "Text Editor",
+   "label": "Recipient Contact",
+   "no_copy": 1,
+   "read_only": 1
   }
  ],
  "icon": "truck",
  "idx": 146,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-11-07 23:00:00.000000",
+ "modified": "2026-11-19 01:00:00.000000",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Delivery Note",
