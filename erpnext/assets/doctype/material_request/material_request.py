@@ -168,7 +168,13 @@ def get_customer_delivery_snapshot(
 
 
 # Borrowing stages a request shows while they last, the earliest first
-BORROWING_WAITING_STATES = ("Pending Pick", "Pending Delivery", "Pending Quality Inspection", "Pending Receipt")
+BORROWING_WAITING_STATES = (
+	"Pending Pick",
+	"Pending Delivery",
+	"Pending Quality Inspection",
+	"Pending Receipt",
+)
+
 
 class CustomerMaterialRequest(MaterialRequest):
 	def is_auto_created_by_reorder(self):
@@ -235,6 +241,8 @@ class CustomerMaterialRequest(MaterialRequest):
 					row.item_code = row.item_code or frappe.db.get_value("Asset", row.asset, "item_code")
 				row.from_warehouse = None
 				row.warehouse = None
+				row.from_storage_location = None
+				row.storage_location = None
 				row.item_type = "Fixed Asset"
 			else:
 				row.asset = None
@@ -270,7 +278,9 @@ class CustomerMaterialRequest(MaterialRequest):
 					frappe.throw(_("Choose Stock Item or Asset as the Borrow Item Type."))
 				expected = "Stock Item" if self.borrow_item_type == "Stock Item" else "Fixed Asset"
 				if any(row.item_type != expected for row in self.items):
-					frappe.throw(_("Every item must match Borrow Item Type {0}.").format(self.borrow_item_type))
+					frappe.throw(
+						_("Every item must match Borrow Item Type {0}.").format(self.borrow_item_type)
+					)
 			else:
 				self.borrow_item_type = "Stock Item" if stock_rows else "Asset"
 			if not stock_rows:
@@ -610,7 +620,7 @@ class CustomerMaterialRequest(MaterialRequest):
 			row.stock_uom = item.stock_uom
 			row.conversion_factor = row.conversion_factor or 1
 			row.schedule_date = row.schedule_date or self.schedule_date
-			row.target_location = row.target_location or self.customer_location
+			# a Stock Item row has no Asset Location: the customer's Location stays on the header (UX WP7)
 		if asset_rows:
 			rows = self.items
 			try:
@@ -891,7 +901,9 @@ class CustomerMaterialRequest(MaterialRequest):
 		# the request shows the Borrowing's own stage while it is picked, delivered or received back (Siwat, 18 Nov 2026)
 		waiting = next((state for state in BORROWING_WAITING_STATES if state in loan_states), None)
 		if not fulfilled_total:
-			self.request_progress_status = waiting if waiting in ("Pending Pick", "Pending Delivery") else "Pending"
+			self.request_progress_status = (
+				waiting if waiting in ("Pending Pick", "Pending Delivery") else "Pending"
+			)
 		elif fulfilled_total < requested_total:
 			self.request_progress_status = "Partially Fulfilled"
 		elif waiting in ("Pending Quality Inspection", "Pending Receipt"):

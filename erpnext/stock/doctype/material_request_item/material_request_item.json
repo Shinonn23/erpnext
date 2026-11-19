@@ -118,30 +118,31 @@
    "width": "100px"
   },
   {
-   "depends_on": "eval:parent.material_request_type == 'Asset Transfer'",
+   "depends_on": "eval:parent.material_request_type=='Asset Transfer' || (in_list(['Customer Demo', 'Borrow', 'Customer Borrow'], parent.material_request_type) && doc.item_type=='Fixed Asset')",
    "fieldname": "asset",
    "fieldtype": "Link",
    "in_list_view": 0,
    "label": "Asset",
    "mandatory_depends_on": "eval:parent.material_request_type == 'Asset Transfer'",
-   "options": "Asset"
+   "options": "Asset",
+   "read_only_depends_on": "eval:parent.material_request_type != 'Asset Transfer'"
   },
   {
-   "depends_on": "eval:parent.material_request_type == 'Asset Transfer'",
+   "depends_on": "eval:parent.material_request_type=='Asset Transfer' || (in_list(['Customer Demo', 'Borrow', 'Customer Borrow'], parent.material_request_type) && doc.item_type=='Fixed Asset')",
    "fieldname": "asset_name",
    "fieldtype": "Data",
    "label": "Asset Name",
    "read_only": 1
   },
   {
-   "depends_on": "eval:parent.material_request_type == 'Asset Transfer'",
+   "depends_on": "eval:parent.material_request_type=='Asset Transfer' || (in_list(['Customer Demo', 'Borrow', 'Customer Borrow'], parent.material_request_type) && doc.item_type=='Fixed Asset')",
    "fieldname": "asset_serial_number",
    "fieldtype": "Data",
    "label": "Asset Serial Number",
    "read_only": 1
   },
   {
-   "depends_on": "eval:parent.material_request_type == 'Asset Transfer'",
+   "depends_on": "eval:parent.material_request_type=='Asset Transfer' || (in_list(['Customer Demo', 'Borrow', 'Customer Borrow'], parent.material_request_type) && doc.item_type=='Fixed Asset')",
    "fieldname": "source_location",
    "fieldtype": "Link",
    "in_list_view": 1,
@@ -150,7 +151,7 @@
    "read_only": 1
   },
   {
-   "depends_on": "eval:parent.material_request_type == 'Asset Transfer'",
+   "depends_on": "eval:parent.material_request_type=='Asset Transfer' || (in_list(['Customer Demo', 'Borrow', 'Customer Borrow'], parent.material_request_type) && doc.item_type=='Fixed Asset')",
    "fieldname": "target_location",
    "fieldtype": "Link",
    "in_list_view": 1,
@@ -802,12 +803,13 @@
   },
   {
    "allow_on_submit": 1,
+   "depends_on": "eval:doc.demo_acquisition_method",
    "description": "Blank until the back office decides: Lend Stock, or an Asset (Ready, Wait Return, Convert Stock).",
    "fieldname": "demo_acquisition_method",
    "fieldtype": "Select",
-   "hidden": 1,
    "label": "Demo Acquisition Method",
-   "options": "\nReady Asset\nWait Return\nConvert Stock\nLend Stock"
+   "options": "\nReady Asset\nWait Return\nConvert Stock\nLend Stock",
+   "read_only": 1
   },
   {
    "description": "The Item the requester asked for; the back office may supply another Demo model.",
@@ -824,7 +826,7 @@
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-11-07 14:00:00.000000",
+ "modified": "2026-11-19 10:00:00.000000",
  "modified_by": "arirat.ba@connectdiagnostics.com",
  "module": "Stock",
  "name": "Material Request Item",
