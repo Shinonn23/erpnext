@@ -266,6 +266,7 @@
    "read_only": 1
   },
   {
+   "depends_on": "eval:!parent.is_borrowing_transaction",
    "fieldname": "section_break_17",
    "fieldtype": "Section Break"
   },
@@ -296,6 +297,7 @@
   {
    "collapsible": 1,
    "collapsible_depends_on": "eval: doc.margin_type || doc.discount_amount || doc.distributed_discount_amount",
+   "depends_on": "eval:!parent.is_borrowing_transaction",
    "fieldname": "discount_and_margin",
    "fieldtype": "Section Break",
    "label": "Discount and Margin"
@@ -356,6 +358,7 @@
    "read_only": 1
   },
   {
+   "depends_on": "eval:!parent.is_borrowing_transaction",
    "fieldname": "section_break_1",
    "fieldtype": "Section Break"
   },
@@ -428,6 +431,7 @@
    "read_only": 1
   },
   {
+   "depends_on": "eval:!parent.is_borrowing_transaction",
    "fieldname": "section_break_25",
    "fieldtype": "Section Break"
   },
@@ -510,19 +514,19 @@
    "options": "Warehouse",
    "print_hide": 1,
    "print_width": "100px",
-   "width": "100px",
-   "read_only_depends_on": "eval:doc.pick_list_item"
+   "read_only_depends_on": "eval:doc.pick_list_item",
+   "width": "100px"
   },
   {
-   "depends_on": "eval:parent.is_internal_customer || doc.target_warehouse",
+   "depends_on": "eval:parent.is_internal_customer || parent.is_borrowing_transaction",
    "fieldname": "target_warehouse",
    "fieldtype": "Link",
-   "hidden": 1,
    "ignore_user_permissions": 1,
    "label": "Target Warehouse",
    "no_copy": 1,
    "options": "Warehouse",
-   "print_hide": 1
+   "print_hide": 1,
+   "read_only_depends_on": "eval:parent.is_borrowing_transaction"
   },
   {
    "depends_on": "eval:!doc.__islocal",
@@ -611,6 +615,7 @@
    "width": "120px"
   },
   {
+   "depends_on": "eval:!parent.is_borrowing_transaction",
    "fieldname": "item_tax_template",
    "fieldtype": "Link",
    "label": "Item Tax Template",
@@ -692,6 +697,7 @@
    "width": "150px"
   },
   {
+   "depends_on": "eval:!parent.is_borrowing_transaction",
    "fieldname": "billed_amt",
    "fieldtype": "Currency",
    "label": "Billed Amt",
@@ -711,6 +717,7 @@
    "print_hide": 1
   },
   {
+   "depends_on": "eval:!parent.is_borrowing_transaction",
    "fieldname": "accounting_details_section",
    "fieldtype": "Section Break",
    "label": "Accounting Details"
@@ -923,8 +930,8 @@
    "fieldtype": "Link",
    "label": "Batch No",
    "options": "Batch",
-   "search_index": 1,
-   "read_only_depends_on": "eval:doc.pick_list_item"
+   "read_only_depends_on": "eval:doc.pick_list_item",
+   "search_index": 1
   },
   {
    "default": "1",
@@ -985,20 +992,21 @@
    "fieldtype": "Column Break"
   },
   {
+   "depends_on": "eval:doc.is_stock_item || doc.storage_location",
    "fieldname": "storage_location",
    "fieldtype": "Link",
    "label": "Source Storage Location",
    "options": "Storage Location",
-   "search_index": 1,
-   "depends_on": "eval:doc.is_stock_item || doc.storage_location",
-   "read_only_depends_on": "eval:doc.pick_list_item"
+   "read_only_depends_on": "eval:doc.pick_list_item",
+   "search_index": 1
   },
   {
-   "depends_on": "eval:parent.is_internal_customer == 1 && (doc.is_stock_item || doc.to_storage_location)",
+   "depends_on": "eval:(parent.is_internal_customer || parent.is_borrowing_transaction) && (doc.is_stock_item || doc.to_storage_location)",
    "fieldname": "to_storage_location",
    "fieldtype": "Link",
    "label": "Target Storage Location",
    "options": "Storage Location",
+   "read_only_depends_on": "eval:parent.is_borrowing_transaction",
    "search_index": 1
   },
   {
@@ -1072,14 +1080,14 @@
    "read_only": 1
   },
   {
+   "description": "Fetched from the Item: the Storage Location fields apply only to a stock Item.",
+   "fetch_from": "item_code.is_stock_item",
    "fieldname": "is_stock_item",
    "fieldtype": "Check",
-   "label": "Is Stock Item",
-   "fetch_from": "item_code.is_stock_item",
    "hidden": 1,
-   "read_only": 1,
+   "label": "Is Stock Item",
    "print_hide": 1,
-   "description": "Fetched from the Item: the Storage Location fields apply only to a stock Item."
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,
@@ -1087,7 +1095,7 @@
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-11-18 14:00:00.000000",
+ "modified": "2026-11-19 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Delivery Note Item",

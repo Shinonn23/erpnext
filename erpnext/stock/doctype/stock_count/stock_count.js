@@ -27,8 +27,8 @@ frappe.ui.form.on("Stock Count", {
 				disabled: 0,
 			},
 		}));
-		// the Lost Warehouse (the field keeps its old name): where the quantity not found is moved
-		frm.set_query("quarantine_warehouse", () => ({
+		// the Lost Warehouse: where the quantity not found is moved
+		frm.set_query("lost_warehouse", () => ({
 			filters: {
 				company: frm.doc.company,
 				is_group: 0,
@@ -37,19 +37,9 @@ frappe.ui.form.on("Stock Count", {
 				name: ["!=", frm.doc.warehouse || ""],
 			},
 		}));
-		// the Found Warehouse: where what the count found beyond the system quantity is received
-		frm.set_query("found_warehouse", () => ({
+		frm.set_query("lost_storage_location", () => ({
 			filters: {
-				company: frm.doc.company,
-				is_group: 0,
-				disabled: 0,
-				warehouse_type: "Found",
-				name: ["!=", frm.doc.warehouse || ""],
-			},
-		}));
-		frm.set_query("quarantine_storage_location", () => ({
-			filters: {
-				warehouse: frm.doc.quarantine_warehouse,
+				warehouse: frm.doc.lost_warehouse,
 				disabled: 0,
 			},
 		}));
@@ -93,10 +83,9 @@ frappe.ui.form.on("Stock Count", {
 		for (const fieldname of ["item_selection", "count_template", "selected_items"]) {
 			frm.set_df_property(fieldname, "read_only", frm.doc.status !== "Draft");
 		}
-		// the system names the Lost and the Found Warehouse (the company's LOST and FOUND); nobody picks them
-		frm.set_df_property("quarantine_warehouse", "read_only", 1);
-		frm.set_df_property("quarantine_storage_location", "read_only", frm.doc.status !== "Draft");
-		frm.set_df_property("found_warehouse", "read_only", 1);
+		// the system names the Lost Warehouse (the counted warehouse's own, else the company's LOST); nobody picks it
+		frm.set_df_property("lost_warehouse", "read_only", 1);
+		frm.set_df_property("lost_storage_location", "read_only", frm.doc.status !== "Draft");
 		erpnext.stock_count.fill_loss_warehouses?.(frm);
 		erpnext.stock_count.show_review_summary?.(frm);
 		erpnext.stock_count.guard_first_counter?.(frm);
@@ -172,16 +161,6 @@ frappe.ui.form.on("Stock Count", {
 				frappe.set_route("Form", "Stock Entry", frm.doc.stock_entry)
 			);
 		}
-		if (frm.doc.found_stock_entry) {
-			frm.add_custom_button(__("Found Stock Entry"), () =>
-				frappe.set_route("Form", "Stock Entry", frm.doc.found_stock_entry)
-			);
-		}
-		if (frm.doc.found_transfer_entry) {
-			frm.add_custom_button(__("Serial Transfer Entry"), () =>
-				frappe.set_route("Form", "Stock Entry", frm.doc.found_transfer_entry)
-			);
-		}
 		// what a count found beyond the system quantity is counted again first
 		if (frm.doc.recount_stock_count) {
 			frm.add_custom_button(__("Recount"), () =>
@@ -204,10 +183,9 @@ frappe.ui.form.on("Stock Count", {
 		const monthly = frm.doc.count_type === "Monthly";
 		erpnext.stock_count.fill_loss_warehouses?.(frm);
 		frm.toggle_display("item_count", monthly && frm.doc.item_selection !== "Selected Items");
-		frm.toggle_display("quarantine_warehouse", monthly);
-		frm.toggle_display("found_warehouse", !!frm.doc.found_stock_entry || !!frm.doc.found_transfer_entry);
+		frm.toggle_display("lost_warehouse", monthly);
 		// the Lost Storage Location is rarely used: shown only when the count names one
-		frm.toggle_display("quarantine_storage_location", monthly && !!frm.doc.quarantine_storage_location);
+		frm.toggle_display("lost_storage_location", monthly && !!frm.doc.lost_storage_location);
 		// the series has one option and the counter never chooses it
 		frm.toggle_display("naming_series", false);
 		// the Accounts, Final and CEO steps exist only on an Annual count (company policy fields)
@@ -553,11 +531,9 @@ erpnext.stock_count.fill_loss_warehouses = async (frm) => {
 	});
 	const found = r?.message || {};
 	const before = frm.__loss_defaults || {};
-	frm.__loss_defaults = { quarantine_warehouse: found.lost };
-	for (const [fieldname, value] of [
-		["quarantine_warehouse", found.lost],
-	]) {
-		// each counted warehouse has its own Lost and Found warehouse (7 Nov 2026): an empty field, one that names the
+	frm.__loss_defaults = { lost_warehouse: found.lost };
+	for (const [fieldname, value] of [["lost_warehouse", found.lost]]) {
+		// each counted warehouse has its own Lost warehouse (7 Nov 2026): an empty field, one that names the
 		// counted warehouse itself or the default of the warehouse chosen before takes the new default; a saved value stays
 		if (
 			value &&

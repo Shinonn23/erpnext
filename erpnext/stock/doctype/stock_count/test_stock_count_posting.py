@@ -63,7 +63,9 @@ class TestSurplusIsNotPosted(unittest.TestCase):
 			frappe._dict(item_code="B", batch_no=None, serial_no=None, system_qty=5, counted_qty=3),
 			frappe._dict(item_code="S", batch_no=None, serial_no="SN-NEW", system_qty=0, counted_qty=1),
 		]
-		doc = SimpleNamespace(items=rows, company="C", warehouse="WH", name="COUNT", snapshot_datetime="2026-01-01 12:00:00")
+		doc = SimpleNamespace(
+			items=rows, company="C", warehouse="WH", name="COUNT", snapshot_datetime="2026-01-01 12:00:00"
+		)
 		doc.get_row_dimension_values = lambda row: {}
 		doc.posts_variance = lambda: False
 		doc.set_reconciliation_department = lambda reconciliation: None
@@ -83,7 +85,9 @@ class TestSurplusIsNotPosted(unittest.TestCase):
 			frappe._dict(item_code="S", batch_no=None, serial_no="SN-OLD", system_qty=1, counted_qty=0),
 			frappe._dict(item_code="S", batch_no=None, serial_no="SN-NEW", system_qty=0, counted_qty=1),
 		]
-		doc = SimpleNamespace(items=rows, company="C", warehouse="WH", name="COUNT", snapshot_datetime="2026-01-01 12:00:00")
+		doc = SimpleNamespace(
+			items=rows, company="C", warehouse="WH", name="COUNT", snapshot_datetime="2026-01-01 12:00:00"
+		)
 		doc.get_row_dimension_values = lambda row: {}
 		doc.posts_variance = lambda: False
 		doc.set_reconciliation_department = lambda reconciliation: None
@@ -131,55 +135,6 @@ class TestPostEntry(unittest.TestCase):
 		self.assertIn("negative stock", message)
 
 
-class TestTakeBackFromLost(unittest.TestCase):
-	def count(self, lost, serial_items=()):
-		doc = Mock()
-		doc.lost_balance = lambda item, batch: lost.get((item, batch or ""), 0)
-		self.enterContext(
-			patch.object(
-				stock_count.frappe,
-				"get_cached_value",
-				side_effect=lambda doctype, item, field: item in serial_items,
-			)
-		)
-		return doc
-
-	def rows(self, **items):
-		rows = defaultdict(lambda: {"qty": 0.0, "serial_nos": []})
-		for (item, batch), qty in items.items():
-			rows[(item, batch, ())]["qty"] = qty
-		return rows
-
-	def test_lost_stock_comes_back_first_and_only_the_rest_is_new(self):
-		doc = self.count({("A", ""): 3, ("B", "L1"): 10})
-		rows = self.rows()
-		rows[("A", "", ())]["qty"] = 5
-		rows[("B", "L1", ())]["qty"] = 4
-		rows[("C", "", ())]["qty"] = 2
-		back = StockCount.take_back_from_lost(doc, rows)
-		self.assertEqual(back, {("A", "", ()): 3, ("B", "L1", ()): 4})
-		self.assertEqual(rows[("A", "", ())]["qty"], 2)
-		self.assertEqual(rows[("B", "L1", ())]["qty"], 0)
-		self.assertEqual(rows[("C", "", ())]["qty"], 2)
-
-	def test_two_rows_of_one_item_share_what_lost_holds(self):
-		doc = self.count({("A", ""): 4})
-		rows = defaultdict(lambda: {"qty": 0.0, "serial_nos": []})
-		rows[("A", "", (("storage_location", "S1"),))]["qty"] = 3
-		rows[("A", "", (("storage_location", "S2"),))]["qty"] = 3
-		back = StockCount.take_back_from_lost(doc, rows)
-		self.assertEqual(sum(back.values()), 4)
-		self.assertEqual(sum(values["qty"] for values in rows.values()), 2)
-
-	def test_serial_numbers_are_never_netted(self):
-		doc = self.count({("S", ""): 5}, serial_items=("S",))
-		rows = defaultdict(lambda: {"qty": 0.0, "serial_nos": []})
-		rows[("S", "", ())]["qty"] = 1
-		rows[("S", "", ())]["serial_nos"] = ["SN-1"]
-		self.assertEqual(StockCount.take_back_from_lost(doc, rows), {})
-		self.assertEqual(rows[("S", "", ())]["qty"], 1)
-
-
 class TestRecountRows(unittest.TestCase):
 	def test_a_recount_carries_the_surplus_the_system_does_not_hold(self):
 		doc = Mock()
@@ -206,59 +161,26 @@ class TestRecountRows(unittest.TestCase):
 		self.assertEqual(StockCount.add_first_count_surplus_rows(doc), set())
 
 
-class TestHandleSurplus(unittest.TestCase):
-	def doc(self, recount_of, pending, first_surplus=None, transfers=None, back=None):
-		doc = Mock()
-		doc.recount_of = recount_of
-		doc.found_warehouse = "FOUND - CD"
-		doc.split_surplus = lambda: (pending, transfers or {}, [])
-		doc.take_back_from_lost = lambda rows: back or {}
-		doc.make_recount = Mock(return_value=frappe._dict(name="SC-2"))
-		doc.make_found_receipt = Mock(return_value=frappe._dict(name="SE-F"))
-		self.enterContext(
-			patch.object(
-				stock_count.frappe,
-				"get_doc",
-				return_value=Mock(surplus=lambda: first_surplus or {}),
-			)
-		)
-		return doc
-
-	def test_a_first_count_posts_the_transfer_back_and_makes_the_recount(self):
-		key = ("A", "", "", ())
-		doc = self.doc(None, {key: 2}, transfers={("S", "", "LOST - CD", ()): ["SN-1"]})
-		StockCount.handle_surplus(doc)
-		doc.make_found_transfer.assert_called_once()
-		doc.db_set.assert_called_with("recount_stock_count", "SC-2")
-		doc.make_found_receipt.assert_not_called()
-
-	def test_a_recount_takes_back_from_lost_and_receives_only_the_rest(self):
-		key = ("A", "", "", ())
-		doc = self.doc("SC-1", {key: 5}, first_surplus={key: 5}, back={("A", "", ()): 3})
-
-		def net(rows):
-			rows[("A", "", ())]["qty"] -= 3
-			return {("A", "", ()): 3}
-
-		doc.take_back_from_lost = net
-		StockCount.handle_surplus(doc)
-		doc.make_found_transfer.assert_called_once_with({}, {("A", "", ()): 3})
-		received = doc.make_found_receipt.call_args.args[0]
-		self.assertEqual(received[("A", "", ())]["qty"], 2)
-		doc.db_set.assert_called_with("found_stock_entry", "SE-F")
-
-	def test_nothing_is_received_when_lost_covers_the_surplus(self):
-		key = ("A", "", "", ())
-		doc = self.doc("SC-1", {key: 3}, first_surplus={key: 3})
-
-		def net(rows):
-			rows[("A", "", ())]["qty"] = 0
-			return {("A", "", ()): 3}
-
-		doc.take_back_from_lost = net
-		StockCount.handle_surplus(doc)
-		doc.make_found_transfer.assert_called_once()
-		doc.make_found_receipt.assert_not_called()
+class TestDeadSurplusCodeIsGone(unittest.TestCase):
+	def test_no_found_receipt_recount_or_surplus_posting_is_left(self):
+		"""The count posts only its shortage (11 Nov 2026); the FOUND receipt and the recount maker were deleted (WP10)."""
+		for name in (
+			"handle_surplus",
+			"make_recount",
+			"make_found_receipt",
+			"make_found_transfer",
+			"take_back_from_lost",
+			"lost_balance",
+			"validate_found_warehouse",
+		):
+			self.assertFalse(hasattr(StockCount, name), name)
+		for name in (
+			"get_found_warehouse",
+			"found_valuation_rate",
+			"confirmed_surplus",
+			"FOUND_WAREHOUSE_TYPE",
+		):
+			self.assertFalse(hasattr(stock_count, name), name)
 
 
 class TestResolveStorageLocation(unittest.TestCase):

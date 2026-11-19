@@ -157,6 +157,12 @@ function render_warehouse_type_summary(summary) {
 	if (summary.loan_counts_as_transfer) {
 		parts.push(__("Borrowing documents count as Transfer"));
 	}
+	// the exits the code opens for single documents, so the form tells the whole rule (WP10)
+	if ((summary.waivers || []).length) {
+		parts.push(
+			__("Exceptions: {0}", [summary.waivers.map((text) => frappe.utils.escape_html(text)).join("; ")])
+		);
+	}
 	return parts.join(". ");
 }
 

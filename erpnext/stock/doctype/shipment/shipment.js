@@ -48,28 +48,11 @@ frappe.ui.form.on("Shipment", {
 			let pickup_from = `pickup_${frappe.model.scrub(frm.doc.pickup_from_type)}`;
 			return frm.events.contact_query(frm, frm.doc.pickup_from_type, frm.doc[pickup_from]);
 		});
-		frm.set_query("delivery_note", "shipment_delivery_note", function () {
-			let customer = "";
-			if (frm.doc.delivery_to_type == "Customer") {
-				customer = frm.doc.delivery_customer;
-			}
-			if (frm.doc.delivery_to_type == "Company") {
-				customer = frm.doc.delivery_company;
-			}
-			if (customer) {
-				return {
-					filters: {
-						customer: customer,
-						docstatus: 1,
-						status: ["not in", ["Cancelled"]],
-					},
-				};
-			}
-		});
 		frm.set_query("reference_doctype", "shipment_documents", function () {
+			// the documents the server accepts (shipment.SHIPPABLE_TRANSACTION_DOCTYPES)
 			return {
 				filters: {
-					name: ["in", ["Delivery Note", "Purchase Receipt", "Stock Entry", "Asset Movement"]],
+					name: ["in", ["Delivery Note", "Purchase Receipt", "Stock Entry"]],
 				},
 			};
 		});
@@ -170,9 +153,6 @@ frappe.ui.form.on("Shipment", {
 		if (frm.doc.delivery_to_type == "Supplier") {
 			frm.set_value("delivery_customer", "");
 			frm.set_value("delivery_company", "");
-			frm.toggle_display("shipment_delivery_note", false);
-		} else {
-			frm.toggle_display("shipment_delivery_note", true);
 		}
 	},
 	delivery_address_name: function (frm) {
@@ -435,10 +415,39 @@ frappe.ui.form.on("Shipment", {
 			});
 		}
 	},
-	pickup_date: function (frm) {
-		if (frm.doc.pickup_date < frappe.datetime.get_today()) {
-			frappe.throw(__("Pickup Date cannot be before this day"));
-		}
+	refresh_documents: function (frm) {
+		// the value of the goods, each row's kind and the suggested Shipment Type come from the server, which
+		// recomputes them on save (shipment.preview_documents); the browser adds nothing up itself.
+		// After submit neither field may change: the server fills the kind of a row added then.
+		if (frm.doc.docstatus !== 0) return;
+		const rows = (frm.doc.shipment_documents || []).filter(
+			(row) => row.reference_doctype && row.reference_name
+		);
+		frappe.call({
+			method: "erpnext.stock.doctype.shipment.shipment.preview_documents",
+			args: {
+				documents: rows.map((row) => ({
+					reference_doctype: row.reference_doctype,
+					reference_name: row.reference_name,
+				})),
+			},
+			callback: ({ message }) => {
+				if (!message) return;
+				for (const [doctype, name, kind] of message.kinds || []) {
+					for (const row of rows) {
+						if (row.reference_doctype === doctype && row.reference_name === name) {
+							frappe.model.set_value(row.doctype, row.name, "document_kind", kind || "");
+						}
+					}
+				}
+				if (message.value_of_goods) {
+					frm.set_value("value_of_goods", message.value_of_goods);
+				}
+				if (!frm.doc.shipment_purpose && message.purpose) {
+					frm.set_value("shipment_purpose", message.purpose);
+				}
+			},
+		});
 	},
 	clear_pickup_fields: function (frm) {
 		let fields = [
@@ -474,32 +483,11 @@ frappe.ui.form.on("Shipment", {
 	},
 });
 
-frappe.ui.form.on("Shipment Delivery Note", {
-	delivery_note: function (frm, cdt, cdn) {
-		let row = locals[cdt][cdn];
-		if (row.delivery_note) {
-			let row_index = row.idx - 1;
-			if (validate_duplicate(frm, "shipment_delivery_note", row.delivery_note, row_index)) {
-				frappe.throw(
-					__("You have entered a duplicate Delivery Note on Row") +
-						` ${row.idx}. ` +
-						__("Please rectify and try again.")
-				);
-			}
-		}
+frappe.ui.form.on("Shipment Document", {
+	reference_name: function (frm) {
+		frm.events.refresh_documents(frm);
 	},
-	grand_total: function (frm, cdt, cdn) {
-		let row = locals[cdt][cdn];
-		if (row.grand_total) {
-			var value_of_goods = parseFloat(frm.doc.value_of_goods) + parseFloat(row.grand_total);
-			frm.set_value("value_of_goods", Math.round(value_of_goods));
-			frm.refresh_fields("value_of_goods");
-		}
+	shipment_documents_remove: function (frm) {
+		frm.events.refresh_documents(frm);
 	},
 });
-
-var validate_duplicate = function (frm, table, fieldname, index) {
-	return table === "shipment_delivery_note"
-		? frm.doc[table].some((detail, i) => detail.delivery_note === fieldname && !(index === i))
-		: frm.doc[table].some((detail, i) => detail.email === fieldname && !(index === i));
-};

@@ -482,7 +482,15 @@ function configure_material_request_item_columns(frm) {
 		}
 		visible_columns.add("uom");
 		if (purpose === "Purchase") visible_columns.add("rate");
+		// once the Stock team has decided a Demo / Borrow row, the requester and the approver see how it is supplied
+		// and which Asset goes out (read only: Change Demo Acquisition / Decide release write them)
+		const rows = frm.doc.items || [];
+		if (is_loan && rows.some((row) => row.demo_acquisition_method)) {
+			visible_columns.add("demo_acquisition_method");
+			if (rows.some((row) => row.asset || row.item_type === "Fixed Asset")) visible_columns.add("asset");
+		}
 	}
+	grid.update_docfield_property("demo_acquisition_method", "label", __("Supply"));
 
 	// The header date is copied to every row by ERPNext's standard handler.
 	// Keep the row date visible only when each row may need its own value.
@@ -491,6 +499,7 @@ function configure_material_request_item_columns(frm) {
 	const managed_columns = [
 		"item_code",
 		"asset",
+		"demo_acquisition_method",
 		"source_location",
 		"target_location",
 		"qty",

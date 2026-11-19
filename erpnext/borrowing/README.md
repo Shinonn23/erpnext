@@ -108,6 +108,26 @@ customer for a demo has it converted to a Demo Asset without returning it first:
 - A submitted conversion is not cancelled while such a borrowing is submitted, and a submitted Borrowing of an Asset is a
   follow-up transaction of the conversion.
 
+## The Borrowing Delivery Note is its own kind (Connect Diagnostics, UX WP3, 18 Nov 2026)
+
+A Delivery Note with `is_borrowing_transaction` is not a sale. Its form (`stock/doctype/delivery_note`, JSON
+`depends_on` and `delivery_note.js` `set_item_columns`) hides the price list, pricing rules, taxes, totals, discount,
+sales team, terms, UTM, auto repeat, Customer PO, the internal customer and its addresses, and shows the section
+**Borrowing**: the Borrowing and read-only fetches of its kind (`material_request_type`), borrower type and borrower,
+responsible employee, recipient, location, address, contact and custody warehouse. The rows show item, quantity,
+warehouse, Storage Location, batch, serial and the target warehouse (read-only); a return names the place
+"Receiving Storage Location". `_make_delivery_note` and the return maker set `ignore_pricing_rule` and copy the
+recipient address and contact (`set_borrowing_recipient`); the native party address / contact check is replaced by
+`validate_borrowing_address_and_contact` (they belong to the internal customer, the recipient customer or the
+borrower). `DeliveryNote.validate` calls
+`prepare_borrowing_delivery_note` (a selling value typed into a saved one is refused; pricing rules and automatic taxes
+off) and `clear_borrowing_selling_fields` (what ERPNext filled by itself is emptied and the totals computed again).
+`get_status` never gives To Bill / Partially Billed (Completed instead); the list indicator and the non-billed reports
+follow; `make_delivery_trip`, `make_installation_note`, `make_packing_slip` and
+`make_inter_company_purchase_receipt` refuse it (`make_sales_invoice` and `make_sales_return` already did).
+`issue_credit_note` is hidden on every Delivery Note, and `return_reason` is required where it shows (a sales return).
+Tests: `borrowing/doctype/borrowing/test_borrowing_delivery_note_kind.py` (offline).
+
 ## Navigation names
 
 The Workspace, Sidebar, Workspace Sidebar, Desktop Icon and dock entry of this module are named **Borrowings**. The

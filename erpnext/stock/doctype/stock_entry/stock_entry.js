@@ -909,23 +909,27 @@ frappe.ui.form.on("Stock Entry", {
 	},
 
 	toggle_warehouse_fields(frm) {
-		frm.fields_dict["items"].grid.update_docfield_property(
-			"s_warehouse",
-			"in_list_view",
-			!["Material Receipt", "Receive from Customer"].includes(frm.doc.purpose)
-		);
+		// each Storage Location column follows its warehouse: a purpose with no source has no source location
+		// column, one with no target no target location column (as asset_movement.js does for its locations)
+		const has_source = !["Material Receipt", "Receive from Customer"].includes(frm.doc.purpose);
+		const has_target = !["Material Issue"].includes(frm.doc.purpose);
+		const grid = frm.fields_dict["items"].grid;
+		for (const [fieldname, shown] of [
+			["s_warehouse", has_source],
+			["storage_location", has_source],
+			["t_warehouse", has_target],
+			["to_storage_location", has_target],
+		]) {
+			grid.update_docfield_property(fieldname, "in_list_view", shown ? 1 : 0);
+		}
 
-		frm.fields_dict["items"].grid.update_docfield_property(
-			"t_warehouse",
-			"in_list_view",
-			!["Material Issue"].includes(frm.doc.purpose)
-		);
-
-		frm.fields_dict["items"].grid.reset_grid();
+		grid.reset_grid();
 	},
 
 	purpose: function (frm) {
 		frm.trigger("validate_purpose_consumption");
+		// the purpose arrives from the Stock Entry Type after its own event: the columns follow it again
+		frm.trigger("toggle_warehouse_fields");
 		frm.fields_dict.items.grid.refresh();
 		frm.cscript.toggle_related_fields(frm.doc);
 	},

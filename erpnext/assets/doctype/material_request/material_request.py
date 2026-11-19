@@ -236,6 +236,8 @@ class CustomerMaterialRequest(MaterialRequest):
 					row.item_code = row.item_code or frappe.db.get_value("Asset", row.asset, "item_code")
 				row.from_warehouse = None
 				row.warehouse = None
+				row.from_storage_location = None
+				row.storage_location = None
 				row.item_type = "Fixed Asset"
 			else:
 				row.asset = None
@@ -613,7 +615,7 @@ class CustomerMaterialRequest(MaterialRequest):
 			row.stock_uom = item.stock_uom
 			row.conversion_factor = row.conversion_factor or 1
 			row.schedule_date = row.schedule_date or self.schedule_date
-			row.target_location = row.target_location or self.customer_location
+			# a Stock Item row has no Asset Location: the customer's Location stays on the header (UX WP7)
 		if asset_rows:
 			rows = self.items
 			try:

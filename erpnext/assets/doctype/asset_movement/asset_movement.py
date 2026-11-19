@@ -86,11 +86,32 @@ class AssetMovement(Document):
 		if self.is_equipment_movement:
 			self.validate_equipment_movement()
 			return
+		self.clear_hidden_fields()
 		self.validate_material_request()
 		for d in self.assets:
 			self.validate_asset(d)
 			self.validate_movement(d)
 			self.validate_transaction_date(d)
+
+	# The row fields a purpose does not show are not stored (asset_movement.js MOVEMENT_FIELDS_BY_PURPOSE): an Issue
+	# or a Reassignment has no locations, so a place typed on an earlier purpose never becomes the Asset's location
+	# (get_latest_location_and_custodian reads the latest target), and outside a Reassignment the custodian and
+	# department changes are off. A Receipt keeps the place the asset left (the employee return reads it) and From
+	# Employee is the custodian the system writes on every purpose. Service Equipment rows (validate returns before)
+	# and the rows of a borrowing, whose places borrowing_core writes, are not touched.
+	def clear_hidden_fields(self):
+		if self.get("is_borrowing_transaction") or self.get("borrowing"):
+			return
+		for row in self.assets:
+			if row.get("service_equipment"):
+				continue
+			if self.purpose in ("Issue", "Reassignment"):
+				row.source_location = None
+				row.target_location = None
+			if self.purpose != "Reassignment":
+				row.change_custodian = 0
+				row.change_department = 0
+				row.target_department = None
 
 	def validate_asset(self, d):
 		status, company = frappe.db.get_value("Asset", d.asset, ["status", "company"])

@@ -870,7 +870,34 @@ class TestWarehouseTypeSummary(unittest.TestCase):
 	def setUp(self):
 		self.addCleanup(patch.stopall)
 		patch.object(frappe, "has_permission", return_value=True).start()
+		patch.object(frappe, "get_hooks", return_value=[]).start()
 		patch.object(warehouse_policy, "_", side_effect=lambda text: text).start()
+
+	def test_summary_lists_the_code_waivers_of_the_type(self):
+		for name, expected in {
+			"Lost": "Stock Write-Off",
+			"Write-Off": "Disposal",
+			"Quarantine": "Quality Inspection is Rejected",
+		}.items():
+			with self.subTest(name=name):
+				policy = frappe._dict(name=name, outgoing_role="Stock Manager")
+				patch.object(frappe, "get_cached_doc", return_value=policy).start()
+				waivers = warehouse_policy.get_warehouse_type_summary(name)["waivers"]
+				self.assertTrue(any(expected in text for text in waivers), waivers)
+				self.assertTrue(any("Stock Count" in text for text in waivers), waivers)
+		policy = frappe._dict(name="Stock", outgoing_role=None)
+		patch.object(frappe, "get_cached_doc", return_value=policy).start()
+		waivers = warehouse_policy.get_warehouse_type_summary("Stock")["waivers"]
+		self.assertFalse(any("Write-Off" in text or "Disposal" in text for text in waivers), waivers)
+
+	def test_an_app_adds_its_waiver_for_its_type_only(self):
+		patch.object(
+			frappe,
+			"get_hooks",
+			return_value=[{"warehouse_type": "Quarantine", "text": "Quarantine Release"}, "not a dict"],
+		).start()
+		self.assertIn("Quarantine Release", warehouse_policy.waivers_of("Quarantine"))
+		self.assertNotIn("Quarantine Release", warehouse_policy.waivers_of("Lost"))
 
 	def test_no_type_means_no_restriction(self):
 		summary = warehouse_policy.get_warehouse_type_summary(None)
@@ -985,3 +1012,78 @@ class TestWarehouseTypeSummary(unittest.TestCase):
 			),
 		):
 			self.assertEqual(warehouse_policy.movement_operation(doc, False, row=row), "sales")
+
+
+# the Warehouse Type rows of the company's sites (local, 18 Nov 2026), as allowed operations
+WAREHOUSE_TYPE_ROWS = {
+	"Borrowed": {"loan"},
+	"Found": {"receipt", "transfer"},
+	"Frozen": {"transfer"},
+	"Lost": {"transfer"},
+	"Quarantine": {"receipt", "transfer"},
+	"Stock": set(warehouse_policy.OPERATION_ORDER),
+	"Transit": {"transfer"},
+	"Write-Off": {"receipt", "transfer", "reconciliation"},
+}
+
+
+class TestWarehouseAllows(unittest.TestCase):
+	"""``warehouse_allows`` / ``is_sellable_warehouse`` answer from the Warehouse Type flags alone (WP10)."""
+
+	def setUp(self):
+		self.addCleanup(patch.stopall)
+		self.warehouses = {
+			f"WH {name}": frappe._dict(is_group=0, warehouse_type=name) for name in WAREHOUSE_TYPE_ROWS
+		}
+		self.warehouses["WH none"] = frappe._dict(is_group=0, warehouse_type=None)
+		self.warehouses["WH group"] = frappe._dict(is_group=1, warehouse_type="Stock")
+
+		def cached(doctype, name, fields=None, as_dict=False):
+			if doctype == "Warehouse":
+				row = self.warehouses.get(name)
+				return row if as_dict or row is None else row.get(fields)
+			allowed = WAREHOUSE_TYPE_ROWS.get(name)
+			if allowed is None:
+				return None
+			return frappe._dict(
+				{f"allow_{op}": int(op in allowed) for op in warehouse_policy.OPERATION_ORDER}
+			)
+
+		patch.object(frappe, "get_cached_value", side_effect=cached).start()
+
+	def test_every_type_and_operation_follows_the_flags(self):
+		for name, allowed in WAREHOUSE_TYPE_ROWS.items():
+			for operation in warehouse_policy.OPERATION_ORDER:
+				with self.subTest(type=name, operation=operation):
+					expected = operation in allowed or (
+						name == "Transit" and operation == "loan" and "transfer" in allowed
+					)
+					self.assertEqual(warehouse_policy.warehouse_allows(f"WH {name}", operation), expected)
+
+	def test_only_stock_is_sellable(self):
+		for name in WAREHOUSE_TYPE_ROWS:
+			with self.subTest(type=name):
+				self.assertEqual(warehouse_policy.is_sellable_warehouse(f"WH {name}"), name == "Stock")
+
+	def test_no_type_allows_everything_and_group_or_unknown_nothing(self):
+		self.assertTrue(warehouse_policy.is_sellable_warehouse("WH none"))
+		self.assertFalse(warehouse_policy.is_sellable_warehouse("WH group"))
+		self.assertFalse(warehouse_policy.is_sellable_warehouse("WH missing"))
+		self.assertFalse(warehouse_policy.warehouse_allows(None, "sales"))
+		with self.assertRaises(ValueError):
+			warehouse_policy.warehouse_allows("WH Stock", "sell")
+
+	def test_quarantine_is_the_type_alone(self):
+		self.assertTrue(warehouse_policy.is_quarantine_type("Quarantine"))
+		for name in ("QA", "Damage", "Stock", None, ""):
+			self.assertFalse(warehouse_policy.is_quarantine_type(name), name)
+		self.assertTrue(warehouse_policy.warehouse_is_quarantine("WH Quarantine"))
+		self.assertFalse(warehouse_policy.warehouse_is_quarantine("WH Stock"))
+
+	def test_the_sql_reads_the_same_flags(self):
+		sql = warehouse_policy.sellable_warehouse_sql("w")
+		self.assertIn("coalesce(w.warehouse_type, '') = ''", sql)
+		for operation in warehouse_policy.SELLABLE_OPERATIONS:
+			self.assertIn(f"allow_{operation} = 1", sql)
+		self.assertNotIn("'QA'", sql)
+		self.assertNotIn("Quarantine", sql)

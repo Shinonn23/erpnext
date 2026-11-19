@@ -17,6 +17,8 @@ frappe.ui.form.on("Delivery Note", {
 	// Called from refresh below: this object also defines refresh, and a second key of an object literal
 	// replaces the first, so a loan Delivery Note never showed its loan buttons.
 	borrowing_refresh(frm) {
+		// a Borrowing / Demo Delivery Note shows only borrowing columns (UX WP3); a sale keeps its own
+		erpnext.stock.delivery_note.set_item_columns(frm);
 		if (!frm.doc.is_borrowing_transaction) return;
 		frm.set_intro(
 			__("Borrowing / Demo stock movement. Manage delivery, returns and consumption from the Borrowing."),
@@ -526,6 +528,51 @@ erpnext.stock.delivery_note.set_print_hide = function (doc, cdt, cdn) {
 			dn_item_fields["discount_amount"].print_hide = 0;
 		if (dn_fields_copy["taxes"].print_hide != 1) dn_fields["taxes"].print_hide = 0;
 	}
+};
+
+// The items grid of a Borrowing / Demo Delivery Note (UX WP3, Siwat 18 Nov 2026): what moves where, no money. The
+// grid columns are global Property Setters (connect_diagnostics_setup setup/grid_columns.py), so the kind's columns
+// are set here per form; a sale keeps the DocType's columns. A return names the place the goods come back to.
+erpnext.stock.delivery_note.BORROWING_COLUMNS = [
+	["item_code", 2],
+	["qty", 1],
+	["warehouse", 1],
+	["storage_location", 2],
+	["batch_no", 1],
+	["serial_no", 1],
+	["target_warehouse", 2],
+];
+
+erpnext.stock.delivery_note.set_item_columns = function (frm) {
+	const grid = frm.fields_dict.items && frm.fields_dict.items.grid;
+	if (!grid || !grid.docfields) return;
+	const borrowing = !!frm.doc.is_borrowing_transaction;
+	const widths = Object.fromEntries(erpnext.stock.delivery_note.BORROWING_COLUMNS);
+	const meta_df = (fieldname) => frappe.meta.get_docfield("Delivery Note Item", fieldname) || {};
+	const wanted = (df) => {
+		const original = meta_df(df.fieldname);
+		if (!borrowing) return { in_list_view: original.in_list_view ? 1 : 0, columns: original.columns };
+		const shown = df.fieldname in widths;
+		return { in_list_view: shown ? 1 : 0, columns: shown ? widths[df.fieldname] : original.columns };
+	};
+	let changed = false;
+	for (const df of grid.docfields) {
+		for (const [property, value] of Object.entries(wanted(df))) {
+			if ((df[property] || 0) !== (value || 0)) {
+				grid.update_docfield_property(df.fieldname, property, value);
+				changed = true;
+			}
+		}
+	}
+	const label = frm.doc.is_return
+		? __("Receiving Storage Location")
+		: __(meta_df("storage_location").label || "Source Storage Location");
+	const location = grid.docfields.find((df) => df.fieldname === "storage_location");
+	if (location && location.label !== label) {
+		grid.update_docfield_property("storage_location", "label", label);
+		changed = true;
+	}
+	if (changed) grid.reset_grid();
 };
 
 frappe.tour["Delivery Note"] = [

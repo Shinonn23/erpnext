@@ -262,6 +262,7 @@ erpnext.patches.v14_0.update_proprietorship_to_individual
 erpnext.patches.v15_0.rename_subcontracting_fields
 erpnext.patches.v15_0.unset_incorrect_additional_discount_percentage
 erpnext.patches.v16_0.rename_custody_loan_to_borrowing
+erpnext.patches.v16_0.rename_stock_count_lost_fields
 
 [post_model_sync]
 erpnext.patches.v16_0.rename_item_asset_conversion_fields
