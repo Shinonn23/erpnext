@@ -1,7 +1,6 @@
 """Return a borrowing set with other lots and consumed stock (Siwat, 5 Nov 2026). Offline."""
 
 import unittest
-from datetime import date
 from unittest.mock import MagicMock, patch
 
 import frappe
@@ -66,14 +65,14 @@ class Patched(unittest.TestCase):
 
 
 class TestExplicitReturn(Patched):
-	def test_opening_return_delegates_to_native_mapper_without_saving(self):
+	def test_opening_return_opens_the_return_document_without_saving(self):
 		source = MagicMock()
 		doc = MagicMock()
 		source.make_return.return_value = doc
 		with patch.object(frappe, "get_doc", return_value=source) as get_doc:
 			self.assertIs(module.make_return("CL-S"), doc)
 		get_doc.assert_called_once_with("Borrowing", "CL-S")
-		source.make_return.assert_called_once_with()
+		source.make_return.assert_called_once_with(None)
 		doc.insert.assert_not_called()
 		doc.submit.assert_not_called()
 
@@ -83,61 +82,6 @@ class TestExplicitReturn(Patched):
 				module.return_loan_set(loan="CL-S", stock=[{"borrowing_item": "S1", "qty": 2}])
 		get_doc.assert_not_called()
 		new_doc.assert_not_called()
-
-
-class TestRegisterLot(Patched):
-	def register(self, existing_item=None, **kwargs):
-		created = []
-
-		class Document:
-			def __init__(self, values):
-				self.values = values
-
-			def insert(self, **kw):
-				created.append(self.values)
-				return self
-
-		flags = frappe._dict(has_batch_no=1, has_serial_no=1)
-		with (
-			patch.object(frappe, "has_permission", return_value=True),
-			patch.object(module, "item_flags", return_value=flags),
-			patch.object(module, "getdate", side_effect=lambda value: date.fromisoformat(str(value))),
-			patch.object(module, "nowdate", return_value="2026-11-05"),
-			patch.object(
-				frappe,
-				"db",
-				MagicMock(
-					get_value=MagicMock(return_value=existing_item), exists=MagicMock(return_value=False)
-				),
-			),
-			patch.object(frappe, "get_doc", side_effect=lambda values: Document(values)),
-		):
-			module.register_returned_lot("REAGENT", **kwargs)
-		return created
-
-	def test_an_unknown_batch_needs_its_expiry_date(self):
-		with self.assertRaisesRegex(frappe.ValidationError, "expiry date of the new batch"):
-			self.register(batch_no="NEW-LOT")
-		created = self.register(batch_no="NEW-LOT", expiry_date="2099-01-01", manufacturing_date="2026-01-01")
-		self.assertEqual(
-			(
-				created[0]["doctype"],
-				created[0]["item"],
-				created[0]["expiry_date"],
-				created[0]["manufacturing_date"],
-			),
-			("Batch", "REAGENT", "2099-01-01", "2026-01-01"),
-		)
-
-	def test_an_expired_batch_and_a_batch_of_another_item_are_refused(self):
-		with self.assertRaisesRegex(frappe.ValidationError, "already expired"):
-			self.register(batch_no="OLD", expiry_date="2020-01-01")
-		with self.assertRaisesRegex(frappe.ValidationError, "belongs to another Item"):
-			self.register(existing_item="OTHER", batch_no="B-1")
-
-	def test_unknown_serial_numbers_are_created(self):
-		created = self.register(serial_nos="SN-1\nSN-2, SN-3")
-		self.assertEqual([values["serial_no"] for values in created], ["SN-1", "SN-2", "SN-3"])
 
 
 class TestTheSet(Patched):
@@ -158,7 +102,6 @@ class TestSetStatus(unittest.TestCase):
 		self.assertEqual(status(["Active", "Active"]), "Out")
 		self.assertEqual(status(["Active", "Returned"]), "Partly back")
 		self.assertEqual(status(["Active", "Partially Returned"]), "Partly back")
-		self.assertEqual(status(["Active", "Pending Receipt"]), "Return being checked")
 		self.assertEqual(status(["Returned", "Closed"]), "Closed")
 		self.assertIsNone(status([]))
 

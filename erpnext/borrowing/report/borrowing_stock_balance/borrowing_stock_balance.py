@@ -18,7 +18,7 @@ def execute(filters=None):
 		"loan.docstatus = 1",
 		"loan.loan_type = 'Stock'",
 		# items on a return not yet received are still the requester's responsibility
-		"loan.status IN ('Active', 'Partially Returned', 'Pending Quality Inspection', 'Pending Receipt')",
+		"loan.status IN ('Active', 'Partially Returned')",
 		"item.outstanding_qty > 0",
 	]
 	values = {}
@@ -33,15 +33,45 @@ def execute(filters=None):
 	add_requester_filter(filters, conditions, values)
 
 	columns = [
-		{"label": "Borrowing", "fieldname": "loan", "fieldtype": "Link", "options": "Borrowing", "width": 165},
-		{"label": "Material Request", "fieldname": "material_request", "fieldtype": "Link", "options": "Material Request", "width": 165},
+		{
+			"label": "Borrowing",
+			"fieldname": "loan",
+			"fieldtype": "Link",
+			"options": "Borrowing",
+			"width": 165,
+		},
+		{
+			"label": "Material Request",
+			"fieldname": "material_request",
+			"fieldtype": "Link",
+			"options": "Material Request",
+			"width": 165,
+		},
 		{"label": "Borrower Type", "fieldname": "borrower_type", "fieldtype": "Data", "width": 110},
-		{"label": "Borrower", "fieldname": "borrower", "fieldtype": "Dynamic Link", "options": "borrower_type", "width": 170},
+		{
+			"label": "Borrower",
+			"fieldname": "borrower",
+			"fieldtype": "Dynamic Link",
+			"options": "borrower_type",
+			"width": 170,
+		},
 		{"label": "Expected Return", "fieldname": "expected_return_date", "fieldtype": "Date", "width": 115},
 		{"label": "Item", "fieldname": "item_code", "fieldtype": "Link", "options": "Item", "width": 140},
 		{"label": "Item Name", "fieldname": "item_name", "fieldtype": "Data", "width": 170},
-		{"label": "Source Warehouse", "fieldname": "source_warehouse", "fieldtype": "Link", "options": "Warehouse", "width": 145},
-		{"label": "Borrowing Warehouse", "fieldname": "customer_loan_warehouse", "fieldtype": "Link", "options": "Warehouse", "width": 145},
+		{
+			"label": "Source Warehouse",
+			"fieldname": "source_warehouse",
+			"fieldtype": "Link",
+			"options": "Warehouse",
+			"width": 145,
+		},
+		{
+			"label": "Borrowing Warehouse",
+			"fieldname": "customer_loan_warehouse",
+			"fieldtype": "Link",
+			"options": "Warehouse",
+			"width": 145,
+		},
 		{"label": "Batch", "fieldname": "batch_no", "fieldtype": "Link", "options": "Batch", "width": 110},
 		{"label": "Serial Nos", "fieldname": "serial_no", "fieldtype": "Small Text", "width": 160},
 		{"label": "Issued", "fieldname": "qty", "fieldtype": "Float", "width": 85},
@@ -66,7 +96,7 @@ def execute(filters=None):
 		FROM `tabBorrowing` loan
 		JOIN `tabBorrowing Item` item ON item.parent = loan.name
 		{REQUEST_JOIN}
-		WHERE {' AND '.join(conditions)}
+		WHERE {" AND ".join(conditions)}
 		ORDER BY loan.expected_return_date, loan.borrower, item.item_code""",
 		values,
 		as_dict=True,

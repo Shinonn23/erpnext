@@ -29,6 +29,24 @@ frappe.ui.form.on("Delivery Note", {
 				frappe.set_route("Form", "Borrowing", frm.doc.borrowing);
 			});
 		}
+		// The goods come back on the return Delivery Note made from this issue note, as a sales return is made from
+		// its Delivery Note (UX WP4, Siwat 18 Nov 2026): only the units still with the borrower.
+		if (
+			frm.doc.docstatus === 1 &&
+			!frm.doc.is_return &&
+			frm.doc.borrowing &&
+			frappe.model.can_create("Delivery Note")
+		) {
+			frm.add_custom_button(
+				__("Return"),
+				() =>
+					frappe.model.open_mapped_doc({
+						method: "erpnext.borrowing.doctype.borrowing.borrowing_core.make_borrowing_return_delivery_note",
+						frm,
+					}),
+				__("Create")
+			);
+		}
 		// Goods of a Loan Return are received first and inspected after (Siwat, 9 Nov 2026): the Quality Inspection(s)
 		// button of a submitted return and the QI team's Inspect task make the inspections.
 	},

@@ -33,18 +33,17 @@ class Patched(TestCase):
 
 
 class TestReturnTemplate(Patched):
-	def test_a_returned_row_reverses_the_delivery_row_that_held_its_serial_or_batch(self):
-		originals = {
-			"D1": Row(name="D1", batch_no="B1", serial_no="S1\nS2", warehouse="A"),
-			"D2": Row(name="D2", batch_no="B2", serial_no="S3", warehouse="B"),
-		}
-		candidates = [{"dn_detail": "D1"}, {"dn_detail": "D2"}]
-		by_serial = core._original_return_template(candidates, originals, Row(serial_no="S3", batch_no=None))
-		by_batch = core._original_return_template(candidates, originals, Row(serial_no=None, batch_no="B2"))
-		neither = core._original_return_template(candidates, originals, Row(serial_no=None, batch_no=None))
-		self.assertEqual(
-			(by_serial["dn_detail"], by_batch["dn_detail"], neither["dn_detail"]), ("D2", "D2", "D1")
-		)
+	def test_a_returned_group_reverses_the_issue_row_that_held_its_serial_or_batch(self):
+		"""The return Delivery Note made from the issue note (UX WP4) reverses the row each group was lent on."""
+		originals = [
+			Row(name="D1", batch_no="B1", serial_no="S1\nS2", warehouse="A", serial_and_batch_bundle=None),
+			Row(name="D2", batch_no="B2", serial_no="S3", warehouse="B", serial_and_batch_bundle=None),
+		]
+		with patch.object(core, "transaction_row_entries", side_effect=lambda row: [(row.batch_no, None, 1)]):
+			by_serial = core._issue_row_for(originals, None, ["S3"])
+			by_batch = core._issue_row_for(originals, "B2", [])
+			neither = core._issue_row_for(originals, None, [])
+		self.assertEqual((by_serial.name, by_batch.name, neither.name), ("D2", "D2", "D1"))
 
 
 class TestQuarantineWarehouse(Patched):
@@ -229,17 +228,6 @@ class TestQuarantinePerWarehouse(Patched):
 
 class TestNoShipmentCoupling(Patched):
 	"""A Shipment is optional (Siwat, 5 Nov 2026): nothing in a borrowing waits for one."""
-
-	def test_receiving_requires_explicit_submission_of_the_receiving_document(self):
-		doc = core.BorrowingReturn.__new__(core.BorrowingReturn)
-		note = Row(name="DN-1", items=[Row(item_code="PLAIN")])
-		with (
-			patch.object(core, "receive_return_delivery_note") as receive,
-			patch.object(core, "borrowing_return_row_requires_inspection", return_value=True),
-		):
-			with self.assertRaises(frappe.ValidationError):
-				doc.receive_returned_goods(note)
-		receive.assert_not_called()
 
 	def test_the_shipment_gates_are_gone(self):
 		for name in (

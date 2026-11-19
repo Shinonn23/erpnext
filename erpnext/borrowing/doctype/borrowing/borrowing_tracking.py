@@ -1,8 +1,8 @@
 """Serial / batch tracking for Stock Borrowings.
 
 A loan row can be picked from several batches, and its serial numbers can come from several batches. Every balance
-is kept per (loan item, batch, serial): what was issued on the loan Delivery Note, what came back on received
-returns, what is on the way back (returns not yet received) and what was written off by adjustments. Quantities are
+is kept per (loan item, batch, serial): what was issued on the loan Delivery Note, what came back on submitted return
+Delivery Notes, what is on the way back (draft return Delivery Notes) and what was written off by adjustments. Quantities are
 in the stock UOM, as on the Serial and Batch Bundle.
 
 Connect Diagnostics (Siwat, 5 Nov 2026, relayed by the user): a loan tracks batches and serial numbers as fully as
@@ -100,32 +100,29 @@ def conversion_factors(loan):
 
 
 def _movement_rows(loan_name, *, exclude=None):
-	"""Return, adjustment and conversion rows of the loan with what they move, split by state."""
+	"""Return, adjustment and conversion rows of the loan with what they move, split by state.
+
+	The goods come back on the return Delivery Notes made from the issue note (UX WP4, Siwat 18 Nov 2026): a submitted
+	one has returned them, a draft is on its way back. ``exclude`` = (doctype, name) leaves one document out."""
+	from erpnext.borrowing.doctype.borrowing.borrowing_core import loan_conversion_rows, return_rows
+
 	rows = []
-	for doctype, child, qty_field in (
-		("Borrowing Return", "Borrowing Return Item", "returned_qty"),
-		("Borrowing Adjustment", "Borrowing Adjustment Item", "qty"),
-	):
-		filters = {"borrowing": loan_name, "docstatus": 1}
-		if exclude and exclude[0] == doctype:
-			filters["name"] = ["!=", exclude[1]]
-		parents = frappe.get_all(doctype, filters=filters, fields=["name", "status"])
-		if not parents:
-			continue
+	for row in return_rows(loan_name, exclude=exclude):
+		if row.doctype == "Delivery Note":
+			rows.append(("returned" if row.docstatus == 1 else "pending", row))
+	filters = {"borrowing": loan_name, "docstatus": 1}
+	if exclude and exclude[0] == "Borrowing Adjustment":
+		filters["name"] = ["!=", exclude[1]]
+	parents = frappe.get_all("Borrowing Adjustment", filters=filters, fields=["name", "status"])
+	if parents:
 		state = {parent.name: parent.status for parent in parents}
 		for row in frappe.get_all(
-			child,
-			filters={"parent": ["in", list(state)], "parenttype": doctype},
-			fields=["parent", "borrowing_item", "batch_no", "serial_no", f"{qty_field} as qty"],
+			"Borrowing Adjustment Item",
+			filters={"parent": ["in", list(state)], "parenttype": "Borrowing Adjustment"},
+			fields=["parent", "borrowing_item", "batch_no", "serial_no", "qty"],
 		):
-			if doctype == "Borrowing Adjustment":
-				kind = "adjusted" if state[row.parent] == "Submitted" else "pending"
-			else:
-				kind = "returned" if state[row.parent] == "Received" else "pending"
-			rows.append((kind, row))
+			rows.append(("adjusted" if state[row.parent] == "Submitted" else "pending", row))
 	# a unit converted to a Demo Asset (Siwat, 16 Nov 2026): a draft reserves it, a submitted conversion settles it
-	from erpnext.borrowing.doctype.borrowing.borrowing_core import loan_conversion_rows
-
 	skip = exclude[1] if exclude and exclude[0] == "Stock to Asset Conversion" else None
 	for row in loan_conversion_rows(loan_name, exclude=skip):
 		rows.append(("adjusted" if row.docstatus == 1 else "pending", row))
@@ -135,8 +132,8 @@ def _movement_rows(loan_name, *, exclude=None):
 def get_balances(loan, *, exclude=None, attribute=True):
 	"""{(loan item, batch, serial): balance} for the tracked items of a Stock loan.
 
-	exclude=(doctype, name) leaves a return or adjustment out, so the document being validated is not counted
-	against itself.
+	exclude=(doctype, name) leaves a return Delivery Note or an adjustment out, so the document being validated is
+	not counted against itself.
 
 	A return may bring back another batch or serial number of the same Item than the one lent (Siwat, 5 Nov 2026):
 	``attribute`` counts what came back in another lot against the lent entries, earliest first, and notes the lot
@@ -489,39 +486,3 @@ def get_loan_item_rows(borrowing):
 		}
 		for row in loan.items
 	]
-
-
-@frappe.whitelist()
-def get_open_loans(borrower_type=None, borrower=None):
-	"""The loans a return can be started for (submitted, still with their borrower) that the user may open, the
-	soonest due first: what the Loan Return form lists once the user says who returns (customer, employee ...)."""
-	filters = {"docstatus": 1, "status": ["in", ["Active", "Partially Returned"]]}
-	if borrower_type:
-		filters["borrower_type"] = borrower_type
-	if borrower:
-		filters["borrower"] = borrower
-	loans = frappe.get_list(
-		"Borrowing",
-		filters=filters,
-		fields=["name", "loan_type", "borrower_type", "borrower", "expected_return_date", "status"],
-		order_by="expected_return_date is null, expected_return_date, creation",
-		limit_page_length=50,
-	)
-	for loan in loans:
-		rows = frappe.get_all(
-			"Borrowing Item",
-			filters={"parent": loan.name, "parenttype": "Borrowing", "outstanding_qty": [">", 0]},
-			fields=["item_code", "outstanding_qty"],
-			order_by="idx",
-		)
-		loan["items"] = ", ".join(f"{row.item_code} x {flt(row.outstanding_qty):g}" for row in rows)
-	return loans
-
-
-@frappe.whitelist()
-def get_return_items(borrowing):
-	"""The rows of a new Loan Return for a loan: what is still with the borrower, one row per batch (the same rows
-	Create > Return fills)."""
-	loan = frappe.get_doc("Borrowing", borrowing)
-	loan.check_permission("read")
-	return [row.as_dict() for row in loan.make_return().items]

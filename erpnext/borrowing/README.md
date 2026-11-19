@@ -8,19 +8,68 @@ The module Borrowing (formerly Loan; the DocTypes Borrowing ... were renamed Bor
 
 The request's Borrower Type is derived from its type (read only), and a Borrowing refuses a borrower of another type than its request names (`BORROWER_TYPE_OF`). Supplier and Contact borrowers are no longer possible.
 
-Create opens an unsaved document for the user to review, save and submit. Preparing or submitting a Borrowing or Borrowing Return does not post another document.
+## The chain (UX WP4, Siwat 18 Nov 2026: "ทำไมไม่ทำเหมือนงานขาย SO -> DN ... เอกสารควรสร้างต่อกันเป็นทอดๆ")
 
-- Stock outgoing: submit the Borrowing, then Create → Pick List. Save, pick and submit it, then Create → Delivery Note. Submit the Delivery Note to issue the goods.
-- Asset outgoing: submit the Borrowing, then Create → Asset Movement. Save and submit the movement to issue the assets. A Stock Delivery Note does not submit an Asset Movement.
-- Incoming: Create → Borrowing Return from the active borrowing, review the returning items, save and submit it. Then Create → Receiving Delivery Note (Stock) or Asset Movement (Asset). Use the Stock User workflow action Receive Borrowing Return on the receiving Delivery Note. Only submission of that receiving document records the physical receipt. Stock requiring inspection enters Quarantine and retains its normal inspection checks. Asset return inspections and holds start only after the receiving Asset Movement is submitted.
-- Different returned batches: use Create → Batch Exchange on the submitted Return. Review, save and submit each two-row Repack, repeating until all exchanges are submitted, then submit the receiving Delivery Note. Each exchange preserves one Item's value and links to its Return. No Repack posts automatically.
+A borrowing is made one document from the one before it with Create, as in selling (Quotation -> Sales Order -> Pick
+List -> Delivery Note -> return Delivery Note made from that Delivery Note). Create opens an unsaved document for the
+user to review, save and submit; preparing or submitting a Borrowing never posts another document.
 
-- Write-offs: create, review and submit the Borrowing Adjustment. It reserves its quantities as Pending Issue. Create → Stock Entry opens its unsaved Material Issue; save and submit it to post the write-off. Cancellation restores the pending reservation until the Adjustment is cancelled.
-- Billing: Create → Asset Sale Invoice and Create → Consumption Invoice open unsaved invoices for the accounting user to review, save and submit through normal invoice approvals. Consumption billing requires the write-off Stock Entry to be submitted.
+- **Stock**: Material Request (Borrow / Customer Borrow / Customer Demo) -> Borrowing (the "order") -> Create > Pick
+  List -> Create > Delivery Note (the issue, into the Borrowed warehouse) -> **Create > Return on the issue Delivery
+  Note** (or Create > Return on the Borrowing): the return Delivery Note (`is_return`, `return_against` = the issue note,
+  `is_borrowing_transaction`, `borrowing`, source the Borrowing; `make_borrowing_return_delivery_note`, also what the
+  native `make_sales_return` opens for a borrowing note). It lists only the units still with the borrower, one row per
+  issued row and batch, back into the warehouse each was lent from; a row whose Item is inspected on receipt comes back
+  into the quarantine of that warehouse (`receive_row_into_quarantine`). Submitting it receives the goods.
+- **Asset**: Borrowing -> Create > Asset Movement (the issue) -> **Create > Return Movement on the issue movement** (or
+  Create > Return on the Borrowing): the return Asset Movement (purpose Receipt, `return_against` = the issue movement,
+  `make_borrowing_return_movement`) takes the Assets still with the borrower back to the Location each left.
+- With several issue documents, Create > Return on the Borrowing asks which one to return against.
+- Write-offs: create, review and submit the Borrowing Adjustment from the Borrowing. It reserves its quantities as
+  Pending Issue. Create > Stock Entry opens its unsaved Material Issue; save and submit it to post the write-off.
+  Cancellation restores the pending reservation until the Adjustment is cancelled.
+- Convert to Demo Asset stays (below). Billing: Create > Asset Sale Invoice and Create > Consumption Invoice open unsaved
+  invoices for accounting, through normal invoice approvals; consumption billing requires the write-off Stock Entry.
 
-Source and movement documents link in both directions. Server validation locks the borrowing and permits only one active Pick List, Delivery Note or Asset Movement for each source; row quantities, items, warehouses and company must match the saved source. The issue Delivery Note delivers each Pick List row's warehouse, Storage Location, batch and serial nos as picked (`erpnext/stock/doctype/pick_list/pick_identity.pick_mismatch`, the rule the app's Delivery Note check uses too; those fields are read-only on a Delivery Note row made from a Pick List). Pending returns and write-offs reserve quantities, and a return's receiving document excludes its own reservation when rechecking availability.
+There is no Borrowing Return document, no "Receiving Delivery Note" step and no Batch Exchange: the DocTypes Borrowing
+Return and Borrowing Return Item are removed (`patches/v16_0/remove_borrowing_return.py`, schema only; a site with
+records keeps them until the Connect Diagnostics seed step that settles them, `e2e/data_access/borrowing_return_chain`,
+has linked their receiving documents to the Borrowing and deleted them).
 
-Use native Cancel on movement documents. Cancel dependent returns, adjustments, inspections and shipments first where the native link checks require it. Cancelling the owning Borrowing or Return retains its existing guarded reversal of its own documents and inspections. Delete a draft or cancelled movement through the native Delete action: its own source and Material Request row links are cleared transactionally, while unrelated linked documents still block deletion. Cancel a receiving Delivery Note before cancelling its batch exchanges.
+### What a return may take
+
+- Balances (`get_loan_item_balances`, `get_loan_item_reserved_qty`, `borrowing_tracking`, the reports): issued = the
+  submitted issue Delivery Note / Asset Movement, returned = the submitted return Delivery Notes / return movements
+  (`return_documents`, `return_rows`), pending return = their drafts (they reserve the units, as a draft write-off does),
+  adjusted = the Borrowing Adjustments, converted = the Stock to Asset Conversions.
+- A return takes only units still with the borrower: more than is out, per Item, batch and serial number, is refused
+  (`validate_borrowing_return_delivery_note`, `validate_borrowing_return_movement`). A serial number comes back as the
+  very unit that was lent.
+- **Another batch of the same Item** may be typed on a return row (Siwat, 5 Nov 2026). It is valued at the issued row's
+  rate (`serial_and_batch_bundle.is_borrowing_return`) and tracked as a swap in the Serial / Batch Tracking table
+  (`returned_as`). Submitting the return posts, for each such row, a value-preserving Repack inside the Borrowed
+  warehouse (lent batch out, returned batch in; `post_return_batch_swaps`, linked by `delivery_note_no`) so the return
+  takes the returned batch out of the Borrowed warehouse; cancelling the return cancels it
+  (`cancel_return_batch_swaps`). Nobody makes or cancels that Repack by hand (`validate_batch_swap`).
+
+### Links and cancellation
+
+Source and movement documents link in both directions; the Borrowing's Connections show its request, Pick List, issue
+and return documents, write-offs, sales and inspections. Server validation locks the borrowing and permits only one
+active Pick List, issue Delivery Note or issue Asset Movement for each borrowing; row quantities, items, warehouses and
+company must match the saved source. The issue Delivery Note delivers each Pick List row's warehouse, Storage Location,
+batch and serial nos as picked (`erpnext/stock/doctype/pick_list/pick_identity.pick_mismatch`).
+
+Use native Cancel on movement documents: cancel the return documents and write-offs before the issue document, the
+issue document before the Borrowing. Delete a draft movement through the native Delete action: its own source and
+Material Request row links are cleared transactionally.
+
+### Columns by type
+
+The Borrowing Items grid shows Source Warehouse, Batch and Serial on a Stock borrowing and Asset and Recipient Location
+on an Asset borrowing (`borrowing.js` `configure_item_columns`); the server clears the fields of the other type and
+keeps an Asset row at quantity 1, and a Source Warehouse must be of a Warehouse Type that lends (`allow_loan`). A
+Quarantine warehouse is recognised by its Warehouse Type only (`is_quarantine_warehouse`).
 
 ## A Borrow unit becomes a Demo Asset (Siwat, 16 Nov 2026)
 

@@ -119,19 +119,20 @@ class TestExplicitDelivery(TestCase):
 		loan.release_assets.assert_not_called()
 		self.database.savepoint.assert_not_called()
 
-	def test_return_submission_only_records_pending_receipt(self):
-		loan = self.loan()
-		returned = Document(
-			borrowing=loan.name,
-			update_status=Mock(),
-			make_stock_return_delivery_note=Mock(),
-			make_asset_receipt=Mock(),
+	def test_a_return_delivery_note_never_rewrites_the_issue_details(self):
+		"""The return is made from the issue note (UX WP4): submitting it refreshes the borrowing only."""
+		loan = self.loan("Stock")
+		loan.capture_delivery_note_details = Mock()
+		doc = Document(
+			doctype="Delivery Note",
+			is_return=1,
+			borrowing_source_doctype="Borrowing",
+			borrowing_source_name=loan.name,
 		)
 		with patch.object(frappe, "get_doc", return_value=loan):
-			core.BorrowingReturn.on_submit(returned)
-		returned.make_stock_return_delivery_note.assert_not_called()
-		returned.make_asset_receipt.assert_not_called()
-		returned.update_status.assert_called_once()
+			core.update_borrowing_status(doc, "on_submit")
+		loan.capture_delivery_note_details.assert_not_called()
+		loan.update_status.assert_called_once()
 
 	def test_submitting_stock_does_not_automatically_release_assets(self):
 		loan = self.loan("Stock")
@@ -261,9 +262,7 @@ class TestExplicitDelivery(TestCase):
 			is_return=0,
 			update_stock=0,
 			items=[
-				Document(
-					borrowing_item="ROW-1", item_code="ITEM-1", qty=2, uom="Unit", conversion_factor=1
-				)
+				Document(borrowing_item="ROW-1", item_code="ITEM-1", qty=2, uom="Unit", conversion_factor=1)
 			],
 		)
 		return source, loan, invoice

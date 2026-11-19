@@ -28,10 +28,12 @@ class TestAssetReissue(TestCase):
 			create table `tabItem` (name text, is_fixed_asset integer, stock_uom text);
 			create table `tabBorrowing` (name text, material_request text, docstatus integer, creation text, status text, loan_type text);
 			create table `tabBorrowing Item` (name text, parent text, asset text, material_request_item text, qty real, issued_qty real);
-			create table `tabBorrowing Return` (name text, borrowing text, docstatus integer, status text, loan_type text, asset_movement text);
-			create table `tabBorrowing Return Item` (name text, parent text, borrowing_item text, returned_qty real);
+			create table `tabDelivery Note` (name text, borrowing text, is_return integer, is_borrowing_transaction integer,
+				docstatus integer);
+			create table `tabDelivery Note Item` (name text, parent text, borrowing_item text, qty real);
 			create table `tabAsset Movement` (name text, docstatus integer, purpose text, borrowing text,
 				borrowing_source_doctype text, borrowing_source_name text);
+			create table `tabAsset Movement Item` (name text, parent text, borrowing_item text, asset text);
 			create table `tabMaterial Request` (name text, docstatus integer, material_request_type text, borrow_item_type text,
 				request_progress_status text, asset_transfer_status text);
 			create table `tabMaterial Request Item` (name text, parent text, asset text);
@@ -41,9 +43,8 @@ class TestAssetReissue(TestCase):
 			insert into `tabBorrowing` values ('OLD-LOAN','OLD-MR',1,'2026-01-01','Partially Returned','Asset');
 			insert into `tabBorrowing Item` values ('OLD-A','OLD-LOAN','ASSET-A','OLD-MR-A',1,1);
 			insert into `tabBorrowing Item` values ('OLD-B','OLD-LOAN','ASSET-B','OLD-MR-B',1,1);
-			insert into `tabBorrowing Return` values ('RETURN-A','OLD-LOAN',1,'Received','Asset','RECEIPT-A');
-			insert into `tabBorrowing Return Item` values ('RETURN-A-ROW','RETURN-A','OLD-A',1);
-			insert into `tabAsset Movement` values ('RECEIPT-A',1,'Receipt','OLD-LOAN','Borrowing Return','RETURN-A');
+			insert into `tabAsset Movement` values ('RECEIPT-A',1,'Receipt','OLD-LOAN','Borrowing','OLD-LOAN');
+			insert into `tabAsset Movement Item` values ('RECEIPT-A-ROW','RECEIPT-A','OLD-A','ASSET-A');
 			insert into `tabMaterial Request` values ('OLD-MR',1,'Customer Demo',null,'Partially Returned',null);
 			insert into `tabMaterial Request Item` values ('OLD-MR-A','OLD-MR','ASSET-A');
 			insert into `tabMaterial Request Item` values ('OLD-MR-B','OLD-MR','ASSET-B');
@@ -125,21 +126,24 @@ class TestAssetReissue(TestCase):
 
 	def test_pending_or_cancelled_return_does_not_release_a(self):
 		for sql in (
-			"update `tabBorrowing Return` set status='Pending Receipt' where name='RETURN-A'",
-			"update `tabBorrowing Return` set status='Received', docstatus=2 where name='RETURN-A'",
+			"update `tabAsset Movement` set docstatus=0 where name='RECEIPT-A'",
+			"update `tabAsset Movement` set docstatus=2 where name='RECEIPT-A'",
 		):
 			self.sql.execute(sql)
 			self.assertTrue(core.asset_has_unreturned_borrowing("ASSET-A"))
 			self.assertTrue(self.active_request("ASSET-A"))
 
-	def test_zero_or_partial_received_quantities_never_release_a(self):
-		for qty in (0, 0.5):
-			self.sql.execute("update `tabBorrowing Return Item` set returned_qty=?", (qty,))
+	def test_a_return_of_another_row_or_an_issue_movement_never_releases_a(self):
+		for sql in (
+			"update `tabAsset Movement Item` set borrowing_item='OLD-B'",
+			"update `tabAsset Movement` set purpose='Transfer'",
+		):
+			self.sql.execute(sql)
 			self.assertTrue(core.asset_has_unreturned_borrowing("ASSET-A"))
 			self.assertTrue(self.active_request("ASSET-A"))
 
 	def test_closed_loss_or_sale_is_not_a_received_return(self):
-		self.sql.execute("delete from `tabBorrowing Return Item`")
+		self.sql.execute("delete from `tabAsset Movement Item`")
 		self.sql.execute("update `tabBorrowing` set status='Closed'")
 		self.assertTrue(core.asset_has_unreturned_borrowing("ASSET-A"))
 		with self.assertRaises(ValueError):
@@ -210,7 +214,9 @@ class TestAssetReissue(TestCase):
 
 	def test_existing_stock_balances_keep_received_adjusted_and_sold_separate(self):
 		with (
-			patch.object(frappe, "get_all", side_effect=[["STOCK-RETURN"], [1], ["ADJUSTMENT"], [1]]),
+			patch.object(core, "return_rows", return_value=[frappe._dict(qty=1)]),
+			patch.object(core, "loan_conversion_rows", return_value=[]),
+			patch.object(frappe, "get_all", side_effect=[["ADJUSTMENT"], [1]]),
 			patch.object(self.db, "sql", return_value=[(2,)]),
 		):
 			self.assertEqual(core.get_loan_item_balances("STOCK-LOAN", "STOCK-ROW"), (1, 1, 2))

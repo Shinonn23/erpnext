@@ -17,7 +17,7 @@ from erpnext.borrowing.doctype.borrowing.borrowing_ui_preflight import inventory
 
 RUN_ID = re.compile(r"^[a-f0-9]{32}$")
 SCENARIOS = {"stock", "serial", "batch", "asset", "asset_employee"}
-FLOW_TYPES = ("Borrowing", "Borrowing Return", "Borrowing Adjustment", "Material Request")
+FLOW_TYPES = ("Borrowing", "Borrowing Adjustment", "Material Request")
 
 
 def _authorize():
@@ -649,7 +649,7 @@ def _assert_effects(manifest, loan, result):
 		for movement in documents.get("Asset Movement", []):
 			if movement["docstatus"] != 1:
 				continue
-			returning = movement["borrowing_source_doctype"] == "Borrowing Return"
+			returning = movement["purpose"] == "Receipt"
 			_equal(
 				movement["purpose"],
 				"Receipt"
@@ -792,7 +792,7 @@ def _assert_request(manifest, loan, documents):
 				)
 		for doc in documents.get("Asset Movement", []):
 			if doc["docstatus"] == 1:
-				if doc["borrowing_source_doctype"] == "Borrowing":
+				if doc["purpose"] != "Receipt":
 					issued = True
 				else:
 					returned += len(doc["assets"])
@@ -879,8 +879,29 @@ def _cleanup_business(manifest, result):
 			{"error": "Incomplete posted Shipment flow requires UI return; manifest retained"}
 		)
 		return result
-	# Never bypass dependencies. Native source cancellation owns generated documents.
-	for dt in ("Borrowing Return", "Borrowing Adjustment", "Borrowing", "Material Request"):
+	# Never bypass dependencies. The return documents go first (a Borrowing with a submitted return is not
+	# cancelled); native source cancellation owns the issue documents.
+	returns = [
+		doc
+		for doc in transactions.get("Delivery Note", []) + transactions.get("Asset Movement", [])
+		if (doc.doctype == "Delivery Note" and doc.is_return)
+		or (doc.doctype == "Asset Movement" and doc.purpose == "Receipt")
+	]
+	for doc in reversed(returns):
+		savepoint = "custody_cleanup_" + uuid4().hex
+		frappe.db.savepoint(savepoint)
+		try:
+			doc.reload()
+			if doc.docstatus == 1:
+				doc.cancel()
+				result["cancelled"].append([doc.doctype, doc.name])
+			elif doc.docstatus == 0:
+				frappe.delete_doc(doc.doctype, doc.name)
+				result["deleted_drafts"].append([doc.doctype, doc.name])
+		except Exception as exc:
+			frappe.db.rollback(save_point=savepoint)
+			result["errors"].append({"doctype": doc.doctype, "name": doc.name, "error": str(exc)})
+	for dt in ("Borrowing Adjustment", "Borrowing", "Material Request"):
 		for doc in reversed(flows[dt]):
 			savepoint = "custody_cleanup_" + uuid4().hex
 			frappe.db.savepoint(savepoint)

@@ -168,12 +168,7 @@ def get_customer_delivery_snapshot(
 
 
 # Borrowing stages a request shows while they last, the earliest first
-BORROWING_WAITING_STATES = (
-	"Pending Pick",
-	"Pending Delivery",
-	"Pending Quality Inspection",
-	"Pending Receipt",
-)
+BORROWING_WAITING_STATES = ("Pending Pick", "Pending Delivery")
 
 
 class CustomerMaterialRequest(MaterialRequest):
@@ -898,7 +893,7 @@ class CustomerMaterialRequest(MaterialRequest):
 		if self.request_progress_status in ("On Hold", "Closed"):
 			return
 		loan_states = {item.status for item in loan_items}
-		# the request shows the Borrowing's own stage while it is picked, delivered or received back (Siwat, 18 Nov 2026)
+		# the request shows the Borrowing's own stage while it is picked or delivered (Siwat, 18 Nov 2026)
 		waiting = next((state for state in BORROWING_WAITING_STATES if state in loan_states), None)
 		if not fulfilled_total:
 			self.request_progress_status = (
@@ -906,8 +901,6 @@ class CustomerMaterialRequest(MaterialRequest):
 			)
 		elif fulfilled_total < requested_total:
 			self.request_progress_status = "Partially Fulfilled"
-		elif waiting in ("Pending Quality Inspection", "Pending Receipt"):
-			self.request_progress_status = waiting
 		else:
 			if loan_states and loan_states.issubset({"Returned", "Closed"}):
 				self.request_progress_status = "Closed" if "Closed" in loan_states else "Returned"

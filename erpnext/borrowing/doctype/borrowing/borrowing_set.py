@@ -1,14 +1,15 @@
-"""Read a request's mixed Asset / Stock loan set and open explicit linked Return documents.
+"""Read a request's mixed Asset / Stock loan set and open its return documents.
 
-Each loan has its own Return, reviewed and submitted by the user. Creating a Return never posts stock,
-Asset movements, consumption adjustments or invoices. The native Return lifecycle owns those posting rules.
+Each borrowing comes back on the return document of its issue document (UX WP4, Siwat 18 Nov 2026): a return
+Delivery Note made from the issue Delivery Note (Stock), a return Asset Movement made from the issue movement (Asset),
+reviewed, saved and submitted by the user. Opening one never posts anything.
 """
 
 from __future__ import annotations
 
 import frappe
 from frappe import _
-from frappe.utils import cint, flt, getdate, nowdate
+from frappe.utils import cint, flt
 
 from erpnext.borrowing.doctype.borrowing.borrowing_core import (
 	loan_item_available_to_receive,
@@ -49,20 +50,17 @@ def _set_names(loan, material_request):
 
 
 DELIVERING = ("Pending Pick", "Pending Delivery")
-RETURN_CHECK = ("Pending Quality Inspection", "Pending Receipt")
 DONE = ("Returned", "Closed", "Cancelled")
 
 
 def set_status(statuses):
-	"""One status for the loans of a request: delivering until the goods have left, then out, partly back, being checked
+	"""One status for the loans of a request: delivering until the goods have left, then out, partly back
 	and finally closed. ``statuses`` are the loans' own statuses."""
 	statuses = [status for status in statuses if status != "Cancelled"]
 	if not statuses:
 		return None
 	if any(status in DELIVERING for status in statuses):
 		return "Being delivered"
-	if any(status in RETURN_CHECK for status in statuses):
-		return "Return being checked"
 	if all(status in DONE for status in statuses):
 		return "Closed"
 	if any(status in DONE or status == "Partially Returned" for status in statuses):
@@ -153,59 +151,10 @@ def loan_set_overview(loan: str | None = None, material_request: str | None = No
 	return overview
 
 
-@frappe.whitelist(methods=["POST"])
-def register_returned_lot(
-	item_code: str,
-	batch_no: str | None = None,
-	expiry_date: str | None = None,
-	manufacturing_date: str | None = None,
-	serial_nos: str | None = None,
-):
-	"""Make a batch or serial number the loan does not know yet, so it can come back. A new batch needs its expiry date
-	(its manufacturing date is optional); a batch that exists is only checked to be of this Item. Serial numbers that
-	are unknown are created; one that exists is left for the return to check (in stock or on another loan: refused)."""
-	frappe.has_permission("Borrowing Return", "create", throw=True)
-	flags = item_flags(item_code)
-	made = {"batch": None, "serials": []}
-	if batch_no:
-		if not cint(flags.get("has_batch_no")):
-			frappe.throw(_("{0} is not kept in batches.").format(item_code))
-		existing = frappe.db.get_value("Batch", batch_no, "item")
-		if existing and existing != item_code:
-			frappe.throw(_("Batch {0} belongs to another Item.").format(batch_no))
-		if not existing:
-			if not expiry_date:
-				frappe.throw(_("Give the expiry date of the new batch {0}.").format(batch_no))
-			if getdate(expiry_date) < getdate(nowdate()):
-				frappe.throw(_("The new batch {0} has already expired on {1}.").format(batch_no, expiry_date))
-			frappe.get_doc(
-				{
-					"doctype": "Batch",
-					"batch_id": batch_no,
-					"item": item_code,
-					"expiry_date": expiry_date,
-					"manufacturing_date": manufacturing_date or None,
-				}
-			).insert(ignore_permissions=True)
-			made["batch"] = batch_no
-	if serial_nos:
-		if not cint(flags.get("has_serial_no")):
-			frappe.throw(_("{0} has no serial numbers.").format(item_code))
-		for serial in [line.strip() for line in serial_nos.replace(",", "\n").split("\n") if line.strip()]:
-			if frappe.db.exists("Serial No", serial):
-				continue
-			doc = frappe.get_doc({"doctype": "Serial No", "serial_no": serial, "item_code": item_code})
-			if batch_no:
-				doc.batch_no = batch_no
-			doc.insert(ignore_permissions=True)
-			made["serials"].append(serial)
-	return made
-
-
 @frappe.whitelist()
-def make_return(borrowing: str):
-	"""Open the native linked Return without saving or submitting it."""
-	return frappe.get_doc("Borrowing", borrowing).make_return()
+def make_return(borrowing: str, source_name: str | None = None):
+	"""Open the unsaved return document of the borrowing's issue document (``source_name`` when it has several)."""
+	return frappe.get_doc("Borrowing", borrowing).make_return(source_name)
 
 
 @frappe.whitelist(methods=["POST"])
@@ -216,7 +165,9 @@ def return_loan_set(
 	stock: str | list | None = None,
 ):
 	"""Reject retired one-click posting, including stale browser sessions."""
-	frappe.throw(_("Create a Borrowing Return, review its items, then Save and Submit it."))
+	frappe.throw(
+		_("Use Create > Return on the Borrowing, review the return document, then Save and Submit it.")
+	)
 
 
 @frappe.whitelist(methods=["POST"])

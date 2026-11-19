@@ -13,7 +13,7 @@ frappe.query_reports["Borrowing Item Details"] = {
 			label: __("Status"),
 			fieldtype: "Select",
 			options:
-				"\nPending Pick\nPending Delivery\nActive\nPartially Returned\nPending Quality Inspection\nPending Receipt\nReturned\nClosed",
+				"\nPending Pick\nPending Delivery\nActive\nPartially Returned\nReturned\nClosed",
 		},
 		{ fieldname: "from_date", label: __("Created From"), fieldtype: "Date" },
 		{ fieldname: "to_date", label: __("Created To"), fieldtype: "Date" },

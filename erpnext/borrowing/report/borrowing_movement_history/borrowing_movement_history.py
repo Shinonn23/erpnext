@@ -13,7 +13,11 @@ from erpnext.borrowing.report.requester import (
 def execute(filters=None):
 	filters = frappe._dict(filters or {})
 	values = {}
-	asset_conditions = ["loan.docstatus = 1", "movement.docstatus = 1", "movement.is_borrowing_transaction = 1"]
+	asset_conditions = [
+		"loan.docstatus = 1",
+		"movement.docstatus = 1",
+		"movement.is_borrowing_transaction = 1",
+	]
 	stock_conditions = ["loan.docstatus = 1", "entry.docstatus = 1", "entry.is_borrowing_transaction = 1"]
 	for field in ("company", "loan_type"):
 		if filters.get(field):
@@ -39,8 +43,7 @@ def execute(filters=None):
 		f"""SELECT movement.transaction_date, loan.name AS loan,
 			loan.material_request, loan.loan_type, loan.borrower_type, loan.borrower, {REQUESTER_SELECT},
 			'Asset Movement' AS source_doctype, movement.name AS source_document,
-			CASE WHEN movement.borrowing_source_doctype = 'Borrowing'
-				THEN 'Issue' ELSE 'Return' END AS action,
+			CASE WHEN movement.purpose = 'Receipt' THEN 'Return' ELSE 'Issue' END AS action,
 			item.asset_item_code AS item_code, asset.asset_name AS item_name,
 			item.asset, asset.asset_serial_number, asset.source_serial_no,
 			asset.source_batch_no AS batch_no, 1 AS qty,
@@ -51,7 +54,7 @@ def execute(filters=None):
 		{REQUEST_JOIN}
 		JOIN `tabAsset Movement Item` item ON item.parent = movement.name
 		JOIN `tabAsset` asset ON asset.name = item.asset
-		WHERE {' AND '.join(asset_conditions)}""",
+		WHERE {" AND ".join(asset_conditions)}""",
 		values,
 		as_dict=True,
 	)
@@ -60,8 +63,7 @@ def execute(filters=None):
 			loan.material_request, loan.loan_type, loan.borrower_type, loan.borrower, {REQUESTER_SELECT},
 			'Stock Entry' AS source_doctype, entry.name AS source_document,
 			CASE entry.borrowing_source_doctype
-				WHEN 'Borrowing' THEN 'Issue'
-				WHEN 'Borrowing Return' THEN 'Return'
+				WHEN 'Borrowing' THEN 'Batch Swap'
 				ELSE 'Adjustment' END AS action,
 			item.item_code, product.item_name, NULL AS asset, NULL AS asset_serial_number,
 			item.serial_no AS source_serial_no, item.batch_no, item.qty,
@@ -72,7 +74,7 @@ def execute(filters=None):
 		{REQUEST_JOIN}
 		JOIN `tabStock Entry Detail` item ON item.parent = entry.name
 		JOIN `tabItem` product ON product.name = item.item_code
-		WHERE {' AND '.join(stock_conditions)}""",
+		WHERE {" AND ".join(stock_conditions)}""",
 		values,
 		as_dict=True,
 	)
@@ -93,7 +95,7 @@ def execute(filters=None):
 		{REQUEST_JOIN}
 		JOIN `tabDelivery Note Item` item ON item.parent = entry.name
 		JOIN `tabItem` product ON product.name = item.item_code
-		WHERE {' AND '.join(stock_conditions)}""",
+		WHERE {" AND ".join(stock_conditions)}""",
 		values,
 		as_dict=True,
 	)
@@ -101,13 +103,37 @@ def execute(filters=None):
 	data.sort(key=lambda row: (str(row.transaction_date or ""), row.source_document or ""), reverse=True)
 	columns = [
 		{"label": "Date", "fieldname": "transaction_date", "fieldtype": "Datetime", "width": 145},
-		{"label": "Borrowing", "fieldname": "loan", "fieldtype": "Link", "options": "Borrowing", "width": 165},
-		{"label": "Material Request", "fieldname": "material_request", "fieldtype": "Link", "options": "Material Request", "width": 165},
+		{
+			"label": "Borrowing",
+			"fieldname": "loan",
+			"fieldtype": "Link",
+			"options": "Borrowing",
+			"width": 165,
+		},
+		{
+			"label": "Material Request",
+			"fieldname": "material_request",
+			"fieldtype": "Link",
+			"options": "Material Request",
+			"width": 165,
+		},
 		{"label": "Type", "fieldname": "loan_type", "fieldtype": "Data", "width": 80},
 		{"label": "Borrower Type", "fieldname": "borrower_type", "fieldtype": "Data", "width": 110},
-		{"label": "Borrower", "fieldname": "borrower", "fieldtype": "Dynamic Link", "options": "borrower_type", "width": 170},
+		{
+			"label": "Borrower",
+			"fieldname": "borrower",
+			"fieldtype": "Dynamic Link",
+			"options": "borrower_type",
+			"width": 170,
+		},
 		{"label": "Source Type", "fieldname": "source_doctype", "fieldtype": "Data", "width": 115},
-		{"label": "Movement", "fieldname": "source_document", "fieldtype": "Dynamic Link", "options": "source_doctype", "width": 155},
+		{
+			"label": "Movement",
+			"fieldname": "source_document",
+			"fieldtype": "Dynamic Link",
+			"options": "source_doctype",
+			"width": 155,
+		},
 		{"label": "Action", "fieldname": "action", "fieldtype": "Data", "width": 90},
 		{"label": "Item", "fieldname": "item_code", "fieldtype": "Link", "options": "Item", "width": 140},
 		{"label": "Item / Asset Name", "fieldname": "item_name", "fieldtype": "Data", "width": 165},
@@ -117,8 +143,20 @@ def execute(filters=None):
 		{"label": "Qty", "fieldname": "qty", "fieldtype": "Float", "width": 75},
 		{"label": "From", "fieldname": "from_location", "fieldtype": "Data", "width": 145},
 		{"label": "To", "fieldname": "to_location", "fieldtype": "Data", "width": 145},
-		{"label": "From Employee", "fieldname": "from_employee", "fieldtype": "Link", "options": "Employee", "width": 135},
-		{"label": "To Employee", "fieldname": "to_employee", "fieldtype": "Link", "options": "Employee", "width": 135},
+		{
+			"label": "From Employee",
+			"fieldname": "from_employee",
+			"fieldtype": "Link",
+			"options": "Employee",
+			"width": 135,
+		},
+		{
+			"label": "To Employee",
+			"fieldname": "to_employee",
+			"fieldtype": "Link",
+			"options": "Employee",
+			"width": 135,
+		},
 		{"label": "Company", "fieldname": "company", "fieldtype": "Link", "options": "Company", "width": 130},
 	]
 	columns = insert_columns_after(columns, "borrower", requester_columns())

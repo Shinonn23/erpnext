@@ -396,7 +396,7 @@ def is_loan_movement(doc):
 		if doc.get("borrowing_source_doctype") != "Borrowing Adjustment" or doc.purpose != "Material Issue":
 			frappe.throw(
 				_(
-					"Borrowing warehouses only accept transactions generated from correctly linked borrowing, return or borrowing adjustment documents."
+					"Borrowing warehouses only accept transactions generated from correctly linked borrowing or borrowing adjustment documents."
 				)
 			)
 		loan = frappe.get_doc("Borrowing", doc.borrowing)
@@ -445,29 +445,16 @@ def conversion_matches_loan(doc):
 
 
 def is_return_lot_swap(doc):
-	"""Whether ``doc`` is the Repack a Borrowing Return makes to exchange the lent batch for the batch the customer
-	brought back (Siwat, 5 and 9 Nov 2026): one Item, one batch out and one batch in, the same quantity, both inside
-	the customer's loan warehouse, linked to a submitted return of that loan. Any other Repack stays refused."""
-	if doc.get("purpose") != "Repack" or doc.get("borrowing_source_doctype") != "Borrowing Return":
+	"""Whether ``doc`` is the Repack a borrowing return Delivery Note posts to swap the lent batch for the batch the
+	borrower brought back (Siwat, 5 Nov 2026; UX WP4, 18 Nov 2026: the swap is part of the return Delivery Note): one
+	Item, one batch out and one batch in, the same quantity, both inside the Borrowed warehouse
+	(``borrowing_core.validate_batch_swap`` checks it). Any other Repack stays refused."""
+	if doc.get("purpose") != "Repack" or doc.get("borrowing_source_doctype") != "Borrowing":
 		return False
-	loan = frappe.get_doc("Borrowing", doc.borrowing)
-	source = frappe.db.get_value(
-		"Borrowing Return", doc.borrowing_source_name, ["docstatus", "borrowing"], as_dict=True
-	)
-	if not source or source.docstatus != 1 or source.borrowing != loan.name:
-		return False
-	rows = list(doc.get("items") or [])
-	outgoing = [row for row in rows if row.get("s_warehouse") and not row.get("t_warehouse")]
-	incoming = [row for row in rows if row.get("t_warehouse") and not row.get("s_warehouse")]
-	if len(rows) != 2 or len(outgoing) != 1 or len(incoming) != 1:
-		return False
-	out, into = outgoing[0], incoming[0]
-	return (
-		out.s_warehouse == loan.customer_loan_warehouse
-		and into.t_warehouse == loan.customer_loan_warehouse
-		and out.item_code == into.item_code
-		and flt(out.qty) == flt(into.qty)
-	)
+	from erpnext.borrowing.doctype.borrowing.borrowing_core import validate_batch_swap
+
+	validate_batch_swap(doc, frappe.get_doc("Borrowing", doc.borrowing))
+	return True
 
 
 def movement_operation(doc, outgoing, loan=False, row=None):

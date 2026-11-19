@@ -80,8 +80,6 @@ function get_request_status_indicator(fieldname, status) {
 		"In Transit": "yellow",
 		"Pending Pick": "orange",
 		"Pending Delivery": "orange",
-		"Pending Quality Inspection": "yellow",
-		"Pending Receipt": "yellow",
 		"Partially Fulfilled": "yellow",
 		Fulfilled: "green",
 		"Partially Returned": "yellow",

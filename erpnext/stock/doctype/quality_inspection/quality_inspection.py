@@ -110,6 +110,10 @@ class QualityInspection(Document):
 		doctype = self.reference_type + " Item"
 		if self.reference_type == "Stock Entry":
 			doctype = "Stock Entry Detail"
+		if self.reference_type == "Asset Movement":
+			# a borrowing's return movement (UX WP4): its rows are ``assets`` and name the Item ``asset_item_code``
+			self.child_row_reference = asset_movement_row_for(self.reference_name, self.item_code)
+			return
 
 		child_doc = frappe.qb.DocType(doctype)
 		qi_doc = frappe.qb.DocType("Quality Inspection")
@@ -250,6 +254,18 @@ class QualityInspection(Document):
 		if self.reference_type in ("Pick List", "Asset Repair"):
 			return
 		quality_inspection = self.name if self.docstatus < 2 and not remove_reference else ""
+
+		if self.reference_type == "Asset Movement":
+			# Asset Movement Item has no ``item_code`` / ``batch_no``: only the inspected row names it (UX WP4)
+			if self.child_row_reference:
+				frappe.db.set_value(
+					"Asset Movement Item",
+					self.child_row_reference,
+					"quality_inspection",
+					quality_inspection,
+					update_modified=False,
+				)
+			return
 
 		if self.reference_type == "Job Card":
 			if self.reference_name:
@@ -471,6 +487,60 @@ class QualityInspection(Document):
 		return actual_mean
 
 
+def asset_movement_row_for(movement, item_code):
+	"""The first row of the Asset Movement ``movement`` for ``item_code`` that no live Quality Inspection names, or None.
+
+	Asset Movement Item has no ``item_code``: the Item of its Asset is ``asset_item_code`` (UX WP4, a borrowing's return
+	movement is inspected on receipt)."""
+	if not (movement and item_code):
+		return None
+	inspected = set(
+		frappe.get_all(
+			"Quality Inspection",
+			filters={"reference_type": "Asset Movement", "reference_name": movement, "docstatus": ["<", 2]},
+			pluck="child_row_reference",
+		)
+	)
+	for name in frappe.get_all(
+		"Asset Movement Item",
+		filters={"parent": movement, "parenttype": "Asset Movement", "asset_item_code": item_code},
+		order_by="idx asc",
+		pluck="name",
+	):
+		if name not in inspected:
+			return name
+	return None
+
+
+def asset_movement_items(movement, txt, start, page_len):
+	"""The Items of the Asset rows of ``movement`` not yet inspected, for the Item search of a Quality Inspection."""
+	if not movement:
+		return []
+	doc = frappe.get_doc("Asset Movement", movement)
+	doc.check_permission("read")
+	if doc.docstatus > 1:
+		return []
+	items = sorted(
+		{
+			row.asset_item_code
+			for row in doc.get("assets") or []
+			if row.asset_item_code and not row.get("quality_inspection")
+		}
+	)
+	if not items:
+		return []
+	rows = frappe.get_list(
+		"Item",
+		filters={"name": ["in", items]},
+		or_filters={"name": ["like", f"%{txt or ''}%"], "item_name": ["like", f"%{txt or ''}%"]},
+		fields=["name", "item_name"],
+		order_by="name",
+		limit_start=start,
+		limit_page_length=page_len,
+	)
+	return [(row.name, row.item_name) for row in rows]
+
+
 @frappe.whitelist()
 @frappe.validate_and_sanitize_search_inputs
 def item_query(doctype: Any, txt: str | None, searchfield: Any, start: int, page_len: int, filters: dict):
@@ -515,6 +585,8 @@ def item_query(doctype: Any, txt: str | None, searchfield: Any, start: int, page
 			limit_page_length=page_len,
 		)
 		return [(row.name, row.item_name) for row in rows]
+	elif reference_doctype == "Asset Movement":
+		return asset_movement_items(filters.get("reference_name"), txt, start, page_len)
 	elif reference_doctype == "Job Card":
 		production_item, item_name = frappe.get_value(
 			"Job Card", filters.get("reference_name"), ["production_item", "item_name"]

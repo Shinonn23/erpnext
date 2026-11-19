@@ -231,7 +231,6 @@ def remove_loan_inventory_dimension_custom_fields():
 	loan_item_doctypes = [
 		"Borrowing Adjustment Item",
 		"Borrowing Item",
-		"Borrowing Return Item",
 	]
 	dimensions = frappe.get_all(
 		"Inventory Dimension",

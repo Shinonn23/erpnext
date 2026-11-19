@@ -1218,8 +1218,11 @@ def make_shipment(source_name, target_doc=None):
 def make_sales_return(source_name, target_doc=None):
 	from erpnext.controllers.sales_and_purchase_return import make_return_doc
 
-	if frappe.get_doc("Delivery Note", source_name).get("is_borrowing_transaction"):
-		frappe.throw(_("Use the Borrowing to return borrowed items."))
+	if frappe.db.get_value("Delivery Note", source_name, "is_borrowing_transaction"):
+		# the return of a borrowing is made from its issue Delivery Note too, with only the units still out (UX WP4)
+		from erpnext.borrowing.doctype.borrowing.borrowing_core import make_borrowing_return_delivery_note
+
+		return make_borrowing_return_delivery_note(source_name)
 	return make_return_doc("Delivery Note", source_name, target_doc)
 
 

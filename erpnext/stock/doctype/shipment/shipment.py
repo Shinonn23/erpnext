@@ -745,37 +745,6 @@ def set_borrowing_shipment_party(shipment, loan, direction, source):
 		shipment.delivery_address_name = get_party_shipping_address("Warehouse", warehouse) or company_address
 
 
-def append_borrowing_return_documents(shipment, source):
-	if source.get("borrowing_source_doctype") != "Borrowing Return":
-		return
-
-	return_doc = frappe.get_doc("Borrowing Return", source.borrowing_source_name)
-	if not return_doc.requires_shipment:
-		return
-
-	for doctype, fieldname in (
-		("Stock Entry", "stock_entry"),
-		("Stock Entry", "replacement_stock_entry"),
-	):
-		name = return_doc.get(fieldname)
-		if not name or (doctype == source.doctype and name == source.name):
-			continue
-		doc = frappe.get_doc(doctype, name)
-		if not doc.get("requires_shipment"):
-			continue
-		if doc.docstatus != 0:
-			frappe.throw(_("All generated return documents must be Draft before creating their Shipment."))
-		if doc.shipment and doc.shipment != shipment.name:
-			frappe.throw(_("All generated return documents must use the same Shipment."))
-		doc.check_permission("write")
-		if not frappe.db.exists(
-			"Shipment Document",
-			{"parent": shipment.name, "reference_doctype": doctype, "reference_name": name},
-		):
-			shipment.append("shipment_documents", {"reference_doctype": doctype, "reference_name": name})
-		doc.db_set("shipment", shipment.name)
-
-
 def get_document_value_field(doctype):
 	return {
 		"Delivery Note": "grand_total",
@@ -816,19 +785,10 @@ def make_shipment_from_document(source_doctype, source_name):
 	docstatus = frappe.db.get_value(source_doctype, source_name, "docstatus")
 	if source_doctype == "Stock Entry" and docstatus == 0:
 		source = frappe.get_doc(source_doctype, source_name)
-		is_replacement_receipt = (
-			source.purpose == "Material Receipt"
-			and source.get("is_borrowing_transaction")
-			and source.get("borrowing_source_doctype") == "Borrowing Return"
-		)
 		if source.get("is_borrowing_transaction"):
-			if not source.requires_shipment or (
-				source.purpose != "Material Transfer" and not is_replacement_receipt
-			):
+			if not source.requires_shipment or source.purpose != "Material Transfer":
 				frappe.throw(
-					_(
-						"Only a draft Borrowing transfer or replacement receipt marked Ship via Shipment can create a Shipment."
-					)
+					_("Only a draft Borrowing transfer marked Ship via Shipment can create a Shipment.")
 				)
 			if source.shipment and frappe.db.exists("Shipment", source.shipment):
 				return frappe.get_doc("Shipment", source.shipment).as_dict()
@@ -848,7 +808,6 @@ def make_shipment_from_document(source_doctype, source_name):
 				"shipment_documents", {"reference_doctype": "Stock Entry", "reference_name": source.name}
 			)
 			source.db_set("shipment", shipment.name)
-			append_borrowing_return_documents(shipment, source)
 			shipment.insert(ignore_permissions=True, ignore_mandatory=True)
 			return shipment.as_dict()
 
