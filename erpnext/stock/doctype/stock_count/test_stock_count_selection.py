@@ -208,40 +208,47 @@ class StockCountSelectionTest(unittest.TestCase):
 		StockCount.keep_variance_mode(preparing)
 		self.assertEqual(preparing.posts_variance_snapshot, 1)
 
-	def test_quarantine_warehouse_is_optional_only_when_the_count_posts_variance(self):
-		doc = count(quarantine_warehouse=None)
-		doc.validate_quarantine_warehouse = Mock(side_effect=frappe.ValidationError)
+	def test_lost_warehouse_is_optional_only_when_the_count_posts_variance(self):
+		doc = count(lost_warehouse=None)
+		doc.validate_lost_warehouse = Mock(side_effect=frappe.ValidationError)
 		doc.uses_variance = lambda: True
-		StockCount.validate_quarantine_if_needed(doc)
+		StockCount.validate_lost_if_needed(doc)
 		doc.uses_variance = lambda: False
 		with patch(f"{StockCount.__module__}.get_lost_warehouse", return_value=None):
 			with self.assertRaises(frappe.ValidationError):
-				StockCount.validate_quarantine_if_needed(doc)
+				StockCount.validate_lost_if_needed(doc)
 		doc.uses_variance = lambda: True
-		doc.quarantine_warehouse = "Q"
+		doc.lost_warehouse = "Q"
 		with self.assertRaises(frappe.ValidationError):
-			StockCount.validate_quarantine_if_needed(doc)
+			StockCount.validate_lost_if_needed(doc)
+
+	def test_the_lost_warehouse_must_be_of_the_type_lost(self):
+		# the form offers only Lost warehouses; an import or API call is held to the same rule (WP10)
+		good = {"company": "C", "is_group": 0, "disabled": 0, "warehouse_type": "Lost"}
+		doc = count(lost_warehouse="LOST - C", company="C", warehouse="CD STOCK")
+		doc.validate_lost_storage_location = Mock()
+		with patch.object(stock_count.frappe, "db", fake_db(get_value=frappe._dict(good))):
+			StockCount.validate_lost_warehouse(doc)
+		for kind in ("Quarantine", "Stock", None):
+			db = fake_db(get_value=frappe._dict(good, warehouse_type=kind))
+			with patch.object(stock_count.frappe, "db", db), self.assertRaises(frappe.ValidationError):
+				StockCount.validate_lost_warehouse(doc)
 
 	def test_a_monthly_count_defaults_to_the_companys_lost_warehouse(self):
-		# the field keeps its name but holds the Lost Warehouse (Connect Diagnostics, 5 Nov 2026)
-		doc = count(quarantine_warehouse=None, found_warehouse=None, company="C", warehouse="CD STOCK")
-		doc.validate_quarantine_warehouse = Mock()
-		doc.validate_found_warehouse = Mock()
+		# the field is the Lost Warehouse (Connect Diagnostics, 5 Nov 2026; named lost_warehouse since WP10)
+		doc = count(lost_warehouse=None, company="C", warehouse="CD STOCK")
+		doc.validate_lost_warehouse = Mock()
 		doc.uses_variance = lambda: False
-		with (
-			patch(f"{StockCount.__module__}.get_lost_warehouse", return_value="LOST - C") as lost,
-			patch(f"{StockCount.__module__}.get_found_warehouse", return_value="FOUND - C") as found,
-		):
-			StockCount.validate_quarantine_if_needed(doc)
-		self.assertEqual((doc.quarantine_warehouse, doc.found_warehouse), ("LOST - C", None))
-		# the counted warehouse chooses its own Lost and Found warehouse (7 Nov 2026)
+		with patch(f"{StockCount.__module__}.get_lost_warehouse", return_value="LOST - C") as lost:
+			StockCount.validate_lost_if_needed(doc)
+		self.assertEqual(doc.lost_warehouse, "LOST - C")
+		# the counted warehouse chooses its own Lost warehouse (7 Nov 2026)
 		lost.assert_called_once_with("C", exclude="CD STOCK", counted="CD STOCK")
-		found.assert_not_called()
 		# a count that posts its differences needs none
-		doc = count(quarantine_warehouse=None, company="C")
+		doc = count(lost_warehouse=None, company="C")
 		doc.uses_variance = lambda: True
 		with patch(f"{StockCount.__module__}.get_lost_warehouse") as lost:
-			StockCount.validate_quarantine_if_needed(doc)
+			StockCount.validate_lost_if_needed(doc)
 		lost.assert_not_called()
 
 	def test_variance_account_must_be_an_enabled_leaf_expense_account_of_the_company(self):
@@ -327,15 +334,14 @@ class StockCountSelectionTest(unittest.TestCase):
 	def test_on_submit_chooses_the_voucher(self):
 		for variance, monthly, expected in (
 			(True, True, "reconciliation"),
-			(False, True, "quarantine"),
+			(False, True, "lost"),
 			(True, False, "reconciliation"),
 		):
 			doc = count(count_type="Monthly" if monthly else "Annual")
 			doc.posts_variance = lambda variance=variance: variance and monthly
 			calls = []
-			doc.make_quarantine_stock_entry = lambda calls=calls: calls.append("quarantine")
+			doc.make_lost_stock_entry = lambda calls=calls: calls.append("lost")
 			doc.make_stock_reconciliation = lambda calls=calls: calls.append("reconciliation")
-			doc.handle_surplus = lambda calls=calls: calls.append("found")
 			doc.db_set = Mock()
 			StockCount.on_submit(doc)
 			self.assertEqual(calls, [expected])
@@ -386,7 +392,7 @@ def preparing(**values):
 			status="Draft",
 			items=[],
 			item_count=0,
-			quarantine_warehouse="Q",
+			lost_warehouse="Q",
 			**values,
 		)
 	)
@@ -394,7 +400,7 @@ def preparing(**values):
 	doc.validate = Mock()
 	doc.save = Mock()
 	doc.get_item_codes_to_count = lambda snapshot: StockCount.get_item_codes_to_count(doc, snapshot)
-	doc.validate_quarantine_if_needed = Mock()
+	doc.validate_lost_if_needed = Mock()
 	doc.add_first_count_surplus_rows = lambda: set()
 	doc.append_snapshot_rows = lambda code, snapshot: doc["items"].append(frappe._dict(item_code=code))
 	doc.stock = []
@@ -467,8 +473,6 @@ class OwnLostWarehouseTest(unittest.TestCase):
 		with patch.object(stock_count.frappe, "db", db):
 			self.assertEqual(stock_count.own_holding_warehouse("W"), "LOST - W")
 			db.get_value.assert_called_with("Warehouse", "W", "lost_warehouse")
-			stock_count.own_holding_warehouse("W", "found_warehouse")
-			db.get_value.assert_called_with("Warehouse", "W", "found_warehouse")
 
 	def test_the_own_lost_warehouse_wins_over_the_company_one(self):
 		own = frappe._dict(company="C", is_group=0, disabled=0)
@@ -493,8 +497,6 @@ class OwnLostWarehouseTest(unittest.TestCase):
 		):
 			self.assertEqual(stock_count.get_lost_warehouse("C", counted="W"), "LOST - CD")
 			company.assert_called_once_with("C", "Lost", None, "lost_warehouse")
-			self.assertEqual(stock_count.get_found_warehouse("C"), "LOST - CD")
-			company.assert_called_with("C", "Found", None, "found_warehouse")
 
 	def test_the_company_search_skips_the_warehouses_that_serve_one_warehouse(self):
 		calls = []
@@ -585,11 +587,7 @@ class LostWarehouseAndLocationsTest(unittest.TestCase):
 			StockCount.get_dimension_filters(self.dims(("Project", "P1"), ("Project", "P2")))
 
 	def test_only_the_quantity_not_found_moves_to_the_lost_warehouse(self):
-		doc = Doc(
-			count(
-				quarantine_warehouse="LOST", quarantine_storage_location=None, stock_entry=None, name="SC-1"
-			)
-		)
+		doc = Doc(count(lost_warehouse="LOST", lost_storage_location=None, stock_entry=None, name="SC-1"))
 		doc.items = [
 			frappe._dict(item_code="SHORT", system_qty=10, counted_qty=7, batch_no=None, serial_no=None),
 			frappe._dict(item_code="OVER", system_qty=2, counted_qty=5, batch_no=None, serial_no=None),
@@ -612,18 +610,13 @@ class LostWarehouseAndLocationsTest(unittest.TestCase):
 			),
 			patch(f"{StockCount.__module__}._", side_effect=lambda text: text),
 		):
-			StockCount.make_quarantine_stock_entry(doc)
+			StockCount.make_lost_stock_entry(doc)
 		moved = {(row["item_code"], row["qty"], row["serial_no"], row["t_warehouse"]) for row in entry.items}
 		self.assertEqual(moved, {("SHORT", 3, "", "LOST"), ("SN", 1, "SN-LOST", "LOST")})
 
 
 class FoundWarehouseTest(unittest.TestCase):
 	"""Count surplus data and snapshot rows."""
-
-	def test_confirmed_surplus_is_the_smaller_of_the_two_counts(self):
-		self.assertEqual(
-			stock_count.confirmed_surplus({"a": 2, "b": 5, "c": 1}, {"a": 3, "b": 1}), {"a": 2, "b": 1}
-		)
 
 	def test_a_row_the_counter_adds_counts_as_found(self):
 		before = count(snapshot_datetime="2026-11-05", items=[frappe._dict(item_code="A", system_qty=3)])

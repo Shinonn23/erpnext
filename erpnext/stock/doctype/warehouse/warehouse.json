@@ -30,6 +30,7 @@
   "found_warehouse",
   "holding_column",
   "quarantine_warehouse",
+  "damage_warehouse",
   "count_variance_section",
   "account",
   "stock_adjustment_account",
@@ -263,7 +264,7 @@
    "fieldname": "holding_section",
    "fieldtype": "Section Break",
    "label": "Related Warehouses",
-   "depends_on": "eval:!!(doc.lost_warehouse || doc.quarantine_warehouse || doc.damage_warehouse) || (!doc.is_group && !['Lost', 'Quarantine', 'Transit', 'Write-Off'].includes(doc.warehouse_type)) || (!doc.is_group && doc.warehouse_type === 'Quarantine')"
+   "depends_on": "eval:!!(doc.lost_warehouse || doc.quarantine_warehouse || doc.damage_warehouse) || (!doc.is_group && ['Stock', 'Quarantine'].includes(doc.warehouse_type))"
   },
   {
    "description": "A Monthly Stock Count of this warehouse moves what it did not find here. Leave empty for the company's Lost warehouse.",
@@ -272,7 +273,7 @@
    "label": "Lost Warehouse",
    "no_copy": 1,
    "options": "Warehouse",
-   "depends_on": "eval:!!doc.lost_warehouse || (!doc.is_group && !['Lost', 'Quarantine', 'Transit', 'Write-Off'].includes(doc.warehouse_type))"
+   "depends_on": "eval:!!doc.lost_warehouse || (!doc.is_group && doc.warehouse_type=='Stock')"
   },
   {
    "description": "A Monthly Stock Count of this warehouse receives what two counts found beyond the system quantity here. Leave empty for the company's Found warehouse.",
@@ -290,7 +291,16 @@
    "label": "Quarantine Warehouse",
    "no_copy": 1,
    "options": "Warehouse",
-   "depends_on": "eval:!!doc.quarantine_warehouse || (!doc.is_group && !['Lost', 'Quarantine', 'Transit', 'Write-Off'].includes(doc.warehouse_type))"
+   "depends_on": "eval:!!doc.quarantine_warehouse || (!doc.is_group && doc.warehouse_type=='Stock')"
+  },
+  {
+   "depends_on": "eval:!!doc.damage_warehouse || (!doc.is_group && ['Stock', 'Quarantine'].includes(doc.warehouse_type))",
+   "description": "Where goods of this warehouse rejected by a Quality Inspection are moved (a Write-Off warehouse). A Quarantine warehouse may name one too: rejected goods go straight from quarantine to damage.",
+   "fieldname": "damage_warehouse",
+   "fieldtype": "Link",
+   "label": "Damage Warehouse",
+   "no_copy": 1,
+   "options": "Warehouse"
   },
   {
    "fieldname": "holding_column",
@@ -302,7 +312,7 @@
  "idx": 1,
  "is_tree": 1,
  "links": [],
- "modified": "2026-11-07 22:30:00.000000",
+ "modified": "2026-11-19 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Warehouse",

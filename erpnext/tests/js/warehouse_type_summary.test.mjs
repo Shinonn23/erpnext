@@ -84,6 +84,24 @@ test("summary lists allowed and blocked operations and the outgoing role", () =>
   assert.match(f.intros.at(-1)[0], /Allowed: Receipt, Issue/);
 });
 
+test("summary lists the code waivers as exceptions", () => {
+  const f = fixture(
+    { name: "LOST", warehouse_type: "Lost" },
+    {
+      restricted: true,
+      operations: ops(["transfer"]),
+      outgoing_role: "Stock Manager",
+      waivers: ["A Stock Write-Off <issue>", "A Stock Count posting"],
+    }
+  );
+  f.handlers.Warehouse.warehouse_type(f.frm);
+  const line = f.descriptions["warehouse_type:description"];
+  assert.match(
+    line,
+    /Exceptions: A Stock Write-Off &lt;issue>; A Stock Count posting/
+  );
+});
+
 test("group warehouse shows no type summary", () => {
   const f = fixture({ name: "WH", is_group: 1, warehouse_type: "Lab" }, null);
   f.handlers.Warehouse.warehouse_type(f.frm);
