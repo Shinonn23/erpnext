@@ -41,6 +41,48 @@ function get_material_request_recipient_details(request) {
 	};
 }
 
+// The row fields each purpose shows (and stores): a hidden location is cleared on the form and by the server
+// (asset_movement.py clear_hidden_fields), so the latest movement never carries a place the user did not see.
+// From Employee is the asset's custodian the system writes on every purpose (read only but on Transfer and Issue).
+const MOVEMENT_FIELDS_BY_PURPOSE = {
+	Transfer: ["source_location", "target_location", "from_employee", "to_employee"],
+	Receipt: ["source_location", "target_location", "from_employee", "to_employee"],
+	Issue: ["from_employee", "to_employee"],
+	"Transfer and Issue": ["source_location", "target_location", "from_employee", "to_employee"],
+	Reassignment: [
+		"change_custodian",
+		"from_employee",
+		"to_employee",
+		"change_department",
+		"source_department",
+		"target_department",
+	],
+};
+const CLEARED_LOCATIONS = ["source_location", "target_location"];
+
+function movement_fields(purpose) {
+	return new Set(MOVEMENT_FIELDS_BY_PURPOSE[purpose] || []);
+}
+
+// what a purpose change empties on a row: the locations it hides (a Service Equipment row and a borrowing keep
+// theirs, the server writes them) and the Reassignment choices outside a Reassignment
+function hidden_movement_values(frm, row) {
+	const shown = movement_fields(frm.doc.purpose);
+	const values = {
+		change_custodian: 0,
+		change_department: 0,
+		// a Transfer keeps the custodian unless the user names a new one (see the asset event)
+		to_employee: frm.doc.purpose === "Transfer" ? row.from_employee || null : null,
+		target_department: null,
+	};
+	if (!row.service_equipment && !frm.doc.is_borrowing_transaction && !frm.doc.borrowing) {
+		for (const fieldname of CLEARED_LOCATIONS) {
+			if (!shown.has(fieldname)) values[fieldname] = null;
+		}
+	}
+	return values;
+}
+
 async function set_material_request_purpose_lock(frm, material_request = null) {
 	const reference_name = frm.doc.reference_name;
 	if (frm.doc.reference_doctype !== "Material Request" || !reference_name) {
@@ -133,15 +175,18 @@ frappe.ui.form.on("Asset Movement", {
 			await frm.set_value("purpose", "Transfer");
 			return;
 		}
+		const shown = movement_fields(frm.doc.purpose);
 		for (const row of frm.doc.assets || []) {
-			const values = {
-				change_custodian: 0,
-				change_department: 0,
-				// a Transfer keeps the custodian unless the user names a new one (see the asset event)
-				to_employee: frm.doc.purpose === "Transfer" ? row.from_employee || null : null,
-				target_department: null,
-			};
-			frappe.model.set_value(row.doctype, row.name, values);
+			frappe.model.set_value(row.doctype, row.name, hidden_movement_values(frm, row));
+			// a location cleared by an earlier purpose comes back from the asset when this one shows it
+			if (row.asset && shown.has("source_location") && !row.source_location) {
+				const asset_name = row.asset;
+				frappe.db.get_value("Asset", asset_name, "location").then(({ message }) => {
+					if (row.asset === asset_name && message && message.location && !row.source_location) {
+						frappe.model.set_value(row.doctype, row.name, "source_location", message.location);
+					}
+				});
+			}
 		}
 		frm.trigger("set_required_fields");
 	},
@@ -198,22 +243,8 @@ frappe.ui.form.on("Asset Movement", {
 			frm.doc.reference_doctype === "Material Request" && frm.doc.reference_name && frm.doc.recipient
 		);
 		frm.toggle_display("address_and_contact_tab", has_material_request_recipient);
-		const fields_by_purpose = {
-			Transfer: ["source_location", "target_location", "to_employee"],
-			Receipt: ["target_location", "to_employee"],
-			Issue: ["to_employee"],
-			"Transfer and Issue": ["source_location", "target_location", "from_employee", "to_employee"],
-			Reassignment: [
-				"change_custodian",
-				"from_employee",
-				"to_employee",
-				"change_department",
-				"source_department",
-				"target_department",
-			],
-		};
-		const visible_fields = new Set(fields_by_purpose[frm.doc.purpose] || []);
-		const movement_fields = [
+		const visible_fields = movement_fields(frm.doc.purpose);
+		const movement_fieldnames = [
 			"source_location",
 			"target_location",
 			"from_employee",
@@ -223,12 +254,12 @@ frappe.ui.form.on("Asset Movement", {
 			"source_department",
 			"target_department",
 		];
-		for (const fieldname of movement_fields) {
+		for (const fieldname of movement_fieldnames) {
 			grid.toggle_display(fieldname, visible_fields.has(fieldname));
 		}
 		grid.set_column_disp_in_list_view(["is_demo_asset", "demo_loan_status"], false);
-		const hidden_columns = movement_fields.filter((fieldname) => !visible_fields.has(fieldname));
-		const shown_columns = movement_fields.filter((fieldname) => visible_fields.has(fieldname));
+		const hidden_columns = movement_fieldnames.filter((fieldname) => !visible_fields.has(fieldname));
+		const shown_columns = movement_fieldnames.filter((fieldname) => visible_fields.has(fieldname));
 		grid.set_column_disp_in_list_view(hidden_columns, false);
 		grid.set_column_disp_in_list_view(shown_columns, true);
 		for (const fieldname of ["request_item", "branch", "department", "location"]) {

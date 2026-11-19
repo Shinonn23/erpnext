@@ -19,6 +19,7 @@ def get_ordered_to_be_billed_data(args, filters=None):
 		or 2
 	)
 
+	doctype_name = doctype
 	doctype = frappe.qb.DocType(doctype)
 	child_doctype = frappe.qb.DocType(child_tab)
 	item = frappe.qb.DocType("Item")
@@ -67,6 +68,9 @@ def get_ordered_to_be_billed_data(args, filters=None):
 		)
 		.orderby(doctype[args.get("order")], order=args.get("order_by"))
 	)
+	if doctype_name == "Delivery Note":
+		# a Borrowing / Demo Delivery Note is never billed (UX WP3): it is not "to be billed"
+		query = query.where(IfNull(doctype.is_borrowing_transaction, 0) == 0)
 
 	if docname:
 		query = query.where(doctype.name == docname)

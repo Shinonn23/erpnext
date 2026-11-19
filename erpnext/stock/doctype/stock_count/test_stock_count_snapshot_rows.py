@@ -34,8 +34,16 @@ class TestSnapshotRows(unittest.TestCase):
 
 class TestFoundIdentifiers(unittest.TestCase):
 	def test_new_identifiers_are_recorded_but_existing_ones_must_match_item_and_batch(self):
-		row = frappe._dict(idx=1, item_code="I", batch_no="B", serial_no="S", storage_location=None,
-			is_counted=1, counted_qty=1, system_qty=0)
+		row = frappe._dict(
+			idx=1,
+			item_code="I",
+			batch_no="B",
+			serial_no="S",
+			storage_location=None,
+			is_counted=1,
+			counted_qty=1,
+			system_qty=0,
+		)
 		doc = SimpleNamespace(items=[row], warehouse="WH", get_countable_dimensions=lambda: [])
 		item = frappe._dict(is_stock_item=1, has_batch_no=1, has_serial_no=1)
 		db = Mock()
@@ -78,11 +86,11 @@ class TestRemainingSnapshotRows(unittest.TestCase):
 
 class TestCancelDeletesGeneratedDrafts(unittest.TestCase):
 	def test_the_link_is_cleared_before_the_generated_draft_is_deleted(self):
-		# Frappe refuses to delete a document any other names, cancelled or not (a recount's FOUND receipt, 5 Nov 2026)
+		# Frappe refuses to delete a document any other names, cancelled or not
 		calls = []
-		count = Mock(name="count", recount_stock_count=None, stock_entry=None, found_transfer_entry=None)
+		count = Mock(name="count", recount_stock_count=None)
 		count.name = "SC-2"
-		count.found_stock_entry = "SE-1"
+		count.stock_entry = "SE-1"
 		count.stock_reconciliation = None
 		count.db_set.side_effect = lambda field, value: calls.append(("db_set", field, value))
 		with (
@@ -96,13 +104,11 @@ class TestCancelDeletesGeneratedDrafts(unittest.TestCase):
 			),
 		):
 			StockCount.on_cancel(count)
-		self.assertEqual(calls, [("db_set", "found_stock_entry", None), ("delete", "SE-1")])
+		self.assertEqual(calls, [("db_set", "stock_entry", None), ("delete", "SE-1")])
 
 	def test_a_draft_recount_is_unlinked_then_deleted(self):
 		calls = []
-		count = Mock(
-			stock_entry=None, found_stock_entry=None, found_transfer_entry=None, stock_reconciliation=None
-		)
+		count = Mock(stock_entry=None, stock_reconciliation=None)
 		count.name = "SC-1"
 		count.recount_stock_count = "SC-2"
 		count.db_set.side_effect = lambda field, value: calls.append(("db_set", field, value))

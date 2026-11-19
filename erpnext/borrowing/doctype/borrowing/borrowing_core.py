@@ -615,6 +615,9 @@ class Borrowing(Document):
 		delivery_note.conversion_rate = 1
 		delivery_note.price_list_currency = company_currency
 		delivery_note.plc_conversion_rate = 1
+		# nothing is sold (UX WP3): no pricing rule, and the goods go to the Borrowing's recipient
+		delivery_note.ignore_pricing_rule = 1
+		set_borrowing_recipient(delivery_note, self)
 		pick_list_rows = {row.name: row for row in pick_list.locations}
 		for row in delivery_note.items:
 			pick_list_row = pick_list_rows.get(row.pick_list_item)
@@ -1257,6 +1260,8 @@ class BorrowingReturn(Document):
 			row.material_request_item = loan_item.material_request_item
 		delivery_note.borrowing = loan.name
 		delivery_note.is_borrowing_transaction = 1
+		delivery_note.ignore_pricing_rule = 1
+		set_borrowing_recipient(delivery_note, loan)
 		delivery_note.borrowing_source_doctype = self.doctype
 		delivery_note.borrowing_source_name = self.name
 		delivery_note.flags.borrowing_generated = True
@@ -1602,18 +1607,12 @@ def asset_awaiting_inspection(asset):
 
 
 def is_quarantine_warehouse(warehouse, company):
-	"""A Quarantine (or QA) warehouse of the company: returned goods that fail inspection are received there."""
-	values = frappe.db.get_value(
-		"Warehouse", warehouse, ["warehouse_type", "warehouse_name", "company"], as_dict=True
-	)
-	return bool(
-		values
-		and values.company == company
-		and (
-			values.warehouse_type in ("Quarantine", "QA")
-			or (values.warehouse_name or "").casefold() in ("qa", "quarantine")
-		)
-	)
+	"""A warehouse of the company whose Warehouse Type is Quarantine (by the type alone, WP10): returned goods that fail
+	inspection are received there."""
+	from erpnext.stock.warehouse_policy import is_quarantine_type
+
+	values = frappe.db.get_value("Warehouse", warehouse, ["warehouse_type", "company"], as_dict=True)
+	return bool(values and values.company == company and is_quarantine_type(values.warehouse_type))
 
 
 def receive_row_into(row, warehouse):
@@ -1738,11 +1737,10 @@ def update_borrowing_return_status_from_quality_inspection(quality_inspection):
 
 
 def is_quarantine_row(row):
-	"""Whether a Warehouse row (warehouse_type, warehouse_name) is a Quarantine (or QA) warehouse."""
-	return row.warehouse_type in ("Quarantine", "QA") or (row.warehouse_name or "").casefold() in (
-		"qa",
-		"quarantine",
-	)
+	"""Whether a Warehouse row (with ``warehouse_type``) is a Quarantine warehouse: by the type alone (WP10)."""
+	from erpnext.stock.warehouse_policy import is_quarantine_type
+
+	return is_quarantine_type(row.get("warehouse_type"))
 
 
 def own_quarantine_warehouse(warehouse):
@@ -1756,8 +1754,8 @@ def own_quarantine_warehouse(warehouse):
 
 def quarantine_warehouse_for(company, near=None):
 	"""The Quarantine warehouse that holds the goods of warehouse ``near``: its own ``quarantine_warehouse`` when it
-	names an enabled leaf of the company, else the company's one (an enabled leaf of type Quarantine or QA, or named so,
-	that no warehouse names as its own; the one beside ``near`` first). Without ``near`` the company's one, else any
+	names an enabled leaf of the company, else the company's one (an enabled leaf of Warehouse Type Quarantine that no
+	warehouse names as its own; the one beside ``near`` first). Without ``near`` the company's one, else any
 	enabled quarantine leaf of the company. None when there is none."""
 	if not company:
 		return None
@@ -1771,7 +1769,7 @@ def quarantine_warehouse_for(company, near=None):
 		for row in frappe.get_all(
 			"Warehouse",
 			filters={"company": company, "is_group": 0, "disabled": 0},
-			fields=["name", "parent_warehouse", "warehouse_type", "warehouse_name"],
+			fields=["name", "parent_warehouse", "warehouse_type"],
 			order_by="name",
 		)
 		if is_quarantine_row(row)
@@ -2290,6 +2288,146 @@ def validate_generated_transaction_cancellation(doc, method=None):
 		doc.ignore_linked_doctypes += ("Quality Inspection",)
 
 	doc.flags.custody_operation_token = _CUSTODY_OPERATION_TOKEN
+
+
+# A Borrowing / Demo Delivery Note sells nothing (UX WP3, Siwat 18 Nov 2026): it carries no taxes, sales team, sales
+# partner, shipping rule or discount. ERPNext fills some of them by itself on every save (the company's default tax
+# template, the Territory's Sales Person), so they are emptied after the native validate; a value a user typed into
+# a saved Borrowing Delivery Note is refused.
+BORROWING_EMPTY_FIELDS = (
+	"taxes_and_charges",
+	"tax_category",
+	"shipping_rule",
+	"sales_partner",
+	"commission_rate",
+	"additional_discount_percentage",
+	"discount_amount",
+	"base_discount_amount",
+)
+BORROWING_EMPTY_TABLES = ("taxes", "sales_team")
+BORROWING_EMPTY_ROW_FIELDS = (
+	"price_list_rate",
+	"base_price_list_rate",
+	"margin_rate_or_amount",
+	"discount_percentage",
+	"discount_amount",
+)
+
+
+def set_borrowing_recipient(delivery_note, loan):
+	"""The Borrowing's recipient address and contact on its Delivery Note (the customer is our internal one)."""
+	if loan.get("recipient_address"):
+		delivery_note.shipping_address_name = loan.recipient_address
+		delivery_note.shipping_address = loan.get("recipient_address_display")
+	if loan.get("recipient_contact"):
+		delivery_note.contact_person = loan.recipient_contact
+		delivery_note.contact_display = loan.get("recipient_contact_display")
+		delivery_note.contact_email = loan.get("recipient_contact_email")
+
+
+def borrowing_delivery_parties(delivery_note):
+	"""(party type, party) pairs whose addresses and contacts a Borrowing Delivery Note may name: the internal
+	customer it is made out to, the Borrowing's recipient customer and its borrower."""
+	parties = []
+	if delivery_note.get("customer"):
+		parties.append(("Customer", delivery_note.customer))
+	if delivery_note.get("borrowing"):
+		loan = frappe.db.get_value(
+			"Borrowing",
+			delivery_note.borrowing,
+			["recipient_customer", "borrower_type", "borrower"],
+			as_dict=True,
+		)
+		if loan:
+			if loan.recipient_customer:
+				parties.append(("Customer", loan.recipient_customer))
+			if loan.borrower_type and loan.borrower:
+				parties.append((loan.borrower_type, loan.borrower))
+	return list(dict.fromkeys(parties))
+
+
+def _linked_to_parties(parenttype, name, parties):
+	for party_type, party in parties:
+		if frappe.db.exists(
+			"Dynamic Link",
+			{"parenttype": parenttype, "parent": name, "link_doctype": party_type, "link_name": party},
+		):
+			return True
+	return False
+
+
+def validate_borrowing_address_and_contact(delivery_note):
+	"""Replaces the native party address / contact check on a Borrowing Delivery Note: the address and contact
+	of the recipient are not the internal customer's, they must belong to one of `borrowing_delivery_parties`."""
+	parties = borrowing_delivery_parties(delivery_note)
+	if not parties:
+		return
+	names = ", ".join(party for _party_type, party in parties)
+	for fieldname, label in (
+		("customer_address", _("Billing Address")),
+		("shipping_address_name", _("Shipping Address")),
+	):
+		address = delivery_note.get(fieldname)
+		if address and not _linked_to_parties("Address", address, parties):
+			frappe.throw(_("{0} does not belong to {1}").format(label, names))
+	contact = delivery_note.get("contact_person")
+	if contact and not _linked_to_parties("Contact", contact, parties):
+		frappe.throw(_("Contact Person does not belong to {0}").format(names))
+
+
+def _table_key(rows):
+	return [
+		(row.get("charge_type"), row.get("account_head"), flt(row.get("rate")), flt(row.get("tax_amount")))
+		if row.get("doctype") == "Sales Taxes and Charges"
+		else (row.get("sales_person"), flt(row.get("allocated_percentage")))
+		for row in rows or []
+	]
+
+
+def prepare_borrowing_delivery_note(doc):
+	"""Before the native validate of a Borrowing Delivery Note: refuse a selling value typed into a saved one,
+	switch off the pricing rules and the automatic taxes."""
+	before = None if doc.is_new() else doc.get_doc_before_save()
+	if before is not None:
+		typed = [
+			doc.meta.get_label(field)
+			for field in BORROWING_EMPTY_FIELDS
+			if doc.get(field) and doc.get(field) != before.get(field)
+		]
+		typed += [
+			doc.meta.get_label(table)
+			for table in BORROWING_EMPTY_TABLES
+			if doc.get(table) and _table_key(doc.get(table)) != _table_key(before.get(table))
+		]
+		if typed:
+			frappe.throw(
+				_("A Borrowing Delivery Note sells nothing: remove {0}.").format(
+					", ".join(_(t) for t in typed)
+				),
+				title=_("Not a Sale"),
+			)
+	doc.ignore_pricing_rule = 1
+	doc.flags.dont_auto_add_taxes = True
+
+
+def clear_borrowing_selling_fields(doc) -> bool:
+	"""After the native validate: empty what ERPNext filled by itself. True when anything was emptied (the totals
+	are computed again)."""
+	changed = False
+	for field in BORROWING_EMPTY_FIELDS:
+		if doc.get(field):
+			doc.set(field, None if doc.meta.get_field(field).fieldtype in ("Link", "Data") else 0)
+			changed = True
+	for table in BORROWING_EMPTY_TABLES:
+		if doc.get(table):
+			doc.set(table, [])
+			changed = True
+	for row in doc.get("items") or []:
+		for field in BORROWING_EMPTY_ROW_FIELDS:
+			if flt(row.get(field)):
+				row.set(field, 0)
+				changed = True
+	return changed
 
 
 def validate_borrowing_delivery_note(doc, loan, source_doctype, source_name):
@@ -2813,18 +2951,21 @@ def make_borrowing_from_request(request, loan_type, ignore_permissions=False, sa
 
 def stocked_warehouse(request, item_code):
 	"""The warehouse of the company that holds the most of the Item, when the request and the Item name none (the
-	Stock team is not asked to type what the system can read). Not the loan or a quarantine warehouse."""
+	Stock team is not asked to type what the system can read). Only a warehouse whose Warehouse Type lets stock be
+	sold or issued (``warehouse_policy.sellable_warehouse_sql``, WP10): never the loan, a quarantine, Lost, Found,
+	Write-Off, Frozen, Transit or another Borrowed warehouse."""
+	from erpnext.stock.warehouse_policy import sellable_warehouse_sql
+
 	rows = frappe.db.sql(
-		"""select bin.warehouse from `tabBin` bin join `tabWarehouse` wh on wh.name = bin.warehouse
+		f"""select bin.warehouse from `tabBin` bin join `tabWarehouse` wh on wh.name = bin.warehouse
 		where bin.item_code = %(item)s and bin.actual_qty > 0 and wh.company = %(company)s and wh.is_group = 0
 		and wh.disabled = 0 and bin.warehouse != %(loan)s
-		and coalesce(wh.warehouse_type, '') not like %(quarantine)s
+		and {sellable_warehouse_sql("wh")}
 		order by bin.actual_qty desc limit 1""",
 		{
 			"item": item_code,
 			"company": request.company,
 			"loan": request.get("customer_loan_warehouse") or "",
-			"quarantine": "%uarantine%",
 		},
 	)
 	return rows[0][0] if rows else None

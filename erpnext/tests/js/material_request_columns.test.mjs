@@ -12,12 +12,12 @@ const configure = vm.runInNewContext(`(${source.slice(start, end)})`, {
 	erpnext: { queries: { storage_location: (warehouse, item_code) => ({ filters: { warehouse, item_code } }) } },
 });
 
-function columns(purpose, schedule_date = null) {
+function columns(purpose, schedule_date = null, items = []) {
 	const visibility = {}, required = {}, queries = {}, labels = {};
 	const grid = { set_column_disp_in_list_view(fields, show, force) {
 		for (const field of fields) { visibility[field] = show; required[field] = Boolean(force); }
 	}, update_docfield_property(field, property, value) { labels[field] = value; } };
-	configure({ doc: { material_request_type: purpose, schedule_date }, fields_dict: { items: { grid } },
+	configure({ doc: { material_request_type: purpose, schedule_date, items }, fields_dict: { items: { grid } },
 		set_query(field, table, query) { queries[field] = query; } });
 	return { visibility, required, queries, labels };
 }
@@ -78,4 +78,27 @@ test("switching to Material Issue labels warehouse as the issue source", () => {
 		set_df_property: (...args) => labels.push(args), trigger: (event) => events[event](frm) };
 	events.material_request_type(frm);
 	assert.deepEqual(labels, [["warehouse", "label", "From Warehouse"], ["set_warehouse", "label", "Set From Warehouse"]]);
+});
+
+test("a decided Demo / Borrow row shows how it is supplied and which Asset goes out", () => {
+	for (const purpose of ["Customer Demo", "Borrow", "Customer Borrow"]) {
+		const undecided = columns(purpose, null, [{ item_code: "MODEL", item_type: "Fixed Asset" }]);
+		assert.equal(undecided.visibility.demo_acquisition_method, false, `${purpose}: undecided has no Supply`);
+		assert.equal(undecided.visibility.asset, false, `${purpose}: undecided has no Asset`);
+		const decided = columns(purpose, null, [
+			{ item_code: "MODEL", item_type: "Fixed Asset", asset: "EQUP-1", demo_acquisition_method: "Ready Asset" },
+		]);
+		assert.equal(decided.visibility.demo_acquisition_method, true, `${purpose}: Supply`);
+		assert.equal(decided.visibility.asset, true, `${purpose}: Asset`);
+		assert.equal(decided.labels.demo_acquisition_method, "Supply");
+		const stock = columns(purpose, null, [
+			{ item_code: "REAGENT", item_type: "Stock Item", demo_acquisition_method: "Lend Stock" },
+		]);
+		assert.equal(stock.visibility.demo_acquisition_method, true, `${purpose}: Supply of a stock row`);
+		assert.equal(stock.visibility.asset, false, `${purpose}: no Asset column when every row is stock`);
+	}
+	for (const purpose of ["Purchase", "Material Transfer", "Material Issue", "Asset Transfer"]) {
+		const other = columns(purpose, null, [{ item_code: "X", demo_acquisition_method: "Ready Asset" }]);
+		assert.equal(other.visibility.demo_acquisition_method, false, `${purpose}: never a Supply column`);
+	}
 });

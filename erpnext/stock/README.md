@@ -17,22 +17,36 @@ stock and has no selection.
 - The selection can change only before Prepare Count. The print format and list show the mode and template.
 - Where the Warehouse has a Count Variance Account (field `stock_adjustment_account`, added by the company
   policy layer; absent here), a Monthly count posts its differences as a Stock Reconciliation on submit instead
-  of the quarantine Stock Entry (the Quarantine Warehouse is then optional). The mode is fixed at Prepare Count, the
+  of the Lost Stock Entry (the Lost Warehouse is then optional). The mode is fixed at Prepare Count, the
   account must be an enabled, non-Stock expense account of the Company and becomes the Difference Account, and a
   Warehouse `department` (if that field exists) becomes the department. Without that field or value nothing changes.
   A Warehouse that names its own Lost Warehouse (below) never posts its differences that way: the shortage goes to Lost.
-- **Lost and Found Warehouse of each counted warehouse** (Connect Diagnostics, 7 Nov 2026): the Warehouse has the links
-  `lost_warehouse` and `found_warehouse` (section "Lost and Found"). A Monthly count moves its shortage to the counted
-  warehouse's own Lost Warehouse and receives its confirmed surplus into its own Found Warehouse; a Warehouse without the
-  link keeps the company's Lost / Found warehouse (the first enabled leaf of the Warehouse Type that no other warehouse
-  names as its own). The Stock Count form picks the defaults again when the warehouse changes.
+- **Lost Warehouse of each counted warehouse** (Connect Diagnostics, 7 Nov 2026): the Warehouse has the link
+  `lost_warehouse` (section "Lost and Found"; `found_warehouse` is hidden and unused). A Monthly count moves its shortage
+  to the counted warehouse's own Lost Warehouse (Stock Count `lost_warehouse` / `lost_storage_location`); a Warehouse
+  without the link keeps the company's Lost warehouse (the first enabled leaf of the Warehouse Type that no other
+  warehouse names as its own). The Stock Count form picks the default again when the warehouse changes. The count never
+  receives what it found beyond the system quantity (11 Nov 2026): WP10 (18 Nov 2026) renamed the count's fields from
+  `quarantine_warehouse` / `quarantine_storage_location` (they always held the Lost Warehouse, while
+  `Warehouse.quarantine_warehouse` is the real Quarantine) and deleted the Found fields `found_warehouse`,
+  `found_stock_entry`, `found_transfer_entry` with the code nothing called (`handle_surplus`, `make_recount`, the FOUND
+  receipt and transfer, `take_back_from_lost`): patch `v16_0/rename_stock_count_lost_fields` (pre-model-sync, schema
+  only; a Found column that still holds a value is kept and logged). The recount fields `recount_of` /
+  `recount_stock_count` stay for the counts that have them; no new recount is made.
 - **Quarantine Warehouse of each warehouse** (Connect Diagnostics, 7 Nov 2026): the Warehouse has the link
   `quarantine_warehouse` (same section). Goods that wait for a Quality Inspection or fail one are held in the quarantine
   of the warehouse they belong to: a rejected sales or borrowing return is received into the quarantine of the warehouse
   the goods came from (`borrowing_core.quarantine_warehouse_for(company, near)`: the own link when it names an
   enabled leaf of the company, else the company's Quarantine warehouse that no warehouse names as its own, the one
-  beside `near` first). Every test "is this a quarantine warehouse" accepts any warehouse of Warehouse Type Quarantine
-  (`is_quarantine_warehouse`). A Stock Count reads the ledger of its one leaf warehouse, so the quarantine (or Lost, or
+  beside `near` first). Every test "is this a quarantine warehouse" is the Warehouse Type Quarantine alone
+  (`warehouse_policy.is_quarantine_type`, used by `is_quarantine_warehouse` and `is_quarantine_row`; the retired alias
+  `QA` and the test on the warehouse's name are gone, WP10).
+- **Damage Warehouse of each warehouse** (`damage_warehouse`, same section; a field of this JSON since WP10, a Custom
+  Field of the app before): where goods rejected by a Quality Inspection go. The three links (`lost_warehouse`,
+  `quarantine_warehouse`, `damage_warehouse`) show on a Stock warehouse only (`depends_on`
+  `!doc.is_group && doc.warehouse_type=='Stock'`, or while the field holds a value); the Damage Warehouse also on a
+  Quarantine warehouse, the one exception (rejected goods go straight from quarantine to damage). The app refuses the
+  links on any other source type. A Stock Count reads the ledger of its one leaf warehouse, so the quarantine (or Lost, or
   Found) warehouse of the counted warehouse is never part of its count.
 - **Stock Write-Off**: a Stock Entry of the Stock Entry Type "Stock Write-Off" (Material Issue) may leave a warehouse of
   Warehouse Type Lost, which otherwise allows no issue and lets only the Stock Manager move stock out
@@ -40,8 +54,8 @@ stock and has no selection.
 
 ## Stock UX review (Connect Diagnostics, 6 Nov 2026)
 
-- **Stock Count**: the Lost and Found Warehouse are read-only; the form fills them from the company's LOST / FOUND
-  warehouses (`get_loss_warehouses`) and the server still fills a blank on save. A failed scan names the code and the
+- **Stock Count**: the Lost Warehouse is read-only; the form fills it from the counted warehouse's or the company's LOST
+  warehouse (`get_loss_warehouses`) and the server still fills a blank on save. A failed scan names the code and the
   location. An approver's state shows how many rows are short and over (units only, never money) and opens the Review
   tab first. The first counter of a recount sees at once that another person must count it.
 - **Stock Reconciliation made by a Stock Count**: rows, Difference Account and Department are read-only, Add row / Upload /
@@ -50,8 +64,28 @@ stock and has no selection.
   the counted Warehouse's department; a Warehouse without one keeps the creator's.
 - **Storage Location**: a blank Location Code is built from Zone-Rack-Shelf.
 - **Stock Ledger Entry**: the inventory-dimension shortage reads "Only N of ITEM at LOCATION on DATE; M more needed".
-- **Warehouse**: the Warehouse Type intro is one line (the groups of operations), not every document name.
+- **Warehouse**: the Warehouse Type intro is one line (the groups of operations), not every document name. Since WP10
+  it ends with the code waivers of the type ("Exceptions: ..."), so the form tells the whole rule (below).
 - **Item**: the Regulatory Affairs headline is cleared before it is set, so it shows once.
+
+## Warehouse policy in one place (Connect Diagnostics, WP10, 18 Nov 2026)
+
+**The Warehouse Type says what the stock is; the Location Type says what the bin is for.** "May stock leave or be sold
+from here" has one answer, built only from the Warehouse Type flags (`allow_receipt`, `allow_issue`, `allow_transfer`,
+`allow_sales`, `allow_loan`, `allow_reconciliation`), never from a list of types or a warehouse's name:
+
+- `warehouse_policy.warehouse_allows(warehouse, operation)`: the type's flag for the operation (no type allows all; a
+  group or unknown warehouse nothing; a Borrowing movement of a Transit warehouse counts as a transfer).
+- `warehouse_policy.is_sellable_warehouse(warehouse)` and its SQL twin `sellable_warehouse_sql(alias)`: the type allows a
+  sale or an issue (`SELLABLE_OPERATIONS`). Only Stock does on the company's sites. Used by
+  `borrowing_core.stocked_warehouse` (the default source of a Borrowing: never a Lost, Found, Write-Off, Frozen, Transit,
+  quarantine or other Borrowed warehouse) and by the app (picking, put-away, the stock age report).
+- `warehouse_policy.is_quarantine_type(warehouse_type)` / `warehouse_is_quarantine(warehouse)`: the Quarantine type alone.
+- The exits the code opens for single documents are listed in `CODE_WAIVERS` (Stock Write-Off out of Lost, Disposal out
+  of Write-Off, the Purchase Return of rejected goods out of Quarantine, the Stock Count's own posting) and an app adds
+  its own with the hook `warehouse_policy_waivers` (dicts `warehouse_type`, `lifts`, `text`; the app lists the
+  Quarantine Release). `get_warehouse_type_summary` returns them as `waivers` and the Warehouse form shows them. A child
+  table "Allowed exits" on Warehouse Type that `validate_warehouse_operation` reads is a later step.
 
 ## Storage Location: Location Type, and the screen shows what the save stores (Connect Diagnostics, WP1, 18 Nov 2026)
 
@@ -108,3 +142,9 @@ is Receiving in a stock warehouse, Holding in any other.
   `TransactionBase.reset_default_field_value` reads a row's `putaway_warehouse` for it, so a receipt whose rows are held
   in Quarantine keeps the warehouse they are for.
 - Offline tests: `stock/doctype/purchase_receipt/test_receipt_asset_rows.py`.
+
+## Delivery Note by kind (Connect Diagnostics, UX WP3, 18 Nov 2026)
+
+A Borrowing / Demo Delivery Note has its own layout, status and makers: see `borrowing/README.md` "The Borrowing
+Delivery Note is its own kind". `accounts/report/non_billed_report.py` leaves it out of "Delivered Items To Be
+Billed", and `delivery_note_list.js` never shows it To Bill and refuses it in the bulk Sales Invoice action.

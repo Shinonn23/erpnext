@@ -847,7 +847,7 @@ def _ledger(item_code, warehouse, location=None, current=False, classify=False):
 						if detail.get("t_warehouse")
 						else None
 					)
-					dispositions[detail.name] = target_type in ("Quarantine", "QA", "Write-Off")
+					dispositions[detail.name] = target_type in ("Quarantine", "Write-Off")
 	rows = [e.voucher_detail_no for e in entries if flt(e.actual_qty) > 0 and e.voucher_detail_no]
 	inspection_rows = (
 		read(

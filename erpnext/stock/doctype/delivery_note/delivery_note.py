@@ -288,7 +288,18 @@ class DeliveryNote(SellingController):
 
 	def validate(self):
 		self.validate_posting_time()
+		borrowing = cint(self.get("is_borrowing_transaction"))
+		if borrowing:
+			from erpnext.borrowing.doctype.borrowing.borrowing_core import prepare_borrowing_delivery_note
+
+			# a Borrowing / Demo Delivery Note sells nothing (UX WP3): no taxes, sales team or discount
+			prepare_borrowing_delivery_note(self)
 		super().validate()
+		if borrowing:
+			from erpnext.borrowing.doctype.borrowing.borrowing_core import clear_borrowing_selling_fields
+
+			if clear_borrowing_selling_fields(self):
+				self.calculate_taxes_and_totals()
 		self.validate_references()
 		self.set_status()
 		self.so_required()
@@ -304,6 +315,7 @@ class DeliveryNote(SellingController):
 
 		make_packing_list(self)
 		from connect_diagnostics_setup.stock.outgoing_inspection import allocate_service_components
+
 		allocate_service_components(self)
 		self.update_current_stock()
 
@@ -312,6 +324,24 @@ class DeliveryNote(SellingController):
 
 		self.validate_against_stock_reservation_entries()
 		self.reset_default_field_value("set_warehouse", "items", "warehouse")
+
+	def validate_party_address_and_contact(self):
+		"""A Borrowing / Demo Delivery Note is made out to the company's internal customer but delivered to the
+		Borrowing's recipient (UX WP3): its address and contact belong to the internal customer, the recipient
+		customer or the borrower."""
+		if not self.get("is_borrowing_transaction"):
+			return super().validate_party_address_and_contact()
+		from erpnext.borrowing.doctype.borrowing.borrowing_core import validate_borrowing_address_and_contact
+
+		validate_borrowing_address_and_contact(self)
+
+	def get_status(self):
+		"""A Borrowing / Demo Delivery Note is never invoiced (UX WP3): once submitted it is Completed (or Return,
+		Return Issued, Closed, Cancelled as any other), never To Bill or Partially Billed."""
+		result = super().get_status()
+		if self.get("is_borrowing_transaction") and result.get("status") in ("To Bill", "Partially Billed"):
+			result["status"] = "Completed"
+		return result
 
 	def validate_with_previous_doc(self):
 		super().validate_with_previous_doc(
@@ -503,12 +533,15 @@ class DeliveryNote(SellingController):
 
 		self.make_gl_entries_on_cancel()
 		self.repost_future_sle_and_gle()
-		self.ignore_linked_doctypes = tuple(set(self.get("ignore_linked_doctypes") or ()) | {
-			"GL Entry",
-			"Stock Ledger Entry",
-			"Repost Item Valuation",
-			"Serial and Batch Bundle",
-		})
+		self.ignore_linked_doctypes = tuple(
+			set(self.get("ignore_linked_doctypes") or ())
+			| {
+				"GL Entry",
+				"Stock Ledger Entry",
+				"Repost Item Valuation",
+				"Serial and Batch Bundle",
+			}
+		)
 
 		self.delete_auto_created_batches()
 
@@ -976,8 +1009,16 @@ def make_sales_invoice(
 	return doc
 
 
+def refuse_borrowing_source(source_name, document):
+	"""A selling document is never made from a Borrowing / Demo Delivery Note (UX WP3): the screen offers no
+	button, and a call made without it is refused here."""
+	if frappe.db.get_value("Delivery Note", source_name, "is_borrowing_transaction"):
+		frappe.throw(_("A Borrowing Delivery Note has no {0}.").format(_(document)))
+
+
 @frappe.whitelist()
 def make_delivery_trip(source_name, target_doc=None, kwargs=None):
+	refuse_borrowing_source(source_name, "Delivery Trip")
 	if not target_doc:
 		target_doc = frappe.new_doc("Delivery Trip")
 
@@ -1008,6 +1049,8 @@ def make_delivery_trip(source_name, target_doc=None, kwargs=None):
 
 @frappe.whitelist()
 def make_installation_note(source_name, target_doc=None, kwargs=None):
+	refuse_borrowing_source(source_name, "Installation Note")
+
 	def update_item(obj, target, source_parent):
 		target.qty = flt(obj.qty) - flt(obj.installed_qty)
 		target.serial_no = obj.serial_no
@@ -1036,6 +1079,8 @@ def make_installation_note(source_name, target_doc=None, kwargs=None):
 
 @frappe.whitelist()
 def make_packing_slip(source_name, target_doc=None):
+	refuse_borrowing_source(source_name, "Packing Slip")
+
 	def set_missing_values(source, target):
 		target.run_method("set_missing_values")
 
@@ -1096,6 +1141,9 @@ def make_shipment(source_name, target_doc=None):
 			"shipment_documents",
 			{"reference_doctype": "Delivery Note", "reference_name": source.name},
 		)
+		from erpnext.stock.doctype.shipment.shipment import purpose_of_document
+
+		target.shipment_purpose = purpose_of_document("Delivery Note", source.name)
 		user = frappe.db.get_value(
 			"User", frappe.session.user, ["email", "full_name", "phone", "mobile_no"], as_dict=1
 		)
@@ -1157,15 +1205,7 @@ def make_shipment(source_name, target_doc=None):
 				},
 				"validation": {"docstatus": ["=", 1]},
 			},
-			"Delivery Note Item": {
-				"doctype": "Shipment Delivery Note",
-				"field_map": {
-					"name": "prevdoc_detail_docname",
-					"parent": "prevdoc_docname",
-					"parenttype": "prevdoc_doctype",
-					"base_amount": "grand_total",
-				},
-			},
+			# the Delivery Note is one row of Stock Transactions (postprocess), never a Shipment Delivery Note row
 		},
 		target_doc,
 		postprocess,
@@ -1192,6 +1232,7 @@ def update_delivery_note_status(docname, status):
 
 @frappe.whitelist()
 def make_inter_company_purchase_receipt(source_name, target_doc=None):
+	refuse_borrowing_source(source_name, "Internal Purchase Receipt")
 	return make_inter_company_transaction("Delivery Note", source_name, target_doc)
 
 
