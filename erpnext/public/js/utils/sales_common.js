@@ -14,6 +14,26 @@ erpnext.sales_common = {
 				this.frm.add_fetch("territory", "territory_manager", "sales_person");
 			}
 
+			sales_person() {
+				this.set_department_from_sales_person();
+			}
+
+			set_department_from_sales_person() {
+				const frm = this.frm;
+				if (!frm.fields_dict.department || frm.doc.department || !frm.doc.sales_person) {
+					return;
+				}
+				frappe
+					.xcall("erpnext.setup.doctype.sales_person.sales_person.get_sales_person_department", {
+						sales_person: frm.doc.sales_person,
+					})
+					.then((department) => {
+						if (department && !frm.doc.department) {
+							frm.set_value("department", department);
+						}
+					});
+			}
+
 			onload() {
 				super.onload();
 				this.setup_queries();

@@ -16,9 +16,7 @@
   "loan_approval_band",
   "loan_group_approver_roles",
   "loan_release_pending",
-  "loan_issue_problem",
   "customer",
-  "company",
   "pricing_complete",
   "requesting_employee",
   "requesting_department",
@@ -26,12 +24,15 @@
   "responsible_employee_user",
   "department",
   "column_break_adou",
+  "company",
   "transaction_date",
   "expected_return_date",
   "schedule_date",
   "buying_price_list",
   "amended_from",
   "auto_created_via_reorder",
+  "borrowing_problem_section",
+  "loan_issue_problem",
   "loan_recipient_section",
   "borrow_item_type",
   "loan_recipient_type",
@@ -40,11 +41,12 @@
   "customer_loan_warehouse",
   "loan_recipient_location",
   "warehouse_section",
+  "set_from_warehouse",
+  "column_break5",
+  "set_warehouse",
+  "item_scanning_section",
   "scan_barcode",
   "last_scanned_warehouse",
-  "column_break5",
-  "set_from_warehouse",
-  "set_warehouse",
   "asset_items_section",
   "asset_source_location",
   "asset_item_filter_column_break",
@@ -56,17 +58,20 @@
   "request_remarks",
   "address_and_contact_tab",
   "recipient_address",
-  "recipient_address_display",
   "loan_recipient_column_break",
   "loan_recipient_contact",
-  "loan_recipient_contact_display",
   "loan_recipient_contact_email",
+  "recipient_address_display_section",
+  "recipient_address_display",
+  "loan_recipient_contact_display_section",
+  "loan_recipient_contact_display",
   "customer_request_section",
-  "customer_request_column_break",
   "contact_person",
-  "customer_contact_display",
   "customer_contact_email",
+  "customer_request_column_break",
   "customer_location",
+  "customer_contact_display_section",
+  "customer_contact_display",
   "terms_tab",
   "terms_section_break",
   "tc_name",
@@ -132,6 +137,33 @@
    "reqd": 1
   },
   {
+   "depends_on": "eval:['Customer Demo', 'Borrow', 'Customer Borrow'].includes(doc.material_request_type)",
+   "fieldname": "loan_approval_band",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Borrowing Approval Band",
+   "no_copy": 1,
+   "options": "\nProduct Group\nManaging Director\nChief Executive Officer",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.loan_approval_band == 'Product Group'",
+   "fieldname": "loan_group_approver_roles",
+   "fieldtype": "Small Text",
+   "hidden": 1,
+   "label": "Item Group Approver Roles",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "loan_release_pending",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "Borrowing Release Pending",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
    "depends_on": "eval:doc.material_request_type == 'Customer Demo'",
    "fieldname": "customer",
    "fieldtype": "Link",
@@ -141,13 +173,61 @@
    "print_hide": 1
   },
   {
-   "allow_on_submit": 1,
-   "fieldname": "schedule_date",
-   "fieldtype": "Date",
-   "in_import_template": 1,
-   "in_list_view": 1,
-   "label": "Required By",
+   "fieldname": "pricing_complete",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "Prices Ready",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "requesting_employee",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Requesting Employee",
+   "no_copy": 1,
+   "options": "Employee",
+   "read_only": 1
+  },
+  {
+   "fieldname": "requesting_department",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Requesting Department",
+   "no_copy": 1,
+   "options": "Department",
+   "read_only": 1
+  },
+  {
+   "fieldname": "responsible_employee",
+   "fieldtype": "Link",
+   "label": "Responsible Employee",
+   "options": "Employee",
+   "depends_on": "eval:in_list(['Customer Demo', 'Borrow', 'Customer Borrow'], doc.material_request_type)",
+   "mandatory_depends_on": "eval:in_list(['Customer Demo', 'Borrow', 'Customer Borrow'], doc.material_request_type)",
+   "no_copy": 0,
+   "description": "Answers for the items until they come back. Defaults to you."
+  },
+  {
+   "fieldname": "responsible_employee_user",
+   "fieldtype": "Link",
+   "label": "Responsible Employee User",
+   "options": "User",
+   "fetch_from": "responsible_employee.user_id",
+   "hidden": 1,
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "department",
+   "fieldtype": "Link",
+   "label": "Department",
+   "options": "Department",
    "depends_on": "eval:in_list(['Purchase', 'Material Transfer', 'Material Issue', 'Asset Transfer'], doc.material_request_type)"
+  },
+  {
+   "fieldname": "column_break_adou",
+   "fieldtype": "Column Break"
   },
   {
    "fieldname": "company",
@@ -165,11 +245,41 @@
    "width": "150px"
   },
   {
-   "fieldname": "department",
-   "fieldtype": "Link",
-   "label": "Department",
-   "options": "Department",
+   "default": "Today",
+   "fieldname": "transaction_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Transaction Date",
+   "no_copy": 1,
+   "oldfieldname": "transaction_date",
+   "oldfieldtype": "Date",
+   "print_width": "100px",
+   "reqd": 1,
+   "search_index": 1,
+   "width": "100px"
+  },
+  {
+   "depends_on": "eval:doc.material_request_type == 'Customer Demo' || in_list(['Borrow', 'Customer Borrow'], doc.material_request_type)",
+   "fieldname": "expected_return_date",
+   "fieldtype": "Date",
+   "label": "Expected Return Date",
+   "mandatory_depends_on": "eval:in_list(['Customer Demo', 'Borrow', 'Customer Borrow'], doc.material_request_type)"
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "schedule_date",
+   "fieldtype": "Date",
+   "in_import_template": 1,
+   "in_list_view": 1,
+   "label": "Required By",
    "depends_on": "eval:in_list(['Purchase', 'Material Transfer', 'Material Issue', 'Asset Transfer'], doc.material_request_type)"
+  },
+  {
+   "depends_on": "eval:doc.material_request_type == 'Purchase'",
+   "fieldname": "buying_price_list",
+   "fieldtype": "Link",
+   "label": "Price List",
+   "options": "Price List"
   },
   {
    "fieldname": "amended_from",
@@ -186,220 +296,6 @@
    "width": "150px"
   },
   {
-   "depends_on": "eval:in_list(['Purchase', 'Material Transfer', 'Material Issue', 'Asset Transfer', 'Customer Demo', 'Borrow', 'Customer Borrow'], doc.material_request_type)",
-   "fieldname": "items_section",
-   "fieldtype": "Section Break",
-   "oldfieldtype": "Section Break",
-   "options": "fa fa-shopping-cart"
-  },
-  {
-   "depends_on": "eval:in_list(['Purchase', 'Material Transfer', 'Material Issue'], doc.material_request_type) || (in_list(['Borrow', 'Customer Borrow'], doc.material_request_type) && doc.borrow_item_type == 'Stock Item')",
-   "fieldname": "scan_barcode",
-   "fieldtype": "Data",
-   "label": "Scan Barcode",
-   "options": "Barcode"
-  },
-  {
-   "allow_bulk_edit": 1,
-   "depends_on": "eval:in_list(['Purchase', 'Material Transfer', 'Material Issue', 'Asset Transfer', 'Customer Demo', 'Borrow', 'Customer Borrow'], doc.material_request_type)",
-   "fieldname": "items",
-   "fieldtype": "Table",
-   "label": "Items",
-   "mandatory_depends_on": "eval:in_list(['Purchase', 'Material Transfer', 'Material Issue', 'Asset Transfer', 'Customer Demo', 'Borrow', 'Customer Borrow'], doc.material_request_type)",
-   "oldfieldname": "indent_details",
-   "oldfieldtype": "Table",
-   "options": "Material Request Item"
-  },
-  {
-   "default": "Today",
-   "fieldname": "transaction_date",
-   "fieldtype": "Date",
-   "in_list_view": 1,
-   "label": "Transaction Date",
-   "no_copy": 1,
-   "oldfieldname": "transaction_date",
-   "oldfieldtype": "Date",
-   "print_width": "100px",
-   "reqd": 1,
-   "search_index": 1,
-   "width": "100px"
-  },
-  {
-   "fieldname": "column_break2",
-   "fieldtype": "Column Break",
-   "oldfieldtype": "Column Break",
-   "print_width": "50%",
-   "width": "50%"
-  },
-  {
-   "fieldname": "status",
-   "fieldtype": "Select",
-   "in_standard_filter": 1,
-   "label": "Status",
-   "no_copy": 1,
-   "oldfieldname": "status",
-   "oldfieldtype": "Select",
-   "options": "\nDraft\nSubmitted\nStopped\nCancelled\nPending\nPartially Ordered\nPartially Received\nOrdered\nIssued\nTransferred\nReceived",
-   "print_hide": 1,
-   "print_width": "100px",
-   "read_only": 1,
-   "search_index": 1,
-   "width": "100px"
-  },
-  {
-   "depends_on": "eval:doc.per_ordered > 0",
-   "fieldname": "per_ordered",
-   "fieldtype": "Percent",
-   "label": "% Ordered",
-   "no_copy": 1,
-   "oldfieldname": "per_ordered",
-   "oldfieldtype": "Currency",
-   "print_hide": 1,
-   "read_only": 1
-  },
-  {
-   "depends_on": "eval:doc.per_received > 0",
-   "fieldname": "per_received",
-   "fieldtype": "Percent",
-   "label": "% Received",
-   "no_copy": 1,
-   "print_hide": 1,
-   "read_only": 1
-  },
-  {
-   "collapsible": 1,
-   "collapsible_depends_on": "terms",
-   "fieldname": "terms_section_break",
-   "fieldtype": "Section Break",
-   "oldfieldtype": "Section Break",
-   "options": "fa fa-legal",
-   "depends_on": "eval:in_list(['Purchase'], doc.material_request_type)"
-  },
-  {
-   "fieldname": "tc_name",
-   "fieldtype": "Link",
-   "label": "Terms",
-   "oldfieldname": "tc_name",
-   "oldfieldtype": "Link",
-   "options": "Terms and Conditions",
-   "print_hide": 1,
-   "report_hide": 1,
-   "depends_on": "eval:in_list(['Purchase'], doc.material_request_type)"
-  },
-  {
-   "fieldname": "terms",
-   "fieldtype": "Text Editor",
-   "label": "Terms and Conditions Content",
-   "oldfieldname": "terms",
-   "oldfieldtype": "Text Editor",
-   "depends_on": "eval:in_list(['Purchase'], doc.material_request_type)"
-  },
-  {
-   "collapsible": 1,
-   "fieldname": "reference",
-   "fieldtype": "Section Break",
-   "label": "Reference"
-  },
-  {
-   "fieldname": "job_card",
-   "fieldtype": "Link",
-   "label": "Job Card",
-   "options": "Job Card",
-   "print_hide": 1,
-   "read_only": 1
-  },
-  {
-   "depends_on": "eval:in_list(['Purchase', 'Material Transfer', 'Material Issue'], doc.material_request_type) || (in_list(['Borrow', 'Customer Borrow'], doc.material_request_type) && doc.borrow_item_type == 'Stock Item')",
-   "fieldname": "warehouse_section",
-   "fieldtype": "Section Break",
-   "hide_border": 1,
-   "label": "Items"
-  },
-  {
-   "depends_on": "eval:in_list(['Purchase', 'Material Transfer', 'Material Issue'], doc.material_request_type)",
-   "fieldname": "set_warehouse",
-   "fieldtype": "Link",
-   "in_import_template": 1,
-   "label": "Set Target Warehouse",
-   "options": "Warehouse"
-  },
-  {
-   "fieldname": "column_break5",
-   "fieldtype": "Column Break",
-   "oldfieldtype": "Column Break",
-   "print_width": "50%",
-   "width": "50%"
-  },
-  {
-   "depends_on": "eval:doc.material_request_type == 'Material Transfer'",
-   "fieldname": "set_from_warehouse",
-   "fieldtype": "Link",
-   "ignore_user_permissions": 1,
-   "label": "Set Source Warehouse",
-   "options": "Warehouse"
-  },
-  {
-   "allow_on_submit": 1,
-   "depends_on": "eval:doc.add_to_transit == 1",
-   "fieldname": "transfer_status",
-   "fieldtype": "Select",
-   "label": "Transfer Status",
-   "no_copy": 1,
-   "options": "\nNot Started\nIn Transit\nCompleted",
-   "read_only": 1
-  },
-  {
-   "fieldname": "work_order",
-   "fieldtype": "Link",
-   "label": "Work Order",
-   "options": "Work Order",
-   "read_only": 1
-  },
-  {
-   "fieldname": "terms_tab",
-   "fieldtype": "Tab Break",
-   "label": "Terms",
-   "depends_on": "eval:in_list(['Purchase'], doc.material_request_type)"
-  },
-  {
-   "fieldname": "more_info_tab",
-   "fieldtype": "Tab Break",
-   "label": "More Info",
-   "depends_on": "eval:in_list(['Purchase', 'Material Transfer', 'Material Issue', 'Asset Transfer'], doc.material_request_type)"
-  },
-  {
-   "fieldname": "connections_tab",
-   "fieldtype": "Tab Break",
-   "label": "Connections",
-   "show_dashboard": 1
-  },
-  {
-   "collapsible": 1,
-   "fieldname": "status_section",
-   "fieldtype": "Section Break",
-   "label": "Status",
-   "oldfieldtype": "Section Break",
-   "options": "fa fa-file-text"
-  },
-  {
-   "fieldname": "column_break_35",
-   "fieldtype": "Column Break"
-  },
-  {
-   "depends_on": "eval:doc.material_request_type == 'Purchase'",
-   "fieldname": "buying_price_list",
-   "fieldtype": "Link",
-   "label": "Price List",
-   "options": "Price List"
-  },
-  {
-   "depends_on": "eval: doc.last_scanned_warehouse",
-   "fieldname": "last_scanned_warehouse",
-   "fieldtype": "Data",
-   "is_virtual": 1,
-   "label": "Last Scanned Warehouse"
-  },
-  {
    "default": "0",
    "depends_on": "auto_created_via_reorder",
    "fieldname": "auto_created_via_reorder",
@@ -409,10 +305,33 @@
    "read_only": 1
   },
   {
+   "fieldname": "borrowing_problem_section",
+   "fieldtype": "Section Break",
+   "depends_on": "eval:doc.loan_issue_problem"
+  },
+  {
+   "depends_on": "eval:doc.loan_issue_problem",
+   "fieldname": "loan_issue_problem",
+   "fieldtype": "Small Text",
+   "label": "Borrowing Problem",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
    "depends_on": "eval:in_list(['Borrow', 'Customer Borrow'], doc.material_request_type)",
    "fieldname": "loan_recipient_section",
    "fieldtype": "Section Break",
    "label": "Borrowing Details"
+  },
+  {
+   "default": "Stock Item",
+   "depends_on": "eval:doc.material_request_type == 'Borrow'",
+   "description": "Choose stock to return by quantity, or assets to return by individual Asset. The Stock team selects the physical Assets after approval.",
+   "fieldname": "borrow_item_type",
+   "fieldtype": "Select",
+   "label": "Borrow Item Type",
+   "mandatory_depends_on": "eval:doc.material_request_type == 'Borrow'",
+   "options": "Stock Item\nAsset"
   },
   {
    "depends_on": "eval:in_list(['Borrow', 'Customer Borrow'], doc.material_request_type)",
@@ -428,135 +347,12 @@
    "fieldname": "loan_recipient",
    "fieldtype": "Dynamic Link",
    "label": "Recipient",
-   "mandatory_depends_on": "eval:in_list(['Borrow', 'Customer Borrow'], doc.material_request_type)",
+   "mandatory_depends_on": "eval:doc.material_request_type == 'Customer Borrow'",
    "options": "loan_recipient_type"
   },
   {
-   "description": "Required for non-employee Asset Borrowings and for Asset Shipments.",
-   "fieldname": "loan_recipient_location",
-   "fieldtype": "Link",
-   "label": "Recipient Location",
-   "options": "Location",
-   "hidden": 1
-  },
-  {
-   "depends_on": "eval:in_list(['Customer Demo', 'Borrow', 'Customer Borrow'], doc.material_request_type)",
-   "description": "Select the address where the requested items will be delivered.",
-   "fieldname": "recipient_address",
-   "fieldtype": "Link",
-   "label": "Recipient Address",
-   "options": "Address"
-  },
-  {
-   "depends_on": "eval:in_list(['Customer Demo', 'Borrow', 'Customer Borrow'], doc.material_request_type)",
-   "fieldname": "recipient_address_display",
-   "fieldtype": "Text Editor",
-   "label": "Address Display",
-   "no_copy": 1,
-   "read_only": 1
-  },
-  {
-   "depends_on": "eval:doc.material_request_type == 'Borrow'",
-   "fieldname": "loan_recipient_column_break",
+   "fieldname": "column_break_uopw",
    "fieldtype": "Column Break"
-  },
-  {
-   "depends_on": "eval:doc.material_request_type == 'Borrow'",
-   "fieldname": "loan_recipient_contact",
-   "fieldtype": "Link",
-   "label": "Recipient Contact",
-   "options": "Contact"
-  },
-  {
-   "depends_on": "eval:doc.material_request_type == 'Borrow'",
-   "fieldname": "loan_recipient_contact_display",
-   "fieldtype": "Text Editor",
-   "label": "Recipient Contact Display",
-   "no_copy": 1,
-   "read_only": 1
-  },
-  {
-   "depends_on": "eval:doc.material_request_type == 'Borrow'",
-   "fieldname": "loan_recipient_contact_email",
-   "fieldtype": "Data",
-   "hidden": 1,
-   "label": "Recipient Contact Email",
-   "no_copy": 1,
-   "read_only": 1
-  },
-  {
-   "depends_on": "eval:doc.material_request_type == 'Customer Demo' || (doc.material_request_type == 'Customer Borrow')",
-   "fieldname": "customer_request_section",
-   "fieldtype": "Section Break",
-   "label": "Customer Delivery Details"
-  },
-  {
-   "depends_on": "eval:doc.material_request_type == 'Customer Demo' || (doc.material_request_type == 'Customer Borrow')",
-   "fieldname": "customer_request_column_break",
-   "fieldtype": "Column Break"
-  },
-  {
-   "depends_on": "eval:doc.material_request_type == 'Customer Demo' || (doc.material_request_type == 'Customer Borrow')",
-   "description": "Person at the customer responsible for receiving and returning the items.",
-   "fieldname": "contact_person",
-   "fieldtype": "Link",
-   "label": "Customer Contact",
-   "options": "Contact"
-  },
-  {
-   "depends_on": "eval:doc.material_request_type == 'Customer Demo' || (doc.material_request_type == 'Customer Borrow')",
-   "fieldname": "customer_contact_display",
-   "fieldtype": "Text Editor",
-   "label": "Contact Display",
-   "no_copy": 1,
-   "read_only": 1
-  },
-  {
-   "depends_on": "eval:doc.material_request_type == 'Customer Demo' || (doc.material_request_type == 'Customer Borrow')",
-   "fieldname": "customer_contact_email",
-   "fieldtype": "Data",
-   "hidden": 1,
-   "label": "Contact Email",
-   "no_copy": 1,
-   "read_only": 1
-  },
-  {
-   "depends_on": "eval:in_list(['Customer Demo', 'Borrow', 'Customer Borrow'], doc.material_request_type)",
-   "fieldname": "return_details_section",
-   "fieldtype": "Section Break",
-   "label": "Remarks"
-  },
-  {
-   "depends_on": "eval:doc.material_request_type == 'Customer Demo' || in_list(['Borrow', 'Customer Borrow'], doc.material_request_type)",
-   "fieldname": "expected_return_date",
-   "fieldtype": "Date",
-   "label": "Expected Return Date",
-   "mandatory_depends_on": "eval:in_list(['Customer Demo', 'Borrow', 'Customer Borrow'], doc.material_request_type)"
-  },
-  {
-   "description": "Physical Location record used when issuing Assets to the Customer.",
-   "fieldname": "customer_location",
-   "fieldtype": "Link",
-   "label": "Customer Location",
-   "options": "Location",
-   "hidden": 1
-  },
-  {
-   "default": "Draft",
-   "depends_on": "eval:in_list(['Customer Demo', 'Borrow', 'Customer Borrow'], doc.material_request_type) && doc.docstatus > 0",
-   "fieldname": "request_progress_status",
-   "fieldtype": "Select",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Request Progress Status",
-   "options": "Draft\nPending\nPending Pick\nPending Delivery\nOn Hold\nPartially Fulfilled\nFulfilled\nPartially Returned\nReturned\nClosed\nCancelled",
-   "read_only": 1
-  },
-  {
-   "depends_on": "eval:doc.material_request_type == 'Customer Demo' || in_list(['Borrow', 'Customer Borrow'], doc.material_request_type)",
-   "fieldname": "request_remarks",
-   "fieldtype": "Small Text",
-   "label": "Request Remarks"
   },
   {
    "description": "Fetched from Company settings.",
@@ -568,25 +364,62 @@
    "hidden": 1
   },
   {
-   "default": "Draft",
-   "depends_on": "eval:doc.material_request_type == 'Asset Transfer'",
-   "fieldname": "asset_transfer_status",
-   "fieldtype": "Select",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Asset Transfer Status",
-   "options": "Draft\nPending\nPartially Fulfilled\nFulfilled\nCancelled",
-   "read_only": 1
+   "description": "Required for non-employee Asset Borrowings and for Asset Shipments.",
+   "fieldname": "loan_recipient_location",
+   "fieldtype": "Link",
+   "label": "Recipient Location",
+   "options": "Location",
+   "hidden": 1
   },
   {
-   "default": "Stock Item",
-   "depends_on": "eval:doc.material_request_type == 'Borrow'",
-   "description": "Choose stock to return by quantity, or assets to return by individual Asset. The Stock team selects the physical Assets after approval.",
-   "fieldname": "borrow_item_type",
-   "fieldtype": "Select",
-   "label": "Borrow Item Type",
-   "mandatory_depends_on": "eval:doc.material_request_type == 'Borrow'",
-   "options": "Stock Item\nAsset"
+   "depends_on": "eval:in_list(['Purchase', 'Material Transfer', 'Material Issue'], doc.material_request_type) || (in_list(['Borrow', 'Customer Borrow'], doc.material_request_type) && doc.borrow_item_type == 'Stock Item')",
+   "fieldname": "warehouse_section",
+   "fieldtype": "Section Break",
+   "hide_border": 1,
+   "label": "Default Warehouses"
+  },
+  {
+   "depends_on": "eval:doc.material_request_type == 'Material Transfer'",
+   "fieldname": "set_from_warehouse",
+   "fieldtype": "Link",
+   "ignore_user_permissions": 1,
+   "label": "Set Source Warehouse",
+   "options": "Warehouse"
+  },
+  {
+   "fieldname": "column_break5",
+   "fieldtype": "Column Break",
+   "oldfieldtype": "Column Break",
+   "print_width": "50%",
+   "width": "50%"
+  },
+  {
+   "depends_on": "eval:in_list(['Purchase', 'Material Transfer', 'Material Issue'], doc.material_request_type)",
+   "fieldname": "set_warehouse",
+   "fieldtype": "Link",
+   "in_import_template": 1,
+   "label": "Set Target Warehouse",
+   "options": "Warehouse"
+  },
+  {
+   "fieldname": "item_scanning_section",
+   "fieldtype": "Section Break",
+   "label": "Scan Items",
+   "depends_on": "eval:in_list(['Purchase', 'Material Transfer', 'Material Issue'], doc.material_request_type) || (in_list(['Borrow', 'Customer Borrow'], doc.material_request_type) && doc.borrow_item_type == 'Stock Item')"
+  },
+  {
+   "depends_on": "eval:in_list(['Purchase', 'Material Transfer', 'Material Issue'], doc.material_request_type) || (in_list(['Borrow', 'Customer Borrow'], doc.material_request_type) && doc.borrow_item_type == 'Stock Item')",
+   "fieldname": "scan_barcode",
+   "fieldtype": "Data",
+   "label": "Scan Barcode",
+   "options": "Barcode"
+  },
+  {
+   "depends_on": "eval: doc.last_scanned_warehouse",
+   "fieldname": "last_scanned_warehouse",
+   "fieldtype": "Data",
+   "is_virtual": 1,
+   "label": "Last Scanned Warehouse"
   },
   {
    "depends_on": "eval:doc.material_request_type == 'Asset Transfer'",
@@ -621,12 +454,34 @@
    "label": "Get Asset"
   },
   {
-   "fieldname": "column_break_adou",
-   "fieldtype": "Column Break"
+   "depends_on": "eval:in_list(['Purchase', 'Material Transfer', 'Material Issue', 'Asset Transfer', 'Customer Demo', 'Borrow', 'Customer Borrow'], doc.material_request_type)",
+   "fieldname": "items_section",
+   "fieldtype": "Section Break",
+   "oldfieldtype": "Section Break",
+   "options": "fa fa-shopping-cart"
   },
   {
-   "fieldname": "column_break_uopw",
-   "fieldtype": "Column Break"
+   "allow_bulk_edit": 1,
+   "depends_on": "eval:in_list(['Purchase', 'Material Transfer', 'Material Issue', 'Asset Transfer', 'Customer Demo', 'Borrow', 'Customer Borrow'], doc.material_request_type)",
+   "fieldname": "items",
+   "fieldtype": "Table",
+   "label": "Items",
+   "mandatory_depends_on": "eval:in_list(['Purchase', 'Material Transfer', 'Material Issue', 'Asset Transfer', 'Customer Demo', 'Borrow', 'Customer Borrow'], doc.material_request_type)",
+   "oldfieldname": "indent_details",
+   "oldfieldtype": "Table",
+   "options": "Material Request Item"
+  },
+  {
+   "depends_on": "eval:in_list(['Customer Demo', 'Borrow', 'Customer Borrow'], doc.material_request_type)",
+   "fieldname": "return_details_section",
+   "fieldtype": "Section Break",
+   "label": "Remarks"
+  },
+  {
+   "depends_on": "eval:doc.material_request_type == 'Customer Demo' || in_list(['Borrow', 'Customer Borrow'], doc.material_request_type)",
+   "fieldname": "request_remarks",
+   "fieldtype": "Small Text",
+   "label": "Request Remarks"
   },
   {
    "fieldname": "address_and_contact_tab",
@@ -635,98 +490,264 @@
    "depends_on": "eval:0"
   },
   {
-   "fieldname": "responsible_employee",
-   "fieldtype": "Link",
-   "label": "Responsible Employee",
-   "options": "Employee",
    "depends_on": "eval:in_list(['Customer Demo', 'Borrow', 'Customer Borrow'], doc.material_request_type)",
-   "mandatory_depends_on": "eval:in_list(['Customer Demo', 'Borrow', 'Customer Borrow'], doc.material_request_type)",
-   "no_copy": 0,
-   "description": "Answers for the items until they come back. Defaults to you."
-  },
-  {
-   "fieldname": "responsible_employee_user",
+   "description": "Select the address where the requested items will be delivered.",
+   "fieldname": "recipient_address",
    "fieldtype": "Link",
-   "label": "Responsible Employee User",
-   "options": "User",
-   "fetch_from": "responsible_employee.user_id",
-   "hidden": 1,
-   "read_only": 1,
-   "no_copy": 1
+   "label": "Recipient Address",
+   "options": "Address"
   },
   {
-   "fieldname": "pricing_complete",
-   "fieldtype": "Check",
+   "depends_on": "eval:doc.material_request_type == 'Borrow'",
+   "fieldname": "loan_recipient_column_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:doc.material_request_type == 'Borrow'",
+   "fieldname": "loan_recipient_contact",
+   "fieldtype": "Link",
+   "label": "Recipient Contact",
+   "options": "Contact"
+  },
+  {
+   "depends_on": "eval:doc.material_request_type == 'Borrow'",
+   "fieldname": "loan_recipient_contact_email",
+   "fieldtype": "Data",
    "hidden": 1,
-   "label": "Prices Ready",
+   "label": "Recipient Contact Email",
    "no_copy": 1,
    "read_only": 1
   },
   {
-   "fieldname": "requesting_employee",
-   "fieldtype": "Link",
-   "hidden": 1,
-   "label": "Requesting Employee",
+   "fieldname": "recipient_address_display_section",
+   "fieldtype": "Section Break",
+   "label": "Delivery Address",
+   "depends_on": "eval:in_list(['Customer Demo', 'Borrow', 'Customer Borrow'], doc.material_request_type)"
+  },
+  {
+   "depends_on": "eval:in_list(['Customer Demo', 'Borrow', 'Customer Borrow'], doc.material_request_type)",
+   "fieldname": "recipient_address_display",
+   "fieldtype": "Text Editor",
+   "label": "Address Display",
    "no_copy": 1,
-   "options": "Employee",
    "read_only": 1
   },
   {
-   "fieldname": "requesting_department",
-   "fieldtype": "Link",
-   "hidden": 1,
-   "label": "Requesting Department",
+   "fieldname": "loan_recipient_contact_display_section",
+   "fieldtype": "Section Break",
+   "label": "Recipient Contact Details",
+   "depends_on": "eval:doc.material_request_type == 'Borrow'"
+  },
+  {
+   "depends_on": "eval:doc.material_request_type == 'Borrow'",
+   "fieldname": "loan_recipient_contact_display",
+   "fieldtype": "Text Editor",
+   "label": "Recipient Contact Display",
    "no_copy": 1,
-   "options": "Department",
    "read_only": 1
   },
   {
-   "fieldname": "placement_confirmation",
-   "fieldtype": "Attach",
-   "label": "Placement Location Confirmation",
-   "no_copy": 1
+   "depends_on": "eval:doc.material_request_type == 'Customer Demo' || (doc.material_request_type == 'Customer Borrow')",
+   "fieldname": "customer_request_section",
+   "fieldtype": "Section Break",
+   "label": "Customer Delivery Details"
   },
   {
-   "fieldname": "placement_confirmed_by",
+   "depends_on": "eval:doc.material_request_type == 'Customer Demo' || (doc.material_request_type == 'Customer Borrow')",
+   "description": "Person at the customer responsible for receiving and returning the items.",
+   "fieldname": "contact_person",
    "fieldtype": "Link",
-   "label": "Placement Confirmed By",
-   "no_copy": 1,
-   "options": "Employee"
+   "label": "Customer Contact",
+   "options": "Contact"
   },
   {
-   "depends_on": "eval:['Customer Demo', 'Borrow', 'Customer Borrow'].includes(doc.material_request_type)",
-   "fieldname": "loan_approval_band",
+   "depends_on": "eval:doc.material_request_type == 'Customer Demo' || (doc.material_request_type == 'Customer Borrow')",
+   "fieldname": "customer_contact_email",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Contact Email",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.material_request_type == 'Customer Demo' || (doc.material_request_type == 'Customer Borrow')",
+   "fieldname": "customer_request_column_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Physical Location record used when issuing Assets to the Customer.",
+   "fieldname": "customer_location",
+   "fieldtype": "Link",
+   "label": "Customer Location",
+   "options": "Location",
+   "hidden": 1
+  },
+  {
+   "fieldname": "customer_contact_display_section",
+   "fieldtype": "Section Break",
+   "label": "Customer Contact Details",
+   "depends_on": "eval:doc.material_request_type == 'Customer Demo' || (doc.material_request_type == 'Customer Borrow')"
+  },
+  {
+   "depends_on": "eval:doc.material_request_type == 'Customer Demo' || (doc.material_request_type == 'Customer Borrow')",
+   "fieldname": "customer_contact_display",
+   "fieldtype": "Text Editor",
+   "label": "Contact Display",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "terms_tab",
+   "fieldtype": "Tab Break",
+   "label": "Terms",
+   "depends_on": "eval:in_list(['Purchase'], doc.material_request_type)"
+  },
+  {
+   "collapsible": 1,
+   "collapsible_depends_on": "terms",
+   "fieldname": "terms_section_break",
+   "fieldtype": "Section Break",
+   "oldfieldtype": "Section Break",
+   "options": "fa fa-legal",
+   "depends_on": "eval:in_list(['Purchase'], doc.material_request_type)"
+  },
+  {
+   "fieldname": "tc_name",
+   "fieldtype": "Link",
+   "label": "Terms",
+   "oldfieldname": "tc_name",
+   "oldfieldtype": "Link",
+   "options": "Terms and Conditions",
+   "print_hide": 1,
+   "report_hide": 1,
+   "depends_on": "eval:in_list(['Purchase'], doc.material_request_type)"
+  },
+  {
+   "fieldname": "terms",
+   "fieldtype": "Text Editor",
+   "label": "Terms and Conditions Content",
+   "oldfieldname": "terms",
+   "oldfieldtype": "Text Editor",
+   "depends_on": "eval:in_list(['Purchase'], doc.material_request_type)"
+  },
+  {
+   "fieldname": "more_info_tab",
+   "fieldtype": "Tab Break",
+   "label": "More Info",
+   "depends_on": "eval:in_list(['Purchase', 'Material Transfer', 'Material Issue', 'Asset Transfer'], doc.material_request_type)"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "status_section",
+   "fieldtype": "Section Break",
+   "label": "Status",
+   "oldfieldtype": "Section Break",
+   "options": "fa fa-file-text"
+  },
+  {
+   "fieldname": "status",
    "fieldtype": "Select",
-   "hidden": 1,
-   "label": "Borrowing Approval Band",
+   "in_standard_filter": 1,
+   "label": "Status",
    "no_copy": 1,
-   "options": "\nProduct Group\nManaging Director\nChief Executive Officer",
+   "oldfieldname": "status",
+   "oldfieldtype": "Select",
+   "options": "\nDraft\nSubmitted\nStopped\nCancelled\nPending\nPartially Ordered\nPartially Received\nOrdered\nIssued\nTransferred\nReceived",
+   "print_hide": 1,
+   "print_width": "100px",
+   "read_only": 1,
+   "search_index": 1,
+   "width": "100px"
+  },
+  {
+   "depends_on": "eval:doc.per_ordered > 0",
+   "fieldname": "per_ordered",
+   "fieldtype": "Percent",
+   "label": "% Ordered",
+   "no_copy": 1,
+   "oldfieldname": "per_ordered",
+   "oldfieldtype": "Currency",
+   "print_hide": 1,
    "read_only": 1
   },
   {
-   "depends_on": "eval:doc.loan_approval_band == 'Product Group'",
-   "fieldname": "loan_group_approver_roles",
-   "fieldtype": "Small Text",
-   "hidden": 1,
-   "label": "Item Group Approver Roles",
-   "no_copy": 1,
+   "default": "Draft",
+   "depends_on": "eval:in_list(['Customer Demo', 'Borrow', 'Customer Borrow'], doc.material_request_type) && doc.docstatus > 0",
+   "fieldname": "request_progress_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Request Progress Status",
+   "options": "Draft\nPending\nPending Pick\nPending Delivery\nOn Hold\nPartially Fulfilled\nFulfilled\nPartially Returned\nReturned\nClosed\nCancelled",
    "read_only": 1
   },
   {
-   "fieldname": "loan_release_pending",
-   "fieldtype": "Check",
-   "hidden": 1,
-   "label": "Borrowing Release Pending",
+   "fieldname": "column_break2",
+   "fieldtype": "Column Break",
+   "oldfieldtype": "Column Break",
+   "print_width": "50%",
+   "width": "50%"
+  },
+  {
+   "allow_on_submit": 1,
+   "depends_on": "eval:doc.add_to_transit == 1",
+   "fieldname": "transfer_status",
+   "fieldtype": "Select",
+   "label": "Transfer Status",
    "no_copy": 1,
+   "options": "\nNot Started\nIn Transit\nCompleted",
    "read_only": 1
   },
   {
-   "depends_on": "eval:doc.loan_issue_problem",
-   "fieldname": "loan_issue_problem",
-   "fieldtype": "Small Text",
-   "label": "Borrowing Problem",
+   "depends_on": "eval:doc.per_received > 0",
+   "fieldname": "per_received",
+   "fieldtype": "Percent",
+   "label": "% Received",
    "no_copy": 1,
+   "print_hide": 1,
    "read_only": 1
+  },
+  {
+   "default": "Draft",
+   "depends_on": "eval:doc.material_request_type == 'Asset Transfer'",
+   "fieldname": "asset_transfer_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Asset Transfer Status",
+   "options": "Draft\nPending\nPartially Fulfilled\nFulfilled\nCancelled",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "reference",
+   "fieldtype": "Section Break",
+   "label": "Reference"
+  },
+  {
+   "fieldname": "job_card",
+   "fieldtype": "Link",
+   "label": "Job Card",
+   "options": "Job Card",
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_35",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "work_order",
+   "fieldtype": "Link",
+   "label": "Work Order",
+   "options": "Work Order",
+   "read_only": 1
+  },
+  {
+   "fieldname": "connections_tab",
+   "fieldtype": "Tab Break",
+   "label": "Connections",
+   "show_dashboard": 1
   },
   {
    "depends_on": "eval:!['Customer Demo', 'Borrow', 'Customer Borrow'].includes(doc.material_request_type) || doc.docstatus > 0",
@@ -741,8 +762,21 @@
    "label": "Placement Confirmation"
   },
   {
+   "fieldname": "placement_confirmation",
+   "fieldtype": "Attach",
+   "label": "Placement Location Confirmation",
+   "no_copy": 1
+  },
+  {
    "fieldname": "connect_placement_column",
    "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "placement_confirmed_by",
+   "fieldtype": "Link",
+   "label": "Placement Confirmed By",
+   "no_copy": 1,
+   "options": "Employee"
   },
   {
    "fieldname": "connect_approval_section",

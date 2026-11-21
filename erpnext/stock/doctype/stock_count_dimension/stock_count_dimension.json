@@ -12,10 +12,9 @@
  "fields": [
   {
    "fieldname": "inventory_dimension",
-   "fieldtype": "Link",
+   "fieldtype": "Autocomplete",
    "in_list_view": 1,
    "label": "Inventory Dimension",
-   "options": "Inventory Dimension",
    "reqd": 1
   },
   {

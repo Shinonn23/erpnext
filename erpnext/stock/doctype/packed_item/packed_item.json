@@ -12,13 +12,18 @@
   "column_break_5",
   "description",
   "section_break_6",
-  "warehouse",
-  "target_warehouse",
   "conversion_factor",
   "column_break_9",
   "qty",
   "rate",
   "uom",
+  "inventory_dimension",
+  "is_stock_item",
+  "warehouse",
+  "storage_location",
+  "inventory_dimension_col_break",
+  "target_warehouse",
+  "to_storage_location",
   "section_break_9",
   "pick_serial_and_batch",
   "use_serial_batch_fields",
@@ -40,12 +45,7 @@
   "picked_qty",
   "page_break",
   "prevdoc_doctype",
-  "parent_detail_docname",
-  "inventory_dimension",
-  "is_stock_item",
-  "storage_location",
-  "inventory_dimension_col_break",
-  "to_storage_location"
+  "parent_detail_docname"
  ],
  "fields": [
   {
@@ -92,7 +92,8 @@
   },
   {
    "fieldname": "section_break_6",
-   "fieldtype": "Section Break"
+   "fieldtype": "Section Break",
+   "label": "Quantity and Units"
   },
   {
    "fieldname": "warehouse",
@@ -318,7 +319,7 @@
   {
    "fieldname": "inventory_dimension",
    "fieldtype": "Section Break",
-   "label": "Inventory Dimension",
+   "label": "Warehouses and Storage",
    "collapsible": 1
   },
   {

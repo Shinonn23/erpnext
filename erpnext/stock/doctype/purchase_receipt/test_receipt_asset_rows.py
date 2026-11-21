@@ -45,14 +45,13 @@ class TestRowJson(unittest.TestCase):
 				self.assertIn("!doc.is_fixed_asset", by_name[fieldname]["depends_on"], (doctype, fieldname))
 			self.assertIn("doc.rejected_warehouse", by_name["rejected_storage_location"]["depends_on"])
 			self.assertIn("doc.is_fixed_asset", by_name["asset_location"]["mandatory_depends_on"], doctype)
-			self.assertEqual(
-				by_name["storage_location"]["read_only_depends_on"], "eval:doc.putaway_warehouse"
-			)
+			self.assertNotIn("read_only_depends_on", by_name["storage_location"])
 			putaway = by_name["putaway_storage_location"]
 			self.assertEqual(
-				(putaway["fieldtype"], putaway["options"], putaway["no_copy"], putaway["read_only"]),
-				("Link", "Storage Location", 1, 1),
+				(putaway["fieldtype"], putaway["options"], putaway["no_copy"], putaway.get("read_only", 0)),
+				("Link", "Storage Location", 1, 0),
 			)
+			self.assertIn("doc.putaway_warehouse", putaway["depends_on"])
 			self.assertEqual(order.index("putaway_storage_location"), order.index("putaway_warehouse") + 1)
 
 	def test_the_header_warehouse_is_the_warehouse_the_goods_are_received_for(self):

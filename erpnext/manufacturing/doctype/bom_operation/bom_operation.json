@@ -22,14 +22,16 @@
   "is_final_finished_good",
   "set_cost_based_on_bom_qty",
   "quality_inspection_required",
-  "warehouse_section",
+  "warehouse_options_section",
   "skip_material_transfer",
+  "warehouse_options_column",
   "backflush_from_wip_warehouse",
+  "warehouse_section",
   "source_warehouse",
   "source_storage_location",
-  "column_break_lbhy",
   "wip_warehouse",
   "wip_storage_location",
+  "column_break_lbhy",
   "fg_warehouse",
   "fg_storage_location",
   "costing_section",
@@ -246,7 +248,7 @@
   {
    "fieldname": "warehouse_section",
    "fieldtype": "Section Break",
-   "label": "Warehouse"
+   "label": "Source and Target Warehouses"
   },
   {
    "depends_on": "eval:!doc.skip_material_transfer || doc.backflush_from_wip_warehouse",
@@ -323,6 +325,15 @@
    "fieldtype": "Link",
    "label": "Finished Goods Storage Location",
    "options": "Storage Location"
+  },
+  {
+   "fieldname": "warehouse_options_section",
+   "fieldtype": "Section Break",
+   "label": "Material Transfer"
+  },
+  {
+   "fieldname": "warehouse_options_column",
+   "fieldtype": "Column Break"
   }
  ],
  "idx": 1,

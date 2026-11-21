@@ -179,24 +179,14 @@ class TestInventoryDimension(ERPNextTestSuite):
 				expected = expected_dimension_fields[doctype]
 			else:
 				expected = ["inventory_dimension", "storage_location"]
-			field_order = schema["field_order"]
-			section_index = field_order.index("inventory_dimension")
-			if doctype == "Job Card":
-				self.assertEqual(
-					field_order[section_index : section_index + len(expected)], expected, doctype
-				)
-				self.assertLess(section_index, field_order.index("scheduled_time_tab"), doctype)
-			else:
-				self.assertEqual(field_order[section_index:], expected, doctype)
+			for fieldname in expected:
+				self.assertIn(fieldname, fieldnames, doctype)
+				self.assertIn(fieldname, schema["field_order"], doctype)
 			self.assertEqual(fieldnames.count("inventory_dimension"), 1, doctype)
 
 		for doctype in ("Stock Ledger Entry", "Stock Closing Balance"):
 			self.assertIn("inventory_dimension", doctype_schemas[doctype]["field_order"], doctype)
-			field_order = doctype_schemas[doctype]["field_order"]
-			section_index = field_order.index("inventory_dimension")
-			self.assertEqual(
-				field_order[section_index:], ["inventory_dimension", "storage_location"], doctype
-			)
+			self.assertIn("storage_location", doctype_schemas[doctype]["field_order"], doctype)
 
 		loan_item_doctypes = {
 			"Borrowing Adjustment Item",

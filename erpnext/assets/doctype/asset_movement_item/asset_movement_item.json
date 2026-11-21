@@ -8,8 +8,6 @@
  "field_order": [
   "company",
   "asset",
-  "service_equipment",
-  "equipment_name",
   "asset_serial_number",
   "is_demo_asset",
   "demo_loan_status",
@@ -23,10 +21,6 @@
   "target_location",
   "to_employee",
   "target_department",
-  "service_previous_status",
-  "service_previous_customer",
-  "service_previous_address",
-  "service_previous_movement",
   "service_previous_placed_on",
   "request_item",
   "borrowing_item",
@@ -36,30 +30,11 @@
  ],
  "fields": [
   {
-   "depends_on": "eval:!doc.service_equipment",
    "fieldname": "asset",
    "fieldtype": "Link",
    "in_list_view": 1,
    "label": "Asset",
-   "mandatory_depends_on": "eval:!doc.service_equipment",
    "options": "Asset"
-  },
-  {
-   "depends_on": "eval:!doc.asset",
-   "fieldname": "service_equipment",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Service Equipment",
-   "mandatory_depends_on": "eval:!doc.asset",
-   "options": "Service Equipment"
-  },
-  {
-   "depends_on": "eval:doc.service_equipment",
-   "fetch_from": "service_equipment.equipment_name",
-   "fieldname": "equipment_name",
-   "fieldtype": "Data",
-   "label": "Equipment Name",
-   "read_only": 1
   },
   {
    "fetch_from": "asset.asset_name",
@@ -92,7 +67,7 @@
    "read_only": 1
   },
   {
-   "depends_on": "eval:!in_list([\"Issue\", \"Reassignment\"], parent.purpose) || doc.service_equipment || parent.is_borrowing_transaction || parent.borrowing",
+   "depends_on": "eval:!in_list([\"Issue\", \"Reassignment\"], parent.purpose) || parent.is_borrowing_transaction || parent.borrowing",
    "fieldname": "source_location",
    "fieldtype": "Link",
    "in_list_view": 1,
@@ -100,7 +75,7 @@
    "options": "Location"
   },
   {
-   "depends_on": "eval:!in_list([\"Issue\", \"Reassignment\"], parent.purpose) || doc.service_equipment || parent.is_borrowing_transaction || parent.borrowing",
+   "depends_on": "eval:!in_list([\"Issue\", \"Reassignment\"], parent.purpose) || parent.is_borrowing_transaction || parent.borrowing",
    "fieldname": "target_location",
    "fieldtype": "Link",
    "in_list_view": 1,
@@ -157,41 +132,6 @@
    "in_list_view": 1,
    "label": "Target Department",
    "options": "Department"
-  },
-  {
-   "depends_on": "eval:doc.service_equipment",
-   "fieldname": "service_previous_status",
-   "fieldtype": "Data",
-   "label": "Previous Equipment Status",
-   "no_copy": 1,
-   "read_only": 1
-  },
-  {
-   "depends_on": "eval:doc.service_equipment",
-   "fieldname": "service_previous_customer",
-   "fieldtype": "Link",
-   "label": "Previous Customer",
-   "no_copy": 1,
-   "options": "Customer",
-   "read_only": 1
-  },
-  {
-   "depends_on": "eval:doc.service_equipment",
-   "fieldname": "service_previous_address",
-   "fieldtype": "Link",
-   "label": "Previous Address",
-   "no_copy": 1,
-   "options": "Address",
-   "read_only": 1
-  },
-  {
-   "depends_on": "eval:doc.service_equipment",
-   "fieldname": "service_previous_movement",
-   "fieldtype": "Link",
-   "label": "Previous Movement",
-   "no_copy": 1,
-   "options": "Asset Movement",
-   "read_only": 1
   },
   {
    "fieldname": "service_previous_placed_on",

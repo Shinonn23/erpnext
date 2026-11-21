@@ -28,8 +28,10 @@
   "bank_cash_account",
   "accounting_dimensions_section",
   "cost_center",
+  "department",
   "dimension_col_break",
   "project",
+  "territory",
   "sec_break1",
   "invoice_name",
   "invoices",
@@ -197,10 +199,10 @@
    "options": "Cost Center"
   },
   {
-    "fieldname": "project",
-    "fieldtype": "Link",
-    "label": "Project",
-    "options": "Project"
+   "fieldname": "project",
+   "fieldtype": "Link",
+   "label": "Project",
+   "options": "Project"
   },
   {
    "depends_on": "eval:doc.party",
@@ -233,6 +235,20 @@
   {
    "fieldname": "dimension_col_break",
    "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "department",
+   "fieldtype": "Link",
+   "label": "Department",
+   "options": "Department",
+   "print_hide": 1
+  },
+  {
+   "fieldname": "territory",
+   "fieldtype": "Link",
+   "label": "Territory",
+   "options": "Territory",
+   "print_hide": 1
   }
  ],
  "hide_toolbar": 1,
@@ -240,7 +256,7 @@
  "is_virtual": 1,
  "issingle": 1,
  "links": [],
- "modified": "2024-04-23 12:38:29.557315",
+ "modified": "2026-11-20 23:48:19.662469",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Payment Reconciliation",

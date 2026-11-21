@@ -1,7 +1,7 @@
 {
  "app": "erpnext",
  "charts": [],
- "content": "[{\"id\": \"HOEnlt9aR9\", \"type\": \"header\", \"data\": {\"text\": \"This module is scheduled for deprecation and will be completely removed in version 17, please use <a href=\\\"https://frappe.io/helpdesk\\\">Frappe Helpdesk</a> instead.\", \"col\": 12}}, {\"id\": \"supportServiceHead\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Service Equipment</b></span>\", \"col\": 12}}, {\"id\": \"supportService00\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Service Equipment\", \"col\": 4}}, {\"id\": \"supportService01\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Equipment Movements\", \"col\": 4}}, {\"id\": \"supportService02\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Equipment Maintenance\", \"col\": 4}}, {\"id\": \"supportService03\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Equipment Repairs\", \"col\": 4}}, {\"id\": \"supportService04\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Service Visits\", \"col\": 4}}, {\"id\": \"supportService05\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Maintenance Schedules\", \"col\": 4}}, {\"id\": \"supportService07\", \"type\": \"card\", \"data\": {\"card_name\": \"Service Equipment Reports\", \"col\": 4}}, {\"id\": \"oxhWhXp9b2\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Reports &amp; Masters</b></span>\", \"col\": 12}}, {\"id\": \"Ff8Ab3nLLN\", \"type\": \"card\", \"data\": {\"card_name\": \"Issues\", \"col\": 4}}, {\"id\": \"_lndiuJTVP\", \"type\": \"card\", \"data\": {\"card_name\": \"Maintenance\", \"col\": 4}}, {\"id\": \"R_aNO5ESzJ\", \"type\": \"card\", \"data\": {\"card_name\": \"Service Level Agreement\", \"col\": 4}}, {\"id\": \"N8aA2afWfi\", \"type\": \"card\", \"data\": {\"card_name\": \"Warranty\", \"col\": 4}}, {\"id\": \"M5fxGuFwUR\", \"type\": \"card\", \"data\": {\"card_name\": \"Settings\", \"col\": 4}}, {\"id\": \"xKH0kO9q4P\", \"type\": \"card\", \"data\": {\"card_name\": \"Reports\", \"col\": 4}}]",
+ "content": "[{\"id\": \"HOEnlt9aR9\", \"type\": \"header\", \"data\": {\"text\": \"This module is scheduled for deprecation and will be completely removed in version 17, please use <a href=\\\"https://frappe.io/helpdesk\\\">Frappe Helpdesk</a> instead.\", \"col\": 12}}, {\"id\": \"oxhWhXp9b2\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Reports &amp; Masters</b></span>\", \"col\": 12}}, {\"id\": \"Ff8Ab3nLLN\", \"type\": \"card\", \"data\": {\"card_name\": \"Issues\", \"col\": 4}}, {\"id\": \"_lndiuJTVP\", \"type\": \"card\", \"data\": {\"card_name\": \"Maintenance\", \"col\": 4}}, {\"id\": \"R_aNO5ESzJ\", \"type\": \"card\", \"data\": {\"card_name\": \"Service Level Agreement\", \"col\": 4}}, {\"id\": \"N8aA2afWfi\", \"type\": \"card\", \"data\": {\"card_name\": \"Warranty\", \"col\": 4}}, {\"id\": \"M5fxGuFwUR\", \"type\": \"card\", \"data\": {\"card_name\": \"Settings\", \"col\": 4}}, {\"id\": \"xKH0kO9q4P\", \"type\": \"card\", \"data\": {\"card_name\": \"Reports\", \"col\": 4}}]",
  "creation": "2020-03-02 15:48:23.224699",
  "custom_blocks": [],
  "docstatus": 0,
@@ -170,135 +170,6 @@
    "link_type": "Report",
    "onboard": 0,
    "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Service Equipment Reports",
-   "link_count": 11,
-   "onboard": 0,
-   "type": "Card Break"
-  },
-  {
-   "dependencies": "",
-   "hidden": 0,
-   "is_query_report": 1,
-   "label": "Service Schedule",
-   "link_count": 0,
-   "link_to": "Service Schedule",
-   "link_type": "Report",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "dependencies": "",
-   "hidden": 0,
-   "is_query_report": 1,
-   "label": "Site Visit Plan",
-   "link_count": 0,
-   "link_to": "Site Visit Plan",
-   "link_type": "Report",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "dependencies": "",
-   "hidden": 0,
-   "is_query_report": 1,
-   "label": "Technician Workload",
-   "link_count": 0,
-   "link_to": "Technician Workload",
-   "link_type": "Report",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "dependencies": "",
-   "hidden": 0,
-   "is_query_report": 1,
-   "label": "Equipment Register",
-   "link_count": 0,
-   "link_to": "Service Equipment Register",
-   "link_type": "Report",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "dependencies": "",
-   "hidden": 0,
-   "is_query_report": 1,
-   "label": "Location History",
-   "link_count": 0,
-   "link_to": "Service Equipment Location History",
-   "link_type": "Report",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "dependencies": "",
-   "hidden": 0,
-   "is_query_report": 1,
-   "label": "Maintenance Due",
-   "link_count": 0,
-   "link_to": "Service Equipment Maintenance Due",
-   "link_type": "Report",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "dependencies": "",
-   "hidden": 0,
-   "is_query_report": 1,
-   "label": "Repair History",
-   "link_count": 0,
-   "link_to": "Service Equipment Repair History",
-   "link_type": "Report",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "dependencies": "",
-   "hidden": 0,
-   "is_query_report": 1,
-   "label": "Open Service Issues",
-   "link_count": 0,
-   "link_to": "Open Service Issues",
-   "link_type": "Report",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "dependencies": "",
-   "hidden": 0,
-   "is_query_report": 1,
-   "label": "Service Visit History",
-   "link_count": 0,
-   "link_to": "Service Visit History",
-   "link_type": "Report",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "dependencies": "",
-   "hidden": 0,
-   "is_query_report": 1,
-   "label": "Coverage Expiry",
-   "link_count": 0,
-   "link_to": "Service Equipment Coverage Expiry",
-   "link_type": "Report",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "dependencies": "",
-   "hidden": 0,
-   "is_query_report": 1,
-   "label": "Service Data Gaps",
-   "link_count": 0,
-   "link_to": "Service Data Gaps",
-   "link_type": "Report",
-   "onboard": 0,
-   "type": "Link"
   }
  ],
  "modified": "2026-11-10 14:00:00.000000",
@@ -313,55 +184,7 @@
  "restrict_to_domain": "",
  "roles": [],
  "sequence_id": 12.0,
- "shortcuts": [
-  {
-   "color": "Blue",
-   "doc_view": "List",
-   "label": "Service Equipment",
-   "link_to": "Service Equipment",
-   "type": "DocType"
-  },
-  {
-   "color": "Grey",
-   "doc_view": "List",
-   "label": "Equipment Movements",
-   "link_to": "Asset Movement",
-   "type": "DocType",
-   "stats_filter": "{\"assets.service_equipment\": [\"is\", \"set\"]}"
-  },
-  {
-   "color": "Grey",
-   "doc_view": "List",
-   "label": "Equipment Maintenance",
-   "link_to": "Asset Maintenance",
-   "stats_filter": "{\"service_equipment\": [\"is\", \"set\"]}",
-   "type": "DocType"
-  },
-  {
-   "color": "Grey",
-   "doc_view": "List",
-   "label": "Equipment Repairs",
-   "link_to": "Asset Repair",
-   "stats_filter": "{\"service_equipment\": [\"is\", \"set\"]}",
-   "type": "DocType"
-  },
-  {
-   "color": "Grey",
-   "doc_view": "List",
-   "label": "Service Visits",
-   "link_to": "Maintenance Visit",
-   "stats_filter": "{\"service_equipment\": [\"is\", \"set\"]}",
-   "type": "DocType"
-  },
-  {
-   "color": "Grey",
-   "doc_view": "List",
-   "label": "Maintenance Schedules",
-   "link_to": "Maintenance Schedule",
-   "stats_filter": "{\"service_equipment\": [\"is\", \"set\"]}",
-   "type": "DocType"
-  }
- ],
+ "shortcuts": [],
  "title": "Support",
  "type": "Workspace",
  "standard": 1

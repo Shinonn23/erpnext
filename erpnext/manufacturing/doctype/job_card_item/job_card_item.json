@@ -7,14 +7,15 @@
  "engine": "InnoDB",
  "field_order": [
   "item_code",
-  "source_warehouse",
-  "source_storage_location",
   "uom",
   "item_group",
   "column_break_3",
   "stock_uom",
   "item_name",
   "description",
+  "warehouse_section",
+  "source_warehouse",
+  "source_storage_location",
   "qty_section",
   "required_qty",
   "column_break_9",
@@ -118,6 +119,11 @@
    "fieldtype": "Link",
    "label": "Source Storage Location",
    "options": "Storage Location"
+  },
+  {
+   "fieldname": "warehouse_section",
+   "fieldtype": "Section Break",
+   "label": "Warehouse and Storage Location"
   }
  ],
  "index_web_pages_for_search": 1,

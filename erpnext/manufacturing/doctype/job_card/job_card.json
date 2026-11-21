@@ -29,16 +29,18 @@
   "semi_finished_good__finished_good_section",
   "finished_good",
   "semi_fg_bom",
-  "production_section",
+  "warehouse_options_section",
   "workstation_type",
-  "source_warehouse",
-  "source_storage_location",
-  "column_break_12",
+  "warehouse_options_column",
   "skip_material_transfer",
   "backflush_from_wip_warehouse",
   "track_semi_finished_goods",
+  "production_section",
+  "source_warehouse",
+  "source_storage_location",
   "wip_warehouse",
   "wip_storage_location",
+  "column_break_12",
   "target_warehouse",
   "target_storage_location",
   "scrap_warehouse",
@@ -301,7 +303,7 @@
   {
    "fieldname": "production_section",
    "fieldtype": "Section Break",
-   "label": "Warehouse"
+   "label": "Source and Target Warehouses"
   },
   {
    "fieldname": "column_break_12",
@@ -721,6 +723,15 @@
    "label": "Scrap Storage Location",
    "options": "Storage Location",
    "depends_on": "eval:doc.track_semi_finished_goods"
+  },
+  {
+   "fieldname": "warehouse_options_section",
+   "fieldtype": "Section Break",
+   "label": "Material Transfer"
+  },
+  {
+   "fieldname": "warehouse_options_column",
+   "fieldtype": "Column Break"
   }
  ],
  "grid_page_length": 50,

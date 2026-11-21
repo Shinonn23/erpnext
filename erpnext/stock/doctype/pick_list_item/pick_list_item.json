@@ -6,15 +6,26 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "section_break_5",
   "item_code",
   "item_name",
   "column_break_2",
   "description",
   "item_group",
-  "section_break_5",
-  "warehouse",
   "inventory_dimension",
+  "warehouse",
   "storage_location",
+  "serial_no_and_batch_section",
+  "pick_serial_and_batch",
+  "serial_and_batch_bundle",
+  "use_serial_batch_fields",
+  "column_break_20",
+  "section_break_ecxc",
+  "has_serial_no",
+  "has_batch_no",
+  "batch_no",
+  "column_break_belw",
+  "serial_no",
   "quantity_section",
   "qty",
   "stock_qty",
@@ -30,17 +41,7 @@
   "actual_qty",
   "column_break_kyek",
   "company_total_stock",
-  "serial_no_and_batch_section",
-  "pick_serial_and_batch",
-  "serial_and_batch_bundle",
-  "use_serial_batch_fields",
-  "column_break_20",
-  "section_break_ecxc",
-  "has_serial_no",
-  "has_batch_no",
-  "serial_no",
-  "column_break_belw",
-  "batch_no",
+  "source_document_section",
   "column_break_15",
   "sales_order",
   "sales_order_item",
@@ -125,7 +126,8 @@
   },
   {
    "fieldname": "section_break_5",
-   "fieldtype": "Section Break"
+   "fieldtype": "Section Break",
+   "label": "Item"
   },
   {
    "fieldname": "stock_uom",
@@ -331,7 +333,7 @@
    "collapsible": 1,
    "fieldname": "inventory_dimension",
    "fieldtype": "Section Break",
-   "label": "Inventory Dimension"
+   "label": "Warehouse and Storage"
   },
   {
    "fieldname": "storage_location",
@@ -340,6 +342,11 @@
    "label": "Storage Location",
    "options": "Storage Location",
    "search_index": 1
+  },
+  {
+   "fieldname": "source_document_section",
+   "fieldtype": "Section Break",
+   "label": "Source Documents"
   }
  ],
  "istable": 1,

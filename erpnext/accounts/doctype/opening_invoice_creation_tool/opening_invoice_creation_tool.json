@@ -14,8 +14,10 @@
   "invoice_type",
   "accounting_dimensions_section",
   "cost_center",
+  "department",
   "dimension_col_break",
   "project",
+  "territory",
   "section_break_4",
   "invoices"
  ],
@@ -85,13 +87,27 @@
    "fieldname": "section_break_ynel",
    "fieldtype": "Section Break",
    "hide_border": 1
+  },
+  {
+   "fieldname": "department",
+   "fieldtype": "Link",
+   "label": "Department",
+   "options": "Department",
+   "print_hide": 1
+  },
+  {
+   "fieldname": "territory",
+   "fieldtype": "Link",
+   "label": "Territory",
+   "options": "Territory",
+   "print_hide": 1
   }
  ],
  "hide_toolbar": 1,
  "icon": "file-plus",
  "issingle": 1,
  "links": [],
- "modified": "2026-05-30 23:18:48.691227",
+ "modified": "2026-11-20 23:48:19.662469",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Opening Invoice Creation Tool",

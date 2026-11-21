@@ -231,6 +231,10 @@ class PurchaseOrder(BuyingController):
 		self.reset_default_field_value("set_warehouse", "items", "warehouse")
 		self.set_missing_terms()
 
+		from erpnext.accounts.doctype.payment_term.payment_term_routes import set_order_payment_route
+
+		set_order_payment_route(self)
+
 	def set_has_unit_price_items(self):
 		"""
 		If permitted in settings and any item has 0 qty, the PO has unit price items.

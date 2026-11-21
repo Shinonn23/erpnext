@@ -11,8 +11,9 @@
   "item_name",
   "column_break_3",
   "bom",
-  "delivery_warehouse",
   "include_exploded_items",
+  "warehouse_section",
+  "delivery_warehouse",
   "quantity_section",
   "qty",
   "produced_qty",
@@ -180,6 +181,11 @@
    "no_copy": 1,
    "options": "Warehouse",
    "reqd": 1
+  },
+  {
+   "fieldname": "warehouse_section",
+   "fieldtype": "Section Break",
+   "label": "Delivery Warehouse"
   }
  ],
  "grid_page_length": 50,

@@ -45,10 +45,11 @@
   "target_incoming_rate",
   "accounting_dimensions_section",
   "cost_center",
+  "department",
   "dimension_col_break",
   "project",
-  "department",
   "target_fixed_asset_account",
+  "territory",
   "connect_approval_section",
   "workflow_state",
   "connect_approval_column",
@@ -329,13 +330,20 @@
   {
    "fieldname": "connect_approval_column",
    "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "territory",
+   "fieldtype": "Link",
+   "label": "Territory",
+   "options": "Territory",
+   "print_hide": 1
   }
  ],
  "icon": "trending-up",
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-11-07 16:00:00.000000",
+ "modified": "2026-11-20 23:48:19.662469",
  "modified_by": "Administrator",
  "module": "Assets",
  "name": "Asset Capitalization",

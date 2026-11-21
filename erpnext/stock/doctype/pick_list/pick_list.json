@@ -16,8 +16,10 @@
   "customer",
   "column_break_4",
   "for_qty",
+  "picking_warehouse_section",
   "parent_warehouse",
   "consider_rejected_warehouses",
+  "picking_warehouse_column",
   "get_item_locations",
   "section_break_cfiw",
   "pick_manually",
@@ -307,6 +309,15 @@
    "label": "Workflow State",
    "no_copy": 1,
    "options": "Workflow State"
+  },
+  {
+   "fieldname": "picking_warehouse_section",
+   "fieldtype": "Section Break",
+   "label": "Picking Warehouse"
+  },
+  {
+   "fieldname": "picking_warehouse_column",
+   "fieldtype": "Column Break"
   }
  ],
  "icon": "list-checks",

@@ -6,12 +6,13 @@
   "item_code",
   "item_name",
   "qty",
+  "source_and_recipient_section",
   "source_warehouse",
   "material_request_item",
+  "source_location",
   "item_column",
   "asset",
   "quality_inspection",
-  "source_location",
   "target_location",
   "balance_section",
   "issued_qty",
@@ -20,6 +21,7 @@
   "adjusted_qty",
   "sold_qty",
   "outstanding_qty",
+  "serial_batch_section",
   "batch_no",
   "serial_no",
   "valuation_rate"
@@ -52,6 +54,11 @@
    "columns": 1
   },
   {
+   "fieldname": "source_and_recipient_section",
+   "fieldtype": "Section Break",
+   "label": "Source and Recipient"
+  },
+  {
    "fieldname": "source_warehouse",
    "fieldtype": "Link",
    "label": "Source Warehouse",
@@ -70,6 +77,13 @@
    "hidden": 1
   },
   {
+   "fieldname": "source_location",
+   "fieldtype": "Link",
+   "label": "Source Location",
+   "options": "Location",
+   "read_only": 1
+  },
+  {
    "fieldname": "item_column",
    "fieldtype": "Column Break"
   },
@@ -85,11 +99,13 @@
    "columns": 2
   },
   {
-   "fieldname": "source_location",
+   "fieldname": "quality_inspection",
+   "label": "Quality Inspection",
    "fieldtype": "Link",
-   "label": "Source Location",
-   "options": "Location",
-   "read_only": 1
+   "options": "Quality Inspection",
+   "read_only": 1,
+   "no_copy": 1,
+   "print_hide": 1
   },
   {
    "fieldname": "target_location",
@@ -142,6 +158,11 @@
    "bold": 1
   },
   {
+   "fieldname": "serial_batch_section",
+   "fieldtype": "Section Break",
+   "label": "Issued Serial and Batch"
+  },
+  {
    "fieldname": "batch_no",
    "fieldtype": "Link",
    "label": "Issued Batch No",
@@ -163,15 +184,6 @@
    "label": "Issue Valuation Rate",
    "read_only": 1,
    "hidden": 1
-  },
-  {
-   "fieldname": "quality_inspection",
-   "label": "Quality Inspection",
-   "fieldtype": "Link",
-   "options": "Quality Inspection",
-   "read_only": 1,
-   "no_copy": 1,
-   "print_hide": 1
   }
  ],
  "istable": 1,

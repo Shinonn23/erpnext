@@ -13,8 +13,9 @@
   "country",
   "disabled",
   "column_break_9",
-  "warehouse",
   "company_address",
+  "warehouse_section",
+  "warehouse",
   "accounting_tab",
   "section_break_11",
   "payments",
@@ -45,8 +46,10 @@
   "allow_partial_payment",
   "accounting_dimensions_section",
   "cost_center",
+  "department",
   "dimension_col_break",
   "project",
+  "territory",
   "pos_configurations_tab",
   "section_break_14",
   "action_on_new_invoice",
@@ -544,6 +547,25 @@
   {
    "fieldname": "column_break_hwfg",
    "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "department",
+   "fieldtype": "Link",
+   "label": "Department",
+   "options": "Department",
+   "print_hide": 1
+  },
+  {
+   "fieldname": "territory",
+   "fieldtype": "Link",
+   "label": "Territory",
+   "options": "Territory",
+   "print_hide": 1
+  },
+  {
+   "fieldname": "warehouse_section",
+   "fieldtype": "Section Break",
+   "label": "Warehouse"
   }
  ],
  "grid_page_length": 50,
@@ -572,7 +594,7 @@
    "link_fieldname": "pos_profile"
   }
  ],
- "modified": "2026-09-16 11:42:07.000000",
+ "modified": "2026-11-20 23:48:19.662469",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "POS Profile",

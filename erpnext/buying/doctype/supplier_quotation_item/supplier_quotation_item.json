@@ -61,6 +61,7 @@
   "weight_uom",
   "warehouse_and_reference",
   "warehouse",
+  "source_documents_section",
   "prevdoc_doctype",
   "material_request",
   "sales_order",
@@ -373,7 +374,7 @@
   {
    "fieldname": "warehouse_and_reference",
    "fieldtype": "Section Break",
-   "label": "Warehouse and Reference"
+   "label": "Warehouse"
   },
   {
    "fieldname": "warehouse",
@@ -609,6 +610,11 @@
   {
    "fieldname": "col_break_6",
    "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "source_documents_section",
+   "fieldtype": "Section Break",
+   "label": "Source Documents"
   }
  ],
  "idx": 1,

@@ -69,6 +69,7 @@
   "weight_uom",
   "reference",
   "warehouse",
+  "source_documents_section",
   "against_blanket_order",
   "blanket_order",
   "blanket_order_rate",
@@ -486,7 +487,7 @@
   {
    "fieldname": "reference",
    "fieldtype": "Section Break",
-   "label": "Warehouse and Reference"
+   "label": "Warehouse"
   },
   {
    "fieldname": "prevdoc_doctype",
@@ -709,6 +710,11 @@
    "non_negative": 1,
    "read_only": 1,
    "reqd": 1
+  },
+  {
+   "fieldname": "source_documents_section",
+   "fieldtype": "Section Break",
+   "label": "Source Documents"
   }
  ],
  "idx": 1,

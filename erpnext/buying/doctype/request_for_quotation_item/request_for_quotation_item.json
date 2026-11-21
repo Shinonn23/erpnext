@@ -147,7 +147,7 @@
   {
    "fieldname": "warehouse_and_reference",
    "fieldtype": "Section Break",
-   "label": "Warehouse and Reference"
+   "label": "Warehouse"
   },
   {
    "columns": 2,
@@ -177,7 +177,8 @@
   },
   {
    "fieldname": "col_break4",
-   "fieldtype": "Column Break"
+   "fieldtype": "Section Break",
+   "label": "Source Documents"
   },
   {
    "fieldname": "material_request_item",

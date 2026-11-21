@@ -24,15 +24,12 @@ function make_shipment_from_stock_asset_transaction(frm) {
 
 function sync_shipment_warehouse_fields(frm) {
 	const shipping = Boolean(frm.doc.requires_shipment);
-	frm.toggle_display("to_warehouse", !shipping);
 	frm.toggle_display("shipment_destination_warehouse", shipping);
 	frm.toggle_display("add_to_transit", !shipping);
 	frm.set_df_property("shipment_destination_warehouse", "reqd", shipping);
 	frm.set_df_property("shipment_destination_warehouse", "read_only", Boolean(frm.doc.shipment));
 	frm.set_df_property("requires_shipment", "read_only", Boolean(frm.doc.shipment));
-	if (frm.fields_dict.items) {
-		frm.fields_dict.items.grid.update_docfield_property("t_warehouse", "hidden", shipping);
-	}
+	frm.trigger("toggle_warehouse_fields");
 }
 
 erpnext.landed_cost_taxes_and_charges.setup_triggers("Stock Entry");
@@ -322,7 +319,6 @@ frappe.ui.form.on("Stock Entry", {
 
 	refresh: function (frm) {
 		frm.trigger("get_items_from_transit_entry");
-		frm.trigger("toggle_warehouse_fields");
 		sync_shipment_warehouse_fields(frm);
 		if (frm.doc.shipment && frappe.model.can_read("Shipment")) {
 			frm.add_custom_button(
@@ -909,21 +905,27 @@ frappe.ui.form.on("Stock Entry", {
 	},
 
 	toggle_warehouse_fields(frm) {
-		// each Storage Location column follows its warehouse: a purpose with no source has no source location
-		// column, one with no target no target location column (as asset_movement.js does for its locations)
-		const has_source = !["Material Receipt", "Receive from Customer"].includes(frm.doc.purpose);
-		const has_target = !["Material Issue"].includes(frm.doc.purpose);
-		const grid = frm.fields_dict["items"].grid;
-		for (const [fieldname, shown] of [
-			["s_warehouse", has_source],
-			["storage_location", has_source],
-			["t_warehouse", has_target],
-			["to_storage_location", has_target],
-		]) {
-			grid.update_docfield_property(fieldname, "in_list_view", shown ? 1 : 0);
-		}
+		const { purpose, requires_shipment } = frm.doc;
+		const has_source = !["Material Receipt", "Receive from Customer", "Subcontracting Return"].includes(
+			purpose
+		);
+		const has_target = ![
+			"Material Issue",
+			"Material Consumption for Manufacture",
+			"Return Raw Material to Customer",
+			"Subcontracting Delivery",
+		].includes(purpose);
+		const show_target_warehouse = has_target && !requires_shipment;
+		frm.toggle_display("from_warehouse", has_source);
+		frm.toggle_display("to_warehouse", show_target_warehouse);
 
-		grid.reset_grid();
+		const grid = frm.fields_dict.items.grid;
+		const layout = `${has_source}:${has_target}:${show_target_warehouse}`;
+		if (grid.stock_entry_warehouse_layout === layout) return;
+		grid.stock_entry_warehouse_layout = layout;
+		grid.set_column_disp_in_list_view(["s_warehouse", "storage_location"], has_source);
+		grid.set_column_disp_in_list_view("t_warehouse", show_target_warehouse);
+		grid.set_column_disp_in_list_view("to_storage_location", has_target);
 	},
 
 	purpose: function (frm) {
@@ -1909,9 +1911,6 @@ erpnext.stock.StockEntry = class StockEntry extends erpnext.stock.StockControlle
 	}
 
 	toggle_related_fields(doc) {
-		this.frm.toggle_enable("from_warehouse", doc.purpose != "Material Receipt");
-		this.frm.toggle_enable("to_warehouse", doc.purpose != "Material Issue");
-
 		this.frm.fields_dict["items"].grid.set_column_disp(
 			"retain_sample",
 			doc.purpose == "Material Receipt"

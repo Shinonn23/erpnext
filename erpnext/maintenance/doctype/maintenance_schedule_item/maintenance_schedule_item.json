@@ -9,7 +9,6 @@
  "field_order": [
   "item_code",
   "item_name",
-  "service_equipment",
   "description",
   "column_break_4",
   "start_date",
@@ -32,7 +31,6 @@
    "fieldtype": "Link",
    "in_list_view": 1,
    "label": "Item Code",
-   "mandatory_depends_on": "eval:!doc.service_equipment",
    "oldfieldname": "item_code",
    "oldfieldtype": "Link",
    "options": "Item",
@@ -49,13 +47,6 @@
    "oldfieldname": "item_name",
    "oldfieldtype": "Data",
    "read_only": 1
-  },
-  {
-   "fieldname": "service_equipment",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Service Equipment",
-   "options": "Service Equipment"
   },
   {
    "fetch_from": "item_code.description",

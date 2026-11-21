@@ -9,7 +9,11 @@
  "engine": "InnoDB",
  "field_order": [
   "item_code",
+  "inventory_dimension",
   "warehouse",
+  "warehouse_storage_column",
+  "storage_location",
+  "posting_details_section",
   "posting_date",
   "posting_time",
   "posting_datetime",
@@ -43,9 +47,7 @@
   "is_cancelled",
   "to_rename",
   "serial_no",
-  "batch_no",
-  "inventory_dimension",
-  "storage_location"
+  "batch_no"
  ],
  "fields": [
   {
@@ -359,7 +361,7 @@
   {
    "fieldname": "inventory_dimension",
    "fieldtype": "Section Break",
-   "label": "Inventory Dimension",
+   "label": "Warehouse and Storage",
    "collapsible": 1
   },
   {
@@ -370,6 +372,15 @@
    "read_only": 1,
    "in_standard_filter": 1,
    "search_index": 1
+  },
+  {
+   "fieldname": "warehouse_storage_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "posting_details_section",
+   "fieldtype": "Section Break",
+   "label": "Posting Details"
   }
  ],
  "grid_page_length": 50,

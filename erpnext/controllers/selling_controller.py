@@ -10,7 +10,11 @@ from erpnext.accounts.party import render_address
 from erpnext.controllers.accounts_controller import _get_taxes_and_charges
 from erpnext.controllers.sales_and_purchase_return import get_rate_for_return, is_batch_expired
 from erpnext.controllers.stock_controller import StockController
-from erpnext.setup.doctype.sales_person.sales_person import get_sales_person_stamp, get_territory_of_user
+from erpnext.setup.doctype.sales_person.sales_person import (
+	get_sales_person_department,
+	get_sales_person_stamp,
+	get_territory_of_user,
+)
 from erpnext.stock.doctype.item.item import set_item_default
 from erpnext.stock.get_item_details import get_bin_details, get_conversion_factor
 from erpnext.stock.utils import _get_incoming_rate, get_combine_datetime, get_valuation_method
@@ -142,15 +146,15 @@ class SellingController(StockController):
 				return
 
 		party_territory = self.get_party_territory()
-		territory = party_territory or self.get("territory")
-		if not party_territory and (
-			not territory or territory == frappe.db.get_single_value("Selling Settings", "territory")
-		):
-			# the customer has none and nothing else is known (the default is not a choice): a
-			# Sales Person opening the document keeps it in their own Territory
-			territory = get_territory_of_user(frappe.session.user) or territory
+		default_territory = frappe.db.get_single_value("Selling Settings", "territory")
+		current_territory = self.get("territory")
 
-		if self.is_new() and party_territory:
+		if not current_territory or (self.is_new() and current_territory == default_territory):
+			territory = party_territory or get_territory_of_user(frappe.session.user) or current_territory
+		else:
+			territory = current_territory
+
+		if self.is_new() and party_territory and territory == party_territory:
 			own_territory = get_territory_of_user(frappe.session.user)
 			if own_territory and own_territory != party_territory:
 				frappe.msgprint(
@@ -165,6 +169,31 @@ class SellingController(StockController):
 		if self.meta.has_field("sales_person"):
 			self.sales_person = self.get_territory_stamp(territory)
 			self.set_sales_team_from_sales_person()
+
+		self.set_department_from_sales_person()
+		self.set_item_standard_dimensions()
+
+	def set_department_from_sales_person(self):
+		"""Default Department on selling documents from the Sales Person's Employee record."""
+		if not self.meta.has_field("department") or self.get("department"):
+			return
+
+		sales_person = self.get("sales_person")
+		if not sales_person and self.get("sales_team"):
+			sales_person = self.sales_team[0].get("sales_person")
+
+		if sales_person:
+			department = get_sales_person_department(sales_person)
+			if department:
+				self.department = department
+
+	def set_item_standard_dimensions(self):
+		"""Inherit header department and territory onto item rows that don't specify their own."""
+		for item in self.get("items") or []:
+			if self.get("department") and item.meta.has_field("department") and not item.get("department"):
+				item.department = self.department
+			if self.get("territory") and item.meta.has_field("territory") and not item.get("territory"):
+				item.territory = self.territory
 
 	def get_territory_party(self):
 		if self.get("customer"):

@@ -8,14 +8,15 @@
  "field_order": [
   "operation",
   "item_code",
-  "source_warehouse",
-  "source_storage_location",
   "operation_row_id",
   "column_break_3",
   "item_name",
   "description",
   "allow_alternative_item",
   "include_item_in_manufacturing",
+  "warehouse_section",
+  "source_warehouse",
+  "source_storage_location",
   "qty_section",
   "required_qty",
   "stock_uom",
@@ -211,6 +212,11 @@
    "fieldtype": "Link",
    "label": "Source Storage Location",
    "options": "Storage Location"
+  },
+  {
+   "fieldname": "warehouse_section",
+   "fieldtype": "Section Break",
+   "label": "Warehouse and Storage Location"
   }
  ],
  "grid_page_length": 50,

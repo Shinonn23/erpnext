@@ -371,6 +371,12 @@ class SalesInvoice(SellingController):
 
 		self.validate_delivery_note()
 
+		from erpnext.accounts.doctype.payment_term.payment_term_routes import (
+			validate_deposit_invoice_amount,
+		)
+
+		validate_deposit_invoice_amount(self)
+
 		is_deferred_invoice = any(d.get("enable_deferred_revenue") for d in self.get("items"))
 
 		# validate service stop date to lie in between start and end date

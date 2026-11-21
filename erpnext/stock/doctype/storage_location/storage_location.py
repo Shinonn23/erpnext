@@ -7,8 +7,10 @@ from frappe.desk.reportview import get_match_cond
 from frappe.model.document import Document
 from frappe.utils import cint, cstr, flt, get_time, getdate
 
-# Every active leaf Warehouse gets this location as its default, so stock rows are filled in.
+# Every active leaf Warehouse gets a default location so stock rows are filled in:
+# STAGING (Receiving) for sellable warehouses, HOLDING (Holding) for holding warehouses.
 DEFAULT_LOCATION_CODE = "STAGING"
+DEFAULT_HOLDING_LOCATION_CODE = "HOLDING"
 
 # What the bin is for (Location Type). The Warehouse Type says what the stock is; the Location Type says what the bin is
 # for. A Receiving location is where goods land; they leave it only by a Stock Entry: never sold, issued, lent, converted
@@ -57,13 +59,33 @@ def receiving_location_sql(expression, warehouse_expression=None):
 
 
 def is_stock_type_warehouse(warehouse):
-	"""The warehouse holds ordinary stock (Warehouse Type Stock, or none): not a holding warehouse such as Quarantine,
-	Lost, Found, Borrowed, Write-Off, Frozen or Transit."""
+	"""The warehouse holds ordinary sellable stock (its Warehouse Type allows sales or issue, or has no type): not a
+	holding warehouse such as Quarantine, Lost, Found, Borrowed, Write-Off, Frozen or Transit."""
 	if not warehouse:
 		return False
-	return (
-		frappe.get_cached_value("Warehouse", warehouse, "warehouse_type") or STOCK_WAREHOUSE_TYPE
-	) == STOCK_WAREHOUSE_TYPE
+	warehouse_type = frappe.get_cached_value("Warehouse", warehouse, "warehouse_type")
+	if not warehouse_type:
+		return True
+	if warehouse_type == STOCK_WAREHOUSE_TYPE:
+		return True
+	from erpnext.stock.warehouse_policy import SELLABLE_OPERATIONS
+
+	flags = frappe.get_cached_value(
+		"Warehouse Type",
+		warehouse_type,
+		[f"allow_{operation}" for operation in SELLABLE_OPERATIONS],
+		as_dict=True,
+	)
+	return bool(flags and any(cint(flags.get(f"allow_{operation}")) for operation in SELLABLE_OPERATIONS))
+
+
+@frappe.whitelist()
+def allowed_location_types(warehouse):
+	"""Location Types allowed in ``warehouse``: Receiving/Storage/Sales Counter for a sellable warehouse, Holding only
+	for a holding warehouse."""
+	if not warehouse:
+		return list(LOCATION_TYPES)
+	return [RECEIVING, STORAGE, SALES_COUNTER] if is_stock_type_warehouse(warehouse) else [HOLDING]
 
 
 def sales_counter_location(warehouse):
@@ -121,6 +143,13 @@ class StorageLocation(Document):
 		)
 		if not warehouse or warehouse.is_group or warehouse.disabled:
 			frappe.throw(_("Storage Location requires an active, non-group Warehouse."))
+		allowed = allowed_location_types(self.warehouse)
+		if self.location_type and self.location_type not in allowed:
+			frappe.throw(
+				_("Warehouse {0} only allows Location Type: {1}.").format(
+					self.warehouse, ", ".join(_(t) for t in allowed)
+				)
+			)
 		if not self.is_new() and self.has_value_changed("warehouse"):
 			if frappe.db.has_column("Stock Ledger Entry", "storage_location") and frappe.db.exists(
 				"Stock Ledger Entry", {"storage_location": self.name}
@@ -131,35 +160,14 @@ class StorageLocation(Document):
 
 
 def setup_storage_location_dimension():
-	"""Provision the built-in dimension on installation and migration, preserving user settings."""
+	"""Clean up legacy Inventory Dimension metadata; Storage Location is a native dimension."""
 	if not frappe.db.exists("DocType", "Storage Location"):
 		return
 	remove_legacy_storage_location_custom_field()
 	remove_loan_inventory_dimension_custom_fields()
 	if frappe.db.exists("Inventory Dimension", "Storage Location"):
-		dimension = frappe.get_doc("Inventory Dimension", "Storage Location")
-		if (
-			dimension.reference_document != "Storage Location"
-			or dimension.source_fieldname != "storage_location"
-			or dimension.target_fieldname != "storage_location"
-		):
-			frappe.throw(
-				_("The existing Storage Location Inventory Dimension conflicts with the built-in dimension.")
-			)
-		dimension.add_custom_fields()
-		return
-	dimension = frappe.get_doc(
-		{
-			"doctype": "Inventory Dimension",
-			"dimension_name": "Storage Location",
-			"reference_document": "Storage Location",
-			"apply_to_all_doctypes": 1,
-			"reqd": 0,
-			"validate_negative_stock": 1,
-		}
-	)
-	dimension.flags.setup_storage_location_dimension = True
-	dimension.insert(ignore_permissions=True)
+		frappe.db.delete("Inventory Dimension", "Storage Location")
+		frappe.clear_cache()
 
 
 def remove_legacy_storage_location_custom_field():
@@ -275,13 +283,16 @@ def remove_loan_inventory_dimension_custom_fields():
 
 
 def ensure_default_storage_location(warehouse):
-	"""Give an active leaf Warehouse a STAGING location and make it the default when none is set: a Receiving location
-	in a stock warehouse (goods land there and are put away), the Holding bin of any other warehouse."""
+	"""Give an active leaf Warehouse a default location when none is set: STAGING (Receiving) in a sellable warehouse,
+	HOLDING (Holding) in a holding warehouse."""
 	if warehouse.is_group or warehouse.disabled or warehouse.default_storage_location:
 		return None
+	sellable = is_stock_type_warehouse(warehouse.name)
+	code = DEFAULT_LOCATION_CODE if sellable else DEFAULT_HOLDING_LOCATION_CODE
+	location_type = RECEIVING if sellable else HOLDING
 	location = frappe.db.get_value(
 		"Storage Location",
-		{"warehouse": warehouse.name, "location_code": DEFAULT_LOCATION_CODE},
+		{"warehouse": warehouse.name, "location_code": code},
 		["name", "disabled"],
 		as_dict=True,
 	)
@@ -294,10 +305,8 @@ def ensure_default_storage_location(warehouse):
 			{
 				"doctype": "Storage Location",
 				"warehouse": warehouse.name,
-				"location_code": DEFAULT_LOCATION_CODE,
-				"location_type": RECEIVING
-				if (warehouse.get("warehouse_type") or STOCK_WAREHOUSE_TYPE) == STOCK_WAREHOUSE_TYPE
-				else HOLDING,
+				"location_code": code,
+				"location_type": location_type,
 			}
 		).insert(ignore_permissions=True)
 	warehouse.db_set("default_storage_location", location.name, update_modified=False)

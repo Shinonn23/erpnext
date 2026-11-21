@@ -28,7 +28,6 @@
   "company",
   "location",
   "custodian",
-  "department",
   "maintenance_required",
   "is_demo_asset",
   "demo_loan_status",
@@ -76,7 +75,9 @@
   "other_info_tab",
   "accounting_dimensions_section",
   "cost_center",
+  "department",
   "dimension_col_break",
+  "territory",
   "insurance_section",
   "policy_number",
   "insurer",
@@ -136,6 +137,7 @@
   {
    "depends_on": "item_code",
    "fetch_from": "item_code.asset_category",
+   "fetch_if_empty": 1,
    "fieldname": "asset_category",
    "fieldtype": "Link",
    "in_list_view": 1,
@@ -143,8 +145,7 @@
    "label": "Asset Category",
    "options": "Asset Category",
    "read_only": 0,
-   "read_only_depends_on": "eval:doc.docstatus != 0",
-   "fetch_if_empty": 1
+   "read_only_depends_on": "eval:doc.docstatus != 0"
   },
   {
    "default": "Company",
@@ -687,6 +688,13 @@
   {
    "fieldname": "column_break_ocrc",
    "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "territory",
+   "fieldtype": "Link",
+   "label": "Territory",
+   "options": "Territory",
+   "print_hide": 1
   }
  ],
  "icon": "building",
@@ -739,7 +747,7 @@
    "table_fieldname": "assets"
   }
  ],
- "modified": "2026-11-07 23:00:00.000000",
+ "modified": "2026-11-20 23:48:19.662469",
  "modified_by": "Administrator",
  "module": "Assets",
  "name": "Asset",

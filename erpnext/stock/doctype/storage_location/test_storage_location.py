@@ -65,12 +65,13 @@ class TestStorageLocation(ERPNextTestSuite):
 		)
 		self.assertEqual([row[0] for row in found], [self.warehouse])
 
-	def test_dimension_setup_preserves_settings(self):
-		dimension = frappe.get_doc("Inventory Dimension", "Storage Location")
-		dimension.validate_negative_stock = 0
-		dimension.save()
+	def test_storage_location_is_native_dimension(self):
+		from erpnext.stock.doctype.inventory_dimension.inventory_dimension import get_inventory_dimensions
+
 		setup_storage_location_dimension()
-		self.assertEqual(frappe.get_doc("Inventory Dimension", "Storage Location").validate_negative_stock, 0)
+		self.assertFalse(frappe.db.exists("Inventory Dimension", "Storage Location"))
+		dimensions = get_inventory_dimensions()
+		self.assertTrue(any(d.fieldname == "storage_location" for d in dimensions))
 		self.assertTrue(frappe.get_meta("Stock Entry Detail").has_field("to_storage_location"))
 		self.assertFalse(
 			frappe.db.exists("Custom Field", {"dt": "Stock Count Item", "fieldname": "storage_location"})

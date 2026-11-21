@@ -75,7 +75,7 @@ function hidden_movement_values(frm, row) {
 		to_employee: frm.doc.purpose === "Transfer" ? row.from_employee || null : null,
 		target_department: null,
 	};
-	if (!row.service_equipment && !frm.doc.is_borrowing_transaction && !frm.doc.borrowing) {
+	if (!frm.doc.is_borrowing_transaction && !frm.doc.borrowing) {
 		for (const fieldname of CLEARED_LOCATIONS) {
 			if (!shown.has(fieldname)) values[fieldname] = null;
 		}
@@ -108,14 +108,6 @@ async function set_material_request_purpose_lock(frm, material_request = null) {
 
 frappe.ui.form.on("Asset Movement", {
 	setup: (frm) => {
-		// Service Equipment rows: the equipment of the movement's company that is not retired
-		frm.set_query("service_equipment", "assets", (doc) => ({
-			filters: { company: doc.company, status: ["!=", "Retired"] },
-		}));
-		frm.set_query("service_target_address", (doc) => ({
-			query: "frappe.contacts.doctype.address.address.address_query",
-			filters: { link_doctype: "Customer", link_name: doc.service_target_customer },
-		}));
 		frm.set_query("to_employee", "assets", (doc) => {
 			return {
 				filters: {

@@ -10,10 +10,11 @@
   "column_break_3",
   "stock_uom",
   "conversion_factor",
-  "reserve_warehouse",
   "column_break_6",
   "bom_detail_no",
   "reference_name",
+  "warehouse_section",
+  "reserve_warehouse",
   "section_break_9",
   "rate",
   "column_break_11",
@@ -172,6 +173,11 @@
    "no_copy": 1,
    "non_negative": 1,
    "read_only": 1
+  },
+  {
+   "fieldname": "warehouse_section",
+   "fieldtype": "Section Break",
+   "label": "Warehouse"
   }
  ],
  "hide_toolbar": 1,

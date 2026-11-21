@@ -41,12 +41,16 @@
   "rm_supp_cost",
   "warehouse_and_reference",
   "warehouse",
+  "storage_location",
+  "column_break_40",
+  "rejected_warehouse",
+  "inventory_dimension",
+  "reference_section",
   "subcontracting_order",
   "subcontracting_order_item",
   "subcontracting_receipt_item",
   "job_card",
-  "column_break_40",
-  "rejected_warehouse",
+  "reference_column",
   "bom",
   "include_exploded_items",
   "quality_inspection",
@@ -74,15 +78,14 @@
   "service_expense_account",
   "accounting_dimensions_section",
   "cost_center",
+  "department",
   "dimension_col_break",
   "project",
-  "department",
+  "territory",
   "section_break_80",
   "page_break",
   "purchase_order",
-  "purchase_order_item",
-  "inventory_dimension",
-  "storage_location"
+  "purchase_order_item"
  ],
  "fields": [
   {
@@ -271,7 +274,7 @@
   {
    "fieldname": "warehouse_and_reference",
    "fieldtype": "Section Break",
-   "label": "Warehouse and Reference"
+   "label": "Receiving Warehouses"
   },
   {
    "bold": 1,
@@ -663,13 +666,29 @@
    "label": "Storage Location",
    "options": "Storage Location",
    "search_index": 1
+  },
+  {
+   "fieldname": "territory",
+   "fieldtype": "Link",
+   "label": "Territory",
+   "options": "Territory",
+   "print_hide": 1
+  },
+  {
+   "fieldname": "reference_section",
+   "fieldtype": "Section Break",
+   "label": "References"
+  },
+  {
+   "fieldname": "reference_column",
+   "fieldtype": "Column Break"
   }
  ],
  "grid_page_length": 50,
  "idx": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-10-21 05:30:00.000000",
+ "modified": "2026-11-20 23:48:19.662469",
  "modified_by": "Administrator",
  "module": "Subcontracting",
  "name": "Subcontracting Receipt Item",

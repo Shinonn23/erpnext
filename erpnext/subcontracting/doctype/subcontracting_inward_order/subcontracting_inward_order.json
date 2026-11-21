@@ -17,10 +17,12 @@
   "column_break_7",
   "company",
   "transaction_date",
-  "customer_warehouse",
   "amended_from",
-  "items_section",
+  "warehouses_section",
+  "customer_warehouse",
+  "warehouses_column",
   "set_delivery_warehouse",
+  "items_section",
   "items",
   "raw_materials_received_section",
   "received_items",
@@ -299,6 +301,15 @@
    "label": "Secondary Items",
    "no_copy": 1,
    "options": "Subcontracting Inward Order Secondary Item"
+  },
+  {
+   "fieldname": "warehouses_section",
+   "fieldtype": "Section Break",
+   "label": "Warehouses"
+  },
+  {
+   "fieldname": "warehouses_column",
+   "fieldtype": "Column Break"
   }
  ],
  "grid_page_length": 50,

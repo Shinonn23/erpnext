@@ -40,7 +40,9 @@
   "additional_discount_percentage",
   "additional_discount_amount",
   "accounting_dimensions_section",
-  "cost_center"
+  "cost_center",
+  "department",
+  "territory"
  ],
  "fields": [
   {
@@ -254,6 +256,20 @@
    "fieldtype": "Int",
    "label": "Number of Days",
    "mandatory_depends_on": "eval:doc.generate_invoice_at === \"Days before the current subscription period\""
+  },
+  {
+   "fieldname": "department",
+   "fieldtype": "Link",
+   "label": "Department",
+   "options": "Department",
+   "print_hide": 1
+  },
+  {
+   "fieldname": "territory",
+   "fieldtype": "Link",
+   "label": "Territory",
+   "options": "Territory",
+   "print_hide": 1
   }
  ],
  "icon": "calendar-sync",
@@ -270,7 +286,7 @@
    "link_fieldname": "subscription"
   }
  ],
- "modified": "2025-12-23 19:42:52.036034",
+ "modified": "2026-11-20 23:48:19.662469",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Subscription",

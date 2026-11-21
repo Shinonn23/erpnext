@@ -26,8 +26,10 @@
   "company",
   "accounting_dimensions_section",
   "cost_center",
+  "department",
   "dimension_col_break",
   "project",
+  "territory",
   "help_section",
   "loyalty_program_help"
  ],
@@ -149,15 +151,29 @@
    "fieldtype": "Column Break"
   },
   {
-    "fieldname": "project",
-    "fieldtype": "Link",
-    "label": "Project",
-    "options": "Project"
+   "fieldname": "project",
+   "fieldtype": "Link",
+   "label": "Project",
+   "options": "Project"
+  },
+  {
+   "fieldname": "department",
+   "fieldtype": "Link",
+   "label": "Department",
+   "options": "Department",
+   "print_hide": 1
+  },
+  {
+   "fieldname": "territory",
+   "fieldtype": "Link",
+   "label": "Territory",
+   "options": "Territory",
+   "print_hide": 1
   }
  ],
  "icon": "gift",
  "links": [],
- "modified": "2026-09-16 11:42:07.000000",
+ "modified": "2026-11-20 23:48:19.662469",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Loyalty Program",

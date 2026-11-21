@@ -22,13 +22,15 @@
   "return_against",
   "accounting_dimensions_section",
   "cost_center",
+  "department",
   "dimension_col_break",
   "project",
-  "department",
+  "territory",
   "sec_warehouse",
   "set_warehouse",
-  "rejected_warehouse",
   "col_break_warehouse",
+  "rejected_warehouse",
+  "supplier_warehouse_section",
   "supplier_warehouse",
   "items_section",
   "items",
@@ -245,7 +247,8 @@
   },
   {
    "fieldname": "sec_warehouse",
-   "fieldtype": "Section Break"
+   "fieldtype": "Section Break",
+   "label": "Receiving Warehouses"
   },
   {
    "description": "Sets 'Accepted Warehouse' in each row of the Items table.",
@@ -682,13 +685,25 @@
    "fieldtype": "Button",
    "label": "Get Secondary Items",
    "options": "get_secondary_items"
+  },
+  {
+   "fieldname": "territory",
+   "fieldtype": "Link",
+   "label": "Territory",
+   "options": "Territory",
+   "print_hide": 1
+  },
+  {
+   "fieldname": "supplier_warehouse_section",
+   "fieldtype": "Section Break",
+   "label": "Job Worker Warehouse"
   }
  ],
  "icon": "package-check",
  "in_create": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-10-21 05:30:00.000000",
+ "modified": "2026-11-20 23:48:19.662469",
  "modified_by": "Administrator",
  "module": "Subcontracting",
  "name": "Subcontracting Receipt",

@@ -262,6 +262,8 @@ erpnext.TransactionController = class TransactionController extends erpnext.taxe
 			this.frm.trigger("payment_terms_template");
 		}
 
+		this.show_payment_schedule_paid_columns();
+
 		if (this.frm.fields_dict["taxes"]) {
 			this["taxes_remove"] = this.calculate_taxes_and_totals;
 		}
@@ -2689,14 +2691,113 @@ erpnext.TransactionController = class TransactionController extends erpnext.taxe
 		}
 	}
 
+	show_payment_schedule_paid_columns() {
+		const field = this.frm.fields_dict["payment_schedule"];
+		const grid = field && field.grid;
+		if (!grid || this.frm.doc.docstatus !== 1) return;
+		const paid_columns = ["paid_amount", "outstanding"];
+		const shown = paid_columns.map((fieldname) => {
+			const col = (grid.docfields || []).find((df) => df.fieldname === fieldname);
+			return Boolean(col) && cint(col.in_list_view) === 1;
+		});
+		if (shown.every(Boolean)) return;
+		try {
+			for (const fieldname of paid_columns) {
+				grid.update_docfield_property(fieldname, "in_list_view", 1);
+			}
+			grid.reset_grid();
+		} catch (e) {
+			// grid column visibility must never break form refresh
+		}
+	}
+
 	make_payment_entry() {
 		let via_journal_entry = this.frm.doc.__onload && this.frm.doc.__onload.make_payment_via_journal_entry;
 		if (this.has_discount_in_schedule() && !via_journal_entry) {
 			// If early payment discount is applied, ask user for reference date
 			this.prompt_user_for_reference_date();
-		} else {
-			this.make_mapped_payment_entry();
+			return;
 		}
+		if (via_journal_entry || !this.frm.doc.payment_terms_template) {
+			this.make_mapped_payment_entry();
+			return;
+		}
+		const unpaid_terms = (this.frm.doc.payment_schedule || []).filter(
+			(row) => row.payment_term && flt(flt(row.payment_amount) - flt(row.paid_amount), 4) > 0
+		);
+		if (unpaid_terms.length <= 1) {
+			this.make_mapped_payment_entry();
+			return;
+		}
+		frappe.db
+			.get_value(
+				"Payment Terms Template",
+				this.frm.doc.payment_terms_template,
+				"allocate_payment_based_on_payment_terms"
+			)
+			.then((r) => {
+				if (r.message && cint(r.message.allocate_payment_based_on_payment_terms)) {
+					this.prompt_user_for_payment_term(unpaid_terms);
+				} else {
+					this.make_mapped_payment_entry();
+				}
+			})
+			.catch(() => {
+				this.make_mapped_payment_entry();
+			});
+	}
+
+	prompt_user_for_payment_term(unpaid_terms) {
+		const me = this;
+		const doc = this.frm.doc;
+		const is_order = ["Purchase Order", "Sales Order"].includes(doc.doctype);
+		const default_row =
+			(is_order &&
+				unpaid_terms.find(
+					(row) =>
+						row.payment_term_type === "Advance" ||
+						(doc.doctype === "Purchase Order" &&
+							row.due_date_based_on === "Day(s) after order date")
+				)) ||
+			unpaid_terms[0];
+
+		const options = unpaid_terms.map((row) => {
+			const owed = flt(flt(row.payment_amount) - flt(row.paid_amount), 4);
+			const type_tag = row.payment_term_type && row.payment_term_type !== "Regular" ? ` [${__(row.payment_term_type)}]` : "";
+			const due = row.due_date ? ` — ${__("Due")}: ${frappe.datetime.str_to_user(row.due_date)}` : "";
+			return {
+				label: `${row.payment_term}${type_tag} (${format_currency(owed, doc.currency)})${due}`,
+				value: row.payment_term,
+			};
+		});
+		options.push({
+			label: __("Pay Full Outstanding (All Terms)"),
+			value: "__all__",
+		});
+
+		const dialog = new frappe.ui.Dialog({
+			title: __("Select Payment Term"),
+			fields: [
+				{
+					fieldname: "payment_term",
+					fieldtype: "Select",
+					label: __("Payment Term"),
+					options: options,
+					default: default_row.payment_term,
+					reqd: 1,
+				},
+			],
+			primary_action_label: __("Create Payment"),
+			primary_action(values) {
+				dialog.hide();
+				me.make_mapped_payment_entry({
+					dt: doc.doctype,
+					dn: doc.name,
+					payment_term: values.payment_term,
+				});
+			},
+		});
+		dialog.show();
 	}
 
 	make_mapped_payment_entry(args) {

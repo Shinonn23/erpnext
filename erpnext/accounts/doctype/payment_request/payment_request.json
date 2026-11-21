@@ -44,8 +44,10 @@
   "swift_number",
   "accounting_dimensions_section",
   "cost_center",
+  "department",
   "dimension_col_break",
   "project",
+  "territory",
   "recipient_and_message",
   "print_format",
   "email_to",
@@ -483,6 +485,20 @@
    "label": "Workflow State",
    "no_copy": 1,
    "options": "Workflow State"
+  },
+  {
+   "fieldname": "department",
+   "fieldtype": "Link",
+   "label": "Department",
+   "options": "Department",
+   "print_hide": 1
+  },
+  {
+   "fieldname": "territory",
+   "fieldtype": "Link",
+   "label": "Territory",
+   "options": "Territory",
+   "print_hide": 1
   }
  ],
  "grid_page_length": 50,
@@ -491,7 +507,7 @@
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-11-07 16:00:00.000000",
+ "modified": "2026-11-20 23:48:19.662469",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Payment Request",

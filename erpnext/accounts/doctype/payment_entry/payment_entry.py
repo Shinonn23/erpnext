@@ -3062,6 +3062,7 @@ def get_payment_entry(
 	payment_type: str | None = None,
 	reference_date: str | date | None = None,
 	created_from_payment_request: bool | None = False,
+	payment_term: str | None = None,
 ):
 	frappe.has_permission("Payment Entry", ptype="create", throw=True)
 
@@ -3071,6 +3072,60 @@ def get_payment_entry(
 	over_billing_allowance = frappe.get_single_value("Accounts Settings", "over_billing_allowance")
 	if dt in ("Sales Order", "Purchase Order") and flt(doc.per_billed, 2) >= (100.0 + over_billing_allowance):
 		frappe.throw(_("Can only make payment against unbilled {0}").format(_(dt)))
+
+	selected_term = None
+	if payment_term == "__all__":
+		selected_term = None
+	elif payment_term:
+		if doc.docstatus != 1:
+			frappe.throw(_("Pay a payment term of a submitted {0} only.").format(_(dt)))
+		schedule = doc.get("payment_schedule") or []
+		if not any(row.payment_term == payment_term for row in schedule):
+			frappe.throw(
+				_("Payment term {0} is not in the payment schedule of {1}.").format(
+					frappe.bold(payment_term), dn
+				)
+			)
+		if not doc.get("payment_terms_template") or not frappe.get_cached_value(
+			"Payment Terms Template", doc.payment_terms_template, "allocate_payment_based_on_payment_terms"
+		):
+			frappe.throw(
+				_(
+					"Payment Terms Template {0} does not allocate payments by payment term. Turn on Allocate "
+					"Payment Based On Payment Terms in it, or use Create > Payment."
+				).format(frappe.bold(doc.get("payment_terms_template") or "-"))
+			)
+		if any(flt(row.get("discount")) for row in schedule):
+			frappe.throw(
+				_("This payment schedule has an early payment discount. Use Create > Payment for the document.")
+			)
+		selected_term = payment_term
+	elif (
+		dt in ("Sales Order", "Purchase Order")
+		and party_amount is None
+		and not (
+			bank_account
+			or bank_amount
+			or payment_type
+			or party_type
+			or reference_date
+			or created_from_payment_request
+		)
+	):
+		from erpnext.accounts.doctype.payment_term.payment_term_routes import get_unpaid_advance_term
+
+		advance_term = get_unpaid_advance_term(doc)
+		if (
+			advance_term
+			and doc.get("payment_terms_template")
+			and frappe.get_cached_value(
+				"Payment Terms Template",
+				doc.payment_terms_template,
+				"allocate_payment_based_on_payment_terms",
+			)
+			and not any(flt(row.get("discount")) for row in doc.get("payment_schedule") or [])
+		):
+			selected_term = advance_term
 
 	if not party_type:
 		party_type = set_party_type(dt)
@@ -3084,6 +3139,22 @@ def get_payment_entry(
 	grand_total, outstanding_amount = set_grand_total_and_outstanding_amount(
 		party_amount, dt, party_account_currency, doc
 	)
+
+	selected_term_reference = None
+	if selected_term:
+		term_references = get_reference_as_per_payment_terms(
+			doc.payment_schedule, dt, dn, doc, grand_total, outstanding_amount, party_account_currency
+		)
+		selected_term_reference = next(
+			(ref for ref in term_references if ref.get("payment_term") == selected_term), None
+		)
+		if not selected_term_reference:
+			frappe.throw(
+				_("Payment term {0} of {1} is already paid in full.").format(
+					frappe.bold(selected_term), dn
+				)
+			)
+		outstanding_amount = flt(selected_term_reference.get("allocated_amount"))
 
 	# bank or cash
 	bank = get_bank_cash_account(doc, bank_account)
@@ -3146,7 +3217,9 @@ def get_payment_entry(
 	if doc.doctype == "Purchase Invoice" and doc.invoice_is_blocked():
 		frappe.msgprint(_("{0} is on hold till {1}").format(doc.name, doc.release_date))
 	else:
-		if doc.doctype in (
+		if selected_term_reference:
+			pe.append("references", selected_term_reference)
+		elif doc.doctype in (
 			"Sales Invoice",
 			"Purchase Invoice",
 			"Purchase Order",

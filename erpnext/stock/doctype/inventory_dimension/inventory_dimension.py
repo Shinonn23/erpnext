@@ -62,30 +62,12 @@ class InventoryDimension(Document):
 			self.dimension_name == "Storage Location"
 			or self.source_fieldname == "storage_location"
 			or self.target_fieldname == "storage_location"
-		) and not self.flags.get("setup_storage_location_dimension"):
+		):
 			frappe.throw(
-				_("Storage Location is managed directly and cannot be configured as an Inventory Dimension.")
+				_("Storage Location is a native dimension and cannot be configured as an Inventory Dimension.")
 			)
 
-		self.validate_builtin_storage_location()
 		self.validate_reference_document()
-
-	def validate_builtin_storage_location(self):
-		if self.is_new() or self.name != "Storage Location":
-			return
-
-		# Negative stock validation is a site-level setting. The built-in dimension's identity and
-		# applicability must stay fixed so it cannot silently disappear from stock transactions.
-		for field in frappe.get_meta("Inventory Dimension").fields:
-			if field.fieldname == "validate_negative_stock":
-				continue
-
-			if self.get(field.fieldname) != frappe.db.get_value(
-				"Inventory Dimension", self.name, field.fieldname
-			):
-				frappe.throw(
-					_("Storage Location is a built-in Inventory Dimension and cannot be reconfigured.")
-				)
 
 	def before_save(self):
 		self.do_not_update_document()
@@ -119,8 +101,6 @@ class InventoryDimension(Document):
 				frappe.throw(_(msg), DoNotChangeError)
 
 	def on_trash(self):
-		if self.dimension_name == "Storage Location":
-			frappe.throw(_("Storage Location is a built-in Inventory Dimension and cannot be deleted."))
 		self.delete_custom_fields()
 
 	def delete_custom_fields(self):
@@ -158,10 +138,7 @@ class InventoryDimension(Document):
 			msg = f"The reference document {self.reference_document} can not be child table."
 			frappe.throw(_(msg), CanNotBeChildDoc)
 
-		if self.reference_document in ["Batch", "Serial No", "Warehouse", "Item"] or (
-			self.reference_document == "Storage Location"
-			and not self.flags.get("setup_storage_location_dimension")
-		):
+		if self.reference_document in ["Batch", "Serial No", "Warehouse", "Item", "Storage Location"]:
 			msg = f"The reference document {self.reference_document} can not be an Inventory Dimension."
 			frappe.throw(_(msg), CanNotBeDefaultDimension)
 
@@ -377,20 +354,43 @@ def get_evaluated_inventory_dimension(doc, sl_dict, parent_doc=None):
 	return filter_dimensions
 
 
+def _native_storage_location_dimension():
+	return frappe._dict(
+		name="Storage Location",
+		dimension_name="Storage Location",
+		fieldname="storage_location",
+		source_fieldname="storage_location",
+		target_fieldname="storage_location",
+		doctype="Storage Location",
+		reference_document="Storage Location",
+		validate_negative_stock=1,
+		type_of_transaction="Both",
+		condition=None,
+		fetch_from_parent=None,
+	)
+
+
 @request_cache
 def get_document_wise_inventory_dimensions(doctype) -> dict:
-	return frappe.get_all(
-		"Inventory Dimension",
-		fields=[
-			"name",
-			"source_fieldname",
-			"condition",
-			"target_fieldname",
-			"type_of_transaction",
-			"fetch_from_parent",
-		],
-		or_filters={"document_type": doctype, "apply_to_all_doctypes": 1},
-	)
+	dimensions = [
+		d
+		for d in frappe.get_all(
+			"Inventory Dimension",
+			fields=[
+				"name",
+				"source_fieldname",
+				"condition",
+				"target_fieldname",
+				"type_of_transaction",
+				"fetch_from_parent",
+			],
+			or_filters={"document_type": doctype, "apply_to_all_doctypes": 1},
+		)
+		if d.name != "Storage Location" and d.source_fieldname != "storage_location"
+	]
+	if doctype in frappe.get_hooks("inventory_dimension_doctypes"):
+		dimensions.insert(0, _native_storage_location_dimension())
+	return dimensions
 
 
 @request_cache
@@ -491,18 +491,24 @@ def get_mandatory_dimension_fields(doctype, dimension) -> list:
 @frappe.whitelist()
 @request_cache
 def get_inventory_dimensions():
-	return frappe.get_all(
-		"Inventory Dimension",
-		fields=[
-			"target_fieldname as fieldname",
-			"source_fieldname",
-			"reference_document as doctype",
-			"validate_negative_stock",
-			"name as dimension_name",
-		],
-		order_by="creation",
-		distinct=True,
-	)
+	dimensions = [
+		d
+		for d in frappe.get_all(
+			"Inventory Dimension",
+			fields=[
+				"target_fieldname as fieldname",
+				"source_fieldname",
+				"reference_document as doctype",
+				"validate_negative_stock",
+				"name as dimension_name",
+			],
+			order_by="creation",
+			distinct=True,
+		)
+		if d.dimension_name != "Storage Location" and d.fieldname != "storage_location"
+	]
+	dimensions.insert(0, _native_storage_location_dimension())
+	return dimensions
 
 
 @frappe.whitelist()

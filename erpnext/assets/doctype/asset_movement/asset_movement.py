@@ -8,7 +8,6 @@ from frappe.model.document import Document
 from frappe.utils import cint, cstr, flt, get_datetime, get_link_to_form
 
 from erpnext.assets.doctype.asset_activity.asset_activity import add_asset_activity
-from erpnext.support import service_equipment as equipment
 
 
 class AssetMovement(Document):
@@ -60,13 +59,6 @@ class AssetMovement(Document):
 	def lock_assets(self):
 		for asset_name in sorted({row.asset for row in self.assets if row.asset}):
 			frappe.db.sql("select name from `tabAsset` where name=%s for update", asset_name)
-		for name in sorted({row.service_equipment for row in self.assets if row.get("service_equipment")}):
-			frappe.db.sql("select name from `tabService Equipment` where name=%s for update", name)
-
-	@property
-	def is_equipment_movement(self):
-		"""A movement of Service Equipment: every row names one, none names an Asset."""
-		return any(row.get("service_equipment") for row in self.assets)
 
 	@frappe.whitelist()
 	def submit(self):
@@ -83,9 +75,6 @@ class AssetMovement(Document):
 		return super().cancel()
 
 	def validate(self):
-		if self.is_equipment_movement:
-			self.validate_equipment_movement()
-			return
 		self.clear_hidden_fields()
 		self.validate_material_request()
 		for d in self.assets:
@@ -93,18 +82,10 @@ class AssetMovement(Document):
 			self.validate_movement(d)
 			self.validate_transaction_date(d)
 
-	# The row fields a purpose does not show are not stored (asset_movement.js MOVEMENT_FIELDS_BY_PURPOSE): an Issue
-	# or a Reassignment has no locations, so a place typed on an earlier purpose never becomes the Asset's location
-	# (get_latest_location_and_custodian reads the latest target), and outside a Reassignment the custodian and
-	# department changes are off. A Receipt keeps the place the asset left (the employee return reads it) and From
-	# Employee is the custodian the system writes on every purpose. Service Equipment rows (validate returns before)
-	# and the rows of a borrowing, whose places borrowing_core writes, are not touched.
 	def clear_hidden_fields(self):
 		if self.get("is_borrowing_transaction") or self.get("borrowing"):
 			return
 		for row in self.assets:
-			if row.get("service_equipment"):
-				continue
 			if self.purpose in ("Issue", "Reassignment"):
 				row.source_location = None
 				row.target_location = None
@@ -157,11 +138,10 @@ class AssetMovement(Document):
 			self.validate_employee(d)
 
 	def validate_transaction_date(self, d):
-		key = ("service_equipment", d.service_equipment) if d.get("service_equipment") else ("asset", d.asset)
 		previous_movement_date = frappe.db.get_value(
 			"Asset Movement",
 			[
-				["Asset Movement Item", key[0], "=", key[1]],
+				["Asset Movement Item", "asset", "=", d.asset],
 				["docstatus", "=", 1],
 				["name", "!=", self.name or ""],
 			],
@@ -271,148 +251,12 @@ class AssetMovement(Document):
 		else:
 			d.target_department = current_department
 
-	# Service Equipment: the movement records a handover and writes the place onto the equipment; it has no
-	# company-asset rules (status, Material Request, borrowing) and no financial effect.
-	def validate_equipment_movement(self):
-		if any(row.get("asset") for row in self.assets):
-			frappe.throw(_("Move Assets and Service Equipment in separate Asset Movements."))
-		# An Installation Note may make the Install movement of its equipment; no request or loan is fulfilled.
-		referenced = self.reference_name and self.reference_doctype != "Installation Note"
-		if referenced or self.get("borrowing") or self.get("is_borrowing_transaction"):
-			frappe.throw(_("A Service Equipment movement cannot fulfil a request or a borrowing."))
-		if self.purpose == "Reassignment":
-			frappe.throw(_("Use Transfer, Receipt or Issue to move Service Equipment."))
-		seen = set()
-		for row in self.assets:
-			if row.service_equipment in seen:
-				frappe.throw(
-					_("Service Equipment {0} is listed more than once in this Movement").format(
-						row.service_equipment
-					)
-				)
-			seen.add(row.service_equipment)
-			self.validate_equipment_row(row)
-
-	def validate_equipment_row(self, row, at_submit=False):
-		current = frappe.db.get_value(
-			"Service Equipment",
-			row.service_equipment,
-			["company", "status", "last_movement", *equipment.PLACE_FIELDS[:5]],
-			as_dict=True,
-			for_update=at_submit,
-		)
-		if not current:
-			frappe.throw(_("Service Equipment {0} does not exist").format(row.service_equipment))
-		if current.company != self.company:
-			frappe.throw(
-				_("Service Equipment {0} does not belong to company {1}").format(
-					row.service_equipment, self.company
-				)
-			)
-		if current.status == "Retired":
-			frappe.throw(_("Service Equipment {0} is retired and cannot move").format(row.service_equipment))
-		if self.docstatus == 0 or at_submit:
-			if at_submit and (row.service_previous_movement or "") != (current.last_movement or ""):
-				frappe.throw(
-					_("A later handover exists for {0}. Save the draft again.").format(row.service_equipment)
-				)
-			row.source_location = current.location
-			row.from_employee = current.custodian
-			row.service_previous_customer = current.customer
-			row.service_previous_address = current.address
-			row.service_previous_status = current.status
-			row.service_previous_movement = current.last_movement
-			row.service_previous_placed_on = current.placed_on
-		target_customer = self.get("service_target_customer")
-		if (
-			target_customer
-			or row.target_location
-			or self.get("service_movement_type")
-			not in (
-				"Return to Supplier",
-				"Retire",
-			)
-		):
-			equipment.validate_placement(
-				self.company,
-				row.target_location,
-				row.to_employee,
-				target_customer,
-				self.get("service_target_address"),
-			)
-		self.validate_transaction_date(row)
-
-	def before_submit(self):
-		if not self.is_equipment_movement:
-			return
-		if not self.get("service_movement_type"):
-			frappe.throw(_("Choose the Handover Type of the equipment."))
-		for row in self.assets:
-			self.validate_equipment_row(row, at_submit=True)
-		equipment.check_private_file(self, "service_evidence")
-
-	def before_cancel(self):
-		if not self.is_equipment_movement:
-			return
-		for row in self.assets:
-			last = frappe.db.get_value(
-				"Service Equipment", row.service_equipment, "last_movement", for_update=True
-			)
-			if last != self.name:
-				frappe.throw(
-					_(
-						"Cancel the later movement of {0} first: only its latest movement can be cancelled."
-					).format(row.service_equipment)
-				)
-
-	def update_equipment_place(self, cancel=False):
-		status = equipment.STATUS_BY_HANDOVER.get(self.get("service_movement_type"))
-		for row in self.assets:
-			if cancel:
-				values = {
-					"location": row.source_location,
-					"custodian": row.from_employee,
-					"customer": row.service_previous_customer,
-					"address": row.service_previous_address,
-					"placed_on": row.service_previous_placed_on,
-					"last_movement": row.service_previous_movement,
-				}
-				# the status goes back only while it is still the one this movement set (a repair may have changed it)
-				current = frappe.db.get_value("Service Equipment", row.service_equipment, "status")
-				if status and current == status:
-					values["status"] = row.service_previous_status
-				subject = _("Movement cancelled, back to its previous place")
-			else:
-				values = {
-					"location": row.target_location,
-					"custodian": row.to_employee,
-					"customer": self.get("service_target_customer"),
-					"address": self.get("service_target_address"),
-					"placed_on": self.transaction_date,
-					"last_movement": self.name,
-				}
-				if status:
-					values["status"] = status
-				subject = _("{0}: moved to {1}").format(
-					_(self.get("service_movement_type") or self.purpose),
-					self.get("service_target_customer") or row.target_location or row.to_employee,
-				)
-			values = {key: value for key, value in values.items() if key != "status" or value}
-			frappe.db.set_value("Service Equipment", row.service_equipment, values)
-			equipment.add_activity(row.service_equipment, subject, self)
-
 	def on_submit(self):
-		if self.is_equipment_movement:
-			self.update_equipment_place()
-			return
 		self.set_latest_location_and_custodian_in_asset()
 		self.update_demo_loan_status()
 		self.update_request_progress()
 
 	def on_cancel(self):
-		if self.is_equipment_movement:
-			self.update_equipment_place(cancel=True)
-			return
 		self.set_latest_location_and_custodian_in_asset()
 		self.update_demo_loan_status()
 		self.update_request_progress()

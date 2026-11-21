@@ -74,17 +74,14 @@ class SalesOrder(SellingController):
 	from typing import TYPE_CHECKING
 
 	if TYPE_CHECKING:
-		from frappe.types import DF
-
 		from erpnext.accounts.doctype.item_wise_tax_detail.item_wise_tax_detail import ItemWiseTaxDetail
 		from erpnext.accounts.doctype.payment_schedule.payment_schedule import PaymentSchedule
 		from erpnext.accounts.doctype.pricing_rule_detail.pricing_rule_detail import PricingRuleDetail
-		from erpnext.accounts.doctype.sales_taxes_and_charges.sales_taxes_and_charges import (
-			SalesTaxesandCharges,
-		)
+		from erpnext.accounts.doctype.sales_taxes_and_charges.sales_taxes_and_charges import SalesTaxesandCharges
 		from erpnext.selling.doctype.sales_order_item.sales_order_item import SalesOrderItem
 		from erpnext.selling.doctype.sales_team.sales_team import SalesTeam
 		from erpnext.stock.doctype.packed_item.packed_item import PackedItem
+		from frappe.types import DF
 
 		additional_discount_percentage: DF.Float
 		address_display: DF.TextEditor | None
@@ -122,9 +119,11 @@ class SalesOrder(SellingController):
 		customer_group: DF.Link | None
 		customer_name: DF.Data | None
 		delivery_date: DF.Date | None
-		delivery_status: DF.Literal[
-			"Not Delivered", "Fully Delivered", "Partly Delivered", "Closed", "Not Applicable"
-		]
+		delivery_status: DF.Literal["Not Delivered", "Fully Delivered", "Partly Delivered", "Closed", "Not Applicable"]
+		department: DF.Link | None
+		deposit_amount: DF.Currency
+		deposit_deduction_method: DF.Literal["Percent", "Full Amount"]
+		deposit_invoice: DF.Data | None
 		disable_rounded_total: DF.Check
 		discount_amount: DF.Currency
 		dispatch_address: DF.TextEditor | None
@@ -132,6 +131,7 @@ class SalesOrder(SellingController):
 		from_date: DF.Date | None
 		grand_total: DF.Currency
 		group_same_items: DF.Check
+		has_deposit: DF.Check
 		has_unit_price_items: DF.Check
 		ignore_default_payment_terms_template: DF.Check
 		ignore_pricing_rule: DF.Check
@@ -158,6 +158,7 @@ class SalesOrder(SellingController):
 		per_billed: DF.Percent
 		per_delivered: DF.Percent
 		per_picked: DF.Percent
+		percent_deposit: DF.Percent
 		plc_conversion_rate: DF.Float
 		po_date: DF.Date | None
 		po_no: DF.Data | None
@@ -179,18 +180,7 @@ class SalesOrder(SellingController):
 		shipping_address_name: DF.Link | None
 		shipping_rule: DF.Link | None
 		skip_delivery_note: DF.Check
-		status: DF.Literal[
-			"",
-			"Draft",
-			"On Hold",
-			"To Pay",
-			"To Deliver and Bill",
-			"To Bill",
-			"To Deliver",
-			"Completed",
-			"Cancelled",
-			"Closed",
-		]
+		status: DF.Literal["", "Draft", "On Hold", "To Pay", "To Deliver and Bill", "To Bill", "To Deliver", "Completed", "Cancelled", "Closed"]
 		tax_category: DF.Link | None
 		tax_id: DF.Data | None
 		taxes: DF.Table[SalesTaxesandCharges]
@@ -211,6 +201,7 @@ class SalesOrder(SellingController):
 		utm_content: DF.Data | None
 		utm_medium: DF.Link | None
 		utm_source: DF.Link | None
+		workflow_state: DF.Link | None
 	# end: auto-generated types
 
 	def __init__(self, *args, **kwargs):
@@ -299,6 +290,10 @@ class SalesOrder(SellingController):
 		self.reset_default_field_value("set_warehouse", "items", "warehouse")
 		if not self.get("is_subcontracted"):
 			self.enable_auto_reserve_stock()
+
+		from erpnext.accounts.doctype.payment_term.payment_term_routes import set_order_payment_route
+
+		set_order_payment_route(self)
 
 	def validate_fg_item_for_subcontracting(self):
 		if self.is_subcontracted:
@@ -713,6 +708,12 @@ class SalesOrder(SellingController):
 		self.validate_drop_ship()
 		self.validate_supplier_after_submit()
 		self.validate_delivery_date()
+
+		from erpnext.accounts.doctype.payment_term.payment_term_routes import (
+			validate_submitted_payment_route,
+		)
+
+		validate_submitted_payment_route(self)
 
 	def validate_supplier_after_submit(self):
 		"""Check that supplier is the same after submit if PO is already made"""

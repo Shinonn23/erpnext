@@ -7,13 +7,14 @@
  "field_order": [
   "production_item",
   "item_name",
-  "fg_warehouse",
-  "fg_storage_location",
   "parent_item_code",
   "column_break_3",
   "bom_no",
   "bom_level",
   "type_of_manufacturing",
+  "warehouse_section",
+  "fg_warehouse",
+  "fg_storage_location",
   "section_break_4rxf",
   "required_qty",
   "column_break_xfhm",
@@ -269,6 +270,11 @@
    "fieldtype": "Link",
    "label": "Target Storage Location",
    "options": "Storage Location"
+  },
+  {
+   "fieldname": "warehouse_section",
+   "fieldtype": "Section Break",
+   "label": "Warehouse and Storage Location"
   }
  ],
  "grid_page_length": 50,

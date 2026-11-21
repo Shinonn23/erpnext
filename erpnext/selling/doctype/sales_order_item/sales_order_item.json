@@ -76,7 +76,9 @@
   "weight_uom",
   "warehouse_and_reference",
   "warehouse",
+  "warehouse_target_column",
   "target_warehouse",
+  "source_documents_section",
   "prevdoc_docname",
   "quotation_item",
   "col_break4",
@@ -117,8 +119,10 @@
   "purchase_order_item",
   "accounting_dimensions_section",
   "cost_center",
+  "department",
   "column_break_ihdh",
   "project",
+  "territory",
   "regulatory_snapshot_section",
   "regulatory_registration",
   "regulatory_newcode",
@@ -540,7 +544,7 @@
    "depends_on": "eval:!parent.is_subcontracted",
    "fieldname": "warehouse_and_reference",
    "fieldtype": "Section Break",
-   "label": "Warehouse and Reference"
+   "label": "Source and Target Warehouses"
   },
   {
    "depends_on": "eval:doc.delivered_by_supplier!=1",
@@ -1111,13 +1115,39 @@
    "label": "Coverage Date",
    "no_copy": 1,
    "read_only": 1
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "department",
+   "fieldtype": "Link",
+   "label": "Department",
+   "options": "Department",
+   "print_hide": 1
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "territory",
+   "fieldtype": "Link",
+   "label": "Territory",
+   "options": "Territory",
+   "print_hide": 1
+  },
+  {
+   "fieldname": "warehouse_target_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "source_documents_section",
+   "fieldtype": "Section Break",
+   "label": "Source Documents",
+   "depends_on": "eval:!parent.is_subcontracted"
   }
  ],
  "grid_page_length": 50,
  "idx": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-11-07 16:00:00.000000",
+ "modified": "2026-11-20 23:48:19.662469",
  "modified_by": "Administrator",
  "module": "Selling",
  "name": "Sales Order Item",

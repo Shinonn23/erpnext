@@ -15,8 +15,6 @@
   "column_break0",
   "customer",
   "serial_no",
-  "service_equipment",
-  "service_equipment_coverage",
   "section_break_7",
   "complaint",
   "issue_details",
@@ -98,19 +96,6 @@
    "label": "Serial No",
    "options": "Serial No",
    "search_index": 1
-  },
-  {
-   "fieldname": "service_equipment",
-   "fieldtype": "Link",
-   "label": "Service Equipment",
-   "options": "Service Equipment"
-  },
-  {
-   "depends_on": "eval:doc.service_equipment",
-   "fieldname": "service_equipment_coverage",
-   "fieldtype": "Data",
-   "label": "Equipment Coverage",
-   "read_only": 1
   },
   {
    "fieldname": "customer",

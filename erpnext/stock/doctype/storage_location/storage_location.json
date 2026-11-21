@@ -7,17 +7,18 @@
  "field_order": [
   "location_details_section",
   "location_code",
-  "warehouse_column",
   "warehouse",
+  "warehouse_column",
   "location_type",
   "disabled",
-  "supported_storage_conditions",
   "physical_position_section",
   "zone",
   "rack_column",
   "rack",
   "shelf_column",
   "shelf",
+  "storage_conditions_section",
+  "supported_storage_conditions",
   "additional_details_section",
   "description"
  ],
@@ -114,6 +115,11 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "description": "What the bin is for. Receiving: goods land here and leave only by a Stock Entry (never sold, issued or picked). Storage: shelves goods are picked from. Sales Counter: the place a lab sells from. Holding: the one bin of a holding warehouse (Quarantine, Lost, Found, Borrowed, Write-Off ...)."
+  },
+  {
+   "fieldname": "storage_conditions_section",
+   "fieldtype": "Section Break",
+   "label": "Storage Conditions"
   }
  ],
  "permissions": [

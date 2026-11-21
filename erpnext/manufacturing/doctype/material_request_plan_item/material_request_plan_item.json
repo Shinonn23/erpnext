@@ -6,15 +6,17 @@
  "engine": "InnoDB",
  "field_order": [
   "item_code",
-  "from_warehouse",
-  "from_storage_location",
-  "warehouse",
-  "storage_location",
-  "material_request_type",
   "column_break_4",
   "item_name",
   "uom",
   "conversion_factor",
+  "warehouse_section",
+  "from_warehouse",
+  "from_storage_location",
+  "warehouse_column",
+  "warehouse",
+  "storage_location",
+  "material_request_type",
   "section_break_azee",
   "from_bom",
   "column_break_scnz",
@@ -276,6 +278,15 @@
    "fieldtype": "Link",
    "label": "Target Storage Location",
    "options": "Storage Location"
+  },
+  {
+   "fieldname": "warehouse_section",
+   "fieldtype": "Section Break",
+   "label": "Source and Target Warehouses"
+  },
+  {
+   "fieldname": "warehouse_column",
+   "fieldtype": "Column Break"
   }
  ],
  "grid_page_length": 50,

@@ -28,7 +28,9 @@
   "payment_gateway",
   "accounting_dimensions_section",
   "cost_center",
-  "dimension_col_break"
+  "department",
+  "dimension_col_break",
+  "territory"
  ],
  "fields": [
   {
@@ -148,11 +150,25 @@
    "fieldname": "product_price_id",
    "fieldtype": "Data",
    "label": "Product Price ID"
+  },
+  {
+   "fieldname": "department",
+   "fieldtype": "Link",
+   "label": "Department",
+   "options": "Department",
+   "print_hide": 1
+  },
+  {
+   "fieldname": "territory",
+   "fieldtype": "Link",
+   "label": "Territory",
+   "options": "Territory",
+   "print_hide": 1
   }
  ],
  "icon": "calendar-sync",
  "links": [],
- "modified": "2024-03-27 13:10:47.998597",
+ "modified": "2026-11-20 23:48:19.662469",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Subscription Plan",

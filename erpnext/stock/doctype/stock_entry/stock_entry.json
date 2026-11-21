@@ -10,19 +10,33 @@
  "engine": "InnoDB",
  "field_order": [
   "stock_entry_details_tab",
-  "company",
-  "naming_series",
+  "transaction_details_section",
   "stock_entry_type",
   "operation_issue_type",
+  "company",
+  "naming_series",
   "purpose",
   "col2",
-  "set_posting_time",
   "posting_date",
   "posting_time",
-  "reference_section",
+  "set_posting_time",
+  "write_off_section",
+  "write_off_reason",
+  "section_break_jwgn",
+  "from_warehouse",
+  "source_warehouse_address",
+  "cb0",
+  "to_warehouse",
+  "target_warehouse_address",
+  "shipment_routing_section",
+  "requires_shipment",
   "add_to_transit",
-  "apply_putaway_rule",
+  "stock_value_column",
+  "shipment_destination_warehouse",
+  "shipment",
+  "reference_section",
   "inspection_required",
+  "apply_putaway_rule",
   "column_break_jabv",
   "work_order",
   "subcontracting_order",
@@ -39,42 +53,28 @@
   "process_loss_percentage",
   "column_break_e92r",
   "process_loss_qty",
-  "section_break_jwgn",
-  "from_warehouse",
-  "source_warehouse_address",
-  "source_address_display",
-  "cb0",
-  "to_warehouse",
-  "requires_shipment",
-  "shipment_destination_warehouse",
-  "shipment",
-  "target_warehouse_address",
-  "target_address_display",
   "sb0",
   "scan_barcode",
   "last_scanned_warehouse",
   "items_section",
   "items",
   "get_stock_and_rate",
+  "accounting_dimensions_section",
   "section_break_19",
   "total_outgoing_value",
   "column_break_22",
   "total_incoming_value",
   "value_difference",
-  "additional_costs_section",
-  "additional_costs",
-  "total_additional_costs",
-  "supplier_info_tab",
-  "contact_section",
-  "supplier",
-  "supplier_name",
-  "supplier_address",
-  "address_display",
-  "accounting_dimensions_section",
+  "accounting_fields_section",
   "project",
   "department",
   "dimension_col_break",
   "cost_center",
+  "territory",
+  "additional_costs_section",
+  "additional_costs",
+  "additional_cost_totals_section",
+  "total_additional_costs",
   "other_info_tab",
   "operation_request_section",
   "operation_requester",
@@ -91,10 +91,6 @@
   "operation_approval_route",
   "lab_self_submission",
   "approval_snapshot",
-  "printing_settings",
-  "select_print_heading",
-  "print_settings_col_break",
-  "letter_head",
   "reference_details_section",
   "delivery_note_no",
   "sales_invoice_no",
@@ -106,27 +102,45 @@
   "purchase_order",
   "subcontracting_inward_order",
   "is_additional_transfer_entry",
+  "supplier_info_tab",
+  "contact_section",
+  "supplier",
+  "supplier_name",
+  "supplier_address",
+  "supplier_address_section",
+  "address_display",
+  "source_address_section",
+  "source_address_display",
+  "target_address_section",
+  "target_address_display",
   "more_info",
   "is_opening",
-  "remarks",
-  "write_off_reason",
   "stock_count",
-  "customer_address",
-  "customer_address_display",
-  "customer_contact",
-  "customer_contact_display",
-  "customer_contact_email",
   "is_system_generated",
-  "is_borrowing_transaction",
-  "borrowing",
-  "borrowing_source_doctype",
-  "borrowing_source_name",
   "col5",
   "per_transferred",
   "total_amount",
   "amended_from",
   "credit_note",
   "is_return",
+  "remarks_section",
+  "remarks",
+  "customer_snapshot_section",
+  "customer_address",
+  "customer_address_display",
+  "customer_snapshot_column",
+  "customer_contact",
+  "customer_contact_display",
+  "customer_contact_email",
+  "borrowing_reference_section",
+  "is_borrowing_transaction",
+  "borrowing",
+  "borrowing_source_doctype",
+  "borrowing_source_name",
+  "printing_settings",
+  "select_print_heading",
+  "print_settings_col_break",
+  "letter_head",
   "tab_connections"
  ],
  "fields": [
@@ -136,7 +150,8 @@
    "label": "Stock Count",
    "no_copy": 1,
    "options": "Stock Count",
-   "read_only": 1
+   "read_only": 1,
+   "depends_on": "eval:doc.stock_count"
   },
   {
    "fieldname": "customer_address",
@@ -391,11 +406,12 @@
    "default": "0",
    "fieldname": "inspection_required",
    "fieldtype": "Check",
-   "label": "Inspection Required"
+   "label": "Inspection Required",
+   "depends_on": "eval:![\"Material Issue\", \"Material Transfer\", \"Material Consumption for Manufacture\", \"Return Raw Material to Customer\"].includes(doc.purpose) || doc.inspection_required"
   },
   {
    "default": "0",
-   "depends_on": "eval:in_list([\"Material Issue\", \"Manufacture\", \"Repack\", \"Send to Subcontractor\", \"Material Transfer for Manufacture\", \"Material Consumption for Manufacture\", \"Disassemble\"], doc.purpose)",
+   "depends_on": "eval:[\"Manufacture\", \"Repack\", \"Send to Subcontractor\", \"Material Transfer for Manufacture\", \"Material Consumption for Manufacture\", \"Disassemble\"].includes(doc.purpose) || doc.from_bom",
    "fieldname": "from_bom",
    "fieldtype": "Check",
    "label": "From BOM",
@@ -454,7 +470,7 @@
    "print_hide": 1
   },
   {
-   "depends_on": "from_warehouse",
+   "depends_on": "eval:doc.from_warehouse && (![\"Material Receipt\", \"Receive from Customer\", \"Subcontracting Return\"].includes(doc.purpose))",
    "fieldname": "source_warehouse_address",
    "fieldtype": "Link",
    "label": "Source Warehouse Address Link",
@@ -511,7 +527,7 @@
    "read_only": 1
   },
   {
-   "depends_on": "to_warehouse",
+   "depends_on": "eval:doc.to_warehouse && (![\"Material Issue\", \"Material Consumption for Manufacture\", \"Return Raw Material to Customer\", \"Subcontracting Delivery\"].includes(doc.purpose))",
    "fieldname": "target_warehouse_address",
    "fieldtype": "Link",
    "label": "Target Warehouse Address Link",
@@ -526,7 +542,8 @@
   {
    "fieldname": "sb0",
    "fieldtype": "Section Break",
-   "options": "Simple"
+   "options": "Simple",
+   "label": "Scan Items"
   },
   {
    "fieldname": "scan_barcode",
@@ -550,12 +567,14 @@
    "label": "Update Rate and Availability",
    "oldfieldtype": "Button",
    "options": "get_stock_and_rate",
-   "print_hide": 1
+   "print_hide": 1,
+   "depends_on": "eval:doc.docstatus==0"
   },
   {
    "fieldname": "section_break_19",
    "fieldtype": "Section Break",
-   "print_hide": 1
+   "print_hide": 1,
+   "label": "Movement Value"
   },
   {
    "fieldname": "total_incoming_value",
@@ -563,7 +582,8 @@
    "label": "Total Incoming Value (Receipt)",
    "options": "Company:company:default_currency",
    "print_hide": 1,
-   "read_only": 1
+   "read_only": 1,
+   "depends_on": "eval:(![\"Material Issue\", \"Material Consumption for Manufacture\", \"Return Raw Material to Customer\", \"Subcontracting Delivery\"].includes(doc.purpose)) || doc.total_incoming_value"
   },
   {
    "fieldname": "column_break_22",
@@ -575,7 +595,8 @@
    "label": "Total Outgoing Value (Consumption)",
    "options": "Company:company:default_currency",
    "print_hide": 1,
-   "read_only": 1
+   "read_only": 1,
+   "depends_on": "eval:(![\"Material Receipt\", \"Receive from Customer\", \"Subcontracting Return\"].includes(doc.purpose)) || doc.total_outgoing_value"
   },
   {
    "fieldname": "value_difference",
@@ -583,13 +604,14 @@
    "label": "Total Value Difference (Incoming - Outgoing)",
    "options": "Company:company:default_currency",
    "print_hide_if_no_value": 1,
-   "read_only": 1
+   "read_only": 1,
+   "depends_on": "eval:((![\"Material Receipt\", \"Receive from Customer\", \"Subcontracting Return\"].includes(doc.purpose)) && (![\"Material Issue\", \"Material Consumption for Manufacture\", \"Return Raw Material to Customer\", \"Subcontracting Delivery\"].includes(doc.purpose))) || doc.value_difference"
   },
   {
    "collapsible": 1,
    "collapsible_depends_on": "total_additional_costs",
    "fieldname": "additional_costs_section",
-   "fieldtype": "Tab Break",
+   "fieldtype": "Section Break",
    "label": "Additional Costs"
   },
   {
@@ -675,7 +697,7 @@
    "collapsible": 1,
    "fieldname": "more_info",
    "fieldtype": "Section Break",
-   "label": "More Information",
+   "label": "Notes and Status",
    "oldfieldtype": "Section Break"
   },
   {
@@ -746,7 +768,8 @@
    "options": "Job Card",
    "print_hide": 1,
    "read_only": 1,
-   "search_index": 1
+   "search_index": 1,
+   "depends_on": "eval:['Manufacture', 'Material Consumption for Manufacture', 'Disassemble'].includes(doc.purpose) || doc.job_card"
   },
   {
    "fieldname": "amended_from",
@@ -771,7 +794,7 @@
    "collapsible": 1,
    "fieldname": "accounting_dimensions_section",
    "fieldtype": "Tab Break",
-   "label": "Accounting Dimensions"
+   "label": "Costs and Accounting"
   },
   {
    "fieldname": "pick_list",
@@ -779,7 +802,8 @@
    "label": "Pick List",
    "options": "Pick List",
    "read_only": 1,
-   "search_index": 1
+   "search_index": 1,
+   "depends_on": "eval:['Material Transfer', 'Material Transfer for Manufacture', 'Send to Subcontractor', 'Subcontracting Delivery'].includes(doc.purpose) || doc.pick_list"
   },
   {
    "fieldname": "print_settings_col_break",
@@ -815,31 +839,32 @@
   },
   {
    "collapsible": 1,
-   "depends_on": "eval:in_list([\"Material Issue\", \"Manufacture\", \"Repack\", \"Send to Subcontractor\", \"Material Transfer for Manufacture\", \"Material Consumption for Manufacture\", \"Disassemble\"], doc.purpose)",
+   "depends_on": "eval:[\"Manufacture\", \"Repack\", \"Send to Subcontractor\", \"Material Transfer for Manufacture\", \"Material Consumption for Manufacture\", \"Disassemble\"].includes(doc.purpose) || doc.from_bom",
    "fieldname": "bom_info_section",
    "fieldtype": "Section Break",
-   "label": "BOM Info"
+   "label": "Manufacturing and BOM"
   },
   {
    "collapsible": 1,
    "fieldname": "section_break_jwgn",
    "fieldtype": "Section Break",
-   "label": "Default Warehouse"
+   "label": "Default Warehouses"
   },
   {
    "fieldname": "other_info_tab",
    "fieldtype": "Tab Break",
-   "label": "Other Info"
+   "label": "Operations and References"
   },
   {
    "fieldname": "supplier_info_tab",
-   "fieldtype": "Tab Break",
-   "label": "Supplier Info"
+   "fieldtype": "Section Break",
+   "label": "Supplier",
+   "depends_on": "eval:erpnext.stock.is_subcontracting_or_return_transfer(doc)"
   },
   {
    "fieldname": "stock_entry_details_tab",
    "fieldtype": "Tab Break",
-   "label": "Details",
+   "label": "Stock Movement",
    "oldfieldtype": "Section Break"
   },
   {
@@ -909,7 +934,8 @@
   },
   {
    "fieldname": "reference_section",
-   "fieldtype": "Section Break"
+   "fieldtype": "Section Break",
+   "label": "Transaction Options"
   },
   {
    "fieldname": "column_break_jabv",
@@ -918,7 +944,7 @@
   {
    "fieldname": "reference_details_section",
    "fieldtype": "Section Break",
-   "label": "Reference"
+   "label": "Source Documents"
   },
   {
    "fieldname": "column_break_qpvo",
@@ -1015,12 +1041,12 @@
    "fieldtype": "Column Break"
   },
   {
+   "depends_on": "eval:doc.operation_approval_route",
    "description": "Set by the system from the stock movement. It decides who approves this document.",
    "fieldname": "operation_approval_route",
    "fieldtype": "Data",
    "label": "Approval Route",
-   "read_only": 1,
-   "depends_on": "eval:doc.operation_approval_route"
+   "read_only": 1
   },
   {
    "fieldname": "lab_self_submission",
@@ -1037,6 +1063,82 @@
    "label": "Approval Snapshot",
    "no_copy": 1,
    "read_only": 1
+  },
+  {
+   "fieldname": "territory",
+   "fieldtype": "Link",
+   "label": "Territory",
+   "options": "Territory",
+   "print_hide": 1
+  },
+  {
+   "fieldname": "shipment_routing_section",
+   "fieldtype": "Section Break",
+   "label": "Shipment Routing",
+   "depends_on": "eval:doc.purpose == 'Material Transfer' || doc.requires_shipment || doc.shipment"
+  },
+  {
+   "fieldname": "transaction_details_section",
+   "fieldtype": "Section Break",
+   "label": "Transaction"
+  },
+  {
+   "fieldname": "stock_value_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "additional_cost_totals_section",
+   "fieldtype": "Section Break",
+   "label": "Additional Cost Total"
+  },
+  {
+   "fieldname": "accounting_fields_section",
+   "fieldtype": "Section Break",
+   "label": "Accounting Dimensions"
+  },
+  {
+   "fieldname": "write_off_section",
+   "fieldtype": "Section Break",
+   "label": "Stock Write-Off",
+   "depends_on": "eval:doc.stock_entry_type == 'Stock Write-Off' || doc.write_off_reason"
+  },
+  {
+   "fieldname": "remarks_section",
+   "fieldtype": "Section Break",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "source_address_section",
+   "fieldtype": "Section Break",
+   "label": "Source Warehouse Address",
+   "depends_on": "eval:doc.source_address_display && (doc.from_warehouse && (![\"Material Receipt\", \"Receive from Customer\", \"Subcontracting Return\"].includes(doc.purpose)))"
+  },
+  {
+   "fieldname": "target_address_section",
+   "fieldtype": "Section Break",
+   "label": "Target Warehouse Address",
+   "depends_on": "eval:doc.target_address_display && (doc.to_warehouse && (![\"Material Issue\", \"Material Consumption for Manufacture\", \"Return Raw Material to Customer\", \"Subcontracting Delivery\"].includes(doc.purpose)))"
+  },
+  {
+   "fieldname": "supplier_address_section",
+   "fieldtype": "Section Break",
+   "label": "Supplier Address",
+   "depends_on": "eval:doc.address_display && erpnext.stock.is_subcontracting_or_return_transfer(doc)"
+  },
+  {
+   "fieldname": "customer_snapshot_section",
+   "fieldtype": "Section Break",
+   "label": "Customer Snapshot"
+  },
+  {
+   "fieldname": "customer_snapshot_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "borrowing_reference_section",
+   "fieldtype": "Section Break",
+   "label": "Borrowing Reference",
+   "depends_on": "eval:doc.is_borrowing_transaction || doc.borrowing || doc.borrowing_source_name"
   }
  ],
  "grid_page_length": 50,
@@ -1045,7 +1147,7 @@
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-11-19 12:00:00.000000",
+ "modified": "2026-11-20 23:48:19.662469",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Stock Entry",

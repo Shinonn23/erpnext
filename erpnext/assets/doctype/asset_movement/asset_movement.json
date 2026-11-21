@@ -15,18 +15,6 @@
   "transaction_date",
   "section_break_10",
   "assets",
-  "service_equipment_section",
-  "service_movement_type",
-  "service_sender",
-  "service_receiver",
-  "service_handover_column",
-  "service_reason",
-  "service_condition",
-  "service_evidence",
-  "service_destination_section",
-  "service_target_customer",
-  "service_destination_column",
-  "service_target_address",
   "reference",
   "reference_doctype",
   "column_break_9",
@@ -274,71 +262,6 @@
    "label": "Assets",
    "options": "Asset Movement Item",
    "reqd": 1
-  },
-  {
-   "depends_on": "eval:(doc.assets || []).some((row) => row.service_equipment)",
-   "fieldname": "service_equipment_section",
-   "fieldtype": "Section Break",
-   "label": "Equipment Handover"
-  },
-  {
-   "fieldname": "service_movement_type",
-   "fieldtype": "Select",
-   "label": "Handover Type",
-   "mandatory_depends_on": "eval:(doc.assets || []).some((row) => row.service_equipment)",
-   "options": "\nReceive from Supplier\nInstall\nTransfer\nSend for Repair\nReturn from Repair\nReturn to Supplier\nRetire"
-  },
-  {
-   "fieldname": "service_sender",
-   "fieldtype": "Data",
-   "label": "Sender"
-  },
-  {
-   "fieldname": "service_receiver",
-   "fieldtype": "Data",
-   "label": "Receiver"
-  },
-  {
-   "fieldname": "service_handover_column",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "service_reason",
-   "fieldtype": "Small Text",
-   "label": "Reason"
-  },
-  {
-   "fieldname": "service_condition",
-   "fieldtype": "Small Text",
-   "label": "Equipment Condition"
-  },
-  {
-   "description": "Optional: a photo or signed handover note.",
-   "fieldname": "service_evidence",
-   "fieldtype": "Attach",
-   "label": "Handover Evidence"
-  },
-  {
-   "depends_on": "eval:(doc.assets || []).some((row) => row.service_equipment)",
-   "fieldname": "service_destination_section",
-   "fieldtype": "Section Break",
-   "label": "Equipment Destination"
-  },
-  {
-   "fieldname": "service_target_customer",
-   "fieldtype": "Link",
-   "label": "Destination Customer",
-   "options": "Customer"
-  },
-  {
-   "fieldname": "service_destination_column",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "service_target_address",
-   "fieldtype": "Link",
-   "label": "Destination Address",
-   "options": "Address"
   },
   {
    "fieldname": "column_break_9",

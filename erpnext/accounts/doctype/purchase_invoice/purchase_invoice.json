@@ -37,9 +37,10 @@
   "bill_date",
   "accounting_dimensions_section",
   "cost_center",
+  "department",
   "dimension_col_break",
   "project",
-  "department",
+  "territory",
   "currency_and_price_list",
   "currency",
   "conversion_rate",
@@ -54,11 +55,13 @@
   "last_scanned_warehouse",
   "col_break_warehouse",
   "update_stock",
-  "set_warehouse",
-  "set_from_warehouse",
   "is_subcontracted",
-  "rejected_warehouse",
+  "warehouse_defaults_section",
+  "set_from_warehouse",
   "supplier_warehouse",
+  "warehouse_defaults_column",
+  "set_warehouse",
+  "rejected_warehouse",
   "items_section",
   "items",
   "section_break_26",
@@ -305,14 +308,14 @@
    "print_hide": 1
   },
   {
-   "fieldname": "note_issuer",
-   "label": "Note Issuer",
-   "fieldtype": "Select",
-   "options": "Company\nCounterparty",
    "default": "Company",
    "depends_on": "eval:doc.is_return",
+   "description": "Company-issued credit/debit notes require approval before submission. Counterparty-issued notes can be submitted directly.",
+   "fieldname": "note_issuer",
+   "fieldtype": "Select",
+   "label": "Note Issuer",
    "mandatory_depends_on": "eval:doc.is_return",
-   "description": "Company-issued credit/debit notes require approval before submission. Counterparty-issued notes can be submitted directly."
+   "options": "Company\nCounterparty"
   },
   {
    "default": "0",
@@ -611,12 +614,12 @@
   },
   {
    "depends_on": "update_stock",
+   "description": "The warehouse the goods are received for. A row whose Item is inspected on receipt is held in that warehouse's Quarantine until the Quality Inspection team has inspected it.",
    "fieldname": "set_warehouse",
    "fieldtype": "Link",
    "label": "Receive for Warehouse",
    "options": "Warehouse",
-   "print_hide": 1,
-   "description": "The warehouse the goods are received for. A row whose Item is inspected on receipt is held in that warehouse's Quarantine until the Quality Inspection team has inspected it."
+   "print_hide": 1
   },
   {
    "depends_on": "update_stock",
@@ -1750,11 +1753,11 @@
   },
   {
    "default": "0",
+   "depends_on": "eval:doc.p2p_exception_required",
    "fieldname": "p2p_exception_required",
    "fieldtype": "Check",
    "label": "Purchase Reference Mismatch",
-   "read_only": 1,
-   "depends_on": "eval:doc.p2p_exception_required"
+   "read_only": 1
   },
   {
    "depends_on": "eval:doc.p2p_exception_required || doc.p2p_exception_reason",
@@ -1840,15 +1843,15 @@
    "read_only_depends_on": "eval:doc.docstatus!=0"
   },
   {
+   "allow_on_submit": 1,
+   "default": "0",
+   "depends_on": "eval:!doc.split_tax_invoice && (doc.tax_invoice_date || doc.months_delayed > 0)",
+   "description": "0 = tax invoice month; 1 = the following month.",
    "fieldname": "months_delayed",
    "fieldtype": "Select",
    "label": "Delayed (months)",
-   "options": "0\n1\n2\n3\n4\n5\n6",
-   "default": "0",
-   "description": "0 = tax invoice month; 1 = the following month.",
-   "allow_on_submit": 1,
-   "depends_on": "eval:!doc.split_tax_invoice && (doc.tax_invoice_date || doc.months_delayed > 0)",
    "no_copy": 1,
+   "options": "0\n1\n2\n3\n4\n5\n6",
    "read_only_depends_on": "eval:doc.docstatus!=0"
   },
   {
@@ -1905,6 +1908,23 @@
    "label": "Deposits",
    "options": "Purchase Invoice Deposit",
    "read_only_depends_on": "eval:!doc.manual_deposit_allocation"
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "territory",
+   "fieldtype": "Link",
+   "label": "Territory",
+   "options": "Territory",
+   "print_hide": 1
+  },
+  {
+   "fieldname": "warehouse_defaults_section",
+   "fieldtype": "Section Break",
+   "label": "Warehouse Defaults"
+  },
+  {
+   "fieldname": "warehouse_defaults_column",
+   "fieldtype": "Column Break"
   }
  ],
  "grid_page_length": 50,
@@ -1912,7 +1932,7 @@
  "idx": 204,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-11-19 10:00:00.000000",
+ "modified": "2026-11-20 23:48:19.662469",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Purchase Invoice",

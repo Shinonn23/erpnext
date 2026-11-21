@@ -18,8 +18,10 @@
   "account",
   "accounting_dimensions_section",
   "cost_center",
+  "department",
   "dimension_col_break",
   "project",
+  "territory",
   "shipping_amount_section",
   "calculate_based_on",
   "column_break_8",
@@ -145,12 +147,26 @@
    "fieldtype": "Link",
    "label": "Project",
    "options": "Project"
+  },
+  {
+   "fieldname": "department",
+   "fieldtype": "Link",
+   "label": "Department",
+   "options": "Department",
+   "print_hide": 1
+  },
+  {
+   "fieldname": "territory",
+   "fieldtype": "Link",
+   "label": "Territory",
+   "options": "Territory",
+   "print_hide": 1
   }
  ],
  "icon": "truck",
  "idx": 1,
  "links": [],
- "modified": "2026-09-16 11:42:07.000000",
+ "modified": "2026-11-20 23:48:19.662469",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Shipping Rule",

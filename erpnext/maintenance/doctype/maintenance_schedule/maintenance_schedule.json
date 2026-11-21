@@ -11,7 +11,6 @@
   "customer_details",
   "naming_series",
   "customer",
-  "service_equipment",
   "service_employee",
   "column_break0",
   "status",
@@ -62,15 +61,6 @@
    "options": "Customer",
    "print_hide": 1,
    "search_index": 1
-  },
-  {
-   "description": "The first equipment of the item rows; the schedule lists every equipment there.",
-   "fieldname": "service_equipment",
-   "fieldtype": "Link",
-   "label": "First Equipment",
-   "no_copy": 1,
-   "options": "Service Equipment",
-   "read_only": 1
   },
   {
    "fieldname": "service_employee",

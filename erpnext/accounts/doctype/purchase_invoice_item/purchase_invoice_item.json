@@ -66,25 +66,29 @@
   "item_tax_amount",
   "landed_cost_voucher_amount",
   "rm_supp_cost",
-  "warehouse_section",
+  "warehouse_storage_section",
   "warehouse",
+  "storage_location",
+  "warehouse_storage_column",
+  "rejected_warehouse",
+  "rejected_storage_location",
+  "warehouse_routing_section",
+  "from_warehouse",
+  "from_storage_location",
+  "warehouse_routing_column",
   "putaway_warehouse",
   "putaway_storage_location",
+  "warehouse_section",
   "add_serial_batch_bundle",
   "serial_and_batch_bundle",
   "use_serial_batch_fields",
   "col_br_wh",
-  "from_warehouse",
   "quality_inspection",
   "purchase_inspection_granularity",
-  "rejected_warehouse",
   "rejected_serial_and_batch_bundle",
   "inventory_dimension",
   "is_stock_item",
-  "rejected_storage_location",
-  "from_storage_location",
   "inventory_dimension_col_break",
-  "storage_location",
   "section_break_rqbe",
   "serial_no",
   "rejected_serial_no",
@@ -132,6 +136,7 @@
   "department",
   "dimension_col_break",
   "cost_center",
+  "territory",
   "section_break_82",
   "page_break"
  ],
@@ -218,11 +223,11 @@
    "reqd": 1
   },
   {
+   "depends_on": "eval:!doc.is_fixed_asset",
    "fieldname": "rejected_qty",
    "fieldtype": "Float",
    "label": "Rejected Qty",
-   "print_hide": 1,
-   "depends_on": "eval:!doc.is_fixed_asset"
+   "print_hide": 1
   },
   {
    "depends_on": "eval:doc.uom != doc.stock_uom",
@@ -446,17 +451,18 @@
    "depends_on": "eval:parent.update_stock",
    "fieldname": "warehouse_section",
    "fieldtype": "Section Break",
-   "label": "Warehouse"
+   "label": "Serial, Batch and Inspection"
   },
   {
    "fieldname": "warehouse",
    "fieldtype": "Link",
    "label": "Accepted Warehouse",
    "options": "Warehouse",
-   "print_hide": 1
+   "print_hide": 1,
+   "depends_on": "eval:(parent.update_stock)"
   },
   {
-   "depends_on": "eval:doc.putaway_warehouse",
+   "depends_on": "eval:(parent.update_stock) && (doc.putaway_warehouse)",
    "description": "The warehouse this row is meant for. It is held in Quarantine until the Quality Inspection team has inspected it.",
    "fieldname": "putaway_warehouse",
    "fieldtype": "Link",
@@ -467,23 +473,22 @@
    "read_only": 1
   },
   {
-   "depends_on": "eval:doc.putaway_storage_location",
+   "depends_on": "eval:(parent.update_stock) && (doc.putaway_warehouse)",
    "description": "The Storage Location chosen for this row before it was received into Quarantine: the Stock team puts the goods there once they are inspected.",
    "fieldname": "putaway_storage_location",
    "fieldtype": "Link",
    "label": "Receive for Storage Location",
    "no_copy": 1,
    "options": "Storage Location",
-   "print_hide": 1,
-   "read_only": 1
+   "print_hide": 1
   },
   {
+   "depends_on": "eval:(parent.update_stock) && (!doc.is_fixed_asset)",
    "fieldname": "rejected_warehouse",
    "fieldtype": "Link",
    "ignore_user_permissions": 1,
    "label": "Rejected Warehouse",
-   "options": "Warehouse",
-   "depends_on": "eval:!doc.is_fixed_asset"
+   "options": "Warehouse"
   },
   {
    "depends_on": "eval:doc.docstatus==1",
@@ -730,9 +735,9 @@
    "fieldname": "asset_location",
    "fieldtype": "Link",
    "label": "Asset Location",
+   "mandatory_depends_on": "eval:doc.is_fixed_asset && parent.update_stock && !parent.is_return",
    "options": "Location",
-   "print_hide": 1,
-   "mandatory_depends_on": "eval:doc.is_fixed_asset && parent.update_stock && !parent.is_return"
+   "print_hide": 1
   },
   {
    "fieldname": "po_detail",
@@ -857,7 +862,7 @@
    "read_only": 1
   },
   {
-   "depends_on": "eval:parent.is_internal_supplier",
+   "depends_on": "eval:(parent.update_stock) && (parent.is_internal_supplier)",
    "fieldname": "from_warehouse",
    "fieldtype": "Link",
    "ignore_user_permissions": 1,
@@ -1060,22 +1065,22 @@
    "read_only": 1
   },
   {
-   "collapsible": 1,
    "fieldname": "inventory_dimension",
    "fieldtype": "Section Break",
-   "label": "Inventory Dimension"
+   "label": "Inventory Dimension",
+   "collapsible": 1
   },
   {
    "fieldname": "inventory_dimension_col_break",
    "fieldtype": "Column Break"
   },
   {
+   "depends_on": "eval:!doc.is_fixed_asset && doc.rejected_warehouse && (doc.is_stock_item || doc.rejected_storage_location)",
    "fieldname": "rejected_storage_location",
    "fieldtype": "Link",
    "label": "Rejected Storage Location",
    "options": "Storage Location",
-   "search_index": 1,
-   "depends_on": "eval:!doc.is_fixed_asset && doc.rejected_warehouse && (doc.is_stock_item || doc.rejected_storage_location)"
+   "search_index": 1
   },
   {
    "depends_on": "eval:parent.is_internal_supplier == 1 && (doc.is_stock_item || doc.from_storage_location)",
@@ -1086,13 +1091,12 @@
    "search_index": 1
   },
   {
+   "depends_on": "eval:!doc.is_fixed_asset && (doc.is_stock_item || doc.storage_location)",
    "fieldname": "storage_location",
    "fieldtype": "Link",
    "label": "Target Storage Location",
    "options": "Storage Location",
-   "search_index": 1,
-   "depends_on": "eval:!doc.is_fixed_asset && (doc.is_stock_item || doc.storage_location)",
-   "read_only_depends_on": "eval:doc.putaway_warehouse"
+   "search_index": 1
   },
   {
    "fetch_from": "item_code.is_deposit_item",
@@ -1102,30 +1106,56 @@
    "read_only": 1
   },
   {
+   "depends_on": "eval:doc.purchase_inspection_granularity",
    "fieldname": "purchase_inspection_granularity",
    "fieldtype": "Select",
    "label": "Purchase Inspection By",
-   "options": "\nNot Required\nBatch/Lot\nSerial Number",
-   "read_only": 1,
    "no_copy": 1,
-   "depends_on": "eval:doc.purchase_inspection_granularity"
+   "options": "\nNot Required\nBatch/Lot\nSerial Number",
+   "read_only": 1
   },
   {
+   "description": "Fetched from the Item: the Storage Location fields apply only to a stock Item.",
+   "fetch_from": "item_code.is_stock_item",
    "fieldname": "is_stock_item",
    "fieldtype": "Check",
-   "label": "Is Stock Item",
-   "fetch_from": "item_code.is_stock_item",
    "hidden": 1,
-   "read_only": 1,
+   "label": "Is Stock Item",
    "print_hide": 1,
-   "description": "Fetched from the Item: the Storage Location fields apply only to a stock Item."
+   "read_only": 1
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "territory",
+   "fieldtype": "Link",
+   "label": "Territory",
+   "options": "Territory",
+   "print_hide": 1
+  },
+  {
+   "fieldname": "warehouse_storage_section",
+   "fieldtype": "Section Break",
+   "label": "Warehouse and Storage"
+  },
+  {
+   "fieldname": "warehouse_storage_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "warehouse_routing_section",
+   "fieldtype": "Section Break",
+   "label": "Source and Putaway"
+  },
+  {
+   "fieldname": "warehouse_routing_column",
+   "fieldtype": "Column Break"
   }
  ],
  "grid_page_length": 50,
  "idx": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-11-19 10:00:00.000000",
+ "modified": "2026-11-20 23:48:19.662469",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Purchase Invoice Item",

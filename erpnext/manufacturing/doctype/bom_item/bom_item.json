@@ -14,10 +14,11 @@
   "column_break_3",
   "do_not_explode",
   "bom_no",
-  "source_warehouse",
-  "source_storage_location",
   "allow_alternative_item",
   "is_stock_item",
+  "warehouse_section",
+  "source_warehouse",
+  "source_storage_location",
   "section_break_5",
   "description",
   "col_break1",
@@ -330,6 +331,11 @@
    "fieldtype": "Link",
    "label": "Source Storage Location",
    "options": "Storage Location"
+  },
+  {
+   "fieldname": "warehouse_section",
+   "fieldtype": "Section Break",
+   "label": "Warehouse and Storage Location"
   }
  ],
  "idx": 1,

@@ -25,21 +25,24 @@
   "target_location",
   "section_break_4",
   "description",
-  "column_break_12",
+  "item_details_section",
   "item_group",
   "brand",
+  "column_break_12",
   "image",
   "quantity_and_warehouse",
   "qty",
   "stock_uom",
-  "from_warehouse",
-  "from_storage_location",
-  "warehouse",
-  "storage_location",
   "col_break2",
   "uom",
   "conversion_factor",
   "stock_qty",
+  "warehouse_routing_section",
+  "from_warehouse",
+  "from_storage_location",
+  "warehouse_routing_column",
+  "warehouse",
+  "storage_location",
   "qty_info_sec_break",
   "min_order_qty",
   "projected_qty",
@@ -75,6 +78,7 @@
   "department",
   "dimension_col_break",
   "cost_center",
+  "territory",
   "more_info",
   "lead_time_date",
   "sales_order",
@@ -118,6 +122,39 @@
    "width": "100px"
   },
   {
+   "fieldname": "item_name",
+   "fieldtype": "Data",
+   "label": "Item Name",
+   "oldfieldname": "item_name",
+   "oldfieldtype": "Data",
+   "print_hide": 1,
+   "print_width": "100px",
+   "search_index": 1,
+   "width": "100px"
+  },
+  {
+   "fieldname": "col_break1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "allow_on_submit": 1,
+   "bold": 1,
+   "columns": 2,
+   "fieldname": "schedule_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Required By",
+   "mandatory_depends_on": "eval:!in_list(['Customer Demo', 'Borrow', 'Customer Borrow'], parent.material_request_type)",
+   "oldfieldname": "schedule_date",
+   "oldfieldtype": "Date",
+   "print_width": "100px",
+   "width": "100px"
+  },
+  {
+   "fieldname": "section_break_jzwe",
+   "fieldtype": "Section Break"
+  },
+  {
    "depends_on": "eval:parent.material_request_type=='Asset Transfer' || (in_list(['Customer Demo', 'Borrow', 'Customer Borrow'], parent.material_request_type) && doc.item_type=='Fixed Asset')",
    "fieldname": "asset",
    "fieldtype": "Link",
@@ -128,10 +165,23 @@
    "read_only_depends_on": "eval:parent.material_request_type != 'Asset Transfer'"
   },
   {
-   "depends_on": "eval:parent.material_request_type=='Asset Transfer' || (in_list(['Customer Demo', 'Borrow', 'Customer Borrow'], parent.material_request_type) && doc.item_type=='Fixed Asset')",
-   "fieldname": "asset_name",
-   "fieldtype": "Data",
-   "label": "Asset Name",
+   "allow_on_submit": 1,
+   "depends_on": "eval:doc.demo_acquisition_method",
+   "description": "Blank until the back office decides: Lend Stock, or an Asset (Ready, Wait Return, Convert Stock).",
+   "fieldname": "demo_acquisition_method",
+   "fieldtype": "Select",
+   "label": "Demo Acquisition Method",
+   "options": "\nReady Asset\nWait Return\nConvert Stock\nLend Stock",
+   "read_only": 1
+  },
+  {
+   "description": "The Item the requester asked for; the back office may supply another Demo model.",
+   "fieldname": "demo_requested_item",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Requested Item",
+   "no_copy": 1,
+   "options": "Item",
    "read_only": 1
   },
   {
@@ -140,6 +190,21 @@
    "fieldtype": "Data",
    "label": "Asset Serial Number",
    "read_only": 1
+  },
+  {
+   "fieldname": "column_break_buxt",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:parent.material_request_type=='Asset Transfer' || (in_list(['Customer Demo', 'Borrow', 'Customer Borrow'], parent.material_request_type) && doc.item_type=='Fixed Asset')",
+   "fieldname": "asset_name",
+   "fieldtype": "Data",
+   "label": "Asset Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_srre",
+   "fieldtype": "Section Break"
   },
   {
    "depends_on": "eval:parent.material_request_type=='Asset Transfer' || (in_list(['Customer Demo', 'Borrow', 'Customer Borrow'], parent.material_request_type) && doc.item_type=='Fixed Asset')",
@@ -151,6 +216,10 @@
    "read_only": 1
   },
   {
+   "fieldname": "column_break_mumj",
+   "fieldtype": "Column Break"
+  },
+  {
    "depends_on": "eval:parent.material_request_type=='Asset Transfer' || (in_list(['Customer Demo', 'Borrow', 'Customer Borrow'], parent.material_request_type) && doc.item_type=='Fixed Asset')",
    "fieldname": "target_location",
    "fieldtype": "Link",
@@ -159,21 +228,6 @@
    "mandatory_depends_on": "eval:parent.material_request_type == 'Asset Transfer'",
    "options": "Location",
    "read_only_depends_on": "eval:parent.material_request_type != 'Asset Transfer'"
-  },
-  {
-   "fieldname": "col_break1",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "item_name",
-   "fieldtype": "Data",
-   "label": "Item Name",
-   "oldfieldname": "item_name",
-   "oldfieldtype": "Data",
-   "print_hide": 1,
-   "print_width": "100px",
-   "search_index": 1,
-   "width": "100px"
   },
   {
    "collapsible": 1,
@@ -191,198 +245,9 @@
    "width": "250px"
   },
   {
-   "fetch_from": "item_code.image",
-   "fieldname": "image",
-   "fieldtype": "Attach Image",
-   "label": "Image",
-   "print_hide": 1,
-   "read_only": 1
-  },
-  {
-   "fieldname": "quantity_and_warehouse",
+   "fieldname": "item_details_section",
    "fieldtype": "Section Break",
-   "label": "Quantity and Warehouse"
-  },
-  {
-   "columns": 1,
-   "fieldname": "qty",
-   "fieldtype": "Float",
-   "in_list_view": 1,
-   "label": "Quantity",
-   "oldfieldname": "qty",
-   "oldfieldtype": "Currency",
-   "print_width": "80px",
-   "reqd": 1,
-   "width": "80px"
-  },
-  {
-   "columns": 1,
-   "fieldname": "uom",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "UOM",
-   "mandatory_depends_on": "eval:!in_list(['Asset Transfer', 'Customer Demo', 'Borrow', 'Customer Borrow'], parent.material_request_type)",
-   "read_only_depends_on": "eval:in_list(['Customer Demo', 'Borrow', 'Customer Borrow'], parent.material_request_type)",
-   "oldfieldname": "uom",
-   "oldfieldtype": "Link",
-   "options": "UOM",
-   "print_width": "70px",
-   "width": "70px"
-  },
-  {
-   "fieldname": "conversion_factor",
-   "fieldtype": "Float",
-   "label": "UOM Conversion Factor",
-   "mandatory_depends_on": "eval:!in_list(['Asset Transfer', 'Customer Demo', 'Borrow', 'Customer Borrow'], parent.material_request_type)",
-   "precision": "9",
-   "print_hide": 1
-  },
-  {
-   "fieldname": "stock_uom",
-   "fieldtype": "Link",
-   "label": "Stock UOM",
-   "mandatory_depends_on": "eval:!in_list(['Asset Transfer', 'Customer Demo', 'Borrow', 'Customer Borrow'], parent.material_request_type)",
-   "options": "UOM",
-   "print_hide": 1,
-   "read_only": 1
-  },
-  {
-   "columns": 3,
-   "depends_on": "eval:in_list([\"Purchase\", \"Material Transfer\", \"Material Issue\"], parent.material_request_type)",
-   "fieldname": "warehouse",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Target Warehouse",
-   "mandatory_depends_on": "eval:in_list([\"Material Transfer\", \"Material Issue\"], parent.material_request_type)",
-   "oldfieldname": "warehouse",
-   "oldfieldtype": "Link",
-   "options": "Warehouse",
-   "print_width": "100px",
-   "width": "100px"
-  },
-  {
-   "fieldname": "col_break2",
-   "fieldtype": "Column Break"
-  },
-  {
-   "allow_on_submit": 1,
-   "bold": 1,
-   "columns": 2,
-   "fieldname": "schedule_date",
-   "fieldtype": "Date",
-   "in_list_view": 1,
-   "label": "Required By",
-   "oldfieldname": "schedule_date",
-   "oldfieldtype": "Date",
-   "print_width": "100px",
-   "width": "100px",
-   "mandatory_depends_on": "eval:!in_list(['Customer Demo', 'Borrow', 'Customer Borrow'], parent.material_request_type)"
-  },
-  {
-   "fieldname": "rate",
-   "fieldtype": "Currency",
-   "label": "Rate",
-   "options": "Company:company:default_currency",
-   "print_hide": 1,
-   "in_list_view": 1
-  },
-  {
-   "fieldname": "amount",
-   "fieldtype": "Currency",
-   "label": "Amount",
-   "options": "Company:company:default_currency",
-   "print_hide": 1,
-   "read_only": 1,
-   "in_list_view": 1
-  },
-  {
-   "fieldname": "estimate_section",
-   "fieldtype": "Section Break",
-   "label": "Estimated Price",
-   "collapsible": 1,
-   "collapsible_depends_on": "eval:doc.estimate_rate",
-   "hidden": 1
-  },
-  {
-   "fieldname": "estimate_supplier",
-   "fieldtype": "Link",
-   "in_list_view": 0,
-   "label": "Estimate Supplier",
-   "options": "Supplier",
-   "print_hide": 1,
-   "hidden": 1,
-   "read_only": 1,
-   "no_copy": 1
-  },
-  {
-   "fieldname": "estimate_currency",
-   "fieldtype": "Link",
-   "in_list_view": 0,
-   "label": "Estimate Currency",
-   "options": "Currency",
-   "print_hide": 1,
-   "hidden": 1,
-   "read_only": 1,
-   "no_copy": 1
-  },
-  {
-   "fieldname": "estimate_rate",
-   "fieldtype": "Currency",
-   "in_list_view": 0,
-   "label": "Estimated Rate",
-   "options": "estimate_currency",
-   "print_hide": 1,
-   "hidden": 1,
-   "read_only": 1,
-   "no_copy": 1
-  },
-  {
-   "fieldname": "estimate_column",
-   "fieldtype": "Column Break",
-   "hidden": 1
-  },
-  {
-   "fieldname": "estimate_exchange_rate",
-   "fieldtype": "Float",
-   "label": "Estimate Exchange Rate",
-   "precision": "9",
-   "print_hide": 1,
-   "hidden": 1,
-   "read_only": 1,
-   "no_copy": 1
-  },
-  {
-   "fieldname": "estimate_source",
-   "fieldtype": "Select",
-   "label": "Estimate Source",
-   "options": "\nEstimated Buying\nLast Purchase\nValuation\nPurchasing",
-   "print_hide": 1,
-   "read_only": 1,
-   "hidden": 1,
-   "no_copy": 1
-  },
-  {
-   "fieldname": "estimate_price_date",
-   "fieldtype": "Date",
-   "label": "Estimate Price Date",
-   "print_hide": 1,
-   "read_only": 1,
-   "hidden": 1,
-   "no_copy": 1
-  },
-  {
-   "fieldname": "stock_qty",
-   "fieldtype": "Float",
-   "label": "Stock Qty",
-   "no_copy": 1,
-   "print_hide": 1,
-   "read_only": 1
-  },
-  {
-   "collapsible": 1,
-   "fieldname": "more_info",
-   "fieldtype": "Section Break",
-   "label": "More Information"
+   "label": "Item Details"
   },
   {
    "fieldname": "item_group",
@@ -406,6 +271,402 @@
    "print_width": "100px",
    "read_only": 1,
    "width": "100px"
+  },
+  {
+   "fieldname": "column_break_12",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fetch_from": "item_code.image",
+   "fieldname": "image",
+   "fieldtype": "Attach Image",
+   "label": "Image",
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "quantity_and_warehouse",
+   "fieldtype": "Section Break",
+   "label": "Quantity and Units"
+  },
+  {
+   "columns": 1,
+   "fieldname": "qty",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Quantity",
+   "oldfieldname": "qty",
+   "oldfieldtype": "Currency",
+   "print_width": "80px",
+   "reqd": 1,
+   "width": "80px"
+  },
+  {
+   "fieldname": "stock_uom",
+   "fieldtype": "Link",
+   "label": "Stock UOM",
+   "mandatory_depends_on": "eval:!in_list(['Asset Transfer', 'Customer Demo', 'Borrow', 'Customer Borrow'], parent.material_request_type)",
+   "options": "UOM",
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_break2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "columns": 1,
+   "fieldname": "uom",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "UOM",
+   "mandatory_depends_on": "eval:!in_list(['Asset Transfer', 'Customer Demo', 'Borrow', 'Customer Borrow'], parent.material_request_type)",
+   "oldfieldname": "uom",
+   "oldfieldtype": "Link",
+   "options": "UOM",
+   "print_width": "70px",
+   "read_only_depends_on": "eval:in_list(['Customer Demo', 'Borrow', 'Customer Borrow'], parent.material_request_type)",
+   "width": "70px"
+  },
+  {
+   "fieldname": "conversion_factor",
+   "fieldtype": "Float",
+   "label": "UOM Conversion Factor",
+   "mandatory_depends_on": "eval:!in_list(['Asset Transfer', 'Customer Demo', 'Borrow', 'Customer Borrow'], parent.material_request_type)",
+   "precision": "9",
+   "print_hide": 1
+  },
+  {
+   "fieldname": "stock_qty",
+   "fieldtype": "Float",
+   "label": "Stock Qty",
+   "no_copy": 1,
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "warehouse_routing_section",
+   "fieldtype": "Section Break",
+   "label": "Warehouses and Storage"
+  },
+  {
+   "depends_on": "eval:parent.material_request_type == \"Material Transfer\"",
+   "fieldname": "from_warehouse",
+   "fieldtype": "Link",
+   "ignore_user_permissions": 1,
+   "in_list_view": 1,
+   "label": "Source Warehouse",
+   "options": "Warehouse"
+  },
+  {
+   "depends_on": "eval:parent.material_request_type == 'Material Transfer'",
+   "fieldname": "from_storage_location",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Source Storage Location",
+   "options": "Storage Location"
+  },
+  {
+   "fieldname": "warehouse_routing_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "columns": 3,
+   "depends_on": "eval:in_list([\"Purchase\", \"Material Transfer\", \"Material Issue\"], parent.material_request_type)",
+   "fieldname": "warehouse",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Target Warehouse",
+   "mandatory_depends_on": "eval:in_list([\"Material Transfer\", \"Material Issue\"], parent.material_request_type)",
+   "oldfieldname": "warehouse",
+   "oldfieldtype": "Link",
+   "options": "Warehouse",
+   "print_width": "100px",
+   "width": "100px"
+  },
+  {
+   "depends_on": "eval:in_list(['Purchase', 'Material Transfer', 'Material Issue'], parent.material_request_type)",
+   "fieldname": "storage_location",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Target Storage Location",
+   "options": "Storage Location"
+  },
+  {
+   "fieldname": "qty_info_sec_break",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "min_order_qty",
+   "fieldtype": "Float",
+   "label": "Min Order Qty",
+   "no_copy": 1,
+   "oldfieldname": "min_order_qty",
+   "oldfieldtype": "Currency",
+   "print_hide": 1,
+   "print_width": "70px",
+   "read_only": 1,
+   "width": "70px"
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "projected_qty",
+   "fieldtype": "Float",
+   "label": "Projected Qty",
+   "no_copy": 1,
+   "oldfieldname": "projected_qty",
+   "oldfieldtype": "Currency",
+   "print_hide": 1,
+   "print_width": "70px",
+   "read_only": 1,
+   "width": "70px"
+  },
+  {
+   "fieldname": "picked_qty",
+   "fieldtype": "Float",
+   "hidden": 1,
+   "label": "Picked Qty",
+   "no_copy": 1,
+   "non_negative": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "qty_info_col_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "actual_qty",
+   "fieldtype": "Float",
+   "label": "Actual Qty",
+   "no_copy": 1,
+   "print_hide": 1,
+   "read_only": 1,
+   "report_hide": 1
+  },
+  {
+   "depends_on": "eval:doc.docstatus==1",
+   "fieldname": "ordered_qty",
+   "fieldtype": "Float",
+   "label": "Completed Qty",
+   "no_copy": 1,
+   "oldfieldname": "ordered_qty",
+   "oldfieldtype": "Currency",
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.docstatus==1",
+   "fieldname": "received_qty",
+   "fieldtype": "Float",
+   "label": "Received Qty",
+   "no_copy": 1,
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "rate_and_amount_section_break",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "rate",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Rate",
+   "options": "Company:company:default_currency",
+   "print_hide": 1
+  },
+  {
+   "fieldname": "price_list_rate",
+   "fieldtype": "Currency",
+   "hidden": 1,
+   "label": "Price List Rate",
+   "options": "currency",
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_break3",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "amount",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Amount",
+   "options": "Company:company:default_currency",
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "collapsible_depends_on": "eval:doc.estimate_rate",
+   "fieldname": "estimate_section",
+   "fieldtype": "Section Break",
+   "hidden": 1,
+   "label": "Estimated Price"
+  },
+  {
+   "fieldname": "estimate_supplier",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "in_list_view": 0,
+   "label": "Estimate Supplier",
+   "no_copy": 1,
+   "options": "Supplier",
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "estimate_currency",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "in_list_view": 0,
+   "label": "Estimate Currency",
+   "no_copy": 1,
+   "options": "Currency",
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "estimate_rate",
+   "fieldtype": "Currency",
+   "hidden": 1,
+   "in_list_view": 0,
+   "label": "Estimated Rate",
+   "no_copy": 1,
+   "options": "estimate_currency",
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "estimate_column",
+   "fieldtype": "Column Break",
+   "hidden": 1
+  },
+  {
+   "fieldname": "estimate_exchange_rate",
+   "fieldtype": "Float",
+   "hidden": 1,
+   "label": "Estimate Exchange Rate",
+   "no_copy": 1,
+   "precision": "9",
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "estimate_source",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Estimate Source",
+   "no_copy": 1,
+   "options": "\nEstimated Buying\nLast Purchase\nValuation\nPurchasing",
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "estimate_price_date",
+   "fieldtype": "Date",
+   "hidden": 1,
+   "label": "Estimate Price Date",
+   "no_copy": 1,
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "accounting_details_section",
+   "fieldtype": "Section Break",
+   "label": "Accounting Details"
+  },
+  {
+   "fieldname": "expense_account",
+   "fieldtype": "Link",
+   "label": "Expense Account",
+   "options": "Account",
+   "print_hide": 1
+  },
+  {
+   "fieldname": "column_break_glru",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "wip_composite_asset",
+   "fieldtype": "Link",
+   "label": "WIP Composite Asset",
+   "options": "Asset"
+  },
+  {
+   "collapsible": 1,
+   "depends_on": "eval:in_list([\"Manufacture\", \"Purchase\"], parent.material_request_type)",
+   "fieldname": "manufacture_details",
+   "fieldtype": "Section Break",
+   "label": "Manufacture"
+  },
+  {
+   "fieldname": "manufacturer",
+   "fieldtype": "Link",
+   "label": "Manufacturer",
+   "options": "Manufacturer"
+  },
+  {
+   "fieldname": "manufacturer_part_no",
+   "fieldtype": "Data",
+   "label": "Manufacturer Part Number",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_break_mfg",
+   "fieldtype": "Column Break"
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "bom_no",
+   "fieldtype": "Link",
+   "label": "BOM No",
+   "no_copy": 1,
+   "options": "BOM",
+   "print_hide": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "accounting_dimensions_section",
+   "fieldtype": "Section Break",
+   "label": "Accounting Dimensions"
+  },
+  {
+   "fieldname": "project",
+   "fieldtype": "Link",
+   "label": "Project",
+   "options": "Project"
+  },
+  {
+   "fieldname": "department",
+   "fieldtype": "Link",
+   "label": "Department",
+   "options": "Department"
+  },
+  {
+   "fieldname": "dimension_col_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "cost_center",
+   "fieldtype": "Link",
+   "label": "Cost Center",
+   "options": "Cost Center",
+   "print_hide": 1
+  },
+  {
+   "fieldname": "territory",
+   "fieldtype": "Link",
+   "label": "Territory",
+   "options": "Territory",
+   "print_hide": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "more_info",
+   "fieldtype": "Section Break",
+   "label": "More Information"
   },
   {
    "fieldname": "lead_time_date",
@@ -436,16 +697,18 @@
    "search_index": 1
   },
   {
-   "fieldname": "project",
-   "fieldtype": "Link",
-   "label": "Project",
-   "options": "Project"
+   "fieldname": "packed_item",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Packed Item",
+   "no_copy": 1,
+   "print_hide": 1,
+   "read_only": 1,
+   "search_index": 1
   },
   {
-   "fieldname": "department",
-   "fieldtype": "Link",
-   "label": "Department",
-   "options": "Department"
+   "fieldname": "col_break4",
+   "fieldtype": "Column Break"
   },
   {
    "fieldname": "production_plan",
@@ -465,164 +728,6 @@
    "read_only": 1
   },
   {
-   "fieldname": "col_break3",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "min_order_qty",
-   "fieldtype": "Float",
-   "label": "Min Order Qty",
-   "no_copy": 1,
-   "oldfieldname": "min_order_qty",
-   "oldfieldtype": "Currency",
-   "print_hide": 1,
-   "print_width": "70px",
-   "read_only": 1,
-   "width": "70px"
-  },
-  {
-   "allow_on_submit": 1,
-   "fieldname": "projected_qty",
-   "fieldtype": "Float",
-   "label": "Projected Qty",
-   "no_copy": 1,
-   "oldfieldname": "projected_qty",
-   "oldfieldtype": "Currency",
-   "print_hide": 1,
-   "print_width": "70px",
-   "read_only": 1,
-   "width": "70px"
-  },
-  {
-   "fieldname": "actual_qty",
-   "fieldtype": "Float",
-   "label": "Actual Qty",
-   "no_copy": 1,
-   "print_hide": 1,
-   "read_only": 1,
-   "report_hide": 1
-  },
-  {
-   "depends_on": "eval:doc.docstatus==1",
-   "fieldname": "ordered_qty",
-   "fieldtype": "Float",
-   "label": "Completed Qty",
-   "no_copy": 1,
-   "oldfieldname": "ordered_qty",
-   "oldfieldtype": "Currency",
-   "print_hide": 1,
-   "read_only": 1
-  },
-  {
-   "fieldname": "expense_account",
-   "fieldtype": "Link",
-   "label": "Expense Account",
-   "options": "Account",
-   "print_hide": 1
-  },
-  {
-   "fieldname": "cost_center",
-   "fieldtype": "Link",
-   "label": "Cost Center",
-   "options": "Cost Center",
-   "print_hide": 1
-  },
-  {
-   "allow_on_submit": 1,
-   "default": "0",
-   "fieldname": "page_break",
-   "fieldtype": "Check",
-   "label": "Page Break",
-   "no_copy": 1,
-   "oldfieldname": "page_break",
-   "oldfieldtype": "Check",
-   "print_hide": 1
-  },
-  {
-   "depends_on": "eval:doc.docstatus==1",
-   "fieldname": "received_qty",
-   "fieldtype": "Float",
-   "label": "Received Qty",
-   "no_copy": 1,
-   "print_hide": 1,
-   "read_only": 1
-  },
-  {
-   "collapsible": 1,
-   "fieldname": "accounting_dimensions_section",
-   "fieldtype": "Section Break",
-   "label": "Accounting Dimensions"
-  },
-  {
-   "fieldname": "dimension_col_break",
-   "fieldtype": "Column Break"
-  },
-  {
-   "collapsible": 1,
-   "depends_on": "eval:in_list([\"Manufacture\", \"Purchase\"], parent.material_request_type)",
-   "fieldname": "manufacture_details",
-   "fieldtype": "Section Break",
-   "label": "Manufacture"
-  },
-  {
-   "fieldname": "manufacturer",
-   "fieldtype": "Link",
-   "label": "Manufacturer",
-   "options": "Manufacturer"
-  },
-  {
-   "fieldname": "column_break_12",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "manufacturer_part_no",
-   "fieldtype": "Data",
-   "label": "Manufacturer Part Number",
-   "read_only": 1
-  },
-  {
-   "fieldname": "rate_and_amount_section_break",
-   "fieldtype": "Section Break"
-  },
-  {
-   "fieldname": "col_break4",
-   "fieldtype": "Column Break"
-  },
-  {
-   "depends_on": "eval:parent.material_request_type == \"Material Transfer\"",
-   "fieldname": "from_warehouse",
-   "fieldtype": "Link",
-   "ignore_user_permissions": 1,
-   "in_list_view": 1,
-   "label": "Source Warehouse",
-   "options": "Warehouse"
-  },
-  {
-   "allow_on_submit": 1,
-   "fieldname": "bom_no",
-   "fieldtype": "Link",
-   "label": "BOM No",
-   "no_copy": 1,
-   "options": "BOM",
-   "print_hide": 1
-  },
-  {
-   "fieldname": "section_break_46",
-   "fieldtype": "Section Break"
-  },
-  {
-   "fieldname": "col_break_mfg",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "qty_info_sec_break",
-   "fieldtype": "Section Break"
-  },
-  {
-   "fieldname": "qty_info_col_break",
-   "fieldtype": "Column Break"
-  },
-  {
    "fieldname": "job_card_item",
    "fieldtype": "Data",
    "hidden": 1,
@@ -631,33 +736,16 @@
    "print_hide": 1
   },
   {
-   "fieldname": "accounting_details_section",
-   "fieldtype": "Section Break",
-   "label": "Accounting Details"
-  },
-  {
-   "fieldname": "column_break_glru",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "wip_composite_asset",
-   "fieldtype": "Link",
-   "label": "WIP Composite Asset",
-   "options": "Asset"
-  },
-  {
-   "fieldname": "price_list_rate",
-   "fieldtype": "Currency",
-   "hidden": 1,
-   "label": "Price List Rate",
-   "options": "currency",
-   "print_hide": 1,
-   "read_only": 1
-  },
-  {
    "fieldname": "item_reorder_section",
    "fieldtype": "Section Break",
    "label": "Item Reorder"
+  },
+  {
+   "description": "If the reorder check is set at the Group warehouse level, the available quantity becomes the sum of the projected quantities of all its child warehouses.",
+   "fieldname": "projected_on_hand",
+   "fieldtype": "Float",
+   "label": "Projected On Hand",
+   "read_only": 1
   },
   {
    "fieldname": "column_break_fdjh",
@@ -676,30 +764,19 @@
    "read_only": 1
   },
   {
-   "description": "If the reorder check is set at the Group warehouse level, the available quantity becomes the sum of the projected quantities of all its child warehouses.",
-   "fieldname": "projected_on_hand",
-   "fieldtype": "Float",
-   "label": "Projected On Hand",
-   "read_only": 1
+   "fieldname": "section_break_46",
+   "fieldtype": "Section Break"
   },
   {
-   "fieldname": "picked_qty",
-   "fieldtype": "Float",
-   "hidden": 1,
-   "label": "Picked Qty",
+   "allow_on_submit": 1,
+   "default": "0",
+   "fieldname": "page_break",
+   "fieldtype": "Check",
+   "label": "Page Break",
    "no_copy": 1,
-   "non_negative": 1,
-   "read_only": 1
-  },
-  {
-   "fieldname": "packed_item",
-   "fieldtype": "Data",
-   "hidden": 1,
-   "label": "Packed Item",
-   "no_copy": 1,
-   "print_hide": 1,
-   "read_only": 1,
-   "search_index": 1
+   "oldfieldname": "page_break",
+   "oldfieldtype": "Check",
+   "print_hide": 1
   },
   {
    "fieldname": "item_type",
@@ -768,65 +845,13 @@
    "label": "Latest Custody Asset Movement",
    "options": "Asset Movement",
    "read_only": 1
-  },
-  {
-   "fieldname": "section_break_jzwe",
-   "fieldtype": "Section Break"
-  },
-  {
-   "fieldname": "column_break_buxt",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "section_break_srre",
-   "fieldtype": "Section Break"
-  },
-  {
-   "fieldname": "column_break_mumj",
-   "fieldtype": "Column Break"
-  },
-  {
-   "depends_on": "eval:parent.material_request_type == 'Material Transfer'",
-   "fieldname": "from_storage_location",
-   "fieldtype": "Link",
-   "hidden": 1,
-   "label": "Source Storage Location",
-   "options": "Storage Location"
-  },
-  {
-   "depends_on": "eval:in_list(['Purchase', 'Material Transfer', 'Material Issue'], parent.material_request_type)",
-   "fieldname": "storage_location",
-   "fieldtype": "Link",
-   "hidden": 1,
-   "label": "Target Storage Location",
-   "options": "Storage Location"
-  },
-  {
-   "allow_on_submit": 1,
-   "depends_on": "eval:doc.demo_acquisition_method",
-   "description": "Blank until the back office decides: Lend Stock, or an Asset (Ready, Wait Return, Convert Stock).",
-   "fieldname": "demo_acquisition_method",
-   "fieldtype": "Select",
-   "label": "Demo Acquisition Method",
-   "options": "\nReady Asset\nWait Return\nConvert Stock\nLend Stock",
-   "read_only": 1
-  },
-  {
-   "description": "The Item the requester asked for; the back office may supply another Demo model.",
-   "fieldname": "demo_requested_item",
-   "fieldtype": "Link",
-   "hidden": 1,
-   "label": "Requested Item",
-   "no_copy": 1,
-   "options": "Item",
-   "read_only": 1
   }
  ],
  "idx": 1,
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-11-19 10:00:00.000000",
+ "modified": "2026-11-20 23:48:19.662469",
  "modified_by": "arirat.ba@connectdiagnostics.com",
  "module": "Stock",
  "name": "Material Request Item",

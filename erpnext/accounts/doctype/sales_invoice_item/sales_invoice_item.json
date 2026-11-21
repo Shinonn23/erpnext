@@ -84,9 +84,13 @@
   "total_weight",
   "column_break_21",
   "weight_uom",
-  "warehouse_and_reference",
+  "inventory_dimension",
   "warehouse",
+  "storage_location",
+  "inventory_dimension_col_break",
   "target_warehouse",
+  "to_storage_location",
+  "warehouse_and_reference",
   "quality_inspection",
   "pick_serial_and_batch",
   "serial_and_batch_bundle",
@@ -95,10 +99,6 @@
   "incoming_rate",
   "item_tax_rate",
   "actual_batch_qty",
-  "inventory_dimension",
-  "storage_location",
-  "inventory_dimension_col_break",
-  "to_storage_location",
   "section_break_eoec",
   "serial_no",
   "column_break_ytgd",
@@ -127,8 +127,10 @@
   "purchase_order_item",
   "accounting_dimensions_section",
   "cost_center",
+  "department",
   "dimension_col_break",
   "project",
+  "territory",
   "section_break_54",
   "page_break",
   "regulatory_snapshot_section",
@@ -606,7 +608,7 @@
    "depends_on": "eval:parent.update_stock",
    "fieldname": "warehouse_and_reference",
    "fieldtype": "Section Break",
-   "label": "Stock Details"
+   "label": "Serial, Batch and Inspection"
   },
   {
    "fieldname": "warehouse",
@@ -616,10 +618,11 @@
    "oldfieldname": "warehouse",
    "oldfieldtype": "Link",
    "options": "Warehouse",
-   "print_hide": 1
+   "print_hide": 1,
+   "depends_on": "eval:(parent.update_stock)"
   },
   {
-   "depends_on": "eval: parent.is_internal_customer",
+   "depends_on": "eval:(parent.update_stock) && ( parent.is_internal_customer)",
    "fieldname": "target_warehouse",
    "fieldtype": "Link",
    "hidden": 1,
@@ -1059,10 +1062,9 @@
    "read_only": 1
   },
   {
-   "collapsible": 1,
    "fieldname": "inventory_dimension",
    "fieldtype": "Section Break",
-   "label": "Inventory Dimension"
+   "label": "Warehouse and Storage"
   },
   {
    "fieldname": "inventory_dimension_col_break",
@@ -1159,13 +1161,29 @@
    "fieldtype": "Check",
    "label": "Is Deposit Item",
    "read_only": 1
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "department",
+   "fieldtype": "Link",
+   "label": "Department",
+   "options": "Department",
+   "print_hide": 1
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "territory",
+   "fieldtype": "Link",
+   "label": "Territory",
+   "options": "Territory",
+   "print_hide": 1
   }
  ],
  "grid_page_length": 50,
  "idx": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-11-08 12:00:00.000000",
+ "modified": "2026-11-20 23:48:19.662469",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Sales Invoice Item",

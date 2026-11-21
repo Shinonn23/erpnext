@@ -17,8 +17,8 @@ from erpnext.accounts.doctype.repost_accounting_ledger.repost_accounting_ledger 
 	get_allowed_types_from_settings,
 )
 
-# Native dimensions that sit beside `project`; they are not Accounting Dimension records.
-STANDARD_DIMENSIONS = ("department", "territory", "sales_person")
+# Native dimensions that sit beside `project` and `cost_center`; they are not Accounting Dimension records.
+STANDARD_DIMENSIONS = ("department", "territory")
 
 
 class AccountingDimension(Document):
@@ -56,6 +56,8 @@ class AccountingDimension(Document):
 			"Accounting Dimension",
 			"Project",
 			"Cost Center",
+			"Department",
+			"Territory",
 			"Accounting Dimension Detail",
 			"Company",
 			"Account",
@@ -363,6 +365,10 @@ def get_dimensions(with_cost_center_and_project=False):
 			[
 				frappe._dict({"fieldname": "cost_center", "document_type": "Cost Center"}),
 				frappe._dict({"fieldname": "project", "document_type": "Project"}),
+				*(
+					frappe._dict({"fieldname": d, "document_type": frappe.unscrub(d)})
+					for d in STANDARD_DIMENSIONS
+				),
 			]
 		)
 
@@ -405,7 +411,7 @@ def get_dimension_fieldname(dim_doctype: str) -> str:
 	"""
 	Return the `GL Entry` fieldname for a given dimension.
 	"""
-	if dim_doctype in ("Cost Center", "Project"):
+	if dim_doctype in ("Cost Center", "Project", *(frappe.unscrub(d) for d in STANDARD_DIMENSIONS)):
 		return frappe.scrub(dim_doctype)
 
 	return frappe.db.get_value("Accounting Dimension", {"document_type": dim_doctype}, "fieldname")

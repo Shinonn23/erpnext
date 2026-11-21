@@ -11,7 +11,6 @@
   "disable",
   "item_code",
   "item_name",
-  "warehouse",
   "priority",
   "col_break_capacity",
   "company",
@@ -21,6 +20,8 @@
   "stock_uom",
   "stock_capacity",
   "inventory_dimension",
+  "warehouse",
+  "warehouse_storage_column",
   "storage_location"
  ],
  "fields": [
@@ -116,7 +117,7 @@
   {
    "fieldname": "inventory_dimension",
    "fieldtype": "Section Break",
-   "label": "Inventory Dimension"
+   "label": "Warehouse and Storage"
   },
   {
    "fieldname": "storage_location",
@@ -124,6 +125,10 @@
    "label": "Storage Location",
    "options": "Storage Location",
    "search_index": 1
+  },
+  {
+   "fieldname": "warehouse_storage_column",
+   "fieldtype": "Column Break"
   }
  ],
  "icon": "archive",

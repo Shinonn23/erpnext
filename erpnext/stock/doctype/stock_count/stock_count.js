@@ -56,7 +56,17 @@ frappe.ui.form.on("Stock Count", {
 		frm.set_query("storage_location", "items", (doc, cdt, cdn) =>
 			erpnext.queries.storage_location(doc.warehouse, locals[cdt][cdn].item_code)
 		);
-		frm.set_query("inventory_dimension", "dimensions", () => ({ filters: { apply_to_all_doctypes: 1 } }));
+		frappe.call({
+			method: "erpnext.stock.doctype.inventory_dimension.inventory_dimension.get_inventory_dimensions",
+			callback(r) {
+				const options = (r.message || []).map((d) => d.dimension_name).filter(Boolean);
+				frm.fields_dict.dimensions.grid.update_docfield_property(
+					"inventory_dimension",
+					"options",
+					options
+				);
+			},
+		});
 		frm.set_query("batch_no", "items", (doc, cdt, cdn) => ({
 			filters: { item: locals[cdt][cdn].item_code },
 		}));
@@ -347,6 +357,10 @@ frappe.ui.form.on("Stock Count Dimension", {
 		row.dimension_value = "";
 		if (!row.inventory_dimension) {
 			frm.refresh_field("dimensions");
+			return;
+		}
+		if (row.inventory_dimension === "Storage Location") {
+			frappe.model.set_value(cdt, cdn, "reference_document", "Storage Location");
 			return;
 		}
 		frappe.db.get_value("Inventory Dimension", row.inventory_dimension, "reference_document", (r) => {

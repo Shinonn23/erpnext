@@ -14,10 +14,6 @@
   "company",
   "asset",
   "asset_name",
-  "service_equipment",
-  "equipment_name",
-  "issue",
-  "maintenance_visit",
   "return_movement",
   "return_movement_item",
   "column_break_2",
@@ -30,9 +26,6 @@
   "description",
   "column_break_9",
   "actions_performed",
-  "equipment_parts_section",
-  "equipment_parts",
-  "equipment_repair_cost",
   "equipment_status_before",
   "accounting_details",
   "invoices",
@@ -54,9 +47,10 @@
   "total_repair_cost",
   "accounting_dimensions_section",
   "cost_center",
+  "department",
   "dimension_col_break",
   "project",
-  "department",
+  "territory",
   "connection_tab"
  ],
  "fields": [
@@ -118,27 +112,6 @@
    "label": "Actions performed"
   },
   {
-   "depends_on": "eval:doc.service_equipment",
-   "description": "A record of the parts used on the equipment: no stock is issued and nothing is posted.",
-   "fieldname": "equipment_parts_section",
-   "fieldtype": "Section Break",
-   "label": "Parts Used"
-  },
-  {
-   "allow_on_submit": 1,
-   "fieldname": "equipment_parts",
-   "fieldtype": "Table",
-   "label": "Parts",
-   "options": "Service Equipment Repair Part"
-  },
-  {
-   "allow_on_submit": 1,
-   "description": "Noted for the service record only: it posts nothing.",
-   "fieldname": "equipment_repair_cost",
-   "fieldtype": "Currency",
-   "label": "Repair Cost (record)"
-  },
-  {
    "fieldname": "equipment_status_before",
    "fieldtype": "Data",
    "hidden": 1,
@@ -156,7 +129,6 @@
   },
   {
    "default": "0",
-   "depends_on": "eval:!doc.service_equipment",
    "fieldname": "repair_cost",
    "fieldtype": "Currency",
    "label": "Repair Cost",
@@ -173,13 +145,11 @@
   },
   {
    "columns": 1,
-   "depends_on": "eval:!doc.service_equipment",
    "fieldname": "asset",
    "fieldtype": "Link",
    "in_list_view": 1,
    "label": "Asset",
    "link_filters": "[[\"Asset\",\"status\",\"not in\",[\"Work In Progress\",\"Capitalized\",\"Sold\",\"Scrapped\",\"Cancelled\"]]]",
-   "mandatory_depends_on": "eval:!doc.service_equipment",
    "options": "Asset"
   },
   {
@@ -189,62 +159,31 @@
    "label": "Asset Name"
   },
   {
-   "depends_on": "eval:!doc.asset",
-   "fieldname": "service_equipment",
-   "fieldtype": "Link",
-   "label": "Service Equipment",
-   "mandatory_depends_on": "eval:!doc.asset",
-   "options": "Service Equipment"
-  },
-  {
-   "depends_on": "eval:doc.service_equipment",
-   "fetch_from": "service_equipment.equipment_name",
-   "fieldname": "equipment_name",
-   "fieldtype": "Data",
-   "label": "Equipment Name",
-   "read_only": 1
-  },
-  {
-   "depends_on": "eval:doc.service_equipment",
-   "fieldname": "issue",
-   "fieldtype": "Link",
-   "label": "Issue",
-   "options": "Issue"
-  },
-  {
-   "depends_on": "eval:doc.service_equipment",
-   "fieldname": "maintenance_visit",
-   "fieldtype": "Link",
-   "label": "Maintenance Visit",
-   "options": "Maintenance Visit"
-  },
-  {
+   "depends_on": "eval:doc.return_movement",
+   "description": "The borrowing return Asset Movement whose inspection rejected this Asset.",
    "fieldname": "return_movement",
    "fieldtype": "Link",
    "label": "Return Movement",
-   "options": "Asset Movement",
-   "read_only": 1,
    "no_copy": 1,
-   "depends_on": "eval:doc.return_movement",
-   "description": "The borrowing return Asset Movement whose inspection rejected this Asset."
+   "options": "Asset Movement",
+   "read_only": 1
   },
   {
    "fieldname": "return_movement_item",
    "fieldtype": "Data",
-   "label": "Return Movement Row",
    "hidden": 1,
-   "read_only": 1,
-   "no_copy": 1
+   "label": "Return Movement Row",
+   "no_copy": 1,
+   "read_only": 1
   },
   {
    "default": "0",
-   "depends_on": "eval:!doc.__islocal && !doc.service_equipment",
+   "depends_on": "eval:!doc.__islocal",
    "fieldname": "capitalize_repair_cost",
    "fieldtype": "Check",
    "label": "Capitalize Repair Cost"
   },
   {
-   "depends_on": "eval:!doc.service_equipment",
    "fieldname": "accounting_details",
    "fieldtype": "Section Break",
    "hide_border": 1
@@ -287,7 +226,6 @@
    "label": "Consumed Stock Items"
   },
   {
-   "depends_on": "eval:!doc.service_equipment",
    "fieldname": "total_repair_cost",
    "fieldtype": "Currency",
    "label": "Total Repair Cost",
@@ -308,7 +246,6 @@
    "options": "Company"
   },
   {
-   "depends_on": "eval:!doc.service_equipment",
    "fieldname": "invoices",
    "fieldtype": "Table",
    "label": "Repair Purchase Invoices",
@@ -350,7 +287,7 @@
    "fieldtype": "Column Break"
   },
   {
-   "depends_on": "eval:doc.consumed_items_cost && !doc.service_equipment",
+   "depends_on": "eval:doc.consumed_items_cost",
    "fieldname": "consumed_items_cost",
    "fieldtype": "Currency",
    "label": "Consumed Items Cost"
@@ -370,6 +307,13 @@
    "fieldtype": "Tab Break",
    "label": "Connection",
    "show_dashboard": 1
+  },
+  {
+   "fieldname": "territory",
+   "fieldtype": "Link",
+   "label": "Territory",
+   "options": "Territory",
+   "print_hide": 1
   }
  ],
  "icon": "wrench",
@@ -381,7 +325,7 @@
    "link_fieldname": "asset_repair"
   }
  ],
- "modified": "2026-11-19 10:00:00.000000",
+ "modified": "2026-11-20 23:48:19.662469",
  "modified_by": "Administrator",
  "module": "Assets",
  "name": "Asset Repair",

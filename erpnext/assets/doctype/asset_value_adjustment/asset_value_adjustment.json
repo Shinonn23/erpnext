@@ -23,7 +23,9 @@
   "journal_entry",
   "accounting_dimensions_section",
   "cost_center",
-  "dimension_col_break"
+  "department",
+  "dimension_col_break",
+  "territory"
  ],
  "fields": [
   {
@@ -133,13 +135,27 @@
    "no_copy": 1,
    "options": "Account",
    "reqd": 1
+  },
+  {
+   "fieldname": "department",
+   "fieldtype": "Link",
+   "label": "Department",
+   "options": "Department",
+   "print_hide": 1
+  },
+  {
+   "fieldname": "territory",
+   "fieldtype": "Link",
+   "label": "Territory",
+   "options": "Territory",
+   "print_hide": 1
   }
  ],
  "icon": "sliders-horizontal",
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2024-12-18 15:04:18.726505",
+ "modified": "2026-11-20 23:48:19.662469",
  "modified_by": "Administrator",
  "module": "Assets",
  "name": "Asset Value Adjustment",

@@ -3,24 +3,33 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "item_section",
   "item_code",
   "qty",
   "stock_qty",
   "stock_uom",
-  "warehouse",
   "material_request_item",
+  "asset_item_column",
+  "asset_item_code",
+  "inventory_dimension",
+  "warehouse",
+  "is_stock_item",
+  "storage_location_column",
+  "storage_location",
   "column_break_1",
   "pick_serial_and_batch",
   "serial_and_batch_bundle",
   "bundle_summary",
-  "asset_item_code",
+  "valuation_column",
   "valuation_rate",
-  "amount",
-  "inventory_dimension",
-  "is_stock_item",
-  "storage_location"
+  "amount"
  ],
  "fields": [
+  {
+   "fieldname": "item_section",
+   "fieldtype": "Section Break",
+   "label": "Item and Conversion"
+  },
   {
    "fieldname": "item_code",
    "fieldtype": "Link",
@@ -53,14 +62,6 @@
    "reqd": 1
   },
   {
-   "fieldname": "warehouse",
-   "fieldtype": "Link",
-   "label": "Warehouse",
-   "options": "Warehouse",
-   "reqd": 1,
-   "in_list_view": 1
-  },
-  {
    "fieldname": "material_request_item",
    "fieldtype": "Link",
    "label": "Material Request Item",
@@ -69,8 +70,56 @@
    "read_only": 1
   },
   {
-   "fieldname": "column_break_1",
+   "fieldname": "asset_item_column",
    "fieldtype": "Column Break"
+  },
+  {
+   "description": "Filled from the stock Item's Asset Item Code; choose another Fixed Asset Item here if it is empty.",
+   "fieldname": "asset_item_code",
+   "fieldtype": "Link",
+   "label": "Target Asset Item",
+   "options": "Item"
+  },
+  {
+   "fieldname": "inventory_dimension",
+   "fieldtype": "Section Break",
+   "label": "Source Warehouse and Storage"
+  },
+  {
+   "fieldname": "warehouse",
+   "fieldtype": "Link",
+   "label": "Warehouse",
+   "options": "Warehouse",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "is_stock_item",
+   "fieldtype": "Check",
+   "label": "Is Stock Item",
+   "fetch_from": "item_code.is_stock_item",
+   "hidden": 1,
+   "read_only": 1,
+   "print_hide": 1,
+   "description": "Fetched from the Item: the Storage Location fields apply only to a stock Item."
+  },
+  {
+   "fieldname": "storage_location_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "storage_location",
+   "fieldtype": "Link",
+   "label": "Source Storage Location",
+   "options": "Storage Location",
+   "search_index": 1,
+   "depends_on": "eval:doc.is_stock_item || doc.storage_location",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Section Break",
+   "label": "Serial, Batch and Valuation"
   },
   {
    "depends_on": "eval:doc.docstatus === 0",
@@ -93,11 +142,8 @@
    "read_only": 1
   },
   {
-   "description": "Filled from the stock Item's Asset Item Code; choose another Fixed Asset Item here if it is empty.",
-   "fieldname": "asset_item_code",
-   "fieldtype": "Link",
-   "label": "Target Asset Item",
-   "options": "Item"
+   "fieldname": "valuation_column",
+   "fieldtype": "Column Break"
   },
   {
    "fieldname": "valuation_rate",
@@ -112,31 +158,6 @@
    "label": "Amount",
    "options": "Company:company:default_currency",
    "read_only": 1
-  },
-  {
-   "fieldname": "inventory_dimension",
-   "fieldtype": "Section Break",
-   "label": "Inventory Dimension",
-   "collapsible": 1
-  },
-  {
-   "fieldname": "storage_location",
-   "fieldtype": "Link",
-   "label": "Source Storage Location",
-   "options": "Storage Location",
-   "search_index": 1,
-   "depends_on": "eval:doc.is_stock_item || doc.storage_location",
-   "in_list_view": 1
-  },
-  {
-   "fieldname": "is_stock_item",
-   "fieldtype": "Check",
-   "label": "Is Stock Item",
-   "fetch_from": "item_code.is_stock_item",
-   "hidden": 1,
-   "read_only": 1,
-   "print_hide": 1,
-   "description": "Fetched from the Item: the Storage Location fields apply only to a stock Item."
   }
  ],
  "istable": 1,

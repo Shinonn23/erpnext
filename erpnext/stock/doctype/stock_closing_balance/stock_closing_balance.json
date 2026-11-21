@@ -8,14 +8,16 @@
  "engine": "InnoDB",
  "field_order": [
   "item_code",
-  "warehouse",
   "batch_no",
+  "inventory_dimension",
+  "warehouse",
+  "warehouse_storage_column",
+  "storage_location",
+  "posting_details_section",
   "column_break_rvdz",
   "posting_date",
   "posting_time",
   "posting_datetime",
-  "inventory_dimension",
-  "storage_location",
   "section_break_11",
   "actual_qty",
   "valuation_rate",
@@ -236,7 +238,7 @@
    "collapsible": 1,
    "fieldname": "inventory_dimension",
    "fieldtype": "Section Break",
-   "label": "Inventory Dimension"
+   "label": "Warehouse and Storage"
   },
   {
    "fieldname": "storage_location",
@@ -246,6 +248,15 @@
    "options": "Storage Location",
    "read_only": 1,
    "search_index": 1
+  },
+  {
+   "fieldname": "warehouse_storage_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "posting_details_section",
+   "fieldtype": "Section Break",
+   "label": "Posting Details"
   }
  ],
  "hide_toolbar": 1,

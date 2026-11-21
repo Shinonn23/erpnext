@@ -14,6 +14,7 @@
   "fg_item_code",
   "column_break_hoxe",
   "stock_uom",
+  "warehouse_section",
   "warehouse",
   "section_break_gqk9",
   "produced_qty",
@@ -108,6 +109,11 @@
   {
    "fieldname": "column_break_jkzt",
    "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "warehouse_section",
+   "fieldtype": "Section Break",
+   "label": "Warehouse"
   }
  ],
  "grid_page_length": 50,

@@ -8,12 +8,13 @@
   "account",
   "party_type",
   "party",
-  "department",
   "user_remark",
   "accounting_dimensions_section",
   "cost_center",
+  "department",
   "dimension_col_break",
-  "project"
+  "project",
+  "territory"
  ],
  "fields": [
   {
@@ -72,11 +73,18 @@
    "label": "User Remark",
    "no_copy": 1,
    "print_hide": 1
+  },
+  {
+   "fieldname": "territory",
+   "fieldtype": "Link",
+   "label": "Territory",
+   "options": "Territory",
+   "print_hide": 1
   }
  ],
  "istable": 1,
  "links": [],
- "modified": "2026-11-07 16:00:00.000000",
+ "modified": "2026-11-20 23:48:19.662469",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Journal Entry Template Account",

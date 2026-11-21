@@ -13,7 +13,6 @@
   "purchase_order",
   "supplier",
   "supplier_name",
-  "supplier_warehouse",
   "supplier_currency",
   "conversion_rate",
   "column_break_7",
@@ -23,11 +22,15 @@
   "amended_from",
   "accounting_dimensions_section",
   "cost_center",
+  "department",
   "dimension_col_break",
   "project",
+  "territory",
   "section_break_24",
+  "supplier_warehouse",
   "column_break_25",
   "set_warehouse",
+  "items_section",
   "items",
   "section_break_32",
   "total_qty",
@@ -253,7 +256,8 @@
   },
   {
    "fieldname": "section_break_24",
-   "fieldtype": "Section Break"
+   "fieldtype": "Section Break",
+   "label": "Job Worker and Target Warehouses"
   },
   {
    "fieldname": "column_break_25",
@@ -500,12 +504,31 @@
    "label": "Production Plan",
    "no_copy": 1,
    "read_only": 1
+  },
+  {
+   "fieldname": "department",
+   "fieldtype": "Link",
+   "label": "Department",
+   "options": "Department",
+   "print_hide": 1
+  },
+  {
+   "fieldname": "territory",
+   "fieldtype": "Link",
+   "label": "Territory",
+   "options": "Territory",
+   "print_hide": 1
+  },
+  {
+   "fieldname": "items_section",
+   "fieldtype": "Section Break",
+   "label": "Items"
   }
  ],
  "icon": "shopping-bag",
  "is_submittable": 1,
  "links": [],
- "modified": "2026-09-23 10:14:28.331204",
+ "modified": "2026-11-20 23:48:19.662469",
  "modified_by": "Administrator",
  "module": "Subcontracting",
  "name": "Subcontracting Order",

@@ -24,12 +24,12 @@
   "company",
   "is_subcontracted",
   "has_unit_price_items",
-  "supplier_warehouse",
   "accounting_dimensions_section",
   "cost_center",
+  "department",
   "dimension_col_break",
   "project",
-  "department",
+  "territory",
   "currency_and_price_list",
   "currency",
   "conversion_rate",
@@ -42,8 +42,12 @@
   "scan_barcode",
   "last_scanned_warehouse",
   "items_col_break",
+  "warehouse_defaults_section",
   "set_from_warehouse",
+  "set_reserve_warehouse",
+  "warehouse_defaults_column",
   "set_warehouse",
+  "supplier_warehouse",
   "items_section",
   "items",
   "sb_last_purchase",
@@ -57,7 +61,6 @@
   "net_total",
   "section_break_48",
   "pricing_rules",
-  "set_reserve_warehouse",
   "taxes_section",
   "tax_category",
   "taxes_and_charges",
@@ -1376,12 +1379,12 @@
    "mandatory_depends_on": "eval:doc.nonlowest_supplier_selection || doc.requires_supplier_selection_approval"
   },
   {
+   "depends_on": "eval:doc.requires_supplier_selection_approval",
    "fieldname": "requires_supplier_selection_approval",
    "fieldtype": "Check",
    "label": "Requires Supplier Selection Approval",
    "no_copy": 1,
-   "read_only": 1,
-   "depends_on": "eval:doc.requires_supplier_selection_approval"
+   "read_only": 1
   },
   {
    "fieldname": "p2p_exception_type",
@@ -1405,29 +1408,29 @@
    "label": "P2P Exception Document"
   },
   {
+   "depends_on": "eval:doc.requires_executive_review",
    "fieldname": "requires_executive_review",
    "fieldtype": "Check",
    "label": "Requires Executive Review",
-   "read_only": 1,
-   "depends_on": "eval:doc.requires_executive_review"
+   "read_only": 1
   },
   {
+   "depends_on": "eval:doc.material_request_approval_reused",
    "fieldname": "material_request_approval_reused",
    "fieldtype": "Check",
    "label": "Approved Material Request Covers This Order",
    "no_copy": 1,
    "print_hide": 1,
-   "read_only": 1,
-   "depends_on": "eval:doc.material_request_approval_reused"
+   "read_only": 1
   },
   {
+   "depends_on": "eval:doc.material_request_approval_changes",
    "fieldname": "material_request_approval_changes",
    "fieldtype": "Long Text",
    "label": "Material Request Approval Changes",
    "no_copy": 1,
    "print_hide": 1,
-   "read_only": 1,
-   "depends_on": "eval:doc.material_request_approval_changes"
+   "read_only": 1
   },
   {
    "fieldname": "connect_operations_tab",
@@ -1509,6 +1512,22 @@
    "fieldtype": "Select",
    "label": "Deposit Deduction Method",
    "options": "Percent\nFull Amount"
+  },
+  {
+   "fieldname": "territory",
+   "fieldtype": "Link",
+   "label": "Territory",
+   "options": "Territory",
+   "print_hide": 1
+  },
+  {
+   "fieldname": "warehouse_defaults_section",
+   "fieldtype": "Section Break",
+   "label": "Warehouse Defaults"
+  },
+  {
+   "fieldname": "warehouse_defaults_column",
+   "fieldtype": "Column Break"
   }
  ],
  "grid_page_length": 50,
@@ -1516,7 +1535,7 @@
  "idx": 105,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-11-17 12:00:00.000000",
+ "modified": "2026-11-20 23:48:19.662469",
  "modified_by": "Administrator",
  "module": "Buying",
  "name": "Purchase Order",

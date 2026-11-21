@@ -12,7 +12,6 @@
   "asset_maintenance",
   "naming_series",
   "asset_name",
-  "service_equipment",
   "column_break_2",
   "item_code",
   "item_name",
@@ -32,7 +31,6 @@
   "description",
   "column_break_9",
   "actions_performed",
-  "maintenance_visit",
   "amended_from"
  ],
  "fields": [
@@ -54,15 +52,6 @@
    "fieldname": "asset_name",
    "fieldtype": "Read Only",
    "label": "Asset Name"
-  },
-  {
-   "fetch_from": "asset_maintenance.service_equipment",
-   "fieldname": "service_equipment",
-   "fieldtype": "Link",
-   "in_standard_filter": 1,
-   "label": "Service Equipment",
-   "options": "Service Equipment",
-   "read_only": 1
   },
   {
    "fieldname": "column_break_2",
@@ -165,15 +154,6 @@
    "fieldname": "actions_performed",
    "fieldtype": "Text Editor",
    "label": "Actions performed"
-  },
-  {
-   "depends_on": "eval:doc.service_equipment",
-   "fieldname": "maintenance_visit",
-   "fieldtype": "Link",
-   "label": "Maintenance Visit",
-   "no_copy": 1,
-   "options": "Maintenance Visit",
-   "read_only": 1
   },
   {
    "fieldname": "amended_from",

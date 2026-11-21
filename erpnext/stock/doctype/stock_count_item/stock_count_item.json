@@ -7,20 +7,21 @@
  "field_order": [
   "item_details_section",
   "item_code",
-  "item_name",
   "column_break_1",
+  "item_name",
+  "inventory_dimension",
+  "storage_location",
+  "count_identification_section",
   "batch_no",
   "expiry_date",
   "serial_no",
   "quantity_section",
-  "stock_uom",
-  "counted_qty",
-  "is_counted",
-  "quantity_column",
   "system_qty",
+  "stock_uom",
+  "quantity_column",
+  "counted_qty",
   "difference_qty",
-  "inventory_dimension",
-  "storage_location"
+  "is_counted"
  ],
  "fields": [
   {
@@ -116,7 +117,7 @@
   {
    "fieldname": "inventory_dimension",
    "fieldtype": "Section Break",
-   "label": "Inventory Dimension",
+   "label": "Storage Location",
    "collapsible": 1
   },
   {
@@ -135,6 +136,11 @@
    "fetch_from": "item_code.stock_uom",
    "read_only": 1,
    "in_list_view": 1
+  },
+  {
+   "fieldname": "count_identification_section",
+   "fieldtype": "Section Break",
+   "label": "Batch and Serial"
   }
  ],
  "istable": 1,

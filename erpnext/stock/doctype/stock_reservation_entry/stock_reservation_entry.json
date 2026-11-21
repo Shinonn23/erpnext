@@ -21,15 +21,17 @@
   "delivered_qty",
   "item_information_section",
   "item_code",
-  "warehouse",
-  "inventory_dimension",
-  "storage_location",
-  "column_break_elik",
   "stock_uom",
+  "column_break_elik",
   "has_serial_no",
   "has_batch_no",
-  "column_break_7dxj",
+  "inventory_dimension",
+  "warehouse",
+  "warehouse_storage_column",
+  "storage_location",
+  "supply_reference_section",
   "from_voucher_type",
+  "column_break_7dxj",
   "from_voucher_no",
   "from_voucher_detail_no",
   "production_section",
@@ -82,7 +84,7 @@
   {
    "fieldname": "inventory_dimension",
    "fieldtype": "Section Break",
-   "label": "Inventory Dimension"
+   "label": "Warehouse and Storage"
   },
   {
    "fieldname": "storage_location",
@@ -349,6 +351,15 @@
    "fieldname": "transferred_qty",
    "fieldtype": "Float",
    "label": "Transferred Qty"
+  },
+  {
+   "fieldname": "warehouse_storage_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "supply_reference_section",
+   "fieldtype": "Section Break",
+   "label": "Supply Reference"
   }
  ],
  "grid_page_length": 50,

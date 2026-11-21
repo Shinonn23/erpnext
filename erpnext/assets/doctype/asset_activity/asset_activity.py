@@ -17,7 +17,6 @@ class AssetActivity(Document):
 
 		asset: DF.Link | None
 		date: DF.Datetime
-		service_equipment: DF.Link | None
 		subject: DF.SmallText
 		user: DF.Link
 	# end: auto-generated types

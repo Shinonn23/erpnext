@@ -13,6 +13,7 @@
   "column_break_6",
   "planned_qty",
   "stock_uom",
+  "warehouse_section",
   "warehouse",
   "storage_location",
   "planned_start_date",
@@ -224,6 +225,11 @@
    "fieldtype": "Link",
    "label": "Finished Goods Storage Location",
    "options": "Storage Location"
+  },
+  {
+   "fieldname": "warehouse_section",
+   "fieldtype": "Section Break",
+   "label": "Warehouse and Storage Location"
   }
  ],
  "idx": 1,

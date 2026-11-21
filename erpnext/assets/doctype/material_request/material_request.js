@@ -464,31 +464,17 @@ function configure_material_request_item_columns(frm) {
 
 	const purpose = frm.doc.material_request_type;
 	const is_loan = ["Customer Demo", "Borrow", "Customer Borrow"].includes(purpose);
-	const visible_columns = new Set();
-	visible_columns.add("item_code");
-
-	if (purpose === "Asset Transfer") {
-		visible_columns.add("asset");
-		visible_columns.add("source_location");
-		visible_columns.add("target_location");
-	} else {
-		// the requester never chooses a Storage Location (Siwat, 16 Nov 2026): the Stock team decides it on the Stock
-		// Entry / Purchase Receipt, so storage_location and from_storage_location are not columns
-		// a Demo / Borrow request asks for the Item and the Qty only; the Assets are chosen by the Stock team
-		visible_columns.add("qty");
-		if (!is_loan && ["Purchase", "Material Transfer", "Material Issue"].includes(purpose)) visible_columns.add("warehouse");
-		if (purpose === "Material Transfer") {
-			visible_columns.add("from_warehouse");
-		}
-		visible_columns.add("uom");
-		if (purpose === "Purchase") visible_columns.add("rate");
-		// once the Stock team has decided a Demo / Borrow row, the requester and the approver see how it is supplied
-		// and which Asset goes out (read only: Change Demo Acquisition / Decide release write them)
-		const rows = frm.doc.items || [];
-		if (is_loan && rows.some((row) => row.demo_acquisition_method)) {
-			visible_columns.add("demo_acquisition_method");
-			if (rows.some((row) => row.asset || row.item_type === "Fixed Asset")) visible_columns.add("asset");
-		}
+	const purpose_columns = {
+		Purchase: ["qty", "uom", "warehouse"],
+		"Material Transfer": ["qty", "uom", "from_warehouse", "warehouse"],
+		"Material Issue": ["qty", "uom", "warehouse"],
+		"Asset Transfer": ["asset", "source_location", "target_location"],
+	};
+	const visible_columns = new Set(["item_code", ...(purpose_columns[purpose] || ["qty", "uom"])]);
+	const rows = frm.doc.items || [];
+	if (is_loan && rows.some((row) => row.demo_acquisition_method)) {
+		visible_columns.add("demo_acquisition_method");
+		if (rows.some((row) => row.asset || row.item_type === "Fixed Asset")) visible_columns.add("asset");
 	}
 	grid.update_docfield_property("demo_acquisition_method", "label", __("Supply"));
 
@@ -509,13 +495,12 @@ function configure_material_request_item_columns(frm) {
 		"from_storage_location",
 		"schedule_date",
 		"uom",
-		"rate",
 	];
 	grid.set_column_disp_in_list_view(
-		managed_columns.filter((fieldname) => visible_columns.has(fieldname) && fieldname !== "rate"),
-		true, true
+		managed_columns.filter((fieldname) => visible_columns.has(fieldname)),
+		true,
+		true
 	);
-	grid.set_column_disp_in_list_view(["rate"].filter((fieldname) => visible_columns.has(fieldname)), true);
 	grid.set_column_disp_in_list_view(
 		managed_columns.filter((fieldname) => !visible_columns.has(fieldname)),
 		false

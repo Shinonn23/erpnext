@@ -10,9 +10,10 @@
   "item_code",
   "item_name",
   "cb",
+  "operation",
+  "warehouse_section",
   "source_warehouse",
   "source_storage_location",
-  "operation",
   "section_break_3",
   "description",
   "column_break_2",
@@ -180,6 +181,11 @@
    "label": "Source Storage Location",
    "options": "Storage Location",
    "read_only": 1
+  },
+  {
+   "fieldname": "warehouse_section",
+   "fieldtype": "Section Break",
+   "label": "Warehouse and Storage Location"
   }
  ],
  "idx": 1,

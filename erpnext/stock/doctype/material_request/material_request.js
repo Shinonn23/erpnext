@@ -142,7 +142,10 @@ frappe.ui.form.on("Material Request", {
 
 	refresh: function (frm) {
 		frm.events.make_custom_buttons(frm);
-		frm.toggle_reqd("customer", frm.doc.material_request_type == "Customer Provided");
+		frm.toggle_reqd(
+			"customer",
+			["Customer Demo", "Customer Provided"].includes(frm.doc.material_request_type)
+		);
 		erpnext.buying.prevent_past_schedule_dates(frm);
 		frm.trigger("set_warehouse_label");
 	},
@@ -172,93 +175,86 @@ frappe.ui.form.on("Material Request", {
 		if (frm.doc.docstatus == 1 && frm.doc.status != "Stopped") {
 			let precision = frappe.defaults.get_default("float_precision");
 
-			if (flt(frm.doc.per_received, precision) < 100) {
+			if (frm.has_perm("write") && flt(frm.doc.per_received, precision) < 100) {
 				frm.add_custom_button(__("Stop"), () => frm.events.update_status(frm, "Stopped"));
 			}
 
 			if (flt(frm.doc.per_ordered, precision) < 100) {
-				let add_create_pick_list_button = () => {
-					if (frm.doc.items.some((item) => item.stock_qty - item.picked_qty > 0)) {
-						frm.add_custom_button(
-							__("Pick List"),
-							() => frm.events.create_pick_list(frm),
-							__("Create")
-						);
-					}
+				const purpose = frm.doc.material_request_type;
+				let has_create_action = false;
+				const add_create = (doctype, label, action, subgroup) => {
+					if (!frappe.model.can_create(doctype)) return;
+					frm.add_custom_button(label, action, __("Create"), subgroup);
+					has_create_action = true;
 				};
 
-				if (frm.doc.material_request_type === "Material Transfer") {
-					add_create_pick_list_button();
-					frm.add_custom_button(
+				if (purpose === "Material Transfer") {
+					if (frm.doc.items.some((item) => item.stock_qty - item.picked_qty > 0)) {
+						add_create("Pick List", __("Pick List"), () => frm.events.create_pick_list(frm));
+					}
+					add_create(
+						"Stock Entry",
 						__("Material Transfer"),
 						() => frm.events.make_stock_entry(frm),
-						__("Create"),
-						"Stock Entry"
+						__("Stock Entry")
 					);
-
-					frm.add_custom_button(
+					add_create(
+						"Stock Entry",
 						__("Material Transfer (In Transit)"),
 						() => frm.events.make_in_transit_stock_entry(frm),
-						__("Create"),
-						"Stock Entry"
+						__("Stock Entry")
 					);
 				}
 
-				if (frm.doc.material_request_type === "Material Issue") {
-					frm.add_custom_button(
+				if (purpose === "Material Issue") {
+					add_create(
+						"Stock Entry",
 						__("Issue Material"),
-						() => frm.events.make_stock_entry(frm),
-						__("Create")
+						() => frm.events.make_stock_entry(frm)
 					);
 				}
 
-				if (frm.doc.material_request_type === "Customer Provided") {
-					frm.add_custom_button(
+				if (purpose === "Customer Provided") {
+					add_create(
+						"Stock Entry",
 						__("Material Receipt"),
 						() => frm.events.make_stock_entry(frm),
-						__("Create"),
-						"Stock Entry"
+						__("Stock Entry")
 					);
 				}
 
-				if (frm.doc.material_request_type === "Purchase") {
-					frm.add_custom_button(
+				if (purpose === "Purchase") {
+					add_create(
+						"Purchase Order",
 						__("Purchase Order"),
-						() => frm.events.make_purchase_order(frm),
-						__("Create")
+						() => frm.events.make_purchase_order(frm)
 					);
-
-					frm.add_custom_button(
+					add_create(
+						"Request for Quotation",
 						__("Request for Quotation"),
-						() => frm.events.make_request_for_quotation(frm),
-						__("Create")
+						() => frm.events.make_request_for_quotation(frm)
 					);
-
-					frm.add_custom_button(
+					add_create(
+						"Supplier Quotation",
 						__("Supplier Quotation"),
-						() => frm.events.make_supplier_quotation(frm),
-						__("Create")
+						() => frm.events.make_supplier_quotation(frm)
 					);
 				}
 
-				if (frm.doc.material_request_type === "Manufacture") {
-					frm.add_custom_button(
-						__("Work Order"),
-						() => frm.events.raise_work_orders(frm),
-						__("Create")
-					);
+				if (purpose === "Manufacture") {
+					add_create("Work Order", __("Work Order"), () => frm.events.raise_work_orders(frm));
 				}
 
-				if (frm.doc.material_request_type === "Subcontracting") {
-					frm.add_custom_button(
+				if (purpose === "Subcontracting") {
+					add_create(
+						"Purchase Order",
 						__("Subcontracted Purchase Order"),
 						() => frm.events.make_purchase_order(frm),
-						__("Create"),
-						"Purchase Order"
+						__("Purchase Order")
 					);
 				}
 
-				frm.page.set_inner_btn_group_as_primary(__("Create"));
+				if (has_create_action) frm.page.set_inner_btn_group_as_primary(__("Create"));
 			}
 		}
 
@@ -270,7 +266,7 @@ frappe.ui.form.on("Material Request", {
 			);
 		}
 
-		if (frm.doc.docstatus == 1 && frm.doc.status == "Stopped") {
+		if (frm.doc.docstatus == 1 && frm.doc.status == "Stopped" && frm.has_perm("write")) {
 			frm.add_custom_button(__("Re-open"), () => frm.events.update_status(frm, "Submitted"));
 		}
 	},
@@ -701,7 +697,10 @@ frappe.ui.form.on("Material Request", {
 		});
 	},
 	material_request_type: function (frm) {
-		frm.toggle_reqd("customer", frm.doc.material_request_type == "Customer Provided");
+		frm.toggle_reqd(
+			"customer",
+			["Customer Demo", "Customer Provided"].includes(frm.doc.material_request_type)
+		);
 
 		if (frm.doc.material_request_type !== "Material Transfer" && frm.doc.set_from_warehouse) {
 			frm.set_value("set_from_warehouse", "");

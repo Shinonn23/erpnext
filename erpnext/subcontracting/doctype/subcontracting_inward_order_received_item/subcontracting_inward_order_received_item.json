@@ -11,10 +11,11 @@
   "is_additional_item",
   "column_break_3",
   "stock_uom",
-  "warehouse",
   "column_break_6",
   "bom_detail_no",
   "reference_name",
+  "warehouse_section",
+  "warehouse",
   "section_break_13",
   "required_qty",
   "billed_qty",
@@ -190,6 +191,11 @@
    "options": "Company:company:default_currency",
    "read_only": 1,
    "read_only_depends_on": "eval:doc.is_customer_provided_item"
+  },
+  {
+   "fieldname": "warehouse_section",
+   "fieldtype": "Section Break",
+   "label": "Warehouse"
   }
  ],
  "grid_page_length": 50,

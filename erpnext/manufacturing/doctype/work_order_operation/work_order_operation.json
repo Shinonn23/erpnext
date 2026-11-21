@@ -25,10 +25,12 @@
   "skip_material_transfer",
   "backflush_from_wip_warehouse",
   "column_break_vjih",
+  "warehouse_section",
   "source_warehouse",
   "source_storage_location",
   "wip_warehouse",
   "wip_storage_location",
+  "warehouse_column",
   "fg_warehouse",
   "fg_storage_location",
   "section_break_10",
@@ -332,6 +334,16 @@
    "fieldtype": "Link",
    "label": "Finished Goods Storage Location",
    "options": "Storage Location"
+  },
+  {
+   "fieldname": "warehouse_section",
+   "fieldtype": "Section Break",
+   "label": "Source and Target Warehouses",
+   "depends_on": "eval:parent.track_semi_finished_goods === 1"
+  },
+  {
+   "fieldname": "warehouse_column",
+   "fieldtype": "Column Break"
   }
  ],
  "grid_page_length": 50,

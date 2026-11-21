@@ -174,6 +174,19 @@ def get_user_territory():
 	return get_territory_of_user(frappe.session.user)
 
 
+@frappe.whitelist()
+def get_sales_person_department(sales_person=None):
+	"""Return the Department of the Employee linked to a Sales Person."""
+	if not sales_person:
+		return None
+
+	employee = frappe.get_cached_value("Sales Person", sales_person, "employee")
+	if not employee:
+		return None
+
+	return frappe.get_cached_value("Employee", employee, "department")
+
+
 def get_timeline_data(doctype: str, name: str) -> dict[int, int]:
 	def _fetch_activity(doctype: str, date_field: str):
 		sales_team = frappe.qb.DocType("Sales Team")
