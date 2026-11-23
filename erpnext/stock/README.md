@@ -70,11 +70,11 @@ stock and has no selection.
 
 ## Warehouse policy in one place (Connect Diagnostics, WP10, 18 Nov 2026)
 
-**The Warehouse Type says what the stock is; the Location Type says what the bin is for.** "May stock leave or be sold
-from here" has one answer, built only from the Warehouse Type flags (`allow_receipt`, `allow_issue`, `allow_transfer`,
-`allow_sales`, `allow_loan`, `allow_reconciliation`), never from a list of types or a warehouse's name:
+**Warehouse Type** is a dropdown on Warehouse. It sets the allowed operations for the whole Warehouse.
+**Location Type** identifies the use of a zone in that Warehouse. The server defines the operations and the
+Stock Manager requirement for outgoing movements in `warehouse_policy`.
 
-- `warehouse_policy.warehouse_allows(warehouse, operation)`: the type's flag for the operation (no type allows all; a
+- `warehouse_policy.warehouse_allows(warehouse, operation)`: the type's configured operation (no type allows all; a
   group or unknown warehouse nothing; a Borrowing movement of a Transit warehouse counts as a transfer).
 - `warehouse_policy.is_sellable_warehouse(warehouse)` and its SQL twin `sellable_warehouse_sql(alias)`: the type allows a
   sale or an issue (`SELLABLE_OPERATIONS`). Only Stock does on the company's sites. Used by
@@ -84,8 +84,7 @@ from here" has one answer, built only from the Warehouse Type flags (`allow_rece
 - The exits the code opens for single documents are listed in `CODE_WAIVERS` (Stock Write-Off out of Lost, Disposal out
   of Write-Off, the Purchase Return of rejected goods out of Quarantine, the Stock Count's own posting) and an app adds
   its own with the hook `warehouse_policy_waivers` (dicts `warehouse_type`, `lifts`, `text`; the app lists the
-  Quarantine Release). `get_warehouse_type_summary` returns them as `waivers` and the Warehouse form shows them. A child
-  table "Allowed exits" on Warehouse Type that `validate_warehouse_operation` reads is a later step.
+  Quarantine Release). `get_warehouse_type_summary` returns them as `waivers` and the Warehouse form shows them.
 
 ## Storage Location: Location Type, and the screen shows what the save stores (Connect Diagnostics, WP1, 18 Nov 2026)
 

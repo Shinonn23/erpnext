@@ -1625,9 +1625,10 @@
   {
    "fetch_from": "borrowing.borrower_type",
    "fieldname": "borrowing_borrower_type",
-   "fieldtype": "Data",
+   "fieldtype": "Select",
    "label": "Borrower Type",
    "no_copy": 1,
+   "options": "\nEmployee\nCustomer",
    "read_only": 1
   },
   {

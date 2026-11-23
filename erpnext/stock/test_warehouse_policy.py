@@ -2,34 +2,27 @@
 # For license information, please see license.txt
 
 import logging
+import sqlite3
 import sys
 import unittest
+from contextlib import closing
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import frappe
 
 from erpnext.stock import warehouse_policy
-from erpnext.stock.doctype.warehouse_type.warehouse_type import WarehouseType
 
 
 class TestWarehousePolicy(unittest.TestCase):
 	def setUp(self):
-		self.warehouse = frappe._dict(is_group=0, warehouse_type="Normal")
-		self.policy = frappe._dict(
-			name="Normal",
-			outgoing_role=None,
-			**{
-				f"allow_{operation}": 1
-				for operation in ("receipt", "issue", "transfer", "sales", "loan", "reconciliation")
-			},
-		)
+		self.warehouse = frappe._dict(is_group=0, warehouse_type="Stock")
 		self.addCleanup(patch.stopall)
 		patch.object(
 			frappe,
 			"get_doc",
 			side_effect=lambda doctype, name, **kwargs: (
-				self.warehouse if doctype == "Warehouse" else self.policy
+				self.warehouse
 			),
 		).start()
 		patch.object(frappe, "get_roles", return_value=["Stock User"]).start()
@@ -43,34 +36,28 @@ class TestWarehousePolicy(unittest.TestCase):
 		patch.object(frappe, "flags", frappe._dict()).start()
 		patch.object(warehouse_policy, "lock_warehouse_policies").start()
 		patch.object(
-			warehouse_policy, "_current_doc", side_effect=lambda doctype, name: frappe.get_doc(doctype, name)
+			warehouse_policy, "_current_warehouse", side_effect=lambda name: frappe.get_doc("Warehouse", name)
 		).start()
 
-	def test_normal_and_legacy_allow_movements(self):
+	def test_stock_and_untyped_warehouses_allow_movements(self):
 		for operation in ("receipt", "issue", "transfer", "sales", "loan", "reconciliation"):
 			warehouse_policy.validate_warehouse_operation("WH", operation, outgoing=True)
 		self.warehouse.warehouse_type = None
-		self.policy.allow_sales = 0
 		warehouse_policy.validate_warehouse_operation("WH", "sales", outgoing=True)
 
 	def test_restricted_type_matrix(self):
-		for name, allowed in {
-			"Transit": {"transfer"},
-			"Borrowed": {"loan"},
-			"Quarantine": {"receipt", "transfer"},
-			"Write-Off": {"receipt", "transfer", "reconciliation"},
-		}.items():
-			self.policy.name = name
-			for operation in ("receipt", "issue", "transfer", "sales", "loan", "reconciliation"):
-				self.policy[f"allow_{operation}"] = operation in allowed
-				if operation in allowed:
-					warehouse_policy.validate_warehouse_operation("WH", operation)
-				else:
-					with self.assertRaises(frappe.ValidationError):
+		for name, allowed in WAREHOUSE_TYPE_ROWS.items():
+			self.warehouse.warehouse_type = name
+			for operation in warehouse_policy.OPERATION_ORDER:
+				with self.subTest(warehouse_type=name, operation=operation):
+					if operation in allowed or (name == "Transit" and operation == "loan"):
 						warehouse_policy.validate_warehouse_operation("WH", operation)
+					else:
+						with self.assertRaises(frappe.ValidationError):
+							warehouse_policy.validate_warehouse_operation("WH", operation)
 
 	def test_cancellation_restores_the_original_movement(self):
-		self.policy.allow_sales = 0
+		self.warehouse.warehouse_type = "Frozen"
 		with self.assertRaises(frappe.ValidationError):
 			warehouse_policy.validate_warehouse_operation("WH", "sales")
 		warehouse_policy.validate_warehouse_operation("WH", "sales", cancellation=True)
@@ -81,7 +68,7 @@ class TestWarehousePolicy(unittest.TestCase):
 			warehouse_policy.validate_warehouse_operation("WH", "receipt", cancellation=True)
 
 	def test_outgoing_role_does_not_block_receipts(self):
-		self.policy.outgoing_role = "Stock Manager"
+		self.warehouse.warehouse_type = "Frozen"
 		warehouse_policy.validate_warehouse_operation("WH", "transfer", outgoing=False)
 		with self.assertRaises(frappe.PermissionError):
 			warehouse_policy.validate_warehouse_operation("WH", "transfer", outgoing=True)
@@ -89,7 +76,6 @@ class TestWarehousePolicy(unittest.TestCase):
 			warehouse_policy.validate_warehouse_operation("WH", "transfer", outgoing=True)
 
 	def test_quarantine_outgoing_role_message_names_the_way_out(self):
-		self.policy.outgoing_role = "Stock Manager"
 		self.warehouse.warehouse_type = "Quarantine"
 		with self.assertRaises(frappe.PermissionError) as raised:
 			warehouse_policy.validate_warehouse_operation("WH", "transfer", outgoing=True)
@@ -101,7 +87,7 @@ class TestWarehousePolicy(unittest.TestCase):
 		self.assertNotIn("own Material Transfer", str(raised.exception))
 
 	def test_an_app_waiver_lifts_the_outgoing_role_only_for_the_document_it_owns(self):
-		self.policy.outgoing_role = "Stock Manager"
+		self.warehouse.warehouse_type = "Quarantine"
 		owned, other = Mock(name="owned"), Mock(name="other")
 		waiver = Mock(side_effect=lambda doc, warehouse, policy: doc is owned)
 		with (
@@ -109,13 +95,15 @@ class TestWarehousePolicy(unittest.TestCase):
 			patch.object(frappe, "get_attr", return_value=waiver),
 		):
 			warehouse_policy.validate_warehouse_operation("WH", "transfer", outgoing=True, doc=owned)
-			waiver.assert_called_with(owned, self.warehouse, self.policy)
+			waiver.assert_called_with(
+				owned, self.warehouse, frappe._dict(name="Quarantine", outgoing_role="Stock Manager")
+			)
 			hooks.assert_called_with("warehouse_outgoing_role_waivers")
 			for doc in (other, None):
 				with self.subTest(doc=doc), self.assertRaises(frappe.PermissionError):
 					warehouse_policy.validate_warehouse_operation("WH", "transfer", outgoing=True, doc=doc)
 			# a waiver never opens an operation the type does not allow
-			self.policy.allow_transfer = 0
+			self.warehouse.warehouse_type = "Borrowed"
 			with self.assertRaises(frappe.ValidationError):
 				warehouse_policy.validate_warehouse_operation("WH", "transfer", outgoing=True, doc=owned)
 
@@ -139,10 +127,6 @@ class TestWarehousePolicy(unittest.TestCase):
 	def test_stock_write_off_leaves_a_lost_warehouse_and_nothing_else_does(self):
 		# Connect Diagnostics, 7 Nov 2026: accounting writes off what a Lost warehouse holds
 		self.warehouse.warehouse_type = "Lost"
-		self.policy.name = "Lost"
-		self.policy.allow_issue = 0
-		self.policy.allow_sales = 0
-		self.policy.outgoing_role = "Stock Manager"
 		write_off = frappe._dict(
 			doctype="Stock Entry", purpose="Material Issue", stock_entry_type="Stock Write-Off"
 		)
@@ -169,17 +153,12 @@ class TestWarehousePolicy(unittest.TestCase):
 			warehouse_policy.validate_warehouse_operation("WH", "sales", outgoing=True, doc=write_off)
 		# the type alone is not enough: another warehouse type keeps its own policy
 		self.warehouse.warehouse_type = "Quarantine"
-		self.policy.name = "Quarantine"
 		with self.assertRaises(frappe.ValidationError):
 			warehouse_policy.validate_warehouse_operation("WH", "issue", outgoing=True, doc=write_off)
 
 	def test_a_disposal_issue_leaves_a_write_off_warehouse_and_nothing_else_does(self):
 		# Connect Diagnostics, 16 Nov 2026: goods moved into DAMAGE were stuck there
 		self.warehouse.warehouse_type = "Write-Off"
-		self.policy.name = "Write-Off"
-		self.policy.allow_issue = 0
-		self.policy.allow_sales = 0
-		self.policy.outgoing_role = "Stock Manager"
 		disposal = frappe._dict(
 			doctype="Stock Entry", purpose="Material Issue", operation_issue_type="Disposal"
 		)
@@ -197,12 +176,11 @@ class TestWarehousePolicy(unittest.TestCase):
 		with self.assertRaises(frappe.ValidationError):
 			warehouse_policy.validate_warehouse_operation("WH", "sales", outgoing=True, doc=disposal)
 		self.warehouse.warehouse_type = "Frozen"
-		self.policy.name = "Frozen"
 		with self.assertRaises(frappe.ValidationError):
 			warehouse_policy.validate_warehouse_operation("WH", "issue", outgoing=True, doc=disposal)
 
 	def test_document_and_ledger_checks_hand_the_document_to_the_waiver(self):
-		self.policy.outgoing_role = "Stock Manager"
+		self.warehouse.warehouse_type = "Frozen"
 		doc = frappe._dict(
 			doctype="Stock Entry",
 			purpose="Material Transfer",
@@ -233,8 +211,6 @@ class TestWarehousePolicy(unittest.TestCase):
 					doc
 					if doctype == "Stock Entry"
 					else self.warehouse
-					if doctype == "Warehouse"
-					else self.policy
 				),
 			):
 				warehouse_policy.validate_stock_ledger_policy([ledger])
@@ -274,7 +250,7 @@ class TestWarehousePolicy(unittest.TestCase):
 		from frappe.model import workflow
 
 		previous, doc = self.workflow_review_documents()
-		self.policy.outgoing_role = "Stock Manager"
+		self.warehouse.warehouse_type = "Frozen"
 		with (
 			patch.object(frappe, "get_cached_value", return_value=1),
 			patch.object(frappe, "session", frappe._dict(user="quality")),
@@ -287,7 +263,7 @@ class TestWarehousePolicy(unittest.TestCase):
 			),
 		):
 			warehouse_policy.validate_document_policy(doc)
-			self.policy.allow_transfer = 0
+			self.warehouse.warehouse_type = "Borrowed"
 			with self.assertRaises(frappe.ValidationError):
 				warehouse_policy.validate_document_policy(doc)
 
@@ -320,7 +296,7 @@ class TestWarehousePolicy(unittest.TestCase):
 	def test_draft_review_cannot_bypass_dispatch_role_for_edits_or_submission(self):
 		from frappe.model import workflow
 
-		self.policy.outgoing_role = "Stock Manager"
+		self.warehouse.warehouse_type = "Frozen"
 		with (
 			patch.object(frappe, "get_cached_value", return_value=1),
 			patch.object(frappe, "session", frappe._dict(user="quality")),
@@ -357,7 +333,7 @@ class TestWarehousePolicy(unittest.TestCase):
 		from frappe.model import workflow
 
 		previous, doc = self.workflow_review_documents()
-		self.policy.outgoing_role = "Stock Manager"
+		self.warehouse.warehouse_type = "Frozen"
 		with (
 			patch.object(frappe, "get_cached_value", return_value=1),
 			patch.object(frappe, "session", frappe._dict(user="quality")),
@@ -379,14 +355,11 @@ class TestWarehousePolicy(unittest.TestCase):
 
 	def test_linked_loan_transit_leg_uses_transfer_policy(self):
 		self.warehouse.warehouse_type = "Transit"
-		self.policy.allow_loan = 0
+		self.assertFalse(warehouse_policy.warehouse_type_allows("Transit", "loan"))
 		warehouse_policy.validate_warehouse_operation("WH", "loan")
-		self.policy.allow_transfer = 0
-		with self.assertRaises(frappe.ValidationError):
-			warehouse_policy.validate_warehouse_operation("WH", "loan")
 
 	def test_reconciliation_quantity_and_value_reductions_need_outgoing_role(self):
-		self.policy.outgoing_role = "Stock Manager"
+		self.warehouse.warehouse_type = "Write-Off"
 		for row in (
 			frappe._dict(qty=1, current_qty=2, amount_difference=0),
 			frappe._dict(qty=2, current_qty=2, amount_difference=-1),
@@ -406,7 +379,7 @@ class TestWarehousePolicy(unittest.TestCase):
 		)
 		with patch.object(frappe, "get_cached_value", return_value=1):
 			warehouse_policy.validate_document_policy(doc)
-			self.policy.allow_receipt = 0
+			self.warehouse.warehouse_type = "Transit"
 			with self.assertRaises(frappe.ValidationError):
 				warehouse_policy.validate_document_policy(doc)
 
@@ -418,16 +391,17 @@ class TestWarehousePolicy(unittest.TestCase):
 					docstatus=0,
 					stock_items=[frappe._dict(item_code="Item", warehouse="WH", qty=1)],
 				)
-				self.policy.allow_receipt = 0
+				self.warehouse.warehouse_type = "Stock"
 				warehouse_policy.validate_document_policy(doc)
-				self.policy.allow_issue = 0
+				self.warehouse.warehouse_type = "Frozen"
 				with self.assertRaises(frappe.ValidationError):
 					warehouse_policy.validate_document_policy(doc)
-				self.policy.allow_issue = 1
-				self.policy.outgoing_role = "Stock Manager"
-				with self.assertRaises(frappe.PermissionError):
+				self.warehouse.warehouse_type = "Stock"
+				with (
+					patch.object(warehouse_policy, "warehouse_type_outgoing_role", return_value="Stock Manager"),
+					self.assertRaises(frappe.PermissionError),
+				):
 					warehouse_policy.validate_document_policy(doc)
-				self.policy.outgoing_role = None
 				self.warehouse.is_group = 1
 				doc.docstatus = 2
 				with self.assertRaises(frappe.ValidationError):
@@ -447,7 +421,7 @@ class TestWarehousePolicy(unittest.TestCase):
 		)
 		doc = Mock(**data)
 		doc.get = lambda field, default=None: data.get(field, default)
-		self.policy.allow_receipt = 0
+		self.warehouse.warehouse_type = "Transit"
 		with patch.object(frappe, "get_cached_value", return_value=1):
 			with self.assertRaises(frappe.ValidationError):
 				StockEntry.validate(doc)
@@ -481,7 +455,7 @@ class TestWarehousePolicy(unittest.TestCase):
 			"set_title",
 			"validate_inventory_dimension_mandatory",
 		)
-		self.policy.allow_issue = 0
+		self.warehouse.warehouse_type = "Frozen"
 		with (
 			patch.object(frappe, "get_cached_value", return_value=1),
 			patch("erpnext.stock.doctype.storage_location.storage_location.set_default_storage_locations"),
@@ -536,12 +510,12 @@ class TestWarehousePolicy(unittest.TestCase):
 		entry = frappe._dict(
 			voucher_type="Stock Entry", voucher_no="SE", warehouse="WH", actual_qty=-1, is_cancelled=1
 		)
-		self.policy.allow_issue = 0
+		self.warehouse.warehouse_type = "Frozen"
 		with patch.object(
 			frappe,
 			"get_doc",
 			side_effect=lambda doctype, name, **kwargs: (
-				doc if doctype == doc.doctype else self.warehouse if doctype == "Warehouse" else self.policy
+				doc if doctype == doc.doctype else self.warehouse
 			),
 		):
 			with self.assertRaises(frappe.ValidationError):
@@ -613,30 +587,18 @@ class TestWarehousePolicy(unittest.TestCase):
 		entry = frappe._dict(
 			voucher_type="Purchase Receipt", voucher_no="PR", warehouse="WH", actual_qty=-1, is_cancelled=1
 		)
-		self.policy.allow_issue = 0
+		self.warehouse.warehouse_type = "Frozen"
 		with patch.object(
 			frappe,
 			"get_doc",
 			side_effect=lambda doctype, name, **kwargs: (
-				doc if doctype == doc.doctype else self.warehouse if doctype == "Warehouse" else self.policy
+				doc if doctype == doc.doctype else self.warehouse
 			),
 		):
 			warehouse_policy.validate_stock_ledger_policy([entry], via_landed_cost_voucher=True)
 			self.warehouse.is_group = 1
 			with self.assertRaises(frappe.ValidationError):
 				warehouse_policy.validate_stock_ledger_policy([entry], via_landed_cost_voucher=True)
-
-	def test_policy_permissions_apply_with_ignore_permissions(self):
-		with (
-			patch.object(frappe, "session", frappe._dict(user="ordinary")),
-			patch("erpnext.stock.doctype.warehouse_type.warehouse_type._", side_effect=lambda text: text),
-		):
-			with self.assertRaises(frappe.PermissionError):
-				WarehouseType.validate_policy_permission(
-					frappe._dict(flags=frappe._dict(ignore_permissions=True))
-				)
-			with patch.object(frappe, "get_roles", return_value=["Stock Manager"]):
-				WarehouseType.validate_policy_permission(frappe._dict())
 
 	def test_supplied_materials_validate_supplier_header_warehouse(self):
 		doc = frappe._dict(
@@ -645,7 +607,7 @@ class TestWarehousePolicy(unittest.TestCase):
 			supplier_warehouse="WH",
 			supplied_items=[frappe._dict(rm_item_code="RM", consumed_qty=1)],
 		)
-		self.policy.allow_issue = 0
+		self.warehouse.warehouse_type = "Frozen"
 		with patch.object(frappe, "get_cached_value", return_value=1):
 			with self.assertRaises(frappe.ValidationError):
 				warehouse_policy.validate_document_policy(doc)
@@ -673,7 +635,7 @@ class TestWarehousePolicy(unittest.TestCase):
 			warehouse="WH", validate_reserved_entries=Mock(), set_reservation_based_on=Mock()
 		)
 		doc.validate_warehouse_policy = lambda: StockReservationEntry.validate_warehouse_policy(doc)
-		self.policy.allow_transfer = 0
+		self.warehouse.warehouse_type = "Borrowed"
 		StockReservationEntry.before_cancel(doc)
 		self.warehouse.is_group = 1
 		for method in (
@@ -699,7 +661,7 @@ class TestWarehousePolicy(unittest.TestCase):
 			via_landed_cost_voucher=1,
 			flags=frappe._dict(),
 		)
-		self.policy.allow_issue = 0
+		self.warehouse.warehouse_type = "Frozen"
 		with (
 			patch.object(frappe, "flags", frappe._dict()),
 			patch.object(
@@ -709,8 +671,6 @@ class TestWarehousePolicy(unittest.TestCase):
 					doc
 					if doctype == doc.doctype
 					else self.warehouse
-					if doctype == "Warehouse"
-					else self.policy
 				),
 			),
 		):
@@ -764,8 +724,6 @@ class TestWarehousePolicy(unittest.TestCase):
 					else loan
 					if doctype == "Borrowing"
 					else self.warehouse
-					if doctype == "Warehouse"
-					else self.policy
 				),
 			),
 			patch.object(core, "_", side_effect=lambda text: text),
@@ -787,8 +745,7 @@ class TestWarehousePolicy(unittest.TestCase):
 			update_stock=1,
 			items=[frappe._dict(item_code="Item", warehouse="WH")],
 		)
-		self.policy.allow_sales = 0
-		self.policy.outgoing_role = "Stock Manager"
+		self.warehouse.warehouse_type = "Frozen"
 		with (
 			patch.object(warehouse_policy, "is_verified_pos_consolidation", return_value=True),
 			patch.object(frappe, "get_cached_value", return_value=1),
@@ -801,12 +758,12 @@ class TestWarehousePolicy(unittest.TestCase):
 	def test_landed_cost_reapplication_needs_no_new_receipt_permission(self):
 		doc = frappe._dict(doctype="Purchase Receipt", docstatus=1, items=[])
 		entry = frappe._dict(voucher_type="Purchase Receipt", voucher_no="PR", warehouse="WH", actual_qty=1)
-		self.policy.allow_receipt = 0
+		self.warehouse.warehouse_type = "Transit"
 		with patch.object(
 			frappe,
 			"get_doc",
 			side_effect=lambda doctype, name, **kwargs: (
-				doc if doctype == doc.doctype else self.warehouse if doctype == "Warehouse" else self.policy
+				doc if doctype == doc.doctype else self.warehouse
 			),
 		):
 			warehouse_policy.validate_stock_ledger_policy([entry], via_landed_cost_voucher=True)
@@ -814,13 +771,6 @@ class TestWarehousePolicy(unittest.TestCase):
 			self.warehouse.is_group = 1
 			with self.assertRaises(frappe.ValidationError):
 				warehouse_policy.validate_stock_ledger_policy([entry], via_landed_cost_voucher=True)
-
-	def test_quality_manager_may_edit_policy(self):
-		with (
-			patch.object(frappe, "session", frappe._dict(user="quality")),
-			patch.object(frappe, "get_roles", return_value=["Quality Manager"]),
-		):
-			WarehouseType.validate_policy_permission(frappe._dict())
 
 
 class TestRejectedLoanReturnIntoQuarantine(unittest.TestCase):
@@ -880,13 +830,9 @@ class TestWarehouseTypeSummary(unittest.TestCase):
 			"Quarantine": "Quality Inspection is Rejected",
 		}.items():
 			with self.subTest(name=name):
-				policy = frappe._dict(name=name, outgoing_role="Stock Manager")
-				patch.object(frappe, "get_cached_doc", return_value=policy).start()
 				waivers = warehouse_policy.get_warehouse_type_summary(name)["waivers"]
 				self.assertTrue(any(expected in text for text in waivers), waivers)
 				self.assertTrue(any("Stock Count" in text for text in waivers), waivers)
-		policy = frappe._dict(name="Stock", outgoing_role=None)
-		patch.object(frappe, "get_cached_doc", return_value=policy).start()
 		waivers = warehouse_policy.get_warehouse_type_summary("Stock")["waivers"]
 		self.assertFalse(any("Write-Off" in text or "Disposal" in text for text in waivers), waivers)
 
@@ -904,10 +850,8 @@ class TestWarehouseTypeSummary(unittest.TestCase):
 		self.assertFalse(summary["restricted"])
 		self.assertEqual(summary["operations"], [])
 
-	def test_summary_reports_flags_role_and_documents(self):
-		policy = frappe._dict(name="Lab", outgoing_role="Stock Manager", allow_receipt=1, allow_issue=0)
-		patch.object(frappe, "get_cached_doc", return_value=policy).start()
-		summary = warehouse_policy.get_warehouse_type_summary("Lab")
+	def test_summary_reports_operations_role_and_documents(self):
+		summary = warehouse_policy.get_warehouse_type_summary("Quarantine")
 		by_operation = {row["operation"]: row for row in summary["operations"]}
 		self.assertEqual(list(by_operation), list(warehouse_policy.OPERATION_ORDER))
 		self.assertTrue(by_operation["receipt"]["allowed"])
@@ -918,8 +862,6 @@ class TestWarehouseTypeSummary(unittest.TestCase):
 		self.assertFalse(summary["loan_counts_as_transfer"])
 
 	def test_transit_loan_counts_as_transfer(self):
-		policy = frappe._dict(name="Transit", outgoing_role=None)
-		patch.object(frappe, "get_cached_doc", return_value=policy).start()
 		self.assertTrue(warehouse_policy.get_warehouse_type_summary("Transit")["loan_counts_as_transfer"])
 
 	def test_requires_read_permission(self):
@@ -1014,7 +956,7 @@ class TestWarehouseTypeSummary(unittest.TestCase):
 			self.assertEqual(warehouse_policy.movement_operation(doc, False, row=row), "sales")
 
 
-# the Warehouse Type rows of the company's sites (local, 18 Nov 2026), as allowed operations
+# Operations formerly configured on the Warehouse Type records.
 WAREHOUSE_TYPE_ROWS = {
 	"Borrowed": {"loan"},
 	"Found": {"receipt", "transfer"},
@@ -1028,8 +970,6 @@ WAREHOUSE_TYPE_ROWS = {
 
 
 class TestWarehouseAllows(unittest.TestCase):
-	"""``warehouse_allows`` / ``is_sellable_warehouse`` answer from the Warehouse Type flags alone (WP10)."""
-
 	def setUp(self):
 		self.addCleanup(patch.stopall)
 		self.warehouses = {
@@ -1037,21 +977,16 @@ class TestWarehouseAllows(unittest.TestCase):
 		}
 		self.warehouses["WH none"] = frappe._dict(is_group=0, warehouse_type=None)
 		self.warehouses["WH group"] = frappe._dict(is_group=1, warehouse_type="Stock")
+		self.warehouses["WH unsupported"] = frappe._dict(is_group=0, warehouse_type="Unsupported")
 
 		def cached(doctype, name, fields=None, as_dict=False):
-			if doctype == "Warehouse":
-				row = self.warehouses.get(name)
-				return row if as_dict or row is None else row.get(fields)
-			allowed = WAREHOUSE_TYPE_ROWS.get(name)
-			if allowed is None:
-				return None
-			return frappe._dict(
-				{f"allow_{op}": int(op in allowed) for op in warehouse_policy.OPERATION_ORDER}
-			)
+			self.assertEqual(doctype, "Warehouse")
+			row = self.warehouses.get(name)
+			return row if as_dict or row is None else row.get(fields)
 
 		patch.object(frappe, "get_cached_value", side_effect=cached).start()
 
-	def test_every_type_and_operation_follows_the_flags(self):
+	def test_every_type_and_operation_follows_the_policy(self):
 		for name, allowed in WAREHOUSE_TYPE_ROWS.items():
 			for operation in warehouse_policy.OPERATION_ORDER:
 				with self.subTest(type=name, operation=operation):
@@ -1068,6 +1003,7 @@ class TestWarehouseAllows(unittest.TestCase):
 	def test_no_type_allows_everything_and_group_or_unknown_nothing(self):
 		self.assertTrue(warehouse_policy.is_sellable_warehouse("WH none"))
 		self.assertFalse(warehouse_policy.is_sellable_warehouse("WH group"))
+		self.assertFalse(warehouse_policy.is_sellable_warehouse("WH unsupported"))
 		self.assertFalse(warehouse_policy.is_sellable_warehouse("WH missing"))
 		self.assertFalse(warehouse_policy.warehouse_allows(None, "sales"))
 		with self.assertRaises(ValueError):
@@ -1080,10 +1016,15 @@ class TestWarehouseAllows(unittest.TestCase):
 		self.assertTrue(warehouse_policy.warehouse_is_quarantine("WH Quarantine"))
 		self.assertFalse(warehouse_policy.warehouse_is_quarantine("WH Stock"))
 
-	def test_the_sql_reads_the_same_flags(self):
-		sql = warehouse_policy.sellable_warehouse_sql("w")
-		self.assertIn("coalesce(w.warehouse_type, '') = ''", sql)
-		for operation in warehouse_policy.SELLABLE_OPERATIONS:
-			self.assertIn(f"allow_{operation} = 1", sql)
-		self.assertNotIn("'QA'", sql)
-		self.assertNotIn("Quarantine", sql)
+	def test_the_sql_matches_python_without_warehouse_type_columns(self):
+		with closing(sqlite3.connect(":memory:")) as db:
+			db.execute("create table warehouse (name text, warehouse_type text, is_group integer)")
+			db.executemany(
+				"insert into warehouse values (?, ?, ?)",
+				[(name, row.warehouse_type, row.is_group) for name, row in self.warehouses.items()],
+			)
+			sql = warehouse_policy.sellable_warehouse_sql("w")
+			sellable = {name for (name,) in db.execute(f"select w.name from warehouse w where {sql}")}
+		self.assertEqual(
+			sellable, {name for name in self.warehouses if warehouse_policy.is_sellable_warehouse(name)}
+		)

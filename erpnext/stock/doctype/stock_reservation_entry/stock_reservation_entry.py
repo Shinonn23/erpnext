@@ -86,6 +86,15 @@ class StockReservationEntry(Document):
 		validate_disabled_warehouse(self.warehouse)
 		validate_warehouse_company(self.warehouse, self.company)
 		validate_storage_location_warehouse(self.storage_location, self.warehouse, item_code=self.item_code)
+		from erpnext.stock.doctype.storage_location.storage_location import is_restricted_location
+
+		if is_restricted_location(self.storage_location, self.warehouse):
+			frappe.throw(
+				_("Stock cannot be reserved from restricted Storage Location {0}.").format(
+					frappe.bold(self.storage_location)
+				),
+				title=_("Restricted Storage Location"),
+			)
 		self.validate_uom_is_integer()
 
 	def before_submit(self) -> None:
@@ -385,6 +394,16 @@ class StockReservationEntry(Document):
 			selected_batch_nos, selected_serial_nos = [], []
 			for entry in self.sb_entries:
 				entry.warehouse = self.warehouse
+				from erpnext.stock.doctype.storage_location.storage_location import is_restricted_location
+
+				entry_location = entry.storage_location or self.storage_location
+				if is_restricted_location(entry_location, self.warehouse):
+					frappe.throw(
+						_("Row #{0}: Stock cannot be reserved from restricted Storage Location {1}.").format(
+							entry.idx, frappe.bold(entry_location)
+						),
+						title=_("Restricted Storage Location"),
+					)
 
 				if self.has_serial_no:
 					entry.qty = 1
@@ -771,11 +790,16 @@ def get_available_qty_to_reserve(
 			inventory_dimensions_dict={"storage_location": storage_location} if storage_location else None,
 		)
 
-	available_qty = _get_stock_balance(
-		item_code,
-		warehouse,
-		inventory_dimensions_dict={"storage_location": storage_location} if storage_location else None,
-	)
+	if storage_location:
+		available_qty = _get_stock_balance(
+			item_code,
+			warehouse,
+			inventory_dimensions_dict={"storage_location": storage_location},
+		)
+	else:
+		from erpnext.stock.get_item_details import get_sellable_actual_qty
+
+		available_qty = get_sellable_actual_qty(item_code, [warehouse])
 
 	if available_qty:
 		sre = frappe.qb.DocType("Stock Reservation Entry")
@@ -1430,11 +1454,16 @@ class StockReservation:
 		frappe.msgprint(msg, title=_("Stock Reservation"), indicator="orange")
 
 	def get_available_qty_to_reserve(self, item_code, warehouse, ignore_sre=None, storage_location=None):
-		available_qty = _get_stock_balance(
-			item_code,
-			warehouse,
-			inventory_dimensions_dict={"storage_location": storage_location} if storage_location else None,
-		)
+		if storage_location:
+			available_qty = _get_stock_balance(
+				item_code,
+				warehouse,
+				inventory_dimensions_dict={"storage_location": storage_location},
+			)
+		else:
+			from erpnext.stock.get_item_details import get_sellable_actual_qty
+
+			available_qty = get_sellable_actual_qty(item_code, [warehouse])
 
 		if available_qty:
 			sre = frappe.qb.DocType("Stock Reservation Entry")

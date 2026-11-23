@@ -21,7 +21,11 @@ erpnext.storage_location_exclude_receiving = (doctype, fieldname, row, doc) => {
 		if (fieldname === "storage_location") {
 			if (!row.s_warehouse) return "";
 			// only a Material Issue is refused a Receiving source (refuses_receiving_source)
-			if (!row.t_warehouse) return doc?.purpose === "Material Issue" ? "1" : "";
+			if (!row.t_warehouse) {
+				return doc?.purpose === "Material Issue" && doc?.operation_issue_type !== "Disposal"
+					? "1"
+					: "";
+			}
 			return row.t_warehouse === row.s_warehouse ? "" : "target";
 		}
 		if (fieldname === "to_storage_location") return row.s_warehouse ? "stock" : "";
@@ -134,6 +138,13 @@ for (const doctype of [
 						);
 						if (exclude) result.filters.exclude_receiving = exclude;
 						if (exclude === "target") result.filters.target_warehouse = row.t_warehouse || "";
+						if (
+							doctype === "Stock Entry" &&
+							fieldname === "storage_location" &&
+							doc.operation_issue_type === "Disposal"
+						) {
+							result.filters.location_types = ["Damage", "Holding"];
+						}
 					}
 					return result;
 				};

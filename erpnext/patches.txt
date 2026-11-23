@@ -558,3 +558,5 @@ erpnext.patches.v16_0.release_loans_waiting_for_shipment
 erpnext.patches.v16_0.remove_unused_item_and_supplier_fields
 erpnext.patches.v16_0.remove_borrowing_return
 erpnext.patches.v16_0.unhide_accounting_dimensions_section
+erpnext.patches.v16_0.remove_warehouse_zone_links
+erpnext.patches.v16_0.retire_warehouse_type

@@ -2,6 +2,7 @@
 # License: GNU General Public License v3. See license.txt
 
 import unittest
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import frappe
@@ -214,13 +215,12 @@ class StockCountSelectionTest(unittest.TestCase):
 		doc.uses_variance = lambda: True
 		StockCount.validate_lost_if_needed(doc)
 		doc.uses_variance = lambda: False
-		with patch(f"{StockCount.__module__}.get_lost_warehouse", return_value=None):
+		with (
+			patch(f"{StockCount.__module__}.typed_location", return_value=None),
+			patch(f"{StockCount.__module__}.get_lost_warehouse", return_value=None),
+		):
 			with self.assertRaises(frappe.ValidationError):
 				StockCount.validate_lost_if_needed(doc)
-		doc.uses_variance = lambda: True
-		doc.lost_warehouse = "Q"
-		with self.assertRaises(frappe.ValidationError):
-			StockCount.validate_lost_if_needed(doc)
 
 	def test_the_lost_warehouse_must_be_of_the_type_lost(self):
 		# the form offers only Lost warehouses; an import or API call is held to the same rule (WP10)
@@ -234,16 +234,30 @@ class StockCountSelectionTest(unittest.TestCase):
 			with patch.object(stock_count.frappe, "db", db), self.assertRaises(frappe.ValidationError):
 				StockCount.validate_lost_warehouse(doc)
 
-	def test_a_monthly_count_defaults_to_the_companys_lost_warehouse(self):
-		# the field is the Lost Warehouse (Connect Diagnostics, 5 Nov 2026; named lost_warehouse since WP10)
+	def test_a_monthly_count_defaults_to_the_companys_lost_warehouse_without_a_lost_zone(self):
 		doc = count(lost_warehouse=None, company="C", warehouse="CD STOCK")
 		doc.validate_lost_warehouse = Mock()
 		doc.uses_variance = lambda: False
-		with patch(f"{StockCount.__module__}.get_lost_warehouse", return_value="LOST - C") as lost:
+		with (
+			patch(f"{StockCount.__module__}.typed_location", return_value=None),
+			patch(f"{StockCount.__module__}.get_lost_warehouse", return_value="LOST - C") as lost,
+		):
 			StockCount.validate_lost_if_needed(doc)
 		self.assertEqual(doc.lost_warehouse, "LOST - C")
-		# the counted warehouse chooses its own Lost warehouse (7 Nov 2026)
 		lost.assert_called_once_with("C", exclude="CD STOCK", counted="CD STOCK")
+
+	def test_a_lost_zone_in_the_counted_warehouse_is_the_default_destination(self):
+		doc = count(lost_warehouse=None, lost_storage_location=None, company="C", warehouse="WH")
+		doc.validate_lost_warehouse = Mock()
+		doc.uses_variance = lambda: False
+		with (
+			patch(f"{StockCount.__module__}.typed_location", return_value="WH / LOST"),
+			patch(f"{StockCount.__module__}.get_lost_warehouse") as lost,
+		):
+			StockCount.validate_lost_if_needed(doc)
+		self.assertEqual(doc.lost_warehouse, "WH")
+		self.assertEqual(doc.lost_storage_location, "WH / LOST")
+		lost.assert_not_called()
 		# a count that posts its differences needs none
 		doc = count(lost_warehouse=None, company="C")
 		doc.uses_variance = lambda: True
@@ -440,7 +454,7 @@ class PrepareCountTest(unittest.TestCase):
 		doc = preparing(selected_items=rows("A"))
 		with (
 			patch.object(stock_count, "get_count_variance_account", return_value="5130-02 - CD"),
-			patch.object(stock_count, "own_holding_warehouse", return_value=None),
+			patch.object(stock_count, "typed_location", return_value=None),
 			patch.object(stock_count, "validate_variance_account") as validate,
 		):
 			self.prepare(doc, ["A"])
@@ -449,72 +463,36 @@ class PrepareCountTest(unittest.TestCase):
 		self.assertEqual(doc.variance_account_snapshot, "5130-02 - CD")
 
 
-class OwnLostWarehouseTest(unittest.TestCase):
-	"""Connect Diagnostics, 7 Nov 2026: each counted warehouse names its own Lost and Found warehouse."""
-
-	def test_a_warehouse_with_its_own_lost_warehouse_never_posts_variance(self):
+class LostDestinationPolicyTest(unittest.TestCase):
+	def test_a_lost_zone_disables_variance_posting(self):
 		with (
 			patch.object(stock_count, "get_count_variance_account", return_value="5150-02 - CD"),
-			patch.object(stock_count, "own_holding_warehouse", return_value="LOST - CD STOCK - CD"),
+			patch.object(stock_count, "typed_location", return_value="WH / LOST"),
 		):
-			self.assertIsNone(stock_count.count_variance_account("LAB"))
-		with (
-			patch.object(stock_count, "get_count_variance_account", return_value="5150-02 - CD"),
-			patch.object(stock_count, "own_holding_warehouse", return_value=None),
-		):
-			self.assertEqual(stock_count.count_variance_account("LAB"), "5150-02 - CD")
+			self.assertIsNone(stock_count.count_variance_account("WH"))
 
-	def test_own_holding_warehouse_needs_the_field_and_a_warehouse(self):
-		db = fake_db(has_column=False, get_value="LOST")
-		with patch.object(stock_count.frappe, "db", db):
-			self.assertIsNone(stock_count.own_holding_warehouse("W"))
-			self.assertIsNone(stock_count.own_holding_warehouse(None))
-		db = fake_db(has_column=True, get_value="LOST - W")
-		with patch.object(stock_count.frappe, "db", db):
-			self.assertEqual(stock_count.own_holding_warehouse("W"), "LOST - W")
-			db.get_value.assert_called_with("Warehouse", "W", "lost_warehouse")
+	def test_legacy_fallback_searches_only_by_company_type_and_counted_warehouse_exclusion(self):
+		with patch.object(stock_count, "_typed_warehouse", return_value="LOST - C") as search:
+			self.assertEqual(stock_count.get_lost_warehouse("C", exclude="WH"), "LOST - C")
+		search.assert_called_once_with("C", "Lost", "WH")
 
-	def test_the_own_lost_warehouse_wins_over_the_company_one(self):
-		own = frappe._dict(company="C", is_group=0, disabled=0)
-		db = fake_db(has_column=True, get_value=lambda *a, **k: own if k.get("as_dict") else "LOST - W")
-		with (
-			patch.object(stock_count.frappe, "db", db),
-			patch.object(stock_count, "_typed_warehouse", return_value="LOST - CD") as company,
-		):
-			self.assertEqual(stock_count.get_lost_warehouse("C", exclude="W", counted="W"), "LOST - W")
-			company.assert_not_called()
-			# another company's, a group or a disabled warehouse is not used: the company's is
-			for change in ({"company": "X"}, {"is_group": 1}, {"disabled": 1}):
-				own.update(change)
-				self.assertEqual(stock_count.get_lost_warehouse("C", exclude="W", counted="W"), "LOST - CD")
-				own.update(company="C", is_group=0, disabled=0)
+	def test_same_warehouse_destination_uses_item_compatible_lost_zone(self):
+		doc = SimpleNamespace(
+			lost_warehouse="WH", warehouse="WH", lost_storage_location="WH / LOST"
+		)
+		with patch.object(stock_count, "typed_location", return_value="WH / LOST B") as typed:
+			self.assertEqual(StockCount.get_lost_storage_location(doc, "ITEM-B"), "WH / LOST B")
+		typed.assert_called_once_with("WH", "ITEM-B", stock_count.LOST)
 
-	def test_a_warehouse_without_the_link_keeps_the_company_lost_warehouse(self):
-		db = fake_db(has_column=True, get_value=None)
-		with (
-			patch.object(stock_count.frappe, "db", db),
-			patch.object(stock_count, "_typed_warehouse", return_value="LOST - CD") as company,
-		):
-			self.assertEqual(stock_count.get_lost_warehouse("C", counted="W"), "LOST - CD")
-			company.assert_called_once_with("C", "Lost", None, "lost_warehouse")
-
-	def test_the_company_search_skips_the_warehouses_that_serve_one_warehouse(self):
-		calls = []
-
-		def get_all(doctype, **kwargs):
-			calls.append(kwargs)
-			return (
-				["LOST - CD STOCK - CD"]
-				if "pluck" in kwargs and kwargs["pluck"] == "lost_warehouse"
-				else ["LOST - CD"]
+	def test_legacy_lost_warehouse_keeps_its_explicit_lost_zone(self):
+		doc = SimpleNamespace(
+			lost_warehouse="LOST - C", warehouse="WH", lost_storage_location="LOST - C / LOST"
+		)
+		with patch.object(stock_count, "typed_location") as typed:
+			self.assertEqual(
+				StockCount.get_lost_storage_location(doc, "ITEM"), "LOST - C / LOST"
 			)
-
-		with (
-			patch.object(stock_count.frappe, "db", fake_db(has_column=True)),
-			patch.object(stock_count.frappe, "get_all", side_effect=get_all),
-		):
-			self.assertEqual(stock_count._typed_warehouse("C", "Lost", "W", "lost_warehouse"), "LOST - CD")
-		self.assertEqual(calls[1]["filters"]["name"], ["not in", ["W", "LOST - CD STOCK - CD"]])
+		typed.assert_not_called()
 
 
 class StockCountTemplateTest(unittest.TestCase):
@@ -587,32 +565,58 @@ class LostWarehouseAndLocationsTest(unittest.TestCase):
 			StockCount.get_dimension_filters(self.dims(("Project", "P1"), ("Project", "P2")))
 
 	def test_only_the_quantity_not_found_moves_to_the_lost_warehouse(self):
-		doc = Doc(count(lost_warehouse="LOST", lost_storage_location=None, stock_entry=None, name="SC-1"))
+		doc = Doc(
+			count(
+				warehouse="WH",
+				lost_warehouse="WH",
+				lost_storage_location="WH / LOST",
+				stock_entry=None,
+				name="SC-1",
+			)
+		)
 		doc.items = [
-			frappe._dict(item_code="SHORT", system_qty=10, counted_qty=7, batch_no=None, serial_no=None),
+			frappe._dict(item_code="SHORT", system_qty=10, counted_qty=5, batch_no=None, serial_no=None),
 			frappe._dict(item_code="OVER", system_qty=2, counted_qty=5, batch_no=None, serial_no=None),
 			frappe._dict(item_code="SN", system_qty=1, counted_qty=0, batch_no=None, serial_no="SN-LOST"),
 			frappe._dict(item_code="SN", system_qty=1, counted_qty=1, batch_no=None, serial_no="SN-FOUND"),
 		]
 		doc.has_differences = lambda: {"SHORT", "OVER", "SN"}
-		doc.get_row_dimension_values = lambda row: {}
-		doc.get_current_stock_qty = lambda row: 100
+		doc.get_row_dimension_values = lambda row: {"storage_location": "WH / STORAGE"}
+		doc.get_current_stock_qty = lambda row: 3 if row.item_code == "SHORT" else 100
+		doc.get_lost_storage_location = lambda item_code: "WH / LOST"
 		doc.post_entry = lambda entry, what: entry
 		entry = Mock()
 		entry.items = []
 		entry.append = lambda field, row: entry.items.append(row)
 		with (
 			patch("frappe.new_doc", return_value=entry),
-			patch("frappe.get_meta", return_value=Mock(has_field=lambda fieldname: False)),
+			patch("frappe.get_meta", return_value=Mock(has_field=lambda fieldname: fieldname in {"storage_location", "to_storage_location"})),
 			patch(
 				"frappe.db",
-				fake_db(get_value=lambda *args, **kwargs: "W" if args[0] == "Serial No" else "MT"),
+				fake_db(get_value=lambda *args, **kwargs: "WH" if args[0] == "Serial No" else "MT"),
 			),
 			patch(f"{StockCount.__module__}._", side_effect=lambda text: text),
 		):
 			StockCount.make_lost_stock_entry(doc)
-		moved = {(row["item_code"], row["qty"], row["serial_no"], row["t_warehouse"]) for row in entry.items}
-		self.assertEqual(moved, {("SHORT", 3, "", "LOST"), ("SN", 1, "SN-LOST", "LOST")})
+		moved = {
+			(
+				row["item_code"],
+				row["qty"],
+				row["serial_no"],
+				row["s_warehouse"],
+				row["t_warehouse"],
+				row.get("storage_location"),
+				row.get("to_storage_location"),
+			)
+			for row in entry.items
+		}
+		self.assertEqual(
+			moved,
+			{
+				("SHORT", 3, "", "WH", "WH", "WH / STORAGE", "WH / LOST"),
+				("SN", 1, "SN-LOST", "WH", "WH", "WH / STORAGE", "WH / LOST"),
+			},
+		)
 
 
 class FoundWarehouseTest(unittest.TestCase):

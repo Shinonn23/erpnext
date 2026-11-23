@@ -109,12 +109,12 @@
    "fieldname": "location_type",
    "fieldtype": "Select",
    "label": "Location Type",
-   "options": "Receiving\nStorage\nSales Counter\nHolding",
+   "options": "Receiving\nStorage\nSales Counter\nHolding\nQuality Inspection\nDamage\nLost",
    "default": "Storage",
    "reqd": 1,
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "description": "What the bin is for. Receiving: goods land here and leave only by a Stock Entry (never sold, issued or picked). Storage: shelves goods are picked from. Sales Counter: the place a lab sells from. Holding: the one bin of a holding warehouse (Quarantine, Lost, Found, Borrowed, Write-Off ...)."
+   "description": "A place within this Warehouse. Storage and Sales Counter are available for normal picking. Receiving is for put-away. Quality Inspection holds stock until inspection. Damage holds rejected stock for return or disposal. Lost holds stock recorded missing by a Stock Count. Holding is used by existing dedicated holding warehouses."
   },
   {
    "fieldname": "storage_conditions_section",

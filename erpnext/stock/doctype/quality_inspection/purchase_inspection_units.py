@@ -798,6 +798,12 @@ def _ledger(item_code, warehouse, location=None, current=False, classify=False):
 	Stock Entry (``ste_detail``), a Purchase Return (``purchase_receipt_item``) or a debit note
 	(``purchase_invoice_item``) names, else None. A document row that leaves and enters the warehouse in one go (a Storage
 	Location change inside the quarantine) moves nothing out of it and is left out."""
+	from erpnext.stock.doctype.storage_location.storage_location import (
+		DAMAGE,
+		QUALITY_INSPECTION,
+		get_location_type,
+	)
+
 	filters = {"item_code": item_code, "warehouse": warehouse, "is_cancelled": 0, "actual_qty": ["!=", 0]}
 	if location:
 		filters["storage_location"] = location
@@ -838,7 +844,7 @@ def _ledger(item_code, warehouse, location=None, current=False, classify=False):
 				filters[field] = ["is", "set"]
 			fields = ["name", field]
 			if (location or classify) and voucher_type == "Stock Entry":
-				fields.append("t_warehouse")
+				fields.extend(("t_warehouse", "to_storage_location"))
 			for detail in read(child, filters=filters, fields=fields):
 				links[detail.name] = detail.get(field)
 				if (location or classify) and voucher_type == "Stock Entry":
@@ -847,7 +853,10 @@ def _ledger(item_code, warehouse, location=None, current=False, classify=False):
 						if detail.get("t_warehouse")
 						else None
 					)
-					dispositions[detail.name] = target_type in ("Quarantine", "Write-Off")
+					dispositions[detail.name] = target_type in ("Quarantine", "Write-Off") or (
+						get_location_type(detail.get("to_storage_location"), detail.get("t_warehouse"))
+						in (QUALITY_INSPECTION, DAMAGE)
+					)
 	rows = [e.voucher_detail_no for e in entries if flt(e.actual_qty) > 0 and e.voucher_detail_no]
 	inspection_rows = (
 		read(
@@ -1028,37 +1037,18 @@ def purchase_release_parts(doc, row, current=False, location=None):
 
 
 def write_off_warehouse(company, source_warehouse=None):
-	"""Return the source warehouse's configured damage warehouse, when it is valid."""
+	"""Legacy fallback for a company with exactly one active Write-Off warehouse."""
 	if not company:
 		return None
-	if not source_warehouse:
-		matches = frappe.get_all(
-			"Warehouse",
-			filters={"company": company, "warehouse_type": "Write-Off", "is_group": 0, "disabled": 0},
-			pluck="name",
-			limit_page_length=2,
-		)
-		return matches[0] if len(matches) == 1 else None
-	if not frappe.db.has_column("Warehouse", "damage_warehouse"):
+	if source_warehouse and frappe.db.get_value("Warehouse", source_warehouse, "company") != company:
 		return None
-	source = frappe.db.get_value("Warehouse", source_warehouse, ["company", "damage_warehouse"], as_dict=True)
-	if not source or source.company != company or not source.damage_warehouse:
-		return None
-	target = frappe.db.get_value(
+	matches = frappe.get_all(
 		"Warehouse",
-		source.damage_warehouse,
-		["company", "warehouse_type", "is_group", "disabled"],
-		as_dict=True,
+		filters={"company": company, "warehouse_type": "Write-Off", "is_group": 0, "disabled": 0},
+		pluck="name",
+		limit_page_length=2,
 	)
-	if (
-		not target
-		or target.company != company
-		or target.warehouse_type != "Write-Off"
-		or target.is_group
-		or target.disabled
-	):
-		return None
-	return source.damage_warehouse
+	return matches[0] if len(matches) == 1 else None
 
 
 def _putaway_location(location, warehouse):
@@ -1066,11 +1056,11 @@ def _putaway_location(location, warehouse):
 	into Quarantine), when it is a location of ``warehouse`` that is not a Receiving one; else None."""
 	if not location or not warehouse:
 		return None
-	from erpnext.stock.doctype.storage_location.storage_location import is_receiving_location
+	from erpnext.stock.doctype.storage_location.storage_location import is_restricted_location
 
 	if frappe.db.get_value("Storage Location", location, "warehouse") != warehouse:
 		return None
-	return None if is_receiving_location(location) else location
+	return None if is_restricted_location(location) else location
 
 
 def _preferred_location(item_code, warehouse, allow_staging=False):
@@ -1081,7 +1071,7 @@ def _preferred_location(item_code, warehouse, allow_staging=False):
 		return None
 	from erpnext.stock.doctype.storage_location.storage_location import (
 		get_default_storage_location,
-		is_receiving_location,
+		is_restricted_location,
 	)
 
 	for row in frappe.get_all(
@@ -1093,13 +1083,24 @@ def _preferred_location(item_code, warehouse, allow_staging=False):
 		if (
 			row.storage_location
 			and frappe.db.get_value("Storage Location", row.storage_location, "warehouse") == warehouse
-			and (allow_staging or not is_receiving_location(row.storage_location))
+			and (allow_staging or not is_restricted_location(row.storage_location))
 		):
 			return row.storage_location
 	location = get_default_storage_location(warehouse, item_code)
-	if location and not allow_staging and is_receiving_location(location):
+	if location and not allow_staging and is_restricted_location(location):
 		return None
 	return location
+
+
+def damage_destination(company, warehouse, item_code):
+	"""Prefer a compatible Damage zone at the physical warehouse, with the legacy warehouse as fallback."""
+	from erpnext.stock.doctype.storage_location.storage_location import DAMAGE, typed_location
+
+	location = typed_location(warehouse, item_code, DAMAGE) if warehouse else None
+	if location:
+		return warehouse, location
+	legacy = write_off_warehouse(company, warehouse)
+	return legacy, _preferred_location(item_code, legacy, allow_staging=True)
 
 
 def build_release_entry(doc, sources, rows):
@@ -1110,11 +1111,7 @@ def build_release_entry(doc, sources, rows):
 		source = next(item for item in sources if item.name == row["row"])
 		stock_uom = source.get("stock_uom") or frappe.db.get_value("Item", row["item_code"], "stock_uom")
 		rejected = row["status"] == "Rejected"
-		target = (
-			write_off_warehouse(doc.company, row.get("home") or row.get("quarantine"))
-			if rejected
-			else row["home"]
-		)
+		target = row["home"]
 		from_location = (
 			source.get("to_storage_location")
 			if doc.get("doctype") == "Stock Entry"
@@ -1122,15 +1119,30 @@ def build_release_entry(doc, sources, rows):
 		)
 		if "storage_location" in row:
 			from_location = row["storage_location"]
-		if not target:
-			incomplete = True
 		# accepted goods go to the location the receipt row was meant for, else the Item's preferred one
 		target_location = None
-		if target and not rejected:
-			target_location = _putaway_location(row.get("putaway_location"), target)
+		if rejected:
+			if row.get("inspection_zone"):
+				from erpnext.stock.doctype.storage_location.storage_location import DAMAGE, typed_location
+
+				target_location = typed_location(target, row["item_code"], DAMAGE)
+				if not target_location:
+					frappe.throw(
+						_("Configure a compatible Damage location for Item {0} in {1}.").format(
+							row["item_code"], target
+						)
+					)
+			else:
+				target, target_location = damage_destination(
+					doc.company, target or row.get("quarantine"), row["item_code"]
+				)
+		elif target:
+			target_location = _putaway_location(row.get("putaway_location"), target) or _preferred_location(
+				row["item_code"], target
+			)
 		if target and not target_location:
 			target_location = _preferred_location(row["item_code"], target, allow_staging=rejected)
-		if not rejected and target and not target_location:
+		if not target or (not rejected and not target_location):
 			incomplete = True
 		if (
 			row.get("staging")

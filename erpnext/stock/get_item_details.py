@@ -1697,11 +1697,11 @@ def get_bin_details(item_code, warehouse, company=None, include_child_warehouses
 			frappe.qb.from_(bin)
 			.select(
 				Coalesce(Sum(bin.projected_qty), 0).as_("projected_qty"),
-				Coalesce(Sum(bin.actual_qty), 0).as_("actual_qty"),
 				Coalesce(Sum(bin.reserved_qty), 0).as_("reserved_qty"),
 			)
 			.where((bin.item_code == item_code) & (bin.warehouse.isin(warehouses)))
 		).run(as_dict=True)[0]
+		bin_details.actual_qty = get_sellable_actual_qty(item_code, warehouses)
 
 	if company:
 		bin_details["company_total_stock"] = get_company_total_stock(item_code, company)
@@ -1709,17 +1709,50 @@ def get_bin_details(item_code, warehouse, company=None, include_child_warehouses
 	return bin_details
 
 
-def get_company_total_stock(item_code, company):
-	bin = frappe.qb.DocType("Bin")
-	wh = frappe.qb.DocType("Warehouse")
+def get_sellable_actual_qty(item_code, warehouses):
+	"""Current stock outside restricted Storage Locations, for sales and issue availability displays."""
+	from frappe.query_builder.functions import Coalesce, NullIf, Sum
 
-	return (
-		frappe.qb.from_(bin)
-		.inner_join(wh)
-		.on(bin.warehouse == wh.name)
-		.select(Sum(bin.actual_qty))
-		.where((wh.company == company) & (bin.item_code == item_code))
-	).run()[0][0]
+	from erpnext.stock.doctype.storage_location.storage_location import HOLD_ZONE_TYPES, RECEIVING
+
+	sle = frappe.qb.DocType("Stock Ledger Entry")
+	sbe = frappe.qb.DocType("Serial and Batch Entry")
+	storage_location = frappe.qb.DocType("Storage Location")
+	location = Coalesce(NullIf(sbe.storage_location, ""), sle.storage_location)
+
+	row = (
+		frappe.qb.from_(sle)
+		.left_join(sbe)
+		.on(sbe.parent == sle.serial_and_batch_bundle)
+		.left_join(storage_location)
+		.on(storage_location.name == location)
+		.select(Coalesce(Sum(Coalesce(sbe.qty, sle.actual_qty)), 0))
+		.where((sle.item_code == item_code) & (sle.is_cancelled == 0) & (sle.warehouse.isin(warehouses)))
+		.where(
+			storage_location.name.isnull()
+			| (
+				storage_location.location_type.notin(list(HOLD_ZONE_TYPES))
+				& (
+					(storage_location.location_type != RECEIVING)
+					| (storage_location.disabled == 1)
+				)
+			)
+		)
+	).run()
+	return flt(row[0][0]) if row and row[0] else 0
+
+
+def get_company_total_stock(item_code, company):
+	from erpnext.stock.warehouse_policy import sellable_warehouse_sql
+
+	warehouses = frappe.db.sql(
+		f"""select wh.name from `tabWarehouse` wh
+		where wh.company = %(company)s and wh.disabled = 0 and wh.is_group = 0
+		and {sellable_warehouse_sql("wh")}""",
+		{"company": company},
+		pluck=True,
+	)
+	return get_sellable_actual_qty(item_code, warehouses) if warehouses else 0
 
 
 @frappe.whitelist()

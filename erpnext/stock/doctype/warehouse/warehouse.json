@@ -25,12 +25,6 @@
   "default_storage_location",
   "transit_section",
   "default_in_transit_warehouse",
-  "holding_section",
-  "lost_warehouse",
-  "found_warehouse",
-  "holding_column",
-  "quarantine_warehouse",
-  "damage_warehouse",
   "count_variance_section",
   "account",
   "stock_adjustment_account",
@@ -58,6 +52,7 @@
    "fieldname": "warehouse_name",
    "fieldtype": "Data",
    "label": "Warehouse Name",
+   "description": "Name the physical warehouse or lab. Use Storage Locations for zones and shelves inside it.",
    "oldfieldname": "warehouse_name",
    "oldfieldtype": "Data",
    "reqd": 1
@@ -162,11 +157,11 @@
   {
    "depends_on": "eval:!doc.is_group || !!doc.warehouse_type",
    "fieldname": "warehouse_type",
-   "fieldtype": "Link",
+   "fieldtype": "Select",
    "in_import_template": 1,
    "label": "Warehouse Type",
-   "options": "Warehouse Type",
-   "description": "Select a Warehouse Type to define the permitted stock operations."
+   "description": "Select a Warehouse Type to define the permitted stock operations.",
+   "options": "\nStock\nTransit\nBorrowed\nFrozen\nLost\nFound\nQuarantine\nWrite-Off"
   },
   {
    "fieldname": "column_break_3",
@@ -259,52 +254,6 @@
    "no_copy": 1,
    "options": "Department",
    "depends_on": "eval:!!doc.department || !doc.is_group"
-  },
-  {
-   "fieldname": "holding_section",
-   "fieldtype": "Section Break",
-   "label": "Related Warehouses",
-   "depends_on": "eval:!!(doc.lost_warehouse || doc.quarantine_warehouse || doc.damage_warehouse) || (!doc.is_group && ['Stock', 'Quarantine'].includes(doc.warehouse_type))"
-  },
-  {
-   "description": "A Monthly Stock Count of this warehouse moves what it did not find here. Leave empty for the company's Lost warehouse.",
-   "fieldname": "lost_warehouse",
-   "fieldtype": "Link",
-   "label": "Lost Warehouse",
-   "no_copy": 1,
-   "options": "Warehouse",
-   "depends_on": "eval:!!doc.lost_warehouse || (!doc.is_group && doc.warehouse_type=='Stock')"
-  },
-  {
-   "description": "A Monthly Stock Count of this warehouse receives what two counts found beyond the system quantity here. Leave empty for the company's Found warehouse.",
-   "fieldname": "found_warehouse",
-   "hidden": 1,
-   "fieldtype": "Link",
-   "label": "Found Warehouse",
-   "no_copy": 1,
-   "options": "Warehouse"
-  },
-  {
-   "description": "Goods of this warehouse that wait for a Quality Inspection or fail one (a Quarantine Intake, a rejected sales or borrowing return) are held in this warehouse. Leave empty for the company's Quarantine warehouse.",
-   "fieldname": "quarantine_warehouse",
-   "fieldtype": "Link",
-   "label": "Quarantine Warehouse",
-   "no_copy": 1,
-   "options": "Warehouse",
-   "depends_on": "eval:!!doc.quarantine_warehouse || (!doc.is_group && doc.warehouse_type=='Stock')"
-  },
-  {
-   "depends_on": "eval:!!doc.damage_warehouse || (!doc.is_group && ['Stock', 'Quarantine'].includes(doc.warehouse_type))",
-   "description": "Where goods of this warehouse rejected by a Quality Inspection are moved (a Write-Off warehouse). A Quarantine warehouse may name one too: rejected goods go straight from quarantine to damage.",
-   "fieldname": "damage_warehouse",
-   "fieldtype": "Link",
-   "label": "Damage Warehouse",
-   "no_copy": 1,
-   "options": "Warehouse"
-  },
-  {
-   "fieldname": "holding_column",
-   "fieldtype": "Column Break"
   }
  ],
  "grid_page_length": 50,

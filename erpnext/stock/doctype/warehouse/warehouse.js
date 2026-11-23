@@ -4,7 +4,11 @@
 frappe.ui.form.on("Warehouse", {
 	setup: function (frm) {
 		frm.set_query("default_storage_location", () => ({
-			filters: { warehouse: frm.doc.name, disabled: 0 },
+			filters: {
+				warehouse: frm.doc.name,
+				disabled: 0,
+				location_type: ["not in", ["Quality Inspection", "Damage", "Lost"]],
+			},
 		}));
 		frm.set_query("default_in_transit_warehouse", function (doc) {
 			return {
@@ -34,6 +38,7 @@ frappe.ui.form.on("Warehouse", {
 				},
 			};
 		});
+		set_warehouse_type_options(frm);
 	},
 
 	warehouse_type: function (frm) {
@@ -44,6 +49,11 @@ frappe.ui.form.on("Warehouse", {
 		if (frm.doc.account) {
 			frm.set_value("account", "");
 		}
+		set_warehouse_type_options(frm);
+	},
+
+	disabled: function (frm) {
+		set_warehouse_type_options(frm);
 	},
 
 	refresh: function (frm) {
@@ -105,6 +115,7 @@ frappe.ui.form.on("Warehouse", {
 		}
 
 		frm.toggle_enable(["is_group", "company"], false);
+		set_warehouse_type_options(frm);
 		show_warehouse_type_summary(frm);
 
 		if (frm.doc.customer) {
@@ -112,6 +123,39 @@ frappe.ui.form.on("Warehouse", {
 		}
 	},
 });
+
+function set_warehouse_type_options(frm) {
+	const request = (frm.__warehouse_type_options_request || 0) + 1;
+	frm.__warehouse_type_options_request = request;
+	const company = frm.doc.company || null;
+	const warehouse = frm.is_new() ? null : frm.doc.name;
+	const selected = frm.doc.warehouse_type;
+	// Hide unverified legacy choices before the request; preserve the current value while options load.
+	frm.set_df_property(
+		"warehouse_type",
+		"options",
+		["", ...(selected ? [selected] : [])].join("\n")
+	);
+	frm.refresh_field("warehouse_type");
+	frappe.call({
+		method: "erpnext.stock.doctype.warehouse.warehouse.warehouse_type_options",
+		args: { company, warehouse },
+		callback: (r) => {
+			if (
+				request !== frm.__warehouse_type_options_request ||
+				company !== (frm.doc.company || null) ||
+				warehouse !== (frm.is_new() ? null : frm.doc.name)
+			)
+				return;
+			const choices = [...(r?.message || [])];
+			const current = frm.doc.warehouse_type;
+			// Keep an in-progress choice visible if company or disabled state changed during the request.
+			if (current && !choices.includes(current)) choices.push(current);
+			frm.set_df_property("warehouse_type", "options", ["", ...choices].join("\n"));
+			frm.refresh_field("warehouse_type");
+		},
+	});
+}
 
 function convert_to_group_or_ledger(frm) {
 	frappe.call({

@@ -20,9 +20,15 @@ from erpnext.borrowing.doctype.borrowing.borrowing_tracking import (
 )
 from erpnext.stock.doctype.pick_list.pick_identity import refuse_mismatch
 from erpnext.stock.doctype.serial_no.serial_no import get_serial_nos
-from erpnext.stock.doctype.storage_location.storage_location import get_default_storage_location
+from erpnext.stock.doctype.storage_location.storage_location import (
+	QUALITY_INSPECTION,
+	get_default_storage_location,
+	get_location_type,
+	typed_location,
+)
 from erpnext.stock.get_item_details import get_item_details
 from erpnext.stock.serial_batch_bundle import get_serial_nos_from_bundle
+from erpnext.stock.warehouse_policy import warehouse_type_allows
 
 BORROWER_TYPES = {"Employee", "Customer"}
 # Siwat, 16 Nov 2026: the request type names the borrower (Customer Demo lends to its Customer)
@@ -275,9 +281,7 @@ class Borrowing(Document):
 								row.idx, self.company
 							)
 						)
-					if warehouse.warehouse_type and not cint(
-						frappe.db.get_value("Warehouse Type", warehouse.warehouse_type, "allow_loan")
-					):
+					if not warehouse_type_allows(warehouse.warehouse_type, "loan"):
 						frappe.throw(
 							_("Row {0}: Warehouse {1} of type {2} does not lend stock").format(
 								row.idx, row.source_warehouse, warehouse.warehouse_type
@@ -1435,6 +1439,7 @@ def require_quarantine_warehouse(return_doc):
 		row.item_code
 		for row in return_doc.items
 		if borrowing_return_row_requires_inspection(row)
+		and get_location_type(row.get("storage_location"), row.get("warehouse")) != QUALITY_INSPECTION
 		and not quarantine_warehouse_for(return_doc.company, getattr(row, "warehouse", None))
 	]
 	if inspected:
@@ -1481,6 +1486,15 @@ def receive_row_into_quarantine(row, company, near=None):
 	at its default Storage Location. Returns the quarantine warehouse, or None when the company has none (the row is
 	not changed). A row already in a Quarantine warehouse is left as it is."""
 	current = row.get("warehouse")
+	warehouse = near or current
+	if location := typed_location(warehouse, row.get("item_code"), QUALITY_INSPECTION):
+		row.warehouse = warehouse
+		row.storage_location = location
+		return warehouse
+	if typed_location(warehouse, None, QUALITY_INSPECTION):
+		frappe.throw(_("No Quality Inspection location in {0} supports Item {1}.").format(
+			warehouse, row.get("item_code")
+		))
 	if current and is_quarantine_warehouse(current, company):
 		return current
 	quarantine = quarantine_warehouse_for(company, near or current)
@@ -1565,27 +1579,10 @@ def is_quarantine_row(row):
 	return is_quarantine_type(row.get("warehouse_type"))
 
 
-def own_quarantine_warehouse(warehouse):
-	"""The Quarantine warehouse a warehouse names itself (``Warehouse.quarantine_warehouse``, Connect Diagnostics,
-	7 Nov 2026: goods are held in the quarantine of the warehouse they belong to), or None. A site that has not
-	migrated to the field has none."""
-	if not warehouse or not frappe.db.has_column("Warehouse", "quarantine_warehouse"):
-		return None
-	return frappe.db.get_value("Warehouse", warehouse, "quarantine_warehouse") or None
-
-
 def quarantine_warehouse_for(company, near=None):
-	"""The Quarantine warehouse that holds the goods of warehouse ``near``: its own ``quarantine_warehouse`` when it
-	names an enabled leaf of the company, else the company's one (an enabled leaf of Warehouse Type Quarantine that no
-	warehouse names as its own; the one beside ``near`` first). Without ``near`` the company's one, else any
-	enabled quarantine leaf of the company. None when there is none."""
+	"""Find a dedicated quarantine warehouse for a company without a Quality Inspection location."""
 	if not company:
 		return None
-	own = own_quarantine_warehouse(near)
-	if own:
-		values = frappe.db.get_value("Warehouse", own, ["company", "is_group", "disabled"], as_dict=True)
-		if values and values.company == company and not values.is_group and not values.disabled:
-			return own
 	rows = [
 		row
 		for row in frappe.get_all(
@@ -1596,21 +1593,9 @@ def quarantine_warehouse_for(company, near=None):
 		)
 		if is_quarantine_row(row)
 	]
-	owned = set()
-	if rows and frappe.db.has_column("Warehouse", "quarantine_warehouse"):
-		owned = set(
-			frappe.get_all(
-				"Warehouse", filters={"quarantine_warehouse": ["is", "set"]}, pluck="quarantine_warehouse"
-			)
-		)
-	shared = [row for row in rows if row.name not in owned]
-	if not near:
-		shared = shared or rows
 	parent = frappe.db.get_value("Warehouse", near, "parent_warehouse") if near else None
-	for row in shared:
-		if parent and row.parent_warehouse == parent:
-			return row.name
-	return shared[0].name if shared else None
+	nearby = [row for row in rows if parent and row.parent_warehouse == parent]
+	return nearby[0].name if len(nearby) == 1 else rows[0].name if len(rows) == 1 else None
 
 
 class BorrowingAdjustment(Document):
@@ -2332,6 +2317,10 @@ def validate_borrowing_return_delivery_note(doc, loan, source_doctype, source_na
 		if flt(row.qty) >= 0:
 			frappe.throw(_("Row {0}: the returned quantity must be negative").format(row.idx))
 		lent_from = {issue_row.warehouse, loan_item.source_warehouse}
+		if borrowing_return_row_requires_inspection(row) and typed_location(
+			issue_row.warehouse, None, QUALITY_INSPECTION
+		):
+			receive_row_into_quarantine(row, doc.company, issue_row.warehouse)
 		if row.warehouse not in lent_from and not (
 			is_quarantine_warehouse(row.warehouse, doc.company)
 			and borrowing_return_row_requires_inspection(row)

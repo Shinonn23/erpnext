@@ -27,9 +27,9 @@ frappe.query_reports["Stock Ageing"] = {
 		{
 			fieldname: "warehouse_type",
 			label: __("Warehouse Type"),
-			fieldtype: "Link",
+			fieldtype: "Select",
 			width: "80",
-			options: "Warehouse Type",
+			options: erpnext.utils.warehouse_type_options,
 		},
 		{
 			fieldname: "warehouse",

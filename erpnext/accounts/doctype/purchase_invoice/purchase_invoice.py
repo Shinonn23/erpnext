@@ -1100,12 +1100,12 @@ class PurchaseInvoice(BuyingController):
 		if self.update_stock:
 			stock_ledger_entries = frappe.get_all(
 				"Stock Ledger Entry",
-				fields=["voucher_detail_no", "stock_value_difference", "warehouse"],
+				fields=["voucher_detail_no", "stock_value_difference", "warehouse", "storage_location"],
 				filters={"voucher_no": self.name, "voucher_type": self.doctype, "is_cancelled": 0},
 			)
 			for d in stock_ledger_entries:
 				voucher_wise_stock_value.setdefault(
-					(d.voucher_detail_no, d.warehouse), d.stock_value_difference
+					(d.voucher_detail_no, d.warehouse, d.storage_location), d.stock_value_difference
 				)
 
 		valuation_tax_accounts = [
@@ -1501,7 +1501,10 @@ class PurchaseInvoice(BuyingController):
 
 			stock_amount = net_rate + item.item_tax_amount + flt(item.landed_cost_voucher_amount)
 			warehouse_debit_amount = flt(
-				voucher_wise_stock_value.get((item.name, item.warehouse)), net_amt_precision
+				voucher_wise_stock_value.get(
+					(item.name, item.warehouse, item.get("storage_location"))
+				),
+				net_amt_precision,
 			)
 
 			if flt(stock_amount, net_amt_precision) != flt(warehouse_debit_amount, net_amt_precision):
@@ -1539,9 +1542,16 @@ class PurchaseInvoice(BuyingController):
 
 		elif (
 			self.update_stock
-			and voucher_wise_stock_value.get((item.name, item.warehouse))
+			and voucher_wise_stock_value.get(
+				(item.name, item.warehouse, item.get("storage_location"))
+			)
 			and warehouse_debit_amount
-			!= flt(voucher_wise_stock_value.get((item.name, item.warehouse)), net_amt_precision)
+			!= flt(
+				voucher_wise_stock_value.get(
+					(item.name, item.warehouse, item.get("storage_location"))
+				),
+				net_amt_precision,
+			)
 		):
 			stock_asset_rbnb = (
 				self.get_company_default("asset_received_but_not_billed", ignore_validation=True)
@@ -1557,7 +1567,12 @@ class PurchaseInvoice(BuyingController):
 				self.get_company_default("default_expense_account", ignore_validation=True)
 				or fallback_account
 			)
-			stock_amount = flt(voucher_wise_stock_value.get((item.name, item.warehouse)), net_amt_precision)
+			stock_amount = flt(
+				voucher_wise_stock_value.get(
+					(item.name, item.warehouse, item.get("storage_location"))
+				),
+				net_amt_precision,
+			)
 			stock_adjustment_amt = warehouse_debit_amount - stock_amount
 
 			gl_entries.append(

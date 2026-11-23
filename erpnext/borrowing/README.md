@@ -68,7 +68,7 @@ Material Request row links are cleared transactionally.
 
 The Borrowing Items grid shows Source Warehouse, Batch and Serial on a Stock borrowing and Asset and Recipient Location
 on an Asset borrowing (`borrowing.js` `configure_item_columns`); the server clears the fields of the other type and
-keeps an Asset row at quantity 1, and a Source Warehouse must be of a Warehouse Type that lends (`allow_loan`). A
+keeps an Asset row at quantity 1, and a Source Warehouse must allow lending under the warehouse operation policy. A
 Quarantine warehouse is recognised by its Warehouse Type only (`is_quarantine_warehouse`).
 
 ## A Borrow unit becomes a Demo Asset (Siwat, 16 Nov 2026)

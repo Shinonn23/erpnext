@@ -312,8 +312,6 @@ def get_preset_records(country=None):
 		{"doctype": "Market Segment", "market_segment": _("Lower Income")},
 		{"doctype": "Market Segment", "market_segment": _("Middle Income")},
 		{"doctype": "Market Segment", "market_segment": _("Upper Income")},
-		# Warehouse Type
-		{"doctype": "Warehouse Type", "name": "Transit"},
 		{"doctype": "Workstation Operating Component", "component_name": _("Electricity")},
 		{"doctype": "Workstation Operating Component", "component_name": _("Consumables")},
 		{"doctype": "Workstation Operating Component", "component_name": _("Rent")},

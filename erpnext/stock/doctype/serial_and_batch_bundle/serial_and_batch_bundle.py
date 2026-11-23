@@ -2762,7 +2762,8 @@ def get_available_serial_nos(kwargs):
 			kwargs, reserved_entries, reserved_voucher_details
 		):
 			filters["name"] = ("in", reserved_serial_nos)
-			return get_serial_nos_based_on_filters(filters, fields, order_by, kwargs)
+			serial_rows = get_serial_nos_based_on_filters(filters, fields, order_by, kwargs)
+			return _exclude_restricted_current_serials(serial_rows, kwargs)
 
 		# Check if serial nos are reserved for other vouchers then ignore those serial nos
 		elif ignore_reserved_serial_nos := get_other_doc_reserved_serials(
@@ -2801,7 +2802,37 @@ def get_available_serial_nos(kwargs):
 
 		filters["batch_no"] = ("in", batches)
 
-	return get_serial_nos_based_on_filters(filters, fields, order_by, kwargs)
+	serial_rows = get_serial_nos_based_on_filters(filters, fields, order_by, kwargs)
+	return _exclude_restricted_current_serials(serial_rows, kwargs)
+
+
+def _exclude_restricted_current_serials(serial_rows, kwargs):
+	if kwargs.get("posting_datetime") or kwargs.get("ignore_warehouse") or not serial_rows:
+		return serial_rows
+	# Serial No tracks its current Warehouse but not its Storage Location. Resolve the current ledger identity before
+	# returning it to an outward selector, so held/damaged serials are not offered for sale, issue or reservation.
+	serial_names = [row.serial_no for row in serial_rows]
+	locations = frappe.db.sql(
+		"""select serial_no.name,
+			(select coalesce(nullif(entry.storage_location, ''), sle.storage_location)
+			from `tabStock Ledger Entry` sle
+			left join `tabSerial and Batch Entry` entry on entry.parent = sle.serial_and_batch_bundle
+			where sle.warehouse = serial_no.warehouse and sle.is_cancelled = 0 and sle.actual_qty > 0
+				and (entry.serial_no = serial_no.name
+					or locate(concat('\\n', serial_no.name, '\\n'), concat('\\n', sle.serial_no, '\\n')) > 0)
+			order by sle.posting_datetime desc, sle.creation desc limit 1) as storage_location
+		from `tabSerial No` serial_no where serial_no.name in %(serials)s""",
+		{"serials": tuple(serial_names)},
+		as_dict=True,
+	)
+	from erpnext.stock.doctype.storage_location.storage_location import is_restricted_location
+
+	restricted = {
+		row.name
+		for row in locations
+		if row.storage_location and is_restricted_location(row.storage_location)
+	}
+	return [row for row in serial_rows if row.serial_no not in restricted]
 
 
 def get_serial_nos_based_on_filters(filters, fields, order_by, kwargs):
@@ -3478,9 +3509,15 @@ def update_available_batches(available_batches, *reserved_batches) -> None:
 
 
 def get_available_batches(kwargs):
+	from frappe.query_builder.functions import Coalesce, NullIf
+
+	from erpnext.stock.doctype.storage_location.storage_location import HOLD_ZONE_TYPES, RECEIVING
+
 	stock_ledger_entry = frappe.qb.DocType("Stock Ledger Entry")
 	batch_ledger = frappe.qb.DocType("Serial and Batch Entry")
 	batch_table = frappe.qb.DocType("Batch")
+	storage_location = frappe.qb.DocType("Storage Location")
+	location = Coalesce(NullIf(batch_ledger.storage_location, ""), stock_ledger_entry.storage_location)
 
 	query = (
 		frappe.qb.from_(stock_ledger_entry)
@@ -3488,6 +3525,8 @@ def get_available_batches(kwargs):
 		.on(stock_ledger_entry.serial_and_batch_bundle == batch_ledger.parent)
 		.inner_join(batch_table)
 		.on(batch_ledger.batch_no == batch_table.name)
+		.left_join(storage_location)
+		.on(storage_location.name == location)
 		.select(
 			batch_ledger.batch_no,
 			batch_ledger.warehouse,
@@ -3496,6 +3535,16 @@ def get_available_batches(kwargs):
 		)
 		.where(batch_table.disabled == 0)
 		.where(stock_ledger_entry.is_cancelled == 0)
+		.where(
+			storage_location.name.isnull()
+			| (
+				storage_location.location_type.notin(list(HOLD_ZONE_TYPES))
+				& (
+					(storage_location.location_type != RECEIVING)
+					| (storage_location.disabled == 1)
+				)
+			)
+		)
 		.groupby(batch_ledger.batch_no, batch_ledger.warehouse)
 	)
 

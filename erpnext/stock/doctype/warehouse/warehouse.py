@@ -15,6 +15,50 @@ from frappe.utils.nestedset import NestedSet
 from pypika.terms import ExistsCriterion
 
 from erpnext.stock import get_warehouse_account, get_warehouse_account_map
+from erpnext.stock.warehouse_policy import WAREHOUSE_TYPE_OPERATIONS
+
+RETIRED_ZONE_WAREHOUSE_TYPES = ("Frozen", "Lost", "Found", "Quarantine", "Write-Off")
+
+
+def uses_stock_locations(company):
+	"""The company's missing stock is held in a Location of the counted Warehouse."""
+	from erpnext.stock.doctype.storage_location.storage_location import LOST
+
+	return bool(
+		company
+		and frappe.db.has_column("Storage Location", "location_type")
+		and frappe.db.sql(
+			"""select 1 from `tabStorage Location` location
+			join tabWarehouse warehouse on warehouse.name = location.warehouse
+			where warehouse.company = %s and warehouse.disabled = 0
+				and location.disabled = 0 and location.location_type = %s limit 1""",
+			(company, LOST),
+		)
+	)
+
+
+@frappe.whitelist()
+def warehouse_type_options(company=None, warehouse=None):
+	"""Selectable type names for the Warehouse form, retaining only this saved warehouse's legacy value."""
+	frappe.has_permission("Warehouse", "read", throw=True)
+	current_type = None
+	if warehouse:
+		current = frappe.get_doc("Warehouse", warehouse)
+		if not frappe.has_permission("Warehouse", "read", doc=current):
+			frappe.throw(_("Not permitted to read Warehouse {0}.").format(warehouse), frappe.PermissionError)
+		if company and company != current.company:
+			frappe.throw(_("Warehouse {0} belongs to Company {1}.").format(warehouse, current.company))
+		company = current.company
+		current_type = current.warehouse_type
+
+	if company and uses_stock_locations(company):
+		choices = [name for name in WAREHOUSE_TYPE_OPERATIONS if name in {"Stock", "Transit", "Borrowed"}]
+	else:
+		choices = list(WAREHOUSE_TYPE_OPERATIONS)
+	if current_type and current_type not in choices:
+		# Keep the existing value visible and saveable, without offering other retired types.
+		choices.append(current_type)
+	return choices
 
 
 class Warehouse(NestedSet):
@@ -40,7 +84,9 @@ class Warehouse(NestedSet):
 		parent_warehouse: DF.Link | None
 		rgt: DF.Int
 		warehouse_name: DF.Data
-		warehouse_type: DF.Link | None
+		warehouse_type: DF.Literal[
+			"", "Stock", "Transit", "Borrowed", "Frozen", "Lost", "Found", "Quarantine", "Write-Off"
+		] | None
 	# end: auto-generated types
 
 	nsm_parent_field = "parent_warehouse"
@@ -64,18 +110,43 @@ class Warehouse(NestedSet):
 		self.set_onload("stock_exists", self.check_if_sle_exists(non_cancelled_only=True))
 
 	def validate(self):
+		self.validate_warehouse_type()
 		if self.default_storage_location:
 			from erpnext.stock.doctype.storage_location.storage_location import (
+				HOLD_ZONE_TYPES,
+				get_location_type,
 				validate_storage_location_warehouse,
 			)
 
 			if self.is_group:
 				frappe.throw(_("A group Warehouse cannot have a Default Storage Location."))
 			validate_storage_location_warehouse(self.default_storage_location, self.name)
+			if get_location_type(self.default_storage_location, self.name) in HOLD_ZONE_TYPES:
+				frappe.throw(_("Select a receiving or storage location as the warehouse default."))
 
 		self.validate_warehouse_account()
 		self.validate_inventory_account()
 		self.warn_about_multiple_warehouse_account()
+
+	def validate_warehouse_type(self):
+		if (
+			self.disabled
+			or not self.warehouse_type
+			or not (
+				self.is_new()
+				or self.has_value_changed("warehouse_type")
+				or self.has_value_changed("disabled")
+			)
+		):
+			return
+		if self.warehouse_type not in WAREHOUSE_TYPE_OPERATIONS:
+			frappe.throw(_("Warehouse Type {0} has no stock operation policy.").format(self.warehouse_type))
+		if self.warehouse_type in RETIRED_ZONE_WAREHOUSE_TYPES and uses_stock_locations(self.company):
+			frappe.throw(
+				_("Warehouse Type {0} is retired for {1}. Set the stock zone on a Storage Location.").format(
+					self.warehouse_type, self.company
+				)
+			)
 
 	def validate_warehouse_account(self):
 		if self.account and self.company:

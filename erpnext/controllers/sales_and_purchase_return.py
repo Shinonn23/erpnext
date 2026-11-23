@@ -455,23 +455,27 @@ def get_returned_packed_items(delivery_note: str) -> list[dict]:
 
 
 def get_returned_qty_map_for_purchase_flow(return_against, supplier, row_name, doctype):
-	# return map of warehouses with qty and stock qty
-	# Example: {'_Test Rejected Warehouse - _TC': {'qty': 5.0, 'stock_qty': 5.0}, '_Test Warehouse - _TC': {'qty': 8.0, 'stock_qty': 8.0}}
+	# Return map by warehouse and Storage Location. A shared warehouse can hold accepted and rejected stock in distinct
+	# locations, so warehouse alone does not identify which quantity has already been returned.
 
 	parent_doc = frappe.qb.DocType(doctype)
 	child_doc = frappe.qb.DocType(doctype + " Item")
+	selected_fields = [
+		child_doc.qty,
+		child_doc.rejected_qty,
+		child_doc.warehouse,
+		child_doc.rejected_warehouse,
+		child_doc.storage_location,
+		child_doc.conversion_factor,
+	]
+	if doctype == "Purchase Receipt":
+		selected_fields.append(child_doc.rejected_storage_location)
 
 	query = (
 		frappe.qb.from_(parent_doc)
 		.inner_join(child_doc)
 		.on(child_doc.parent == parent_doc.name)
-		.select(
-			child_doc.qty,
-			child_doc.rejected_qty,
-			child_doc.warehouse,
-			child_doc.rejected_warehouse,
-			child_doc.conversion_factor,
-		)
+		.select(*selected_fields)
 		.where(
 			(parent_doc.return_against == return_against)
 			& (parent_doc.supplier == supplier)
@@ -494,26 +498,28 @@ def get_returned_qty_map_for_purchase_flow(return_against, supplier, row_name, d
 
 	data = query.run(as_dict=True)
 
-	_return_map = frappe._dict({})
+	return aggregate_purchase_flow_returns(data)
 
-	for row in data:
-		if row.warehouse and row.warehouse not in _return_map:
-			_return_map[row.warehouse] = frappe._dict({"qty": 0, "stock_qty": 0})
 
-		if row.rejected_warehouse and row.rejected_warehouse not in _return_map:
-			_return_map[row.rejected_warehouse] = frappe._dict({"qty": 0, "stock_qty": 0})
+def aggregate_purchase_flow_returns(rows):
+	"""Sum returned accepted and rejected legs by warehouse and Storage Location."""
+	return_map = frappe._dict()
+	for row in rows:
+		if row.get("warehouse"):
+			key = (row.warehouse, row.get("storage_location") or None)
+			qty_map = return_map.setdefault(key, frappe._dict(qty=0, stock_qty=0))
+			qty_map.qty += abs(flt(row.get("qty")))
+			qty_map.stock_qty += abs(flt(row.get("stock_qty")))
 
-		if row.warehouse:
-			qty_map = _return_map.get(row.warehouse)
-			qty_map.qty += abs(flt(row.qty))
-			qty_map.stock_qty += abs(flt(row.stock_qty))
+		if row.get("rejected_warehouse"):
+			key = (row.rejected_warehouse, row.get("rejected_storage_location") or None)
+			rejected_qty_map = return_map.setdefault(key, frappe._dict(qty=0, stock_qty=0))
+			rejected_qty_map.qty += abs(flt(row.get("rejected_qty")))
+			rejected_qty_map.stock_qty += abs(
+				flt(row.get("rejected_qty")) * flt(row.get("conversion_factor"))
+			)
 
-		if row.rejected_warehouse:
-			rejected_qty_map = _return_map.get(row.rejected_warehouse)
-			rejected_qty_map.qty += abs(flt(row.rejected_qty))
-			rejected_qty_map.stock_qty += abs(flt(row.rejected_qty) * flt(row.conversion_factor))
-
-	return _return_map
+	return return_map
 
 
 def get_returned_qty_map_for_row(return_against, party, row_name, doctype):
@@ -673,8 +679,12 @@ def make_return_doc(doctype: str, source_name: str, target_doc=None, return_agai
 				source_parent.name, source_parent.supplier, source_doc.name, doctype
 			)
 
-			wh_map = returned_qty_map.get(source_doc.warehouse) or frappe._dict()
-			rejected_wh_map = returned_qty_map.get(source_doc.rejected_warehouse) or frappe._dict()
+			wh_map = returned_qty_map.get(
+				(source_doc.warehouse, source_doc.get("storage_location"))
+			) or frappe._dict()
+			rejected_wh_map = returned_qty_map.get(
+				(source_doc.rejected_warehouse, source_doc.get("rejected_storage_location"))
+			) or frappe._dict()
 
 			if doctype == "Subcontracting Receipt":
 				target_doc.received_qty = -1 * flt(source_doc.qty)

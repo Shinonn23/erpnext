@@ -19,8 +19,12 @@ RECEIVING = "Receiving"
 STORAGE = "Storage"
 SALES_COUNTER = "Sales Counter"
 HOLDING = "Holding"
-LOCATION_TYPES = (RECEIVING, STORAGE, SALES_COUNTER, HOLDING)
-STOCK_WAREHOUSE_TYPE = "Stock"
+QUALITY_INSPECTION = "Quality Inspection"
+DAMAGE = "Damage"
+LOST = "Lost"
+HOLD_ZONE_TYPES = (QUALITY_INSPECTION, DAMAGE, LOST)
+LOCATION_TYPES = (RECEIVING, STORAGE, SALES_COUNTER, HOLDING, *HOLD_ZONE_TYPES)
+PUTAWAY_LOCATION_TYPES = (STORAGE, SALES_COUNTER)
 # every native location field of a stock voucher row (cleared on a row whose Item is not a stock Item)
 LOCATION_FIELDS = (
 	"storage_location",
@@ -58,25 +62,54 @@ def receiving_location_sql(expression, warehouse_expression=None):
 	)
 
 
-def is_stock_type_warehouse(warehouse):
-	"""The warehouse holds ordinary sellable stock (its Warehouse Type allows sales or issue, or has no type): not a
-	holding warehouse such as Quarantine, Lost, Found, Borrowed, Write-Off, Frozen or Transit."""
-	if not warehouse:
-		return False
-	warehouse_type = frappe.get_cached_value("Warehouse", warehouse, "warehouse_type")
-	if not warehouse_type:
-		return True
-	if warehouse_type == STOCK_WAREHOUSE_TYPE:
-		return True
-	from erpnext.stock.warehouse_policy import SELLABLE_OPERATIONS
+def get_location_type(location, warehouse=None):
+	if not location:
+		return None
+	row = frappe.get_cached_value("Storage Location", location, ("warehouse", "location_type"), as_dict=True)
+	return row.location_type if row and (not warehouse or row.warehouse == warehouse) else None
 
-	flags = frappe.get_cached_value(
-		"Warehouse Type",
-		warehouse_type,
-		[f"allow_{operation}" for operation in SELLABLE_OPERATIONS],
-		as_dict=True,
+
+def is_restricted_location(location, warehouse=None):
+	return get_location_type(location, warehouse) in HOLD_ZONE_TYPES or is_receiving_location(
+		location, warehouse
 	)
-	return bool(flags and any(cint(flags.get(f"allow_{operation}")) for operation in SELLABLE_OPERATIONS))
+
+
+def restricted_location_sql(expression, warehouse_expression=None):
+	own = f" and restricted_sl.warehouse = ({warehouse_expression})" if warehouse_expression else ""
+	return (
+		"exists (select 1 from `tabStorage Location` restricted_sl "
+		f"where restricted_sl.name = ({expression}){own} and ("
+		"restricted_sl.location_type in ('Quality Inspection', 'Damage', 'Lost') "
+		"or (restricted_sl.location_type = 'Receiving' and restricted_sl.disabled = 0)))"
+	)
+
+
+def typed_location(warehouse, item_code, location_type):
+	"""Return the enabled zone that supports the Item's storage condition."""
+	if not warehouse:
+		return None
+	condition = frappe.get_cached_value("Item", item_code, "storage_condition") if item_code else None
+	rows = frappe.db.sql(
+		"""select sl.name from `tabStorage Location` sl
+		where sl.warehouse = %(warehouse)s and sl.location_type = %(kind)s and sl.disabled = 0
+		and (%(condition)s = '' or exists (
+			select 1 from `tabStorage Location Condition` c
+			where c.parent = sl.name and c.parenttype = 'Storage Location'
+				and c.parentfield = 'supported_storage_conditions' and c.storage_condition = %(condition)s
+		))
+		order by sl.name limit 1""",
+		{"warehouse": warehouse, "kind": location_type, "condition": condition or ""},
+		pluck=True,
+	)
+	return rows[0] if rows else None
+
+
+def is_stock_type_warehouse(warehouse):
+	"""Use the stock operation policy to distinguish sellable warehouses from holding warehouses."""
+	from erpnext.stock.warehouse_policy import is_sellable_warehouse
+
+	return is_sellable_warehouse(warehouse)
 
 
 @frappe.whitelist()
@@ -85,7 +118,11 @@ def allowed_location_types(warehouse):
 	for a holding warehouse."""
 	if not warehouse:
 		return list(LOCATION_TYPES)
-	return [RECEIVING, STORAGE, SALES_COUNTER] if is_stock_type_warehouse(warehouse) else [HOLDING]
+	return (
+		[RECEIVING, STORAGE, SALES_COUNTER, *HOLD_ZONE_TYPES]
+		if is_stock_type_warehouse(warehouse)
+		else [HOLDING]
+	)
 
 
 def sales_counter_location(warehouse):
@@ -111,7 +148,7 @@ def preferred_location(item_code, warehouse):
 		where preference.parent = %(item)s and preference.parenttype = 'Item'
 			and preference.parentfield = 'preferred_storage_locations'
 			and location.warehouse = %(warehouse)s and location.disabled = 0
-			and location.location_type != 'Receiving'
+			and location.location_type in ('Storage', 'Sales Counter', 'Holding')
 		order by preference.idx
 		limit 1""",
 		{"item": item_code, "warehouse": warehouse},
@@ -150,6 +187,14 @@ class StorageLocation(Document):
 					self.warehouse, ", ".join(_(t) for t in allowed)
 				)
 			)
+		previous = self.get_doc_before_save()
+		if (
+			previous
+			and previous.location_type != self.location_type
+			and ({previous.location_type, self.location_type} & set(HOLD_ZONE_TYPES))
+			and frappe.db.exists("Stock Ledger Entry", {"storage_location": self.name})
+		):
+			frappe.throw(_("Move the stock to another location to change its hold status."))
 		if not self.is_new() and self.has_value_changed("warehouse"):
 			if frappe.db.has_column("Stock Ledger Entry", "storage_location") and frappe.db.exists(
 				"Stock Ledger Entry", {"storage_location": self.name}
@@ -358,10 +403,17 @@ def get_default_storage_location(warehouse, item_code=None):
 			and preference.parentfield = 'preferred_storage_locations'
 		where location.warehouse = %(warehouse)s and location.disabled = 0
 			and supported.storage_condition = %(condition)s
+			and (location.location_type is null or location.location_type not in %(held_types)s)
 		order by location.name = %(default)s desc, case when preference.idx is null then 1 else 0 end,
 			preference.idx, location.name
 		limit 1""",
-		{"warehouse": warehouse, "item_code": item_code, "condition": condition, "default": default or ""},
+		{
+			"warehouse": warehouse,
+			"item_code": item_code,
+			"condition": condition,
+			"default": default or "",
+			"held_types": HOLD_ZONE_TYPES,
+		},
 	)
 	if not location:
 		frappe.throw(
@@ -554,6 +606,13 @@ def default_row_location(doc, row, fieldname, warehouse, item_code):
 	at several locations."""
 	if fieldname == "storage_location" and doc.doctype == "POS Invoice" and doc.get("pos_profile"):
 		return None
+	if (
+		fieldname == "storage_location"
+		and doc.doctype in ("Purchase Receipt", "Purchase Invoice")
+		and not cint(doc.get("is_return"))
+		and is_stock_type_warehouse(warehouse)
+	):
+		return preferred_purchase_location(warehouse, item_code)
 	if fieldname == "storage_location" and is_outgoing_row(doc, row):
 		location = source_storage_location(doc, row, warehouse, item_code)
 		if location or is_stock_type_warehouse(warehouse):
@@ -568,6 +627,28 @@ def default_row_location(doc, row, fieldname, warehouse, item_code):
 		# only a Material Transfer: a transfer for manufacture or to a subcontractor keeps the target's default
 		return transfer_target_location(row, warehouse, item_code)
 	return get_default_storage_location(warehouse, item_code)
+
+
+def preferred_purchase_location(warehouse, item_code):
+	"""Use a configured, compatible place for put-away. Leave an unconfigured shelf for the receiver to choose."""
+	for location in (
+		preferred_location(item_code, warehouse),
+		frappe.get_cached_value("Warehouse", warehouse, "default_storage_location"),
+	):
+		if not location:
+			continue
+		bin_details = frappe.get_cached_value(
+			"Storage Location", location, ("warehouse", "disabled", "location_type"), as_dict=True
+		)
+		if (
+			bin_details
+			and bin_details.warehouse == warehouse
+			and not bin_details.disabled
+			and bin_details.location_type in PUTAWAY_LOCATION_TYPES
+			and _meets_condition(location, item_code)
+		):
+			return location
+	return None
 
 
 def transfer_target_location(row, warehouse, item_code):
@@ -599,19 +680,20 @@ def _meets_condition(location, item_code):
 	return True
 
 
-def receiving_source_locations(row, warehouse):
-	"""The Receiving locations of ``warehouse`` a row takes goods from: its Storage Location and the locations of its
-	Serial and Batch Bundle entries."""
+def stock_source_locations(row):
+	"""Source locations carried by the row or its tracked stock."""
 	locations = [row.get("storage_location")]
 	bundle = row.get("serial_and_batch_bundle")
 	if bundle:
 		locations += frappe.get_all(
 			"Serial and Batch Entry", filters={"parent": bundle}, pluck="storage_location", order_by="idx"
 		)
+	return dict.fromkeys(location for location in locations if location)
+
+
+def receiving_source_locations(row, warehouse):
 	return [
-		location
-		for location in dict.fromkeys(location for location in locations if location)
-		if is_receiving_location(location, warehouse)
+		location for location in stock_source_locations(row) if is_receiving_location(location, warehouse)
 	]
 
 
@@ -622,6 +704,14 @@ def validate_receiving_source(doc, row):
 	if not warehouse or not row.meta.has_field("storage_location"):
 		return
 	item_code = row.get("item_code") or row.get("rm_item_code")
+	if doc.doctype != "Stock Entry" and is_outgoing_row(doc, row):
+		for location in stock_source_locations(row):
+			if get_location_type(location, warehouse) in HOLD_ZONE_TYPES:
+				frappe.throw(
+					_("Row {0}: stock held at {1} cannot be sold, issued, or consumed.").format(
+						row.get("idx"), location
+					)
+				)
 	if refuses_receiving_source(doc, row):
 		for location in receiving_source_locations(row, warehouse):
 			frappe.throw(
@@ -733,6 +823,18 @@ def validate_storage_location(ledger_entry):
 		not ledger_entry.get("is_cancelled")
 		and frappe.flags.get("warehouse_policy_lcv_entry") is not ledger_entry
 	):
+		voucher_type = ledger_entry.get("voucher_type")
+		qty = flt(ledger_entry.get("actual_qty"))
+		if qty and voucher_type not in ("Stock Entry", "Stock Reconciliation"):
+			kind = get_location_type(location_name, ledger_entry.warehouse)
+			if kind == LOST or (
+				qty < 0
+				and kind in HOLD_ZONE_TYPES
+				and voucher_type not in ("Purchase Receipt", "Purchase Invoice")
+			):
+				frappe.throw(
+					_("Stock held at {0} cannot be sold, issued, or consumed.").format(location_name)
+				)
 		validate_item_storage_condition(location_name, ledger_entry.get("item_code"))
 
 
@@ -822,7 +924,7 @@ def location_stock(item_code, warehouse, batch_no=None, unlocated=False, exclude
 
 def _not_receiving(expression, exclude_receiving):
 	"""`` and not <receiving>`` for a WHERE when ``exclude_receiving``, else nothing."""
-	return f" and not {receiving_location_sql(expression)}" if exclude_receiving else ""
+	return f" and not {restricted_location_sql(expression)}" if exclude_receiving else ""
 
 
 def serial_locations(serial_nos, warehouse, exclude_receiving=False):
@@ -938,10 +1040,20 @@ def storage_location_query(doctype, txt, searchfield, start, page_len, filters):
 		as_dict=True,
 	)
 	if exclude_receiving:
-		candidates = [row for row in candidates if row.location_type != RECEIVING]
+		excluded_types = (RECEIVING,) if exclude == "stock" else (RECEIVING, *HOLD_ZONE_TYPES)
+		candidates = [row for row in candidates if row.location_type not in excluded_types]
+	location_types = filters.get("location_types")
+	if isinstance(location_types, list):
+		candidates = [row for row in candidates if row.location_type in location_types]
+	if filters.get("location_name"):
+		candidates = [row for row in candidates if row.name == filters["location_name"]]
 	if serials:
-		candidates = [row for row in candidates if row.name in holding]
-	elif cint(filters.get("only_stock")) and stock:
+		candidates = [
+			row
+			for row in candidates
+			if holding.get(row.name, 0) >= (len(set(serials)) if cint(filters.get("require_stock")) else 1)
+		]
+	elif cint(filters.get("require_stock")) or (cint(filters.get("only_stock")) and stock):
 		candidates = [row for row in candidates if row.name in stock]
 	candidates.sort(key=lambda row: (-row.preferred, -stock.get(row.name, 0), row.idx or 0, row.name))
 	start, page_len = cint(start), cint(page_len) or 20
@@ -966,28 +1078,48 @@ def warehouse_query(doctype, txt, searchfield, start, page_len, filters):
 
 	filters = frappe.parse_json(filters) or {}
 	item_code = filters.get("storage_condition_item")
+	require_stock = cint(filters.get("require_stock"))
 	base = filters.get("filters") or {}
+	location_types = filters.get("location_types")
+	location_types = location_types if isinstance(location_types, list) else []
 	condition = None
 	if item_code and frappe.db.exists("Item", item_code):
 		item = frappe.get_cached_doc("Item", item_code)
 		if frappe.has_permission("Item", "select", doc=item):
 			condition = item.get("storage_condition")
-	if condition:
+		elif require_stock:
+			return []
+	elif require_stock:
+		return []
+	if condition or location_types or require_stock:
 		if isinstance(base, dict):
 			base = [
 				["Warehouse", key, *(value if isinstance(value, list | tuple) else ["=", value])]
 				for key, value in base.items()
 			]
+	if condition or location_types:
 		warehouses = frappe.db.sql_list(
-			"""select distinct location.warehouse
-			from `tabStorage Location` location
-			join `tabStorage Location Condition` supported
-				on supported.parent = location.name and supported.parenttype = 'Storage Location'
-				and supported.parentfield = 'supported_storage_conditions'
-			where location.disabled = 0 and supported.storage_condition = %s""",
-			condition,
+			"""select distinct location.warehouse from `tabStorage Location` location
+			where location.disabled = 0
+				and (%(restrict_types)s = 0 or location.location_type in %(location_types)s)
+				and (%(condition)s = '' or exists (
+					select 1 from `tabStorage Location Condition` supported
+					where supported.parent = location.name and supported.parenttype = 'Storage Location'
+						and supported.parentfield = 'supported_storage_conditions'
+						and supported.storage_condition = %(condition)s
+				))""",
+			{
+				"condition": condition or "",
+				"restrict_types": bool(location_types),
+				"location_types": location_types or [""],
+			},
 		)
 		base = [*base, ["Warehouse", "name", "in", warehouses or [""]]]
+	if require_stock:
+		stocked = frappe.get_all(
+			"Bin", filters={"item_code": item_code, "actual_qty": [">", 0]}, pluck="warehouse"
+		)
+		base = [*base, ["Warehouse", "name", "in", stocked or [""]]]
 	return search_widget(
 		"Warehouse", txt, searchfield=searchfield, start=start, page_length=page_len, filters=base
 	)

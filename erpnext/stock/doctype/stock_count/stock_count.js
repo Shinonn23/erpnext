@@ -34,7 +34,6 @@ frappe.ui.form.on("Stock Count", {
 				is_group: 0,
 				disabled: 0,
 				warehouse_type: "Lost",
-				name: ["!=", frm.doc.warehouse || ""],
 			},
 		}));
 		frm.set_query("lost_storage_location", () => ({
@@ -545,10 +544,15 @@ erpnext.stock_count.fill_loss_warehouses = async (frm) => {
 	});
 	const found = r?.message || {};
 	const before = frm.__loss_defaults || {};
-	frm.__loss_defaults = { lost_warehouse: found.lost };
-	for (const [fieldname, value] of [["lost_warehouse", found.lost]]) {
-		// each counted warehouse has its own Lost warehouse (7 Nov 2026): an empty field, one that names the
-		// counted warehouse itself or the default of the warehouse chosen before takes the new default; a saved value stays
+	frm.__loss_defaults = {
+		lost_warehouse: found.lost,
+		lost_storage_location: found.lost_storage_location,
+	};
+	for (const [fieldname, value] of [
+		["lost_warehouse", found.lost],
+		["lost_storage_location", found.lost_storage_location],
+	]) {
+		// An empty field or a previous default follows the selected Warehouse; a value the user changed stays.
 		if (
 			value &&
 			(!frm.doc[fieldname] ||

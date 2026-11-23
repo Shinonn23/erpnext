@@ -11,7 +11,7 @@
   "fg_item",
   "fg_item_qty",
   "item_code",
-  "supplier_catalog_item",
+  "trading_partner_catalog_item",
   "supplier_part_no",
   "item_name",
   "brand",
@@ -1099,12 +1099,12 @@
    "read_only": 1
   },
   {
-   "fieldname": "supplier_catalog_item",
+   "fieldname": "trading_partner_catalog_item",
    "fieldtype": "Link",
    "in_list_view": 0,
    "insert_after": "item_code",
-   "label": "Supplier Catalog Item",
-   "options": "Supplier Catalog Item"
+   "label": "Trading Partner Catalog Item",
+   "options": "Trading Partner Catalog Item"
   },
   {
    "fieldname": "territory",

@@ -932,15 +932,9 @@ def get_bundle_availability(bundle_item_code, warehouse):
 
 
 def get_bin_qty(item_code, warehouse):
-	bin_qty = frappe.db.sql(
-		"""select actual_qty from `tabBin`
-		where item_code = %s and warehouse = %s
-		limit 1""",
-		(item_code, warehouse),
-		as_dict=1,
-	)
+	from erpnext.stock.get_item_details import get_sellable_actual_qty
 
-	return bin_qty[0].actual_qty or 0 if bin_qty else 0
+	return get_sellable_actual_qty(item_code, [warehouse])
 
 
 def get_pos_reserved_qty(item_code, warehouse):

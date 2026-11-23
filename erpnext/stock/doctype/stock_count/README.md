@@ -10,10 +10,12 @@ Each barcode scan adds one Stock UOM. Count packaged goods through Count in UOM.
 Serial numbers must have total counts of zero or one. Whole-number stock UOMs reject fractional totals.
 Batch and storage-location rows remain separate; choose the matching row before applying a count.
 
-## Lost Warehouse (WP10, 18 Nov 2026)
+## Lost Storage Location
 
-A Monthly count moves what it did not find to its Lost Warehouse: the fields are `lost_warehouse` and
-`lost_storage_location` (read-only, filled from the counted warehouse's own Lost warehouse, else the company's). They
+A Monthly count excludes stock already in a Lost Storage Location from its snapshot. Shortages move to the item-compatible
+Lost location in the counted warehouse, keeping the stock in that warehouse while separating it from ordinary stock. If
+the counted warehouse has no Lost location, the count falls back to an active Lost Warehouse and optional Holding location.
+The fields `lost_warehouse` and `lost_storage_location` retain the legacy destination where one was already selected. They
 were named `quarantine_warehouse` / `quarantine_storage_location` before, although they never held a quarantine; the
 pre-model-sync patch `v16_0/rename_stock_count_lost_fields` renames them. The count never receives a surplus (11 Nov
 2026): the Found fields (`found_warehouse`, `found_stock_entry`, `found_transfer_entry`) and the code that made the FOUND

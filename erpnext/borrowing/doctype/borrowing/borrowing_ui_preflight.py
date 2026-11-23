@@ -35,7 +35,6 @@ ROOTS = (
 	"Warehouse",
 	"Storage Location",
 	"Location",
-	"Warehouse Type",
 	"Company",
 	"Item",
 	"Serial No",

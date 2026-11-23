@@ -47,6 +47,8 @@ from erpnext.stock.doctype.serial_and_batch_bundle.serial_and_batch_bundle impor
 )
 from erpnext.stock.doctype.storage_location.storage_location import (
 	LOCATION_FIELDS,
+	QUALITY_INSPECTION,
+	get_location_type,
 	get_storage_location_warehouses,
 	validate_receiving_source,
 	validate_storage_location_warehouse,
@@ -107,6 +109,16 @@ def item_inspection_switch(doctype, is_return=False):
 		"Sales Invoice": "inspection_required_before_delivery",
 		"Delivery Note": "inspection_required_before_delivery",
 	}.get(doctype)
+
+
+def is_fully_rejected_purchase_row(doc, row):
+	return (
+		doc.doctype in ("Purchase Receipt", "Purchase Invoice")
+		and not cint(doc.get("is_return"))
+		and flt(row.get("rejected_qty")) > 0
+		and row.get("qty") is not None
+		and not flt(row.qty)
+	)
 
 
 def stock_entry_row_requires_inspection(purpose, row):
@@ -1411,7 +1423,11 @@ class StockController(AccountsController):
 			if warehouse == row.get("t_warehouse") and flt(sl_dict.get("actual_qty")) > 0:
 				fieldname = "to_storage_location"
 		elif self.doctype in ("Purchase Receipt", "Purchase Invoice", "Subcontracting Receipt"):
-			if row.get("rejected_warehouse") and warehouse == row.get("rejected_warehouse"):
+			if (
+				row.get("rejected_warehouse")
+				and warehouse == row.get("rejected_warehouse")
+				and warehouse != row.get("warehouse")
+			):
 				fieldname = "rejected_storage_location"
 			elif row.get("from_warehouse") and warehouse == row.get("from_warehouse"):
 				fieldname = "from_storage_location"
@@ -1494,6 +1510,13 @@ class StockController(AccountsController):
 				self.doctype in ["Purchase Invoice", "Purchase Receipt"]
 				and row.get("rejected_warehouse")
 				and sl_dict.get("warehouse") == row.get("rejected_warehouse")
+				and (
+					row.get("warehouse") != row.get("rejected_warehouse")
+					or (
+						row.get("rejected_storage_location")
+						and sl_dict.get("storage_location") == row.get("rejected_storage_location")
+					)
+				)
 			):
 				fieldname = f"rejected_{dimension.source_fieldname}"
 				sl_dict[dimension.target_fieldname] = row.get(fieldname)
@@ -1757,6 +1780,9 @@ class StockController(AccountsController):
 			return
 
 		for row in self.get("items"):
+			if is_fully_rejected_purchase_row(self, row):
+				# Everything on this row was already rejected at receiving.
+				continue
 			qi_required = False
 			if inspection_required_fieldname and frappe.get_cached_value(
 				"Item", row.item_code, inspection_required_fieldname
@@ -1844,16 +1870,16 @@ class StockController(AccountsController):
 			return False
 		from erpnext.borrowing.doctype.borrowing.borrowing_core import is_quarantine_warehouse
 
-		return is_quarantine_warehouse(row.warehouse, self.company)
+		return is_quarantine_warehouse(row.warehouse, self.company) or (
+			get_location_type(row.get("storage_location"), row.warehouse) == QUALITY_INSPECTION
+		)
 
 	def is_return_into_quarantine(self, row):
 		"""Goods that failed their inspection on coming back are received into the Quarantine warehouse (Connect
 		Diagnostics, Siwat, 5 Nov 2026): a sales return row received there is not refused for its rejection."""
 		if self.doctype not in ("Delivery Note", "Sales Invoice") or not cint(self.get("is_return")):
 			return False
-		from erpnext.borrowing.doctype.borrowing.borrowing_core import is_quarantine_warehouse
-
-		return bool(row.get("warehouse")) and is_quarantine_warehouse(row.warehouse, self.company)
+		return self.is_receipt_into_quarantine(row)
 
 	def validate_qi_rejection(self, row):
 		"""Check if QI is rejected on row level, during submission"""

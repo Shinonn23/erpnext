@@ -77,6 +77,7 @@ class StockEntryDetail(Document):
 		storage_location: DF.Link | None
 		subcontracted_item: DF.Link | None
 		t_warehouse: DF.Link | None
+		t_warehouse_type: DF.Data | None
 		to_storage_location: DF.Link | None
 		transfer_qty: DF.Float
 		transferred_qty: DF.Float

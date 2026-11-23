@@ -161,6 +161,40 @@ def get_common_ancestor_item_group(item_groups: list[str]) -> str:
 	)[0]
 
 
+def _sellable_item_codes_query(warehouse):
+	"""Subquery of items with positive current stock outside restricted Storage Locations."""
+	from frappe.query_builder.functions import Coalesce, NullIf, Sum
+
+	from erpnext.stock.doctype.storage_location.storage_location import HOLD_ZONE_TYPES, RECEIVING
+
+	sle = frappe.qb.DocType("Stock Ledger Entry")
+	sbe = frappe.qb.DocType("Serial and Batch Entry")
+	storage_location = frappe.qb.DocType("Storage Location")
+	location = Coalesce(NullIf(sbe.storage_location, ""), sle.storage_location)
+
+	return (
+		frappe.qb.from_(sle)
+		.left_join(sbe)
+		.on(sbe.parent == sle.serial_and_batch_bundle)
+		.left_join(storage_location)
+		.on(storage_location.name == location)
+		.select(sle.item_code)
+		.where((sle.warehouse == warehouse) & (sle.is_cancelled == 0))
+		.where(
+			storage_location.name.isnull()
+			| (
+				storage_location.location_type.notin(list(HOLD_ZONE_TYPES))
+				& (
+					(storage_location.location_type != RECEIVING)
+					| (storage_location.disabled == 1)
+				)
+			)
+		)
+		.groupby(sle.item_code)
+		.having(Sum(Coalesce(sbe.qty, sle.actual_qty)) > 0)
+	)
+
+
 @frappe.whitelist()
 def get_items(start, page_length, price_list, item_group, pos_profile, search_term=""):
 	check_pos_profile_access(pos_profile)
@@ -217,15 +251,7 @@ def get_items(start, page_length, price_list, item_group, pos_profile, search_te
 		query = query.where(item_group_condition)
 
 	if hide_unavailable_items:
-		bin_dt = frappe.qb.DocType("Bin")
-		query = (
-			query.left_join(bin_dt)
-			.on(bin_dt.item_code == item.name)
-			.where(
-				(item.is_stock_item == 0)
-				| ((item.is_stock_item == 1) & (bin_dt.warehouse == warehouse) & (bin_dt.actual_qty > 0))
-			)
-		)
+		query = query.where((item.is_stock_item == 0) | item.name.isin(_sellable_item_codes_query(warehouse)))
 
 	items_data = (
 		query.orderby(item.name, order=Order.asc).limit(cint(page_length)).offset(cint(start)).run(as_dict=1)

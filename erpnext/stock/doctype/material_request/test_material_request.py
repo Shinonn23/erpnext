@@ -1492,14 +1492,6 @@ def make_material_request_for_items(item_codes, **args):
 
 
 def get_in_transit_warehouse(company):
-	if not frappe.db.exists("Warehouse Type", "Transit"):
-		frappe.get_doc(
-			{
-				"doctype": "Warehouse Type",
-				"name": "Transit",
-			}
-		).insert()
-
 	in_transit_warehouse = frappe.db.exists("Warehouse", {"warehouse_type": "Transit", "company": company})
 
 	if not in_transit_warehouse:

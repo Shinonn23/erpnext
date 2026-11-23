@@ -92,9 +92,9 @@ frappe.query_reports["Stock Balance"] = {
 		{
 			fieldname: "warehouse_type",
 			label: __("Warehouse Type"),
-			fieldtype: "Link",
+			fieldtype: "Select",
 			width: "80",
-			options: "Warehouse Type",
+			options: erpnext.utils.warehouse_type_options,
 		},
 		{
 			fieldname: "valuation_field_type",

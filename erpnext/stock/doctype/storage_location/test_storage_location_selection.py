@@ -98,7 +98,7 @@ class TestStorageLocationSelection(unittest.TestCase):
 			"frappe.get_cached_value", return_value=frappe._dict(warehouse="Warehouse", disabled=0)
 		), patch(
 			f"{MODULE}.validate_item_storage_condition", side_effect=frappe.ValidationError("Incompatible")
-		) as validate:
+		) as validate, patch("frappe.flags", frappe._dict()):
 			with self.assertRaisesRegex(frappe.ValidationError, "Incompatible"):
 				validate_storage_location(entry)
 			validate.assert_called_once_with("Shelf", "Item")
@@ -175,9 +175,14 @@ class TestStorageLocationSelection(unittest.TestCase):
 			self.assertEqual(is_putaway_rule_enabled(), expected)
 
 	def test_disabled_putaway_rejects_backend_call(self):
-		with patch(
-			"erpnext.stock.doctype.putaway_rule.putaway_rule.is_putaway_rule_enabled", return_value=False
-		), patch("erpnext.stock.doctype.putaway_rule.putaway_rule._", side_effect=lambda text: text):
+		module = "erpnext.stock.doctype.putaway_rule.putaway_rule"
+		with (
+			patch(f"{module}.is_putaway_rule_enabled", return_value=False),
+			patch(f"{module}._", side_effect=lambda text: text),
+			patch(f"{module}.get_user_permissions", return_value={}),
+			patch("frappe.has_permission", return_value=True),
+			patch("frappe.session", frappe._dict(user="stock@example.com")),
+		):
 			with self.assertRaisesRegex(frappe.ValidationError, "Putaway Rules are disabled"):
 				apply_putaway_rule("Stock Entry", [], "Company", purpose="Material Transfer")
 
@@ -233,6 +238,24 @@ class TestStorageLocationStock(unittest.TestCase):
 		) as where:
 			self.assertEqual([row[0] for row in self.query(serial_no="SN-1\nSN-2\n")], ["A-1"])
 		self.assertEqual(where.call_args.args, (["SN-1", "SN-2"], "W"))
+
+	def test_receipt_location_filters_limit_type_and_pinned_holding_bin(self):
+		for row, location_type in zip(self.candidates, ("Receiving", "Storage", "Holding"), strict=True):
+			row.location_type = location_type
+		with patch(f"{MODULE}.location_stock", return_value={}):
+			self.assertEqual([row[0] for row in self.query(location_types=["Storage"])], ["A-2"])
+			self.assertEqual(
+				[row[0] for row in self.query(location_types=["Holding"], location_name="B-1")], ["B-1"]
+			)
+			self.assertEqual(self.query(location_types=["Holding"], location_name="A-1"), [])
+
+	def test_purchase_return_requires_live_stock_and_all_selected_serials(self):
+		with (
+			patch(f"{MODULE}.location_stock", return_value={}),
+			patch(f"{MODULE}.serial_locations", return_value={"A-1": 1, "A-2": 2}),
+		):
+			self.assertEqual(self.query(require_stock=1), [])
+			self.assertEqual([row[0] for row in self.query(require_stock=1, serial_no="SN-1\nSN-2")], ["A-2"])
 
 
 class TestLocationCodeFromPosition(unittest.TestCase):

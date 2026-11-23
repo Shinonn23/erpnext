@@ -579,7 +579,14 @@ class PurchaseReceipt(BuyingController):
 
 			outgoing_amount = item.base_net_amount
 			if self.is_internal_transfer() and item.valuation_rate:
-				outgoing_amount = abs(get_stock_value_difference(self.name, item.name, item.from_warehouse))
+				outgoing_amount = abs(
+					get_stock_value_difference(
+						self.name,
+						item.name,
+						item.from_warehouse,
+						item.get("from_storage_location") or item.get("storage_location"),
+					)
+				)
 				credit_amount = outgoing_amount
 
 			if (
@@ -587,7 +594,9 @@ class PurchaseReceipt(BuyingController):
 				and not self.is_internal_transfer()
 				and frappe.db.get_single_value("Buying Settings", "set_valuation_rate_for_rejected_materials")
 			):
-				outgoing_amount += get_stock_value_difference(self.name, item.name, item.rejected_warehouse)
+				outgoing_amount += get_stock_value_difference(
+					self.name, item.name, item.rejected_warehouse, item.get("rejected_storage_location")
+				)
 				credit_amount = outgoing_amount
 
 			if credit_amount:
@@ -745,7 +754,9 @@ class PurchaseReceipt(BuyingController):
 			)
 
 			if item.get("rejected_qty") and self.is_rejected_material_valued():
-				rejected_item_cost = get_stock_value_difference(self.name, item.name, item.rejected_warehouse)
+				rejected_item_cost = get_stock_value_difference(
+					self.name, item.name, item.rejected_warehouse, item.get("rejected_storage_location")
+				)
 				divisional_loss -= rejected_item_cost
 
 			if divisional_loss:
@@ -811,7 +822,9 @@ class PurchaseReceipt(BuyingController):
 						flt(d.base_net_amount) + flt(d.item_tax_amount) + flt(d.landed_cost_voucher_amount)
 					)
 				elif inventory_account := self.get_inventory_account_dict(d, inventory_account_map):
-					stock_value_diff = get_stock_value_difference(self.name, d.name, d.warehouse)
+					stock_value_diff = get_stock_value_difference(
+						self.name, d.name, d.warehouse, d.get("storage_location")
+					)
 					stock_asset_account_name = inventory_account["account"]
 
 					supplier_warehouse_account = None
@@ -861,7 +874,9 @@ class PurchaseReceipt(BuyingController):
 					else self.get_company_default("stock_received_but_not_billed")
 				)
 
-				stock_value_diff = get_stock_value_difference(self.name, d.name, d.rejected_warehouse)
+				stock_value_diff = get_stock_value_difference(
+					self.name, d.name, d.rejected_warehouse, d.get("rejected_storage_location")
+				)
 				_inv_dict = self.get_inventory_account_dict(d, inventory_account_map, "rejected_warehouse")
 
 				stock_asset_account_name = _inv_dict["account"]
@@ -1164,32 +1179,45 @@ class PurchaseReceipt(BuyingController):
 		return production_plan_references
 
 	def enable_recalculate_rate_in_sles(self):
-		rejected_warehouses = frappe.get_all(
-			"Purchase Receipt Item", filters={"parent": self.name}, pluck="rejected_warehouse"
-		)
-
 		sle_table = frappe.qb.DocType("Stock Ledger Entry")
-		(
-			frappe.qb.update(sle_table)
-			.set(sle_table.recalculate_rate, 1)
-			.where(sle_table.voucher_no == self.name)
-			.where(sle_table.voucher_type == "Purchase Receipt")
-			.where(sle_table.warehouse.notin(rejected_warehouses))
-		).run()
+		for row in self.get("items") or []:
+			if not row.get("warehouse"):
+				continue
+
+			query = (
+				frappe.qb.update(sle_table)
+				.set(sle_table.recalculate_rate, 1)
+				.where(sle_table.voucher_no == self.name)
+				.where(sle_table.voucher_type == "Purchase Receipt")
+				.where(sle_table.voucher_detail_no == row.name)
+				.where(sle_table.warehouse == row.warehouse)
+			)
+			location = row.get("storage_location")
+			if location:
+				query = query.where(sle_table.storage_location == location)
+			elif frappe.db.has_column("Stock Ledger Entry", "storage_location"):
+				query = query.where(sle_table.storage_location.isnull())
+			query.run()
 
 
-def get_stock_value_difference(voucher_no, voucher_detail_no, warehouse):
-	return frappe.db.get_value(
-		"Stock Ledger Entry",
-		{
-			"voucher_type": "Purchase Receipt",
-			"voucher_no": voucher_no,
-			"voucher_detail_no": voucher_detail_no,
-			"warehouse": warehouse,
-			"is_cancelled": 0,
-		},
-		"stock_value_difference",
+def get_stock_value_difference(voucher_no, voucher_detail_no, warehouse, storage_location=None):
+	"""Stock value of one Purchase Receipt row's warehouse/location leg."""
+	sle = frappe.qb.DocType("Stock Ledger Entry")
+	query = (
+		frappe.qb.from_(sle)
+		.select(Sum(sle.stock_value_difference))
+		.where(sle.voucher_type == "Purchase Receipt")
+		.where(sle.voucher_no == voucher_no)
+		.where(sle.voucher_detail_no == voucher_detail_no)
+		.where(sle.warehouse == warehouse)
+		.where(sle.is_cancelled == 0)
 	)
+	if frappe.db.has_column("Stock Ledger Entry", "storage_location"):
+		query = query.where(
+			sle.storage_location == storage_location if storage_location else sle.storage_location.isnull()
+		)
+	result = query.run()
+	return flt(result[0][0]) if result else 0.0
 
 
 def update_billed_amount_based_on_po(po_details, update_modified=True, pr_doc=None):

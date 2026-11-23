@@ -251,7 +251,7 @@ class QualityInspection(Document):
 				frappe.throw(_("Row #{0}: Status is mandatory").format(reading.idx))
 
 	def update_qc_reference(self, remove_reference=False):
-		if self.reference_type in ("Pick List", "Asset Repair"):
+		if self.reference_type in ("Pick List", "Asset Repair", "Installation Note"):
 			return
 		quality_inspection = self.name if self.docstatus < 2 and not remove_reference else ""
 

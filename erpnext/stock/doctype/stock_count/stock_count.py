@@ -18,7 +18,12 @@ from erpnext.stock.doctype.inventory_dimension.inventory_dimension import get_in
 from erpnext.stock.doctype.serial_and_batch_bundle.serial_and_batch_bundle import (
 	get_serial_nos_based_on_posting_date,
 )
-from erpnext.stock.doctype.storage_location.storage_location import validate_storage_location_warehouse
+from erpnext.stock.doctype.storage_location.storage_location import (
+	HOLDING,
+	LOST,
+	typed_location,
+	validate_storage_location_warehouse,
+)
 
 
 class StockCount(Document):
@@ -62,6 +67,10 @@ class StockCount(Document):
 			self.scan_storage_location = resolve_storage_location(self.warehouse, self.scan_storage_location)
 		validate_storage_location_warehouse(self.get("scan_storage_location"), self.warehouse)
 		self.validate_generated_links()
+		if self.lost_storage_location and not self.lost_warehouse:
+			self.lost_warehouse = frappe.db.get_value(
+				"Storage Location", self.lost_storage_location, "warehouse"
+			)
 		if self.warehouse:
 			warehouse = frappe.db.get_value(
 				"Warehouse", self.warehouse, ["company", "is_group", "disabled"], as_dict=True
@@ -176,9 +185,23 @@ class StockCount(Document):
 			self.variance_account_snapshot = None
 
 	def validate_lost_if_needed(self):
-		# A monthly count moves the quantity it did not find to the Lost Warehouse (Connect Diagnostics, 5 Nov 2026).
+		# Prefer a Lost zone in the counted warehouse; it keeps the discrepancy physically separate while preserving
+		# the warehouse. Older sites without a Lost zone keep using a dedicated Lost warehouse.
 		# A count that posts its differences as a Stock Reconciliation moves nothing.
-		if not self.uses_variance() and not self.lost_warehouse and self.company:
+		if self.uses_variance():
+			return
+		if self.lost_storage_location:
+			location_warehouse = frappe.db.get_value(
+				"Storage Location", self.lost_storage_location, "warehouse"
+			)
+			if location_warehouse == self.warehouse:
+				self.lost_warehouse = self.warehouse
+			elif not self.lost_warehouse:
+				self.lost_warehouse = location_warehouse
+		elif self.warehouse and (location := typed_location(self.warehouse, None, LOST)):
+			self.lost_storage_location = location
+			self.lost_warehouse = self.warehouse
+		elif not self.lost_warehouse and self.company:
 			self.lost_warehouse = get_lost_warehouse(
 				self.company, exclude=self.warehouse, counted=self.warehouse
 			)
@@ -193,7 +216,10 @@ class StockCount(Document):
 				)
 			)
 		if self.warehouse == self.lost_warehouse:
-			frappe.throw(_("Lost Warehouse must be different from the counted Warehouse."))
+			self.validate_lost_storage_location()
+			if not self.lost_storage_location:
+				frappe.throw(_("Choose a Lost Storage Location in the counted Warehouse."))
+			return
 
 		warehouse = frappe.db.get_value(
 			"Warehouse",
@@ -223,8 +249,17 @@ class StockCount(Document):
 		location_data = frappe.db.get_value(
 			"Storage Location", location, ["warehouse", "disabled"], as_dict=True
 		)
-		if not location_data or location_data.disabled or location_data.warehouse != self.lost_warehouse:
-			frappe.throw(_("Lost Storage Location must belong to the Lost Warehouse."))
+		location_type = frappe.get_cached_value("Storage Location", location, "location_type")
+		expected_type = LOST if location_data and location_data.warehouse == self.warehouse else HOLDING
+		if (
+			not location_data
+			or location_data.disabled
+			or location_data.warehouse != self.lost_warehouse
+			or location_type != expected_type
+		):
+			frappe.throw(
+				_("Lost Storage Location must be an active Lost location, or a Holding location in a Lost Warehouse.")
+			)
 
 	def get_countable_dimensions(self):
 		child_meta = frappe.get_meta("Stock Count Item")
@@ -531,6 +566,17 @@ class StockCount(Document):
 				& (sle.posting_datetime <= snapshot)
 			)
 		)
+		if frappe.db.has_column("Stock Ledger Entry", "storage_location"):
+			location = DocType("Storage Location")
+			lost_locations = (
+				frappe.qb.from_(location)
+				.select(location.name)
+				.where(location.warehouse == self.warehouse)
+				.where(location.location_type == LOST)
+			)
+			# A Lost location is a holding area within this warehouse, never part of the physical count. Keep
+			# unlocated legacy ledger rows; only rows explicitly assigned to a Lost zone are excluded.
+			query = query.where(sle.storage_location.isnull() | ~sle.storage_location.isin(lost_locations))
 		if item_code:
 			query = query.where(sle.item_code == item_code)
 		for fieldname, value in dimension_filters.items():
@@ -820,13 +866,20 @@ class StockCount(Document):
 			frappe.throw(_("Create a standard Material Transfer Stock Entry Type before closing this count."))
 		stock_entry.from_warehouse = self.warehouse
 		stock_entry.to_warehouse = self.lost_warehouse
-		stock_entry.remarks = _("Not found by Stock Count {0}: moved to the Lost Warehouse.").format(
+		stock_entry.remarks = _("Not found by Stock Count {0}: moved to Lost storage.").format(
 			self.name
 		)
 		stock_entry.stock_count = self.name
 
 		stock_entry_item_meta = frappe.get_meta("Stock Entry Detail")
 		for (item_code, batch_no, dimension_key), values in transfer_rows.items():
+			lost_location = self.get_lost_storage_location(item_code)
+			if self.lost_warehouse == self.warehouse and not lost_location:
+				frappe.throw(
+					_("No Lost Storage Location supports Item {0} in Warehouse {1}.").format(
+						item_code, self.warehouse
+					)
+				)
 			entry_row = {
 				"item_code": item_code,
 				"qty": values["qty"],
@@ -841,11 +894,20 @@ class StockCount(Document):
 				transfer_field = f"to_{fieldname}"
 				if stock_entry_item_meta.has_field(transfer_field):
 					entry_row[transfer_field] = (
-						self.lost_storage_location if fieldname == "storage_location" else value
+						lost_location if fieldname == "storage_location" else value
 					)
 			stock_entry.append("items", entry_row)
 
-		return self.post_entry(stock_entry, _("the transfer to the Lost Warehouse"))
+		return self.post_entry(stock_entry, _("the transfer to Lost storage"))
+
+	def get_lost_storage_location(self, item_code):
+		"""Destination Lost zone for this item, or the legacy Lost warehouse's explicit zone."""
+		if self.lost_warehouse == self.warehouse:
+			if location := typed_location(self.warehouse, item_code, LOST):
+				return location
+		if self.lost_storage_location:
+			return self.lost_storage_location
+		return None
 
 	def post_entry(self, stock_entry, what):
 		"""Insert and submit a Stock Entry the count makes. Only this document, by identity, passes the user guards
@@ -1124,53 +1186,30 @@ def get_storage_location_zones(warehouse: str):
 
 @frappe.whitelist()
 def get_loss_warehouses(company, warehouse=None):
-	"""The Lost warehouse a Monthly count would name by default (the form fills it)."""
+	"""The default Lost destination: a Lost zone in the counted warehouse when present, else its Lost warehouse."""
 	frappe.has_permission("Stock Count", "read", throw=True)
-	return {"lost": get_lost_warehouse(company, exclude=warehouse, counted=warehouse)}
+	lost_location = typed_location(warehouse, None, LOST) if warehouse else None
+	return {
+		"lost": warehouse if lost_location else get_lost_warehouse(company, exclude=warehouse, counted=warehouse),
+		"lost_storage_location": lost_location,
+	}
 
 
 def get_lost_warehouse(company, exclude=None, counted=None):
-	"""The Lost warehouse a count of ``counted`` moves its shortage to: the warehouse's own ``lost_warehouse`` (Connect
-	Diagnostics, 7 Nov 2026: one for each counted warehouse), else the company's Lost warehouse (Warehouse Type "Lost",
-	enabled, not a group, and not the own Lost warehouse of another counted warehouse), else None."""
-	return _holding_warehouse(company, LOST_WAREHOUSE_TYPE, "lost_warehouse", exclude, counted)
-
-
-def own_holding_warehouse(warehouse, fieldname="lost_warehouse"):
-	"""The Lost warehouse a counted warehouse names itself, or None. The fields are on the Warehouse
-	DocType of this fork; a site that has not migrated yet has none."""
-	if not warehouse or not frappe.db.has_column("Warehouse", fieldname):
-		return None
-	return frappe.db.get_value("Warehouse", warehouse, fieldname) or None
+	"""The company's active Lost warehouse, used only when no Lost Storage Location is configured."""
+	return _typed_warehouse(company, LOST_WAREHOUSE_TYPE, exclude)
 
 
 def count_variance_account(warehouse):
-	"""The Count Variance Account a Monthly count of ``warehouse`` posts its differences into, or None. A warehouse that
-	names its own Lost warehouse never posts them (Connect Diagnostics, 7 Nov 2026: the shortage moves to Lost and
-	accounting writes it off from there; the account stays for that write-off and for Stock Reconciliations)."""
+	"""The variance account, or None when a Lost zone means shortages are moved there."""
 	account = get_count_variance_account(warehouse)
-	if account and own_holding_warehouse(warehouse):
+	if account and typed_location(warehouse, None, LOST):
 		return None
 	return account
 
 
-def _holding_warehouse(company, warehouse_type, fieldname, exclude=None, counted=None):
-	own = own_holding_warehouse(counted, fieldname)
-	if own and own != (exclude or ""):
-		data = frappe.db.get_value("Warehouse", own, ["company", "is_group", "disabled"], as_dict=True)
-		if data and data.company == company and not data.is_group and not data.disabled:
-			return own
-	return _typed_warehouse(company, warehouse_type, exclude, fieldname)
-
-
-def _typed_warehouse(company, warehouse_type, exclude=None, owned_field=None):
-	"""The first enabled leaf of the type in the company. A warehouse that another warehouse names in ``owned_field``
-	(its own Lost warehouse) is not the company's: it serves that warehouse alone."""
-	not_in = [exclude or ""]
-	if owned_field and frappe.db.has_column("Warehouse", owned_field):
-		not_in += frappe.get_all(
-			"Warehouse", filters={owned_field: ["is", "set"]}, pluck=owned_field, limit_page_length=0
-		)
+def _typed_warehouse(company, warehouse_type, exclude=None):
+	"""The first enabled leaf of the requested type in the company."""
 	rows = frappe.get_all(
 		"Warehouse",
 		filters={
@@ -1178,7 +1217,7 @@ def _typed_warehouse(company, warehouse_type, exclude=None, owned_field=None):
 			"warehouse_type": warehouse_type,
 			"is_group": 0,
 			"disabled": 0,
-			"name": ["not in", not_in],
+			"name": ["!=", exclude or ""],
 		},
 		pluck="name",
 		order_by="name",

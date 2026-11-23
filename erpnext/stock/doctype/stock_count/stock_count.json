@@ -163,7 +163,7 @@
    "fieldtype": "Link",
    "label": "Lost Storage Location",
    "options": "Storage Location",
-   "description": "Optional destination location in the Lost Warehouse."
+   "description": "Lost zone in the counted Warehouse, or a destination location in the legacy Lost Warehouse."
   },
   {
    "fieldname": "selected_items_section",

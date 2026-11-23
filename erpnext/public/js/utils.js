@@ -4,6 +4,18 @@ frappe.provide("erpnext");
 frappe.provide("erpnext.utils");
 frappe.provide("erpnext.stock.utils");
 
+erpnext.utils.warehouse_type_options = [
+	"",
+	"Stock",
+	"Transit",
+	"Borrowed",
+	"Frozen",
+	"Lost",
+	"Found",
+	"Quarantine",
+	"Write-Off",
+];
+
 $.extend(erpnext, {
 	get_currency: function (company) {
 		if (!company && cur_frm) company = cur_frm.doc.company;
