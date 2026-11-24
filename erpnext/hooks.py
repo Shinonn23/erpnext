@@ -77,7 +77,6 @@ doctype_js = {
 	"Item": "regulatory_affairs/item.js",
 	"Material Request": "assets/doctype/material_request/material_request.js",
 	"Asset Movement": "assets/doctype/asset_movement/asset_movement.js",
-	"Borrowing": "borrowing/doctype/borrowing/borrowing.js",
 	"Borrowing Adjustment": "borrowing/doctype/borrowing_adjustment/borrowing_adjustment.js",
 	"Communication": "public/js/communication.js",
 	"Event": "public/js/event.js",

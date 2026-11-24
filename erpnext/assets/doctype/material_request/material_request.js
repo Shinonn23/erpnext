@@ -474,7 +474,11 @@ function configure_material_request_item_columns(frm) {
 	const rows = frm.doc.items || [];
 	if (is_loan && rows.some((row) => row.demo_acquisition_method)) {
 		visible_columns.add("demo_acquisition_method");
-		if (rows.some((row) => row.asset || row.item_type === "Fixed Asset")) visible_columns.add("asset");
+		grid.update_docfield_property("demo_acquisition_method", "hidden", 0);
+		if (rows.some((row) => row.asset || row.item_type === "Fixed Asset")) {
+			visible_columns.add("asset");
+			grid.update_docfield_property("asset", "hidden", 0);
+		}
 	}
 	grid.update_docfield_property("demo_acquisition_method", "label", __("Supply"));
 

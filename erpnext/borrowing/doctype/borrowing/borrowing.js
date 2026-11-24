@@ -114,7 +114,7 @@ frappe.ui.form.on("Borrowing", {
 		if (!["Active", "Partially Returned"].includes(frm.doc.status)) return;
 		const return_doctype = frm.doc.loan_type === "Asset" ? "Asset Movement" : "Delivery Note";
 		if (frappe.model.can_create(return_doctype)) {
-			frm.add_custom_button(__("Return"), () => make_borrowing_return(frm), __("Create"));
+			frm.add_custom_button(__("Return"), () => make_borrowing_return(frm), __("Create"), return_doctype);
 		}
 		if (frm.doc.loan_type === "Stock" && frappe.model.can_create("Borrowing Adjustment")) {
 			frm.add_custom_button(

@@ -2550,6 +2550,15 @@ def validate_asset_movement_borrowing(doc):
 		frappe.throw(_("An issue Asset Movement does not return against another movement"))
 	expected_items = set(items)
 	if doc.docstatus == 1:
+		lock_material_request(loan.material_request)
+		for entry in delivery_loans(loan):
+			lock_borrowing(entry.name)
+			entry.reload()
+			if entry.loan_type == "Stock" and (
+				not entry.delivery_note
+				or frappe.db.get_value("Delivery Note", entry.delivery_note, "docstatus") != 1
+			):
+				frappe.throw(_("Submit the Stock Borrowing Delivery Note before issuing the Assets."))
 		loan.run_method("before_delivery")
 	if len(doc.assets) != len(expected_items) or {row.borrowing_item for row in doc.assets} != expected_items:
 		frappe.throw(_("Asset Movement must contain every source Asset exactly once."))
@@ -2916,7 +2925,9 @@ def normalize_serials(serial_numbers):
 
 
 def loan_item_available_to_receive(loan_name, loan_item, *, exclude_return=None):
-	returned, adjusted, sold = get_loan_item_balances(loan_name, loan_item.name)
+	returned, adjusted, sold = get_loan_item_balances(
+		loan_name, loan_item.name, exclude_return=exclude_return
+	)
 	reserved = get_loan_item_reserved_qty(loan_name, loan_item.name, exclude_return=exclude_return)
 	return max(flt(loan_item.qty) - returned - adjusted - sold - reserved, 0)
 
@@ -3160,8 +3171,14 @@ def get_loan_item_returned_qty(loan_name, loan_item_name, *, for_update=False):
 	return max(sum(row.qty for row in return_rows(loan_name, loan_item_name, docstatus=(1,))), 0)
 
 
-def get_loan_item_balances(loan_name, loan_item_name):
-	returned = get_loan_item_returned_qty(loan_name, loan_item_name)
+def get_loan_item_balances(loan_name, loan_item_name, *, exclude_return=None):
+	if exclude_return:
+		# Ledger validation runs again after the current return is marked submitted.
+		returned = sum(
+			row.qty for row in return_rows(loan_name, loan_item_name, docstatus=(1,), exclude=exclude_return)
+		)
+	else:
+		returned = get_loan_item_returned_qty(loan_name, loan_item_name)
 	adjusted = sold = 0
 	adjustment_names = frappe.get_all(
 		"Borrowing Adjustment",
