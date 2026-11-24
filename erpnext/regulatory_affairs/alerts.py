@@ -34,7 +34,6 @@ from erpnext.regulatory_affairs.constants import (
 	ROLE_APPROVER,
 	SETTINGS,
 )
-from erpnext.regulatory_affairs.coverage import refresh_item_coverage_for_registration
 
 # Registrations and establishments in these statuses are maintained and alerted.
 ALERTABLE_STATUSES = (ACTIVE, EXPIRED)
@@ -649,18 +648,17 @@ def _maintain_document(run, row) -> bool:
 def _maintain(run, registrations, establishments, documents):
 	"""Expiry facts; always runs, whether or not alerts are enabled."""
 	title = "Regulatory expiry maintenance failed"
-	expired_registrations = []
 	for row in registrations:
-		if needs_maintenance(row, run.today) and _guarded(
-			_maintain_record,
-			run,
-			PRODUCT_REGISTRATION,
-			row,
-			title=title,
-			doctype=PRODUCT_REGISTRATION,
-			name=row.name,
-		):
-			expired_registrations.append(row.name)
+		if needs_maintenance(row, run.today):
+			_guarded(
+				_maintain_record,
+				run,
+				PRODUCT_REGISTRATION,
+				row,
+				title=title,
+				doctype=PRODUCT_REGISTRATION,
+				name=row.name,
+			)
 	for row in establishments:
 		if needs_maintenance(row, run.today):
 			_guarded(
@@ -675,14 +673,6 @@ def _maintain(run, registrations, establishments, documents):
 	for row in documents:
 		if should_expire_document(row, run.today):
 			_guarded(_maintain_document, run, row, title=title, doctype=REGULATORY_DOCUMENT, name=row.name)
-	for name in expired_registrations:
-		_guarded(
-			refresh_item_coverage_for_registration,
-			name,
-			title="Regulatory item coverage refresh failed",
-			doctype=PRODUCT_REGISTRATION,
-			name=name,
-		)
 
 
 def _create_renewal_action(run, row):

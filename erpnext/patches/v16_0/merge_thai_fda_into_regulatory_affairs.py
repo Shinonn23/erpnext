@@ -866,7 +866,7 @@ def read_legacy_exempt_items(item_codes: set[str]) -> set[str]:
 
 
 def apply_item_categories(categories: dict[str, tuple[str, str | None]]) -> None:
-	"""Copy the category to Items that have none, then refresh the stored coverage of those Items.
+	"""Copy the category to Items that have none.
 
 	A Product Category makes an Item regulated (checked on transactions), so Items the legacy assessment
 	marked Not Required / Exempt get none.
@@ -881,9 +881,6 @@ def apply_item_categories(categories: dict[str, tuple[str, str | None]]) -> None
 			" where name = %s and ifnull(regulatory_product_category, '') = ''",
 			(category, other_category, item),
 		)
-	from erpnext.regulatory_affairs.coverage import refresh_item_coverage_for_items
-
-	refresh_item_coverage_for_items(set(categories))
 
 
 def merge_settings() -> list[str]:

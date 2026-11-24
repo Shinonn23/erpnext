@@ -466,20 +466,87 @@ class TestRegistrationCategory(unittest.TestCase):
 			frappe._dict(name="UNCAT", item_name="Uncat", regulatory_product_category=None),
 		]
 		with (
-			patch.object(frappe, "get_all", return_value=items) as get_all,
+			patch.object(frappe, "db", MagicMock()) as db,
 			patch.object(frappe, "msgprint") as msgprint,
 			patch.object(registration_module, "get_other_lines", return_value=[]),
 		):
+			db.get_values.return_value = items
 			doc._validate_registered_product_rows()
-		self.assertEqual(
-			get_all.call_args.kwargs["fields"], ["name", "item_name", "regulatory_product_category"]
-		)
+		db.set_value.assert_not_called()
+		self.assertTrue(db.get_values.call_args.kwargs["for_update"])
 		msgprint.assert_called_once()
 		message = msgprint.call_args.args[0]
 		self.assertIn(frappe.bold("UNCAT"), message)
 		self.assertNotIn(frappe.bold("REG"), message)
 		self.assertIn("are not marked as regulated", message)
 		self.assertEqual(msgprint.call_args.kwargs, {"indicator": "orange", "alert": True})
+
+
+class TestRegulatoryDocumentDeletion(unittest.TestCase):
+	def test_expired_verified_certificate_can_be_removed_from_active_registration(self):
+		doc = bare(
+			RegulatoryDocument,
+			document_type="Certificate",
+			verification_status="Verified",
+			expiry_date="2026-11-23",
+		)
+		with (
+			patch.object(document_module, "today", return_value="2026-11-24"),
+			patch.object(frappe, "db", MagicMock()) as db,
+		):
+			doc.on_trash()
+			db.get_value.assert_not_called()
+
+	def test_active_registration_keeps_its_last_valid_verified_certificate(self):
+		doc = bare(
+			RegulatoryDocument,
+			name="CERT-1",
+			registration="REG-1",
+			document_type="Certificate",
+			verification_status="Verified",
+			expiry_date="2026-11-24",
+		)
+		with (
+			patch.object(document_module, "today", return_value="2026-11-24"),
+			patch.object(frappe, "db", MagicMock()) as db,
+			throws(),
+			self.assertRaises(Thrown),
+		):
+			db.get_value.return_value = "Active"
+			db.get_values.return_value = [frappe._dict(expiry_date="2026-11-23")]
+			doc.on_trash()
+
+
+class TestRegistrationDeletion(unittest.TestCase):
+	def test_draft_and_cancelled_registrations_can_be_deleted_when_unused(self):
+		for status in ("Draft", "Cancelled"):
+			doc = bare(
+				registration_module.RegulatoryProductRegistration, official_status=status, name="REG-1"
+			)
+			with (
+				patch.object(frappe, "db", MagicMock()) as db,
+				patch.object(registration_module, "is_approver", return_value=True),
+			):
+				db.exists.return_value = False
+				doc.on_trash()
+				self.assertEqual(db.exists.call_count, 2)
+
+	def test_live_registration_requires_cancellation(self):
+		doc = bare(registration_module.RegulatoryProductRegistration, official_status="Active")
+		with throws(), self.assertRaises(Thrown):
+			doc.on_trash()
+
+	def test_cancelled_registration_with_supporting_records_still_blocks_deletion(self):
+		doc = bare(
+			registration_module.RegulatoryProductRegistration, official_status="Cancelled", name="REG-1"
+		)
+		with (
+			patch.object(frappe, "db", MagicMock()),
+			patch.object(registration_module, "is_approver", return_value=True),
+			throws(),
+			self.assertRaises(Thrown),
+		):
+			doc.on_trash()
 
 
 class TestSettingsRecipients(unittest.TestCase):

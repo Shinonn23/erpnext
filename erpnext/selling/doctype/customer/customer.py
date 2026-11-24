@@ -116,11 +116,7 @@ class Customer(TransactionBase):
 		if cust_master_name == "Customer Name":
 			self.name = self.get_customer_name()
 		elif cust_master_name == "Naming Series":
-			if self.customer_group:
-				self.naming_series = (
-					frappe.db.get_value("Customer Group", self.customer_group, "naming_series")
-					or "CUST-.YYYY.-"
-				)
+			self.naming_series = self.naming_series or "CUST-.YYYY.-"
 			set_name_by_naming_series(self)
 		else:
 			set_name_from_naming_options(frappe.get_meta(self.doctype).autoname, self)
@@ -917,7 +913,8 @@ def get_customer_outstanding(customer, company, ignore_outstanding_sales_order=F
 	return outstanding_based_on_gle + outstanding_based_on_so + outstanding_based_on_dn
 
 
-def get_credit_limit(customer, company):
+def get_credit_limit(customer, company, *, include_company_default=True):
+	"""Return the customer/group limit, optionally falling back to the company default."""
 	credit_limit = None
 
 	if customer:
@@ -939,7 +936,7 @@ def get_credit_limit(customer, company):
 			if result and not result[0].bypass_credit_limit_check:
 				credit_limit = result[0].credit_limit
 
-	if not credit_limit:
+	if not credit_limit and include_company_default:
 		credit_limit = frappe.get_cached_value("Company", company, "credit_limit")
 
 	return flt(credit_limit)

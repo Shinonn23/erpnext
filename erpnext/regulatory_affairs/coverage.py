@@ -18,7 +18,6 @@ from erpnext.regulatory_affairs.constants import (
 	DRAFT,
 	EXPIRY_SPECIFIED,
 	IN_FORCE_STATUSES,
-	ITEM_COVERAGE_FIELDS,
 	PRODUCT_REGISTRATION,
 	REGISTERED_PRODUCT,
 	SETTINGS,
@@ -153,49 +152,6 @@ def get_effective_mapping(item_code: str, on_date: date | str | None = None) -> 
 	if mapping and mapping.official_status == ACTIVE and mapping.in_force:
 		return mapping
 	return None
-
-
-def coverage_values(mapping: Any | None) -> dict[str, Any]:
-	"""Item coverage field values for a mapping (blank when there is none)."""
-	if not mapping:
-		return dict.fromkeys(ITEM_COVERAGE_FIELDS, None)
-	return {
-		"current_regulatory_registration": mapping.get("registration"),
-		"current_newcode": mapping.get("newcode"),
-		"current_registration_expiry": mapping.get("expiry_date"),
-		"current_registration_status": mapping.get("official_status"),
-	}
-
-
-def refresh_item_coverage(item: Any, on_date: date | str | None = None) -> None:
-	"""Set an Item document's read-only coverage fields from the registration master."""
-	mapping = get_effective_mapping(item.name, on_date) if item.name and not item.is_new() else None
-	item.update(coverage_values(mapping))
-
-
-def refresh_item_coverage_for_items(item_codes: set[str]) -> None:
-	"""Recompute stored coverage for Items after a registration changes, without touching `modified`."""
-	for item_code in sorted(item_codes):
-		if not frappe.db.exists("Item", item_code):
-			continue
-		try:
-			mapping = get_effective_mapping(item_code)
-		except frappe.ValidationError:
-			frappe.log_error(
-				title=f"Ambiguous regulatory registration for {item_code}", message=frappe.get_traceback()
-			)
-			mapping = None
-		frappe.db.set_value("Item", item_code, coverage_values(mapping), update_modified=False)
-
-
-def refresh_item_coverage_for_registration(registration: str) -> None:
-	"""Refresh every Item mapped by a registration (any line status, so removed lines are cleared too)."""
-	item_codes = frappe.get_all(
-		REGISTERED_PRODUCT,
-		filters={"parent": registration, "parenttype": PRODUCT_REGISTRATION},
-		pluck="item_code",
-	)
-	refresh_item_coverage_for_items({item_code for item_code in item_codes if item_code})
 
 
 def get_regulatory_owner(item: Any = None) -> str | None:

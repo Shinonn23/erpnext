@@ -1,7 +1,7 @@
 """Item validation hook for the regulatory classification.
 
 Product Category defaults to Not Regulated and is never blank. Other categories are regulated: transactions
-validate the registration that covers the Item and it keeps the read-only coverage fields.
+validate the registration that covers the Item.
 """
 
 from typing import Any
@@ -9,14 +9,15 @@ from typing import Any
 import frappe
 from frappe import _
 
-from erpnext.regulatory_affairs import coverage, permissions
+from erpnext.regulatory_affairs import permissions
 from erpnext.regulatory_affairs.constants import (
 	ITEM_CATEGORIES,
 	ITEM_CATEGORY_FIELD,
-	ITEM_COVERAGE_FIELDS,
 	MEDICAL_DEVICE,
 	NOT_REGULATED,
 	OTHER_CATEGORY,
+	PRODUCT_REGISTRATION,
+	REGISTERED_PRODUCT,
 )
 
 
@@ -115,17 +116,25 @@ def set_product_category(item_code: str, category: str | None = None) -> str:
 
 
 def validate(doc, method=None):
-	"""Item `validate` hook: guard the Product Category, then refresh or clear the derived coverage."""
+	"""Item `validate` hook: default and guard the Product Category."""
 	before = doc.get_doc_before_save()
 	if not category_of(doc.get(ITEM_CATEGORY_FIELD)) and not (
 		before and category_of(before.get(ITEM_CATEGORY_FIELD))
 	):
 		doc[ITEM_CATEGORY_FIELD] = NOT_REGULATED
 	check_category_change(doc)
-	if is_regulated(doc):
-		coverage.refresh_item_coverage(doc)
-	else:
-		doc.update(dict.fromkeys(ITEM_COVERAGE_FIELDS))
+
+
+def detach_deleted_item(doc, method=None):
+	"""Keep the FDA product row and its last Item code without leaving a live Item mapping."""
+	product = frappe.qb.DocType(REGISTERED_PRODUCT)
+	(
+		frappe.qb.update(product)
+		.set(product.deleted_item_code, product.item_code)
+		.set(product.item_code, None)
+		.where(product.parenttype == PRODUCT_REGISTRATION)
+		.where(product.item_code == doc.name)
+	).run()
 
 
 @frappe.whitelist()

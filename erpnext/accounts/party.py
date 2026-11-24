@@ -905,10 +905,10 @@ def get_payment_terms_template(party_name, party_type, company=None):
 		customer = frappe.get_cached_value(
 			"Customer", party_name, fieldname=["payment_terms", "customer_group"], as_dict=1
 		)
-		template = customer.payment_terms
-
-		if not template and customer.customer_group:
+		if customer.customer_group:
 			template = frappe.get_cached_value("Customer Group", customer.customer_group, "payment_terms")
+
+		template = template or customer.payment_terms
 	else:
 		supplier = frappe.get_cached_value(
 			"Supplier", party_name, fieldname=["payment_terms", "supplier_group"], as_dict=1

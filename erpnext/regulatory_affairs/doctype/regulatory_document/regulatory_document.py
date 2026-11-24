@@ -35,9 +35,15 @@ class RegulatoryDocument(Document):
 		"""Do not delete the only valid certificate of an Active registration."""
 		if self.document_type != "Certificate" or self.verification_status != "Verified":
 			return
-		if frappe.db.get_value(PRODUCT_REGISTRATION, self.registration, "official_status") != ACTIVE:
+		current_date = getdate(today())
+		if self.expiry_date and getdate(self.expiry_date) < current_date:
 			return
-		others = frappe.get_all(
+		if (
+			frappe.db.get_value(PRODUCT_REGISTRATION, self.registration, "official_status", for_update=True)
+			!= ACTIVE
+		):
+			return
+		others = frappe.db.get_values(
 			REGULATORY_DOCUMENT,
 			filters={
 				"registration": self.registration,
@@ -45,9 +51,11 @@ class RegulatoryDocument(Document):
 				"verification_status": "Verified",
 				"name": ("!=", self.name),
 			},
-			fields=["expiry_date"],
+			fieldname=["expiry_date"],
+			as_dict=True,
+			for_update=True,
 		)
-		if not any(not row.expiry_date or getdate(row.expiry_date) >= getdate(today()) for row in others):
+		if not any(not row.expiry_date or getdate(row.expiry_date) >= current_date for row in others):
 			frappe.throw(
 				_("This is the only valid Certificate of an Active registration and cannot be deleted.")
 			)

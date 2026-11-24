@@ -107,23 +107,11 @@ class TestCoverage(unittest.TestCase):
 		self.assertFalse(chosen.in_force)
 		self.assertIsNone(coverage.select_mapping([], "2026-06-01"))
 
-	def test_item_coverage_fields_do_not_use_the_retired_classification(self):
-		from erpnext.regulatory_affairs.constants import ITEM_COVERAGE_FIELDS
-
-		self.assertEqual(set(coverage.coverage_values(None)), set(ITEM_COVERAGE_FIELDS))
-		# an Item names no owner of its own: the default owner of Regulatory Settings is asked
+	def test_owner_comes_from_regulatory_settings(self):
 		db = MagicMock()
 		db.get_single_value.return_value = "d@example.com"
 		with patch.object(coverage.frappe, "db", db):
 			self.assertEqual(coverage.get_regulatory_owner(frappe._dict()), "d@example.com")
-
-	def test_coverage_values(self):
-		self.assertEqual(set(coverage.coverage_values(None).values()), {None})
-		values = coverage.coverage_values(
-			frappe._dict(registration="R1", newcode="NC", expiry_date="2027-01-01", official_status="Active")
-		)
-		self.assertEqual(values["current_regulatory_registration"], "R1")
-		self.assertEqual(values["current_registration_status"], "Active")
 
 
 if __name__ == "__main__":

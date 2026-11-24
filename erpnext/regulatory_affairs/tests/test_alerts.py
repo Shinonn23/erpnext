@@ -655,16 +655,15 @@ class TestJobs(unittest.TestCase):
 		with (
 			patch.object(frappe, "get_single", return_value=self.settings(**settings)),
 			patch.object(alerts, "_get_rows", side_effect=lambda doctype, *args, **kwargs: rows[doctype]),
-			patch.object(alerts, "refresh_item_coverage_for_registration") as coverage,
 			patch.object(alerts, "_retry_pending_alerts") as retry,
 			patch.object(alerts, "_send_new_alerts") as send,
 			patch.object(alerts, "_create_renewal_actions") as renewals,
 		):
 			alerts.run_daily_expiry_processing()
-		return frappe._dict(coverage=coverage, retry=retry, send=send, renewals=renewals)
+		return frappe._dict(retry=retry, send=send, renewals=renewals)
 
 	def test_maintenance_expires_lapsed_records_and_refreshes_days(self):
-		result = self.run_daily(
+		self.run_daily(
 			registrations=[
 				make_registration(name="LAPSED", expiry_date=date(2026, 10, 10), days_to_expiry=3),
 				make_registration(name="STALE", days_to_expiry=30),
@@ -711,8 +710,6 @@ class TestJobs(unittest.TestCase):
 			),
 		)
 		self.assertTrue(all(c["doctype"] == "Comment" and c["comment_type"] == "Info" for c in comments))
-		# Only the expired registration has its Item coverage refreshed.
-		result.coverage.assert_called_once_with("LAPSED")
 
 	def test_maintenance_runs_but_alerts_do_not_when_alerts_are_disabled(self):
 		result = self.run_daily(
@@ -722,7 +719,6 @@ class TestJobs(unittest.TestCase):
 		self.db.set_value.assert_any_call(
 			PRODUCT_REGISTRATION, "LAPSED", "official_status", "Expired", update_modified=False
 		)
-		result.coverage.assert_called_once_with("LAPSED")
 		result.retry.assert_not_called()
 		result.send.assert_not_called()
 		result.renewals.assert_called_once()
@@ -745,7 +741,7 @@ class TestJobs(unittest.TestCase):
 				raise RuntimeError("boom")
 
 		self.db.set_value.side_effect = set_value
-		result = self.run_daily(
+		self.run_daily(
 			registrations=[
 				make_registration(name="BROKEN", expiry_date=date(2026, 10, 10)),
 				make_registration(name="LAPSED", expiry_date=date(2026, 10, 10)),
@@ -757,7 +753,6 @@ class TestJobs(unittest.TestCase):
 		self.db.set_value.assert_any_call(
 			PRODUCT_REGISTRATION, "LAPSED", "official_status", "Expired", update_modified=False
 		)
-		result.coverage.assert_called_once_with("LAPSED")
 		self.db.commit.assert_not_called()
 
 	def test_guarded_returns_the_result_or_none_after_rolling_back(self):

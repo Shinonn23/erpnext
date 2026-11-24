@@ -31,21 +31,17 @@ class Supplier(TransactionBase):
 	from typing import TYPE_CHECKING
 
 	if TYPE_CHECKING:
-		from frappe.types import DF
-
-		from erpnext.accounts.doctype.allowed_to_transact_with.allowed_to_transact_with import (
-			AllowedToTransactWith,
-		)
+		from erpnext.accounts.doctype.allowed_to_transact_with.allowed_to_transact_with import AllowedToTransactWith
 		from erpnext.accounts.doctype.party_account.party_account import PartyAccount
-		from erpnext.buying.doctype.customer_number_at_supplier.customer_number_at_supplier import (
-			CustomerNumberAtSupplier,
-		)
+		from erpnext.buying.doctype.customer_number_at_supplier.customer_number_at_supplier import CustomerNumberAtSupplier
 		from erpnext.utilities.doctype.portal_user.portal_user import PortalUser
+		from frappe.types import DF
 
 		accounts: DF.Table[PartyAccount]
 		alias: DF.Data | None
 		allow_purchase_invoice_creation_without_purchase_order: DF.Check
 		allow_purchase_invoice_creation_without_purchase_receipt: DF.Check
+		branch_code: DF.Data | None
 		companies: DF.Table[AllowedToTransactWith]
 		country: DF.Link | None
 		customer_numbers: DF.Table[CustomerNumberAtSupplier]
@@ -62,7 +58,7 @@ class Supplier(TransactionBase):
 		is_transporter: DF.Check
 		language: DF.Link | None
 		mobile_no: DF.ReadOnly | None
-		naming_series: DF.Data
+		naming_series: DF.Literal["SUP-.YYYY.-"]
 		on_hold: DF.Check
 		payment_terms: DF.Link | None
 		portal_users: DF.Table[PortalUser]
@@ -114,11 +110,7 @@ class Supplier(TransactionBase):
 		if supp_master_name == "Supplier Name":
 			self.name = self.supplier_name
 		elif supp_master_name == "Naming Series":
-			if self.supplier_group:
-				self.naming_series = (
-					frappe.db.get_value("Supplier Group", self.supplier_group, "naming_series")
-					or "SUP-.YYYY.-"
-				)
+			self.naming_series = self.naming_series or "SUP-.YYYY.-"
 			set_name_by_naming_series(self)
 		else:
 			set_name_from_naming_options(frappe.get_meta(self.doctype).autoname, self)

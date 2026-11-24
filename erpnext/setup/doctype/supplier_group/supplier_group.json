@@ -14,7 +14,6 @@
   "supplier_group_name",
   "parent_supplier_group",
   "is_group",
-  "naming_series",
   "section_credit_limit",
   "payment_terms",
   "default_payable_account",
@@ -52,12 +51,6 @@
    "in_import_template": 1,
    "in_list_view": 1,
    "label": "Is Group"
-  },
-  {
-   "fieldname": "naming_series",
-   "fieldtype": "Data",
-   "label": "Supplier Naming Series",
-   "description": "Naming series used for new records in this group."
   },
   {
    "collapsible": 1,

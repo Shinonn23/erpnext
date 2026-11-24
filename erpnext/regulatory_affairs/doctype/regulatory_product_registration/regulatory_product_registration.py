@@ -57,20 +57,22 @@ class RegulatoryProductRegistration(Document):
 		self._validate_registered_product_rows()
 		self._validate_effective_mapping_overlaps()
 
-	def on_update(self):
-		"""Refresh stored Item coverage after a mapping or status change."""
-		previous = self.get_doc_before_save()
-		rows = [
-			*self.get("registered_products", []),
-			*(previous.get("registered_products", []) if previous else []),
-		]
-		coverage.refresh_item_coverage_for_items({row.item_code for row in rows if row.item_code})
-
 	def on_trash(self):
-		"""Regulatory facts are history: only an unused Draft can be deleted."""
-		if self.official_status != DRAFT:
+		"""Delete an unused draft or cancelled registration, subject to the usual link checks."""
+		if self.official_status in (ACTIVE, SUSPENDED, EXPIRED):
 			frappe.throw(
-				_("Only a Draft registration can be deleted. Cancel it instead to keep the history.")
+				_(
+					"A Regulatory Approver must use Cancel Registration before this registration can be deleted."
+				)
+			)
+		if self.official_status not in (DRAFT, CANCELLED):
+			frappe.throw(
+				_("A {0} registration is retained as regulatory history.").format(_(self.official_status))
+			)
+		if self.official_status == CANCELLED and not is_approver():
+			frappe.throw(
+				approver_only_message(_("delete a cancelled registration")),
+				frappe.PermissionError,
 			)
 		for doctype in (REGISTRATION_ACTION, REGULATORY_DOCUMENT):
 			if frappe.db.exists(doctype, {"registration": self.name}):
@@ -181,10 +183,13 @@ class RegulatoryProductRegistration(Document):
 		item_names = {}
 		item_codes = {row.item_code for row in rows if row.item_code}
 		if item_codes:
-			items = frappe.get_all(
+			items = frappe.db.get_values(
 				"Item",
-				filters={"name": ("in", list(item_codes))},
-				fields=["name", "item_name", ITEM_CATEGORY_FIELD],
+				filters={"name": ("in", sorted(item_codes))},
+				fieldname=["name", "item_name", ITEM_CATEGORY_FIELD],
+				as_dict=True,
+				order_by="name",
+				for_update=True,
 			)
 			item_names = {item.name: item for item in items}
 
@@ -212,8 +217,13 @@ class RegulatoryProductRegistration(Document):
 				frappe.throw(_("Row {0}: Effective To must be on or after Effective From.").format(row.idx))
 			if row.item_code:
 				item = item_names.get(row.item_code)
-				row.item_name_at_registration = item.item_name if item else ""
-				if item and item.get(ITEM_CATEGORY_FIELD) in (None, "", NOT_REGULATED):
+				if not item:
+					frappe.throw(
+						_("Row {0}: Item {1} no longer exists.").format(row.idx, frappe.bold(row.item_code))
+					)
+				row.deleted_item_code = None
+				row.item_name_at_registration = item.item_name
+				if item.get(ITEM_CATEGORY_FIELD) in (None, "", NOT_REGULATED):
 					uncategorized.add(row.item_code)
 
 		active_rows = [row for row in rows if row.item_code and row.line_status == "Active"]
@@ -225,7 +235,6 @@ class RegulatoryProductRegistration(Document):
 							row.idx, other.idx, frappe.bold(row.item_code)
 						)
 					)
-		uncategorized = self._classify_items_from_registration(uncategorized, item_names)
 		if uncategorized:
 			frappe.msgprint(
 				_(
@@ -234,30 +243,6 @@ class RegulatoryProductRegistration(Document):
 				indicator="orange",
 				alert=True,
 			)
-
-	def _classify_items_from_registration(self, item_codes, items):
-		"""An Item with no Product Category takes this registration's (Siwat, 6 Nov 2026: the system does it, the
-		user does not open each Item). An Item marked Not Regulated, or already classified, is never overwritten.
-		Returns the Items still unclassified (to warn about once)."""
-		if self.product_category not in PRODUCT_CATEGORIES:
-			return item_codes
-		left = set()
-		for item_code in sorted(item_codes):
-			item = items.get(item_code)
-			if item is not None and item.get(ITEM_CATEGORY_FIELD) in (None, ""):
-				frappe.db.set_value(
-					"Item", item_code, ITEM_CATEGORY_FIELD, self.product_category, update_modified=False
-				)
-				item[ITEM_CATEGORY_FIELD] = self.product_category
-				frappe.get_doc("Item", item_code).add_comment(
-					"Info",
-					_("Product Category set to {0} from Regulatory Registration {1}.").format(
-						_(self.product_category), self.name or self.registration_number or ""
-					),
-				)
-			else:
-				left.add(item_code)
-		return left
 
 	def _validate_effective_mapping_overlaps(self):
 		if self.official_status not in IN_FORCE_STATUSES:

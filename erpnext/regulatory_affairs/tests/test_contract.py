@@ -188,6 +188,18 @@ class TestRegulatoryFields(unittest.TestCase):
 			specs["regulatory_current_section"]["depends_on"], "eval:doc.regulatory_product_category"
 		)
 
+	def test_item_coverage_is_virtual(self):
+		specs = {spec["fieldname"]: spec for spec in ra_specs("Item")[0]}
+		for fieldname in (
+			"current_regulatory_registration",
+			"current_newcode",
+			"current_registration_expiry",
+			"current_registration_status",
+		):
+			self.assertEqual(specs[fieldname]["is_virtual"], 1)
+			self.assertEqual(specs[fieldname]["read_only"], 1)
+		self.assertEqual(specs["current_regulatory_registration"]["fieldtype"], "Data")
+
 	def test_item_tab_sits_between_quality_and_pricing(self):
 		_, order = ra_specs("Item")
 		self.assertEqual(

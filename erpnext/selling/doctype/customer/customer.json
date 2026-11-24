@@ -14,7 +14,6 @@
   "basic_info",
   "naming_series",
   "customer_name",
-  "former_id",
   "customer_type",
   "alias",
   "gender",
@@ -35,7 +34,6 @@
   "contact_and_address_tab",
   "address_contacts",
   "address_html",
-  "branch_html",
   "column_break1",
   "contact_html",
   "primary_address_and_contact_detail",
@@ -129,16 +127,6 @@
    "oldfieldname": "customer_name",
    "oldfieldtype": "Data",
    "reqd": 1,
-   "search_index": 1
-  },
-  {
-   "depends_on": "eval:doc.former_id",
-   "description": "The ID this party had before its ID became its name (Siwat, 18 Nov 2026). Searchable in every link.",
-   "fieldname": "former_id",
-   "fieldtype": "Data",
-   "label": "Former ID",
-   "no_copy": 1,
-   "read_only": 1,
    "search_index": 1
   },
   {
@@ -340,7 +328,6 @@
    "description": "Select, to make the customer searchable with these fields",
    "fieldname": "primary_address_and_contact_detail",
    "fieldtype": "Section Break",
-   "hidden": 1,
    "label": "Primary Address and Contact"
   },
   {
@@ -728,13 +715,6 @@
    "fieldname": "branch_code",
    "fieldtype": "Data",
    "label": "Branch Code"
-  },
-  {
-   "depends_on": "eval: !doc.__islocal",
-   "fieldname": "branch_html",
-   "fieldtype": "HTML",
-   "label": "Branches / สาขา",
-   "read_only": 1
   }
  ],
  "icon": "user-round",
@@ -883,7 +863,7 @@
  ],
  "quick_entry": 1,
  "row_format": "Dynamic",
- "search_fields": "customer_group,territory,mobile_no,primary_address,alias,former_id",
+ "search_fields": "customer_group,territory,mobile_no,primary_address,alias",
  "show_name_in_global_search": 1,
  "sort_field": "creation",
  "sort_order": "DESC",

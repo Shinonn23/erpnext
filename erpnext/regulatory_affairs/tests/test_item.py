@@ -1,13 +1,15 @@
 import json
+import sqlite3
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import frappe
 
+from erpnext.regulatory_affairs import coverage, transactions
 from erpnext.regulatory_affairs import item as ra_item
-from erpnext.regulatory_affairs import transactions
-from erpnext.regulatory_affairs.constants import ITEM_CATEGORY_FIELD, ITEM_COVERAGE_FIELDS
+from erpnext.regulatory_affairs.constants import ITEM_CATEGORY_FIELD
+from erpnext.stock.doctype.item.item import Item
 
 COVERAGE = dict(
 	current_regulatory_registration="R1",
@@ -93,30 +95,19 @@ class TestIsRegulated(unittest.TestCase):
 
 class TestValidate(unittest.TestCase):
 	def run_validate(self, doc):
-		with (
-			patch.object(ra_item, "check_category_change"),
-			patch.object(ra_item.coverage, "refresh_item_coverage") as refresh,
-		):
+		with patch.object(ra_item, "check_category_change"):
 			ra_item.validate(doc)
-		return refresh
 
-	def test_coverage_fixture_matches_the_coverage_fields(self):
-		self.assertEqual(set(COVERAGE), set(ITEM_COVERAGE_FIELDS))
-
-	def test_regulated_item_refreshes_its_coverage(self):
-		doc = item("Drug", **COVERAGE)
-		refresh = self.run_validate(doc)
-		refresh.assert_called_once_with(doc)
-		for fieldname, value in COVERAGE.items():
-			self.assertEqual(doc[fieldname], value)
-
-	def test_unregulated_item_clears_its_coverage(self):
-		for blank in (None, "", "  "):
-			doc = item(blank, **COVERAGE)
-			self.assertEqual(self.run_validate(doc).call_count, 0, repr(blank))
-			self.assertEqual(doc[ITEM_CATEGORY_FIELD], "Not Regulated")
-			for fieldname in ITEM_COVERAGE_FIELDS:
-				self.assertIsNone(doc[fieldname], (blank, fieldname))
+	def test_current_coverage_comes_from_the_register(self):
+		doc = object.__new__(Item)
+		doc.__dict__.update(name="ITEM-1", regulatory_product_category="Drug", **COVERAGE)
+		mapping = {"registration": "R2", "newcode": "NC2", "official_status": "Active"}
+		with patch.object(coverage, "get_effective_mapping", return_value=mapping) as lookup:
+			self.assertEqual(doc.current_regulatory_registration, "R2")
+			self.assertEqual(doc.current_newcode, "NC2")
+			self.assertEqual(doc.current_registration_status, "Active")
+			self.assertIsNone(doc.current_registration_expiry)
+		lookup.assert_called_once_with("ITEM-1")
 
 	def test_other_fields_are_untouched(self):
 		values = dict(regulatory_other_category="Toy", medical_device_category="IVD")
@@ -183,12 +174,10 @@ class TestCategoryChange(unittest.TestCase):
 		doc = item("Drug")
 		with (
 			patch.object(ra_item, "check_category_change", side_effect=frappe.PermissionError) as check,
-			patch.object(ra_item.coverage, "refresh_item_coverage") as refresh,
 		):
 			with self.assertRaises(frappe.PermissionError):
 				ra_item.validate(doc)
 		check.assert_called_once_with(doc)
-		refresh.assert_not_called()
 
 	def test_new_and_legacy_blank_items_default_without_an_ra_role(self):
 		for previous in (None, frappe._dict(regulatory_product_category="")):
@@ -198,23 +187,49 @@ class TestCategoryChange(unittest.TestCase):
 				patch.object(frappe, "session", frappe._dict(user="creator@example.test")),
 				patch.object(frappe, "flags", frappe._dict()),
 				patch.object(ra_item.permissions, "is_operator", return_value=False),
-				patch.object(ra_item.coverage, "refresh_item_coverage") as refresh,
 			):
 				ra_item.validate(doc)
 			self.assertEqual(doc.regulatory_product_category, "Not Regulated")
-			refresh.assert_not_called()
 
 	def test_clearing_a_regulated_item_does_not_apply_the_default(self):
 		doc = item("")
 		doc.get_doc_before_save = lambda: frappe._dict(regulatory_product_category="Drug")
 		with (
 			patch.object(frappe, "throw", side_effect=frappe.ValidationError),
-			patch.object(ra_item.coverage, "refresh_item_coverage") as refresh,
 			self.assertRaises(frappe.ValidationError),
 		):
 			ra_item.validate(doc)
-		refresh.assert_not_called()
 		self.assertEqual(doc.regulatory_product_category, "")
+
+
+class TestItemDeletion(unittest.TestCase):
+	def test_ra_product_rows_keep_the_deleted_item_code_and_drop_the_mapping(self):
+		from frappe.query_builder.builder import MariaDB
+
+		with sqlite3.connect(":memory:") as db:
+			db.executescript(
+				"""
+				create table `tabRegulatory Registered Product` (
+					parenttype text, item_code text, deleted_item_code text
+				);
+				insert into `tabRegulatory Registered Product` values
+					('Regulatory Product Registration', 'ITEM-1', null),
+					('Regulatory Product Registration', 'ITEM-2', null);
+				"""
+			)
+
+			query_type = type(MariaDB.update(MariaDB.DocType("Regulatory Registered Product")))
+			with (
+				patch.object(frappe, "qb", MariaDB),
+				patch.object(query_type, "run", lambda query: db.execute(query.get_sql()), create=True),
+			):
+				ra_item.detach_deleted_item(frappe._dict(name="ITEM-1"))
+			self.assertEqual(
+				db.execute(
+					"select item_code, deleted_item_code from `tabRegulatory Registered Product`"
+				).fetchall(),
+				[(None, "ITEM-1"), ("ITEM-2", None)],
+			)
 
 
 class TestSetProductCategory(unittest.TestCase):

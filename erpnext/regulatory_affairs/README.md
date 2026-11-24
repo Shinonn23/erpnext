@@ -33,6 +33,18 @@ Type), `activity_type` (Import, Manufacture, Sale, Product Registration, Other),
 `legacy_renewal_history` (read-only table of **Regulatory Renewal History**) keeps the legacy renewal log.
 **Regulatory Alert Recipient** (child of Settings) holds extra alert recipients.
 
+### Deleting records
+
+A Regulatory Approver or System Manager can use **Cancel Registration** on an Active, Suspended or Expired
+product registration and give a reason. Draft and Cancelled registrations can be deleted when they have no
+dependent documents, actions or other business records. Revoked and Superseded registrations remain in the
+register. Historical alert logs retain their references independently. An Active registration must retain
+at least one valid verified certificate before any other valid certificate can be deleted.
+
+Deleting an Item still requires the usual Item permissions and ERPNext link checks. An RA product row keeps
+the deleted Item code and the name recorded at registration. Its Item mapping is cleared so a new Item with
+the same code does not inherit coverage.
+
 ### Item classification
 
 **Product Category is required and defaults to Not Regulated** (Siwat, 9 Nov 2026). The field
@@ -56,13 +68,11 @@ For Quotation, Sales Order, Delivery Note and Sales Invoice:
 * returns, consolidated POS invoices and non-Required Sales Invoice rows already delivered are not checked; purchasing and stock keep their
   own rules (a Purchase Order only warns).
 
-Saving a registration whose product row names an Item with no Product Category sets that Item's category from the registration's (never overwrites an existing category or Not Regulated; the Item gets a comment; the orange warning only names the Items left; Siwat, 6 Nov 2026). Verify and Activate sets Last Verified On. RA classifies one Item with *Actions > Classify Item* (Product Category, Medical Device Category in one
-dialog; `item.classify_item`) and many with the Item list *Actions > Classify as ...* (`item.classify_items`); the report
-*Regulatory Unclassified Items* counts and lists the sales Items still unclassified (filter by Item Group). Only a regulated
-Item shows the *Current Regulatory Coverage* section with the read-only coverage fields (`current_regulatory_registration`,
-`current_newcode`, `current_registration_expiry`, `current_registration_status`), the red/orange headline alerts and the *Coverage
-Matrix* button; saving a Not Regulated Item clears its coverage fields. There is no separate assessment status, exemption reason
-or Not Assessed state.
+Saving a registration warns about mapped Items with no regulated Product Category. RA classifies one Item
+with *Actions > Classify Item* (Product Category and Medical Device Category in one dialog) and many with
+the Item list *Actions > Classify as ...*. The *Regulatory Unclassified Items* report lists sales Items still
+unclassified. The Item form displays current coverage from the regulatory register as virtual fields. The
+*Coverage Matrix* shows the underlying mappings. Verify and Activate sets Last Verified On.
 
 The **Regulatory** tab also has `regulatory_other_category` (for Other), `medical_device_category` (only for Medical Device); an Item names no Regulatory Owner (a person is no master data: the default owner of Regulatory Settings is asked). Each item row of the six guarded transactions
 (not the Quotation) gets a collapsed, read-only **Regulatory Snapshot** section (`regulatory_*` fields listed in `custom_fields.SNAPSHOT_FIELDNAMES`). The 70 RA fields are DocFields in the DocType JSON of Item and of

@@ -101,15 +101,6 @@ frappe.ui.form.on("Supplier", {
 	supplier_group(frm) {
 		if (frm.doc.supplier_group) {
 			frm.trigger("get_supplier_group_details");
-			if (frm.doc.__islocal && frappe.defaults.get_default("supp_master_name") === "Naming Series") {
-				frappe.db.get_value("Supplier Group", frm.doc.supplier_group, "naming_series").then(
-					({ message }) => {
-						const series = message?.naming_series || "SUP-.YYYY.-";
-						frm.set_df_property("naming_series", "options", `SUP-.YYYY.-\n${series}`);
-						frm.set_value("naming_series", series);
-					}
-				);
-			}
 		}
 	},
 

@@ -150,20 +150,6 @@ frappe.ui.form.on("Customer", {
 		}
 	},
 
-	customer_group(frm) {
-		if (
-			frm.doc.__islocal &&
-			frm.doc.customer_group &&
-			frappe.defaults.get_default("cust_master_name") === "Naming Series"
-		) {
-			frappe.db.get_value("Customer Group", frm.doc.customer_group, "naming_series").then(({ message }) => {
-				const series = message?.naming_series || "CUST-.YYYY.-";
-				frm.set_df_property("naming_series", "options", `CUST-.YYYY.-\n${series}`);
-				frm.set_value("naming_series", series);
-			});
-		}
-	},
-
 	is_internal_customer: function (frm) {
 		if (frm.doc.is_internal_customer == 1) {
 			frm.toggle_reqd("represents_company", true);

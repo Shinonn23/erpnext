@@ -11,6 +11,7 @@
   "identifier",
   "item_code",
   "item_name_at_registration",
+  "deleted_item_code",
   "effective_from",
   "effective_to",
   "line_status",
@@ -69,6 +70,13 @@
    "fieldname": "item_name_at_registration",
    "fieldtype": "Data",
    "label": "Item Name at Registration",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.deleted_item_code",
+   "fieldname": "deleted_item_code",
+   "fieldtype": "Data",
+   "label": "Deleted Item Code",
    "read_only": 1
   },
   {

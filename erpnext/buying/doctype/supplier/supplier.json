@@ -13,7 +13,6 @@
  "field_order": [
   "naming_series",
   "supplier_name",
-  "former_id",
   "supplier_type",
   "alias",
   "gender",
@@ -30,7 +29,6 @@
   "contact_and_address_tab",
   "address_contacts",
   "address_html",
-  "branch_html",
   "column_break1",
   "contact_html",
   "primary_address_and_contact_detail_section",
@@ -91,13 +89,13 @@
   {
    "fieldname": "naming_series",
    "fieldtype": "Select",
+   "hidden": 1,
    "label": "Series",
    "no_copy": 1,
    "oldfieldname": "naming_series",
    "oldfieldtype": "Select",
    "options": "SUP-.YYYY.-",
-   "set_only_once": 1,
-   "hidden": 1
+   "set_only_once": 1
   },
   {
    "bold": 1,
@@ -109,16 +107,6 @@
    "oldfieldname": "supplier_name",
    "oldfieldtype": "Data",
    "reqd": 1
-  },
-  {
-   "depends_on": "eval:doc.former_id",
-   "description": "The ID this party had before its ID became its name (Siwat, 18 Nov 2026). Searchable in every link.",
-   "fieldname": "former_id",
-   "fieldtype": "Data",
-   "label": "Former ID",
-   "no_copy": 1,
-   "read_only": 1,
-   "search_index": 1
   },
   {
    "fieldname": "alias",
@@ -407,7 +395,6 @@
   {
    "fieldname": "primary_address_and_contact_detail_section",
    "fieldtype": "Section Break",
-   "hidden": 1,
    "label": "Primary Address and Contact"
   },
   {
@@ -585,13 +572,6 @@
    "fieldname": "branch_code",
    "fieldtype": "Data",
    "label": "Branch Code"
-  },
-  {
-   "depends_on": "eval: !doc.__islocal",
-   "fieldname": "branch_html",
-   "fieldtype": "HTML",
-   "label": "Branches / สาขา",
-   "read_only": 1
   }
  ],
  "grid_page_length": 50,
@@ -605,7 +585,7 @@
    "link_fieldname": "party"
   }
  ],
- "modified": "2026-11-18 10:00:00.000000",
+ "modified": "2026-11-24 16:53:53.052026",
  "modified_by": "Administrator",
  "module": "Buying",
  "name": "Supplier",
@@ -689,7 +669,7 @@
  ],
  "quick_entry": 1,
  "row_format": "Dynamic",
- "search_fields": "supplier_group,alias,former_id",
+ "search_fields": "supplier_group,alias",
  "show_name_in_global_search": 1,
  "sort_field": "creation",
  "sort_order": "ASC",

@@ -1,6 +1,8 @@
 # Copyright (c) 2021, Frappe Technologies Pvt. Ltd. and Contributors
 # License: GNU General Public License v3. See license.txt
 
+from functools import cached_property
+
 import frappe
 from frappe import _, bold
 from frappe.model.document import Document
@@ -701,6 +703,31 @@ class Item(Document):
 				item_code=self.name,
 			),
 		)
+
+	@cached_property
+	def _regulatory_coverage(self):
+		from erpnext.regulatory_affairs import coverage
+		from erpnext.regulatory_affairs.item import is_regulated
+
+		if self.is_new() or not is_regulated(self):
+			return {}
+		return coverage.get_effective_mapping(self.name) or {}
+
+	@property
+	def current_regulatory_registration(self):
+		return self._regulatory_coverage.get("registration")
+
+	@property
+	def current_newcode(self):
+		return self._regulatory_coverage.get("newcode")
+
+	@property
+	def current_registration_expiry(self):
+		return self._regulatory_coverage.get("expiry_date")
+
+	@property
+	def current_registration_status(self):
+		return self._regulatory_coverage.get("official_status")
 
 	def on_trash(self):
 		frappe.db.sql("""delete from tabBin where item_code=%s""", self.name)

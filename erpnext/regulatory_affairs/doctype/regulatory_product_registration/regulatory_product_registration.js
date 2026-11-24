@@ -95,7 +95,7 @@ frappe.ui.form.on("Regulatory Product Registration", {
 
 		const status = frm.doc.official_status;
 		const group = __("Status");
-		const change = (target, label, needs_reason, verify) => {
+		const change = (target, label, needs_reason, verify, button_group = group) => {
 			frm.add_custom_button(
 				label,
 				() => {
@@ -128,7 +128,7 @@ frappe.ui.form.on("Regulatory Product Registration", {
 						__("Confirm")
 					);
 				},
-				group
+				button_group
 			);
 		};
 
@@ -140,6 +140,8 @@ frappe.ui.form.on("Regulatory Product Registration", {
 			if (status === "Active") change("Suspended", __("Suspend"), true);
 			change("Revoked", __("Revoke"), true);
 		}
-		if (["Active", "Suspended", "Expired"].includes(status)) change("Cancelled", __("Cancel"), true);
+		if (["Active", "Suspended", "Expired"].includes(status)) {
+			change("Cancelled", __("Cancel Registration"), true, false, null);
+		}
 	},
 });

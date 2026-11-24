@@ -78,10 +78,3 @@ SALE_DOCTYPES = ("Quotation", "Sales Order", "Delivery Note", "Sales Invoice")
 # Item classification: an Item with a Product Category is regulated, so transactions validate it against
 # its FDA registrations; an Item without one is not checked.
 ITEM_CATEGORY_FIELD = "regulatory_product_category"
-
-ITEM_COVERAGE_FIELDS = (
-	"current_regulatory_registration",
-	"current_newcode",
-	"current_registration_expiry",
-	"current_registration_status",
-)

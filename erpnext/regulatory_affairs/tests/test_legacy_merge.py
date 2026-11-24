@@ -383,23 +383,18 @@ class TestItemCategories(unittest.TestCase):
 		with (
 			patch.object(merge, "read_legacy_exempt_items", return_value=exempt) as read_exempt,
 			patch.object(merge.frappe, "db", db),
-			patch.object(coverage, "refresh_item_coverage_for_items") as refresh,
 		):
 			merge.apply_item_categories(categories)
-		return read_exempt, db, refresh
+		return read_exempt, db
 
 	def test_legacy_exempt_items_get_no_category(self):
-		read_exempt, db, refresh = self.apply(
-			{"ITEM-1": ("Food", None), "ITEM-2": ("Drug", None)}, {"ITEM-2"}
-		)
+		read_exempt, db = self.apply({"ITEM-1": ("Food", None), "ITEM-2": ("Drug", None)}, {"ITEM-2"})
 		read_exempt.assert_called_once_with({"ITEM-1", "ITEM-2"})
 		self.assertEqual([call.args[1] for call in db.sql.call_args_list], [("Food", None, "ITEM-1")])
-		refresh.assert_called_once_with({"ITEM-1"})
 
 	def test_only_exempt_items_write_nothing(self):
-		_, db, refresh = self.apply({"ITEM-2": ("Drug", None)}, {"ITEM-2"})
+		_, db = self.apply({"ITEM-2": ("Drug", None)}, {"ITEM-2"})
 		db.sql.assert_not_called()
-		refresh.assert_not_called()
 
 
 class TestOverlapResolution(unittest.TestCase):

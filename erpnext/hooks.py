@@ -56,7 +56,6 @@ app_include_js = [
 	"/assets/erpnext/js/thailand/address.js?v=20261116-1",
 	"/assets/erpnext/js/thailand/print_format.js",
 	"/assets/erpnext/js/thailand/deposit_utils.js",
-	"/assets/erpnext/js/thailand/party_branches.js",
 	"/assets/erpnext/js/thailand/party_tax_id.js",
 ]
 app_include_css = "erpnext.bundle.css"
@@ -267,11 +266,9 @@ _thailand_doc_events = {
 	},
 	"Address": {"on_update": "erpnext.regional.thailand.custom.address.update_tax_info_in_linked_doc"},
 	"Customer": {
-		"onload": "erpnext.regional.thailand.custom.branches.onload",
 		"before_insert": "erpnext.regional.thailand.utils.fill_rd_address_before_insert",
 	},
 	"Supplier": {
-		"onload": "erpnext.regional.thailand.custom.branches.onload",
 		"before_insert": "erpnext.regional.thailand.utils.fill_rd_address_before_insert",
 	},
 	"Item": {"validate": "erpnext.regional.thailand.custom.item.validate_deposit_item"},
@@ -292,7 +289,10 @@ for _doctype in ("Sales Invoice", "Purchase Invoice", "Payment Entry", "Journal 
 		_events[_event] = [*(_existing if isinstance(_existing, list) else [_existing]), _handler]
 
 _regulatory_affairs_doc_events = {
-	"Item": {"validate": "erpnext.regulatory_affairs.item.validate"},
+	"Item": {
+		"validate": "erpnext.regulatory_affairs.item.validate",
+		"on_trash": "erpnext.regulatory_affairs.item.detach_deleted_item",
+	},
 	"Purchase Order": {
 		"validate": "erpnext.regulatory_affairs.transactions.validate_warning_transaction",
 		"before_submit": "erpnext.regulatory_affairs.transactions.capture_transaction_snapshot",
@@ -970,6 +970,7 @@ global_search_doctypes = {
 ignore_links_on_delete = [
 	"Tax Withholding Entry",
 	"Asset Activity",
+	"Regulatory Alert Log",  # Historical alerts retain their original references.
 ]
 
 additional_timeline_content = {"*": ["erpnext.telephony.doctype.call_log.call_log.get_linked_call_logs"]}

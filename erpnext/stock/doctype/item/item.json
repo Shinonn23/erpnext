@@ -1240,15 +1240,16 @@
   },
   {
    "fieldname": "current_regulatory_registration",
-   "fieldtype": "Link",
+   "fieldtype": "Data",
+   "is_virtual": 1,
    "label": "Current Registration",
    "no_copy": 1,
-   "options": "Regulatory Product Registration",
    "read_only": 1
   },
   {
    "fieldname": "current_newcode",
    "fieldtype": "Data",
+   "is_virtual": 1,
    "label": "Current NEWCODE",
    "no_copy": 1,
    "read_only": 1
@@ -1260,6 +1261,7 @@
   {
    "fieldname": "current_registration_expiry",
    "fieldtype": "Date",
+   "is_virtual": 1,
    "label": "Current Registration Expiry",
    "no_copy": 1,
    "read_only": 1
@@ -1267,6 +1269,7 @@
   {
    "fieldname": "current_registration_status",
    "fieldtype": "Data",
+   "is_virtual": 1,
    "label": "Current Registration Status",
    "no_copy": 1,
    "read_only": 1
