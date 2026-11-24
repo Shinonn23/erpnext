@@ -44,24 +44,22 @@ function get_material_request_recipient_details(request) {
 // The row fields each purpose shows (and stores): a hidden location is cleared on the form and by the server
 // (asset_movement.py clear_hidden_fields), so the latest movement never carries a place the user did not see.
 // From Employee is the asset's custodian the system writes on every purpose (read only but on Transfer and Issue).
-const MOVEMENT_FIELDS_BY_PURPOSE = {
-	Transfer: ["source_location", "target_location", "from_employee", "to_employee"],
-	Receipt: ["source_location", "target_location", "from_employee", "to_employee"],
-	Issue: ["from_employee", "to_employee"],
-	"Transfer and Issue": ["source_location", "target_location", "from_employee", "to_employee"],
-	Reassignment: [
-		"change_custodian",
-		"from_employee",
-		"to_employee",
-		"change_department",
-		"source_department",
-		"target_department",
-	],
-};
-const CLEARED_LOCATIONS = ["source_location", "target_location"];
-
 function movement_fields(purpose) {
-	return new Set(MOVEMENT_FIELDS_BY_PURPOSE[purpose] || []);
+	const fields_by_purpose = {
+		Transfer: ["source_location", "target_location", "from_employee", "to_employee"],
+		Receipt: ["source_location", "target_location", "from_employee", "to_employee"],
+		Issue: ["from_employee", "to_employee"],
+		"Transfer and Issue": ["source_location", "target_location", "from_employee", "to_employee"],
+		Reassignment: [
+			"change_custodian",
+			"from_employee",
+			"to_employee",
+			"change_department",
+			"source_department",
+			"target_department",
+		],
+	};
+	return new Set(fields_by_purpose[purpose] || []);
 }
 
 // what a purpose change empties on a row: the locations it hides (a Service Equipment row and a borrowing keep
@@ -76,7 +74,7 @@ function hidden_movement_values(frm, row) {
 		target_department: null,
 	};
 	if (!frm.doc.is_borrowing_transaction && !frm.doc.borrowing) {
-		for (const fieldname of CLEARED_LOCATIONS) {
+		for (const fieldname of ["source_location", "target_location"]) {
 			if (!shown.has(fieldname)) values[fieldname] = null;
 		}
 	}
@@ -85,7 +83,11 @@ function hidden_movement_values(frm, row) {
 
 async function set_material_request_purpose_lock(frm, material_request = null) {
 	const reference_name = frm.doc.reference_name;
-	if (frm.doc.reference_doctype !== "Material Request" || !reference_name) {
+	if (
+		frm.doc.borrowing ||
+		frm.doc.reference_doctype !== "Material Request" ||
+		!reference_name
+	) {
 		frm.asset_transfer_purpose_locked = false;
 		frm.set_df_property("purpose", "read_only", 0);
 		return;
@@ -332,7 +334,8 @@ function add_borrowing_return_button(frm) {
 				method: "erpnext.borrowing.doctype.borrowing.borrowing_core.make_borrowing_return_movement",
 				frm,
 			}),
-		__("Create")
+		__("Create"),
+		"Asset Movement"
 	);
 	frm.add_custom_button(
 		__("Borrowing"),

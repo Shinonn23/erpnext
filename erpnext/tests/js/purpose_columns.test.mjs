@@ -131,6 +131,18 @@ function asset_movement_events() {
   return forms["Asset Movement"];
 }
 
+test("a borrowing receipt refresh does not fetch its Material Request", async () => {
+  const events = asset_movement_events();
+  const triggered = [];
+  await events.refresh({
+    doc: { docstatus: 1, borrowing: "LOAN", purpose: "Receipt",
+      reference_doctype: "Material Request", reference_name: "REQUEST" },
+    set_df_property() {},
+    trigger(event) { triggered.push(event); },
+  });
+  assert.deepEqual(triggered, ["set_required_fields"]);
+});
+
 function movement_columns(purpose) {
   const events = asset_movement_events();
   const columns = {};

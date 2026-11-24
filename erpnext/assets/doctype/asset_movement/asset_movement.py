@@ -420,7 +420,7 @@ class AssetMovement(Document):
 		args = {"asset": asset, "company": self.company}
 		latest_movement_entry = frappe.db.sql(
 			f"""
-			SELECT asm_item.target_location, asm_item.to_employee
+			SELECT asm_item.target_location, asm_item.to_employee, asm.transaction_date
 			FROM `tabAsset Movement Item` asm_item
 			JOIN `tabAsset Movement` asm ON asm_item.parent = asm.name
 			WHERE
@@ -433,9 +433,18 @@ class AssetMovement(Document):
 			args,
 		)
 
+		# The cancelled transfer's source reflects custody just before the move, including imported asset
+		# assignments that may be absent from the earlier movement history.
+		if self.purpose == "Transfer" and (self._action == "cancel" or self.docstatus == 2):
+			if not latest_movement_entry or get_datetime(latest_movement_entry[0][2]) < get_datetime(
+				self.transaction_date
+			):
+				movement_item = next((row for row in self.assets if row.asset == asset), None)
+				if movement_item and movement_item.source_location:
+					return movement_item.source_location, movement_item.from_employee
+
 		if latest_movement_entry:
-			current_location = latest_movement_entry[0][0]
-			current_employee = latest_movement_entry[0][1]
+			current_location, current_employee = latest_movement_entry[0][:2]
 		elif self.purpose == "Reassignment" and (self._action == "cancel" or self.docstatus == 2):
 			movement_item = next((row for row in self.assets if row.asset == asset), None)
 			if movement_item:
