@@ -185,6 +185,8 @@ class QualityInspection(Document):
 	def before_submit(self):
 		self.validate_sample_size()
 		self.validate_readings_status_mandatory()
+		if self.status == "Accepted" and any(reading.status == "Rejected" for reading in self.readings):
+			frappe.throw(_("A Quality Inspection with a rejected reading cannot be accepted."))
 
 	def validate_sample_size(self):
 		if flt(self.sample_size) <= 0:
@@ -193,9 +195,14 @@ class QualityInspection(Document):
 	@frappe.whitelist()
 	def get_item_specification_details(self):
 		if not self.quality_inspection_template:
-			self.quality_inspection_template = frappe.db.get_value(
-				"Item", self.item_code, "quality_inspection_template"
-			)
+			if self.reference_type == "Installation Note":
+				self.quality_inspection_template = frappe.db.get_value(
+					"Item", self.item_code, "installation_qi_template"
+				)
+			if not self.quality_inspection_template:
+				self.quality_inspection_template = frappe.db.get_value(
+					"Item", self.item_code, "quality_inspection_template"
+				)
 
 		if not self.quality_inspection_template:
 			return
@@ -527,6 +534,10 @@ def asset_movement_items(movement, txt, start, page_len):
 			if row.asset_item_code and not row.get("quality_inspection")
 		}
 	)
+	return search_inspection_items(items, txt, start, page_len)
+
+
+def search_inspection_items(items, txt, start, page_len):
 	if not items:
 		return []
 	rows = frappe.get_list(
@@ -587,6 +598,16 @@ def item_query(doctype: Any, txt: str | None, searchfield: Any, start: int, page
 		return [(row.name, row.item_name) for row in rows]
 	elif reference_doctype == "Asset Movement":
 		return asset_movement_items(filters.get("reference_name"), txt, start, page_len)
+	elif reference_doctype == "Installation Note":
+		if not (name := filters.get("reference_name")):
+			return []
+		note = frappe.get_doc("Installation Note", name)
+		note.check_permission("read")
+		if note.docstatus != 1:
+			return []
+		# The same installed item must remain selectable for reinspection.
+		items = sorted({row.item_code for row in note.items if row.item_code})
+		return search_inspection_items(items, txt, start, page_len)
 	elif reference_doctype == "Job Card":
 		production_item, item_name = frappe.get_value(
 			"Job Card", filters.get("reference_name"), ["production_item", "item_name"]

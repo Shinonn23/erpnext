@@ -68,6 +68,9 @@ frappe.ui.form.on("Quality Inspection", {
 	refresh: async function (frm) {
 		// Ignore cancellation of reference doctype on cancel all.
 		frm.ignore_doctypes_on_cancel_all = [frm.doc.reference_type, "Serial and Batch Bundle"];
+		if (frm.doc.reference_type === "Installation Note") {
+			frm.ignore_doctypes_on_cancel_all.push("Installation Certificate");
+		}
 		show_reading_criteria(frm);
 		if (frm.doc.docstatus === 0 && !frm.read_only && frm.perm?.[0]?.write &&
 			(frm.doc.readings || []).some(can_fill_expected_text)) {
