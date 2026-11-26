@@ -5,6 +5,7 @@
 import frappe
 from frappe import _, scrub
 from frappe.model.document import Document
+from frappe.model.workflow import apply_workflow, get_workflow_name
 from frappe.utils import escape_html, flt, nowdate
 from frappe.utils.background_jobs import enqueue, is_job_enqueued
 
@@ -317,7 +318,12 @@ def start_import(invoices):
 			# be added on top of it
 			doc.flags.dont_auto_add_taxes = True
 			doc.insert(set_name=invoice_number)
-			doc.submit()
+			if get_workflow_name(doc.doctype):
+				doc = apply_workflow(doc, "Submit")
+				if doc.docstatus != 1:
+					frappe.throw(_("The workflow Submit action did not submit {0}.").format(doc.doctype))
+			else:
+				doc.submit()
 			if not frappe.in_test:
 				frappe.db.commit()
 			names.append(doc.name)

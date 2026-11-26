@@ -92,7 +92,8 @@ erpnext.stock.LandedCostVoucher = class LandedCostVoucher extends erpnext.stock.
 						item.applicable_charges = 0;
 					});
 					refresh_field("items");
-					if (items.length) {
+					// The initial blank grid row does not have an item to allocate to yet.
+					if (items.some((item) => item.item_code)) {
 						frappe.show_alert({
 							message: __(
 								"Total {0} of all items is zero, charges cannot be distributed on it.",

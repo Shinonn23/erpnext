@@ -976,9 +976,11 @@ def remaining_parts(doc, row, quarantine, current=False, location=None):
 					"""select entry.serial_no
 					from `tabStock Ledger Entry` sle
 					join `tabSerial and Batch Entry` entry on entry.parent = sle.serial_and_batch_bundle
+					left join `tabStorage Location` entry_location
+						on entry_location.name = entry.storage_location and entry_location.warehouse = sle.warehouse
 					where sle.warehouse = %(warehouse)s and sle.is_cancelled = 0
 						and entry.serial_no in %(serials)s
-						and coalesce(nullif(entry.storage_location, ''), sle.storage_location) = %(location)s
+						and coalesce(entry_location.name, sle.storage_location) = %(location)s
 					group by entry.serial_no having sum(entry.qty) > 0"""
 					+ (" for update" if current else ""),
 					{"warehouse": quarantine, "serials": tuple(serials), "location": location},
@@ -1003,12 +1005,19 @@ def remaining_parts(doc, row, quarantine, current=False, location=None):
 	left = allocate(*ledger).get(row.name, {})
 	if cint(has_batch):
 		parts = []
+		# The availability API intentionally excludes held locations from picking.
+		# For an explicit inspection or damage location, use its physical ledger.
+		inflows, outflows = ledger
 		for batch, qty in left.items():
 			if not batch:
 				continue
-			kwargs = {"inventory_dimensions_dict": {"storage_location": location}} if location else {}
-			if not current:
-				qty = min(qty, flt(get_batch_qty(batch_no=batch, warehouse=quarantine, **kwargs)))
+			if location:
+				held = sum(entry["batches"].get(batch, 0) for entry in inflows) - sum(
+					entry["batches"].get(batch, 0) for entry in outflows
+				)
+				qty = min(qty, held)
+			elif not current:
+				qty = min(qty, flt(get_batch_qty(batch_no=batch, warehouse=quarantine)))
 			if qty > 1e-9:
 				parts.append({"qty": qty, "batch_no": batch, "serial_nos": None})
 		return parts

@@ -49,7 +49,8 @@ frappe.ui.form.on("Asset", {
 	},
 
 	setup: function (frm) {
-		frm.ignore_doctypes_on_cancel_all = ["Journal Entry"];
+		// Asset.on_cancel cancels its movements with the asset receipt context.
+		frm.ignore_doctypes_on_cancel_all = ["Journal Entry", "Asset Movement"];
 
 		frm.make_methods = {
 			"Asset Movement": () => {

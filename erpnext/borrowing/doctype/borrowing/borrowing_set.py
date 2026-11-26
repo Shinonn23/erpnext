@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import frappe
 from frappe import _
+from frappe.permissions import has_permission
 from frappe.utils import cint, flt
 
 from erpnext.borrowing.doctype.borrowing.borrowing_core import (
@@ -75,7 +76,7 @@ def request_loan_summary(material_request: str):
 	loans = []
 	for name in loans_of_request(material_request):
 		doc = frappe.get_doc("Borrowing", name)
-		if not doc.has_permission("read"):
+		if not has_permission(doc, "read", print_logs=False):
 			continue
 		rows = [
 			{
@@ -100,7 +101,7 @@ def loan_set_overview(loan: str | None = None, material_request: str | None = No
 	overview = {"loans": [], "assets": [], "stock": [], "request_type": None, "open_loans": 0}
 	for name in names:
 		doc = frappe.get_doc("Borrowing", name)
-		if not doc.has_permission("read"):
+		if not has_permission(doc, "read", print_logs=False):
 			continue
 		overview["request_type"] = overview["request_type"] or frappe.db.get_value(
 			"Material Request", doc.material_request, "material_request_type"

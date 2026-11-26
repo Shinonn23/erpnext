@@ -262,6 +262,13 @@ frappe.ui.form.on("Pick List", {
 
 				if (frm.doc.purpose === "Delivery") {
 					if (frm.doc.borrowing) {
+						if (frappe.model.can_create("Delivery Note")) {
+							frm.add_custom_button(
+								__("Delivery Note"),
+								() => frm.events.create_delivery(frm, "Delivery Note"),
+								__("Create")
+							);
+						}
 						frm.add_custom_button(__("Borrowing"), () =>
 							frappe.set_route("Form", "Borrowing", frm.doc.borrowing)
 						);

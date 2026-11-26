@@ -262,6 +262,7 @@ def update_packed_item_basic_data(main_item_row, pi_row, packing_item, item_data
 	pi_row.parent_detail_docname = main_item_row.name
 	pi_row.item_code = packing_item.item_code
 	pi_row.item_name = item_data.item_name
+	pi_row.is_stock_item = item_data.is_stock_item
 	pi_row.uom = item_data.stock_uom
 	# the bundle states each part in its own UOM (e.g. 1 Test of a reagent stocked in Bottles): deliver it in stock UOM
 	pi_row.qty = flt(packing_item.qty) * part_conversion_factor(packing_item) * flt(main_item_row.stock_qty)

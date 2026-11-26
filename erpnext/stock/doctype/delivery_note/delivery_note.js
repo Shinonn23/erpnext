@@ -546,11 +546,15 @@ erpnext.stock.delivery_note.BORROWING_COLUMNS = [
 erpnext.stock.delivery_note.set_item_columns = function (frm) {
 	const grid = frm.fields_dict.items && frm.fields_dict.items.grid;
 	if (!grid || !grid.docfields) return;
+	const rows = frm.doc.items || [];
+	const hasOnlyNonStockItems = rows.length > 0 && rows.every((row) => Number(row.is_stock_item) === 0);
 	const borrowing = !!frm.doc.is_borrowing_transaction;
 	const widths = Object.fromEntries(erpnext.stock.delivery_note.BORROWING_COLUMNS);
 	const meta_df = (fieldname) => frappe.meta.get_docfield("Delivery Note Item", fieldname) || {};
 	const wanted = (df) => {
 		const original = meta_df(df.fieldname);
+		if (df.fieldname === "storage_location" && hasOnlyNonStockItems)
+			return { in_list_view: 0, columns: original.columns };
 		if (!borrowing) return { in_list_view: original.in_list_view ? 1 : 0, columns: original.columns };
 		const shown = df.fieldname in widths;
 		return { in_list_view: shown ? 1 : 0, columns: shown ? widths[df.fieldname] : original.columns };

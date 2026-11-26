@@ -2364,6 +2364,12 @@ def create_delivery(
 	if pick_list.status == "Closed":
 		frappe.throw(_("Pick List {0} is closed. Reopen it to deliver from it.").format(bold(pick_list.name)))
 	target = target or (frappe.flags.args or {}).get("target") or "Delivery Note"
+	if pick_list.get("borrowing"):
+		if target != "Delivery Note":
+			frappe.throw(_("A Borrowing Pick List can only create a Delivery Note"))
+		borrowing = frappe.get_doc("Borrowing", pick_list.borrowing)
+		return borrowing.make_delivery_note(source_pick_list=pick_list.name)
+
 	validate_item_locations(pick_list)
 	sales_dict = dict()
 	sales_orders = []

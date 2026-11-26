@@ -13,6 +13,7 @@ from unittest.mock import MagicMock, patch
 import frappe
 
 from erpnext.borrowing.doctype.borrowing import borrowing_core as core
+from erpnext.stock.stock_ledger import update_entries_after
 
 
 def entry(loan_item, batch, issued, open_qty):
@@ -123,6 +124,28 @@ class TestSwapPostedWithTheReturn(unittest.TestCase):
 		self.assertEqual(get_all.call_args.kwargs["filters"]["delivery_note_no"], "DN-RET-1")
 		self.assertTrue(entry_doc.flags.borrowing_cancellation)
 		entry_doc.cancel.assert_called_once()
+
+
+class TestBorrowingReturnValuation(unittest.TestCase):
+	def test_return_receiving_leg_uses_amount_removed_from_loan_warehouse(self):
+		ledger = update_entries_after.__new__(update_entries_after)
+		sle = frappe._dict(
+			voucher_type="Delivery Note",
+			voucher_no="DN-RETURN",
+			voucher_detail_no="return-row",
+			item_code="REAGENT",
+			warehouse="STORE",
+			actual_qty=2,
+			recalculate_rate=1,
+		)
+		row = frappe._dict(item_code="REAGENT", warehouse="STORE", target_warehouse="LOAN", qty=-2)
+		db = MagicMock()
+		db.get_value.side_effect = [row, row, -1010]
+		with patch.object(frappe, "db", db), patch.object(frappe, "get_cached_value", return_value=1):
+			self.assertTrue(ledger.is_inward_transfer_leg(sle))
+			self.assertEqual(ledger.get_incoming_outgoing_rate_from_transaction(sle), 505)
+		self.assertEqual(db.get_value.call_args.args[0], "Stock Ledger Entry")
+		self.assertEqual(db.get_value.call_args.args[1]["actual_qty"], ("<", 0))
 
 
 if __name__ == "__main__":

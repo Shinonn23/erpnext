@@ -110,7 +110,6 @@ class TestSetStatus(unittest.TestCase):
 		readable.name = "CL-A"
 		readable.loan_type = "Asset"
 		readable.status = "Active"
-		readable.has_permission.return_value = True
 		readable.items = [
 			frappe._dict(
 				item_code="DEVICE",
@@ -124,12 +123,13 @@ class TestSetStatus(unittest.TestCase):
 			)
 		]
 		hidden = MagicMock()
-		hidden.has_permission.return_value = False
 		with (
 			patch.object(module, "loans_of_request", return_value=["CL-A", "CL-X"]),
 			patch.object(frappe, "get_doc", side_effect=[readable, hidden]),
+			patch.object(module, "has_permission", side_effect=[True, False]) as can_read,
 		):
 			summary = module.request_loan_summary("MR-1")
+		can_read.assert_called_with(hidden, "read", print_logs=False)
 		self.assertEqual(summary["status"], "Out")
 		self.assertEqual([loan["name"] for loan in summary["loans"]], ["CL-A"])
 		self.assertEqual(summary["loans"][0]["items"][0]["outstanding"], 1)
@@ -143,7 +143,7 @@ class TestSetDelivery(unittest.TestCase):
 
 		from erpnext.borrowing.doctype.borrowing.borrowing_core import Borrowing
 
-		loan = SimpleNamespace(
+		loan = frappe._dict(
 			loan_type="Asset", asset_movement=None, material_request="MR-1", name="CL-A", **values
 		)
 

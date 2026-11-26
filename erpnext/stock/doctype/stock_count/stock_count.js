@@ -27,15 +27,19 @@ frappe.ui.form.on("Stock Count", {
 				disabled: 0,
 			},
 		}));
-		// the Lost Warehouse: where the quantity not found is moved
-		frm.set_query("lost_warehouse", () => ({
-			filters: {
-				company: frm.doc.company,
-				is_group: 0,
-				disabled: 0,
-				warehouse_type: "Lost",
-			},
-		}));
+		frm.set_query("lost_warehouse", () => {
+			const destination = frm.__loss_defaults;
+			const uses_lost_location =
+				destination?.lost_storage_location && destination.lost_warehouse === frm.doc.warehouse;
+			return {
+				filters: {
+					company: frm.doc.company,
+					is_group: 0,
+					disabled: 0,
+					...(uses_lost_location ? { name: frm.doc.warehouse } : { warehouse_type: "Lost" }),
+				},
+			};
+		});
 		frm.set_query("lost_storage_location", () => ({
 			filters: {
 				warehouse: frm.doc.lost_warehouse,

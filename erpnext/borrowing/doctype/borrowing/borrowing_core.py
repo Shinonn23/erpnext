@@ -108,9 +108,17 @@ class BorrowingQualityInspectionMixin:
 	def before_cancel(self):
 		delivery_note_name = get_borrowing_return_delivery_note(self)
 		if delivery_note_name and frappe.db.get_value("Delivery Note", delivery_note_name, "docstatus") == 1:
-			frappe.throw(
-				_("Cancel the borrowing return Delivery Note before cancelling its Quality Inspection")
-			)
+			receipt = frappe.get_doc("Delivery Note", delivery_note_name, for_update=True)
+			row = next((item for item in receipt.items if item.name == self.child_row_reference), None)
+			if not row or get_location_type(row.storage_location, row.warehouse) != QUALITY_INSPECTION:
+				frappe.throw(
+					_("Cancel the borrowing return Delivery Note before cancelling its Quality Inspection")
+				)
+			if frappe.db.exists(
+				"Stock Entry Detail",
+				{"ste_detail": row.name, "storage_location": row.storage_location, "docstatus": 1},
+			):
+				frappe.throw(_("Cancel the stock movement before cancelling this Quality Inspection."))
 		before_cancel = getattr(super(), "before_cancel", None)
 		if before_cancel:
 			return before_cancel()
@@ -573,19 +581,23 @@ class Borrowing(Document):
 		return pick_list
 
 	@frappe.whitelist()
-	def make_delivery_note(self):
+	def make_delivery_note(self, source_pick_list: str | None = None):
 		"""Create the standard Borrowing Delivery Note from the submitted native Pick List."""
 		self.reload()
 		self.check_permission("read")
 		frappe.has_permission("Delivery Note", "create", throw=True)
-		return self._make_delivery_note()
+		return self._make_delivery_note(source_pick_list)
 
-	def _make_delivery_note(self):
+	def _make_delivery_note(self, source_pick_list=None):
 		if self.docstatus != 1 or self.loan_type != "Stock":
 			frappe.throw(_("Create a Borrowing Delivery Note from a submitted Stock Borrowing"))
 
 		lock_borrowing(self.name)
 		self.reload()
+		if source_pick_list and source_pick_list != self.pick_list:
+			frappe.throw(_("This Pick List is no longer linked to the Borrowing"))
+		if source_pick_list and frappe.db.get_value("Pick List", source_pick_list, "docstatus") != 1:
+			frappe.throw(_("Submit the Borrowing Pick List before creating a Borrowing Delivery Note"))
 		if self.delivery_note:
 			delivery_note_status = frappe.db.get_value("Delivery Note", self.delivery_note, "docstatus")
 			if delivery_note_status in (0, 1):

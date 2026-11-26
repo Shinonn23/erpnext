@@ -26,6 +26,29 @@ class TestManualLoanDocuments(TestCase):
 			patcher.start()
 			self.addCleanup(patcher.stop)
 
+	def test_pick_list_mapper_uses_borrowing_delivery_rules(self):
+		from erpnext.stock.doctype.pick_list.pick_list import create_delivery
+
+		pick_list = Mock(name="pick_list", status="Open", borrowing="LOAN-1")
+		pick_list.name = "PL-1"
+		pick_list.get.return_value = "LOAN-1"
+		borrowing = Mock()
+		with patch.object(frappe, "get_doc", side_effect=[pick_list, borrowing]) as get_doc:
+			self.assertEqual(
+				create_delivery("PL-1", target="Delivery Note"), borrowing.make_delivery_note.return_value
+			)
+		pick_list.check_permission.assert_called_once_with("read")
+		get_doc.assert_called_with("Borrowing", "LOAN-1")
+		borrowing.make_delivery_note.assert_called_once_with(source_pick_list="PL-1")
+
+	def test_unlinked_pick_list_cannot_open_existing_borrowing_delivery(self):
+		source = self.source()
+		source.pick_list = "PL-2"
+		source.delivery_note = "DN-1"
+		with patch.object(core, "lock_borrowing"), self.assertRaises(frappe.ValidationError):
+			core.Borrowing._make_delivery_note(source, "PL-1")
+		frappe.db.get_value.assert_not_called()
+
 	def source(self):
 		return Doc(
 			doctype="Borrowing",
@@ -132,7 +155,7 @@ class TestManualLoanDocuments(TestCase):
 					check_permission=Mock(),
 					db_set=Mock(),
 				)
-				source._make_delivery_note = lambda: core.Borrowing._make_delivery_note(source)
+				source._make_delivery_note = lambda pick_list: core.Borrowing._make_delivery_note(source, pick_list)
 				target = Mock()
 				target.as_dict.return_value = {"doctype": "Delivery Note", "name": "DN-1"}
 				frappe.db.get_value.side_effect = [0] if linked else [1, "DN-1"]

@@ -18,6 +18,25 @@ from erpnext.stock.doctype.quality_inspection.purchase_inspection_units import (
 
 
 class TestPurchaseInspectionUnits(unittest.TestCase):
+	def test_batch_at_inspection_location_is_releasable_from_its_own_receipt_row(self):
+		location = "CD STOCK - CD / QI STAGING"
+		row = frappe._dict(item_code="Item A", name="intake-row")
+		inflows = [
+			{"seq": 0, "row": "intake-row", "batches": {"Batch A": 3}},
+			{"seq": 1, "row": "other-row", "batches": {"Batch A": 5}},
+		]
+		outflows = [{"seq": 2, "linked": "intake-row", "batches": {"Batch A": 2}}]
+		with (
+			patch.object(frappe, "db", Mock(get_value=Mock(return_value=(0, 1)))),
+			patch.object(module, "_ledger", return_value=(inflows, outflows)) as ledger,
+			patch("erpnext.stock.doctype.batch.batch.get_batch_qty", return_value=0) as pickable,
+		):
+			parts = module.remaining_parts(None, row, "CD STOCK - CD", location=location)
+
+		ledger.assert_called_once_with("Item A", "CD STOCK - CD", location)
+		pickable.assert_not_called()
+		self.assertEqual(parts, [{"qty": 1, "batch_no": "Batch A", "serial_nos": None}])
+
 	def test_manual_numeric_result_cannot_accept_an_out_of_range_reading(self):
 		from erpnext.stock.doctype.quality_inspection.quality_inspection import QualityInspection
 

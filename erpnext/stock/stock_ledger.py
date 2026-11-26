@@ -1486,9 +1486,21 @@ class update_entries_after:
 			return False
 
 		row = frappe.db.get_value(
-			f"{sle.voucher_type} Item", sle.voucher_detail_no, ["item_code", "target_warehouse"], as_dict=True
+			f"{sle.voucher_type} Item",
+			sle.voucher_detail_no,
+			["item_code", "warehouse", "target_warehouse", "qty"],
+			as_dict=True,
 		)
-		return bool(row and row.item_code == sle.item_code and row.target_warehouse == sle.warehouse)
+		if not row or row.item_code != sle.item_code or not row.target_warehouse:
+			return False
+		if (
+			flt(row.qty) < 0
+			and sle.voucher_type == "Delivery Note"
+			and frappe.get_cached_value("Delivery Note", sle.voucher_no, "is_borrowing_transaction")
+		):
+			# On a borrowing return, the original source warehouse is the receiving leg.
+			return row.warehouse == sle.warehouse
+		return row.target_warehouse == sle.warehouse
 
 	def is_outward_internal_transfer_leg(self, sle):
 		return bool(
@@ -1558,6 +1570,11 @@ class update_entries_after:
 			"Subcontracting Receipt",
 		):
 			if frappe.get_cached_value(sle.voucher_type, sle.voucher_no, "is_return"):
+				if self.is_inward_transfer_leg(sle):
+					outward_value = self.get_outward_leg_value(sle)
+					if outward_value is not None:
+						return outward_value / flt(sle.actual_qty)
+
 				from erpnext.controllers.sales_and_purchase_return import (
 					get_rate_for_return,  # don't move this import to top
 				)

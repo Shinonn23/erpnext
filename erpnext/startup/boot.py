@@ -18,6 +18,9 @@ def boot_session(bootinfo):
 	if frappe.session["user"] != "Guest":
 		update_page_info(bootinfo)
 		bootinfo.sysdefaults.enable_putaway_rule = int(is_putaway_rule_enabled())
+		bootinfo.sysdefaults.disable_serial_no_and_batch_selector = cint(
+			frappe.get_single_value("Stock Settings", "disable_serial_no_and_batch_selector")
+		)
 		bootinfo.sysdefaults.restrict_item_uoms = int(is_item_uom_restricted())
 
 		bootinfo.sysdefaults.territory = frappe.get_single_value("Selling Settings", "territory")

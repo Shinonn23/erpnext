@@ -4,6 +4,7 @@
 import frappe
 from frappe import _
 from frappe.query_builder import CustomFunction
+from frappe.query_builder.functions import Concat_ws
 
 from erpnext.regional.thailand.tax_report_branch import branch_criterion, finish_tax_report
 
@@ -125,7 +126,6 @@ def get_data(filters):
 	nullif = CustomFunction("nullif", ["value1", "value2"])
 	month = CustomFunction("month", ["date"])
 	year = CustomFunction("year", ["date"])
-	concat_ws = CustomFunction("concat_ws", ["separator", "1", "2", "3", "4", "5", "6"])
 
 	query = (
 		frappe.qb.from_(tinv)
@@ -154,7 +154,7 @@ def get_data(filters):
 			sup.supplier_name.as_("party_name"),
 			sup.tax_id.as_("tax_id"),
 			sup.branch_code.as_("branch_code"),
-			concat_ws(
+			Concat_ws(
 				" ",
 				addr.address_line1,
 				addr.address_line2,

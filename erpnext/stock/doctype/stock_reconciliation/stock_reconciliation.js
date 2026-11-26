@@ -59,9 +59,18 @@ frappe.ui.form.on("Stock Reconciliation", {
 		erpnext.accounts.dimensions.setup_dimension_filters(frm, frm.doctype);
 	},
 
-	company: function (frm) {
+	company: async function (frm) {
 		frm.trigger("toggle_display_account_head");
 		erpnext.accounts.dimensions.update_dimension(frm, frm.doctype);
+
+		const { company, cost_center } = frm.doc;
+		if (!company || !erpnext.is_perpetual_inventory_enabled(company)) return;
+
+		// Fetch after the Company field changes so the Cost Center uses the new company's filters.
+		const { message } = await frappe.db.get_value("Company", company, "cost_center");
+		if (frm.doc.company === company && frm.doc.cost_center === cost_center && message) {
+			await frm.set_value("cost_center", message.cost_center);
+		}
 	},
 
 	refresh: function (frm) {
@@ -356,9 +365,6 @@ erpnext.stock.StockReconciliation = class StockReconciliation extends erpnext.st
 
 		this.setup_posting_date_time_check();
 
-		if (me.frm.doc.company && erpnext.is_perpetual_inventory_enabled(me.frm.doc.company)) {
-			this.frm.add_fetch("company", "cost_center", "cost_center");
-		}
 		this.frm.fields_dict["expense_account"].get_query = function () {
 			if (erpnext.is_perpetual_inventory_enabled(me.frm.doc.company)) {
 				return {

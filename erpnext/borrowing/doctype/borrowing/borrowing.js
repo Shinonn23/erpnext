@@ -51,7 +51,7 @@ frappe.ui.form.on("Borrowing", {
 		if (frm.doc.status === "Pending Pick") {
 			frm.set_intro(
 				__(
-					"Use Create → Pick List, then save and submit the picked quantities. Use Create → Delivery Note to review, save and submit the outgoing goods."
+					"Use Create → Pick List, then save and submit the picked quantities. On the Pick List, use Create → Delivery Note to review, save and submit the outgoing goods."
 				),
 				"blue"
 			);

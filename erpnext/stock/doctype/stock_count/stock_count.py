@@ -885,6 +885,7 @@ class StockCount(Document):
 				"qty": values["qty"],
 				"s_warehouse": self.warehouse,
 				"t_warehouse": self.lost_warehouse,
+				"use_serial_batch_fields": int(bool(batch_no or values["serial_nos"])),
 				"batch_no": batch_no,
 				"serial_no": "\n".join(values["serial_nos"]),
 			}
