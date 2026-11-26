@@ -53,7 +53,6 @@
    "search_index": 1
   },
   {
-   "fetch_from": "item_code.stock_uom",
    "fetch_if_empty": 1,
    "fieldname": "uom",
    "fieldtype": "Link",

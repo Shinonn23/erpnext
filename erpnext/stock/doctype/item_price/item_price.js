@@ -11,6 +11,13 @@ frappe.ui.form.on("Item Price", {
 			};
 		});
 
+		if (frappe.boot.sysdefaults?.restrict_item_uoms) {
+			frm.set_query("uom", () => ({
+				query: "erpnext.controllers.queries.get_item_uom_query",
+				filters: { item_code: frm.doc.item_code || "" },
+			}));
+		}
+
 		frm._price_list_filters = {};
 		frm.set_query("price_list", () => ({ filters: frm._price_list_filters }));
 	},
