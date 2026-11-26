@@ -16,9 +16,7 @@ frappe.ui.form.on("Item Price", {
 	},
 
 	refresh(frm) {
-		if (frm.doc.item_code) {
-			frm.trigger("item_code");
-		}
+		return update_item_details(frm);
 	},
 
 	onload(frm) {
@@ -30,7 +28,6 @@ frappe.ui.form.on("Item Price", {
 		// Fetch item details
 		frm.add_fetch("item_code", "item_name", "item_name");
 		frm.add_fetch("item_code", "description", "item_description");
-		frm.add_fetch("item_code", "stock_uom", "uom");
 
 		frm.set_df_property(
 			"bulk_import_help",
@@ -48,18 +45,29 @@ frappe.ui.form.on("Item Price", {
 	},
 
 	item_code(frm) {
-		frm._price_list_filters = {};
-		if (frm.doc.item_code) {
-			frappe.db
-				.get_value("Item", frm.doc.item_code, ["is_sales_item", "is_purchase_item"])
-				.then((r) => {
-					if (!r.message) return;
-					if (r.message.is_sales_item && !r.message.is_purchase_item) {
-						frm._price_list_filters.selling = 1;
-					} else if (r.message.is_purchase_item && !r.message.is_sales_item) {
-						frm._price_list_filters.buying = 1;
-					}
-				});
-		}
+		return update_item_details(frm, true);
 	},
 });
+
+async function update_item_details(frm, set_stock_uom = false) {
+	const doc = frm.doc;
+	const item_code = doc.item_code;
+	frm._price_list_filters = {};
+	if (!item_code) return;
+
+	const { message: item } = await frappe.db.get_value("Item", item_code, [
+		"is_sales_item",
+		"is_purchase_item",
+		"stock_uom",
+	]);
+	if (!item || frm.doc !== doc || frm.doc.item_code !== item_code) return;
+
+	if (item.is_sales_item && !item.is_purchase_item) {
+		frm._price_list_filters.selling = 1;
+	} else if (item.is_purchase_item && !item.is_sales_item) {
+		frm._price_list_filters.buying = 1;
+	}
+
+	// Validate the stock UOM only after the selected Item is set on the form.
+	if (set_stock_uom) return frm.set_value("uom", item.stock_uom);
+}
