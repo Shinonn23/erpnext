@@ -309,6 +309,21 @@
    "indent": 0,
    "is_default_module": 0,
    "keep_closed": 0,
+   "label": "Selling Price vs Standard",
+   "link_to": "Selling Price vs Standard",
+   "link_type": "Report",
+   "open_in_new_tab": 1,
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "added": 0,
+   "child": 1,
+   "collapsible": 1,
+   "hidden": 0,
+   "indent": 0,
+   "is_default_module": 0,
+   "keep_closed": 0,
    "label": "Pricing Rule",
    "link_to": "Pricing Rule",
    "link_type": "DocType",
@@ -452,7 +467,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-10-20 12:00:00.000000",
+ "modified": "2026-11-28 18:28:00.000000",
  "modified_by": "Administrator",
  "module": "Selling",
  "name": "Selling",

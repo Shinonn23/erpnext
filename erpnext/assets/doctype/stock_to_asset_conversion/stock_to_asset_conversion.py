@@ -516,22 +516,16 @@ class StocktoAssetConversion(StockController):
 				frappe.throw(_("Row {0}: Invalid accounting treatment.").format(output.idx))
 			if output.accounting_treatment != "Expense Immediately":
 				continue
-			# a Borrow loan unit converted to a Demo Asset is a Demo conversion too
-			if not self.borrowing and (
-				not self.material_request
-				or frappe.db.get_value("Material Request", self.material_request, "material_request_type")
-				!= "Customer Demo"
-			):
-				frappe.throw(_("Immediate expense is available only for Customer Demo conversions."))
-			if frappe.get_cached_value("Company", self.company, "default_currency") != "THB":
-				frappe.throw(_("The 10,000 baht Demo expense policy requires a THB company."))
+			validators = frappe.get_hooks("stock_to_asset_immediate_expense_validators")
+			if not validators:
+				frappe.throw(_("Configure an immediate-expense policy before using this accounting treatment."))
 			if not erpnext.is_perpetual_inventory_enabled(self.company):
 				frappe.throw(_("Immediate Demo expense currently requires perpetual inventory accounting."))
 			self.set_purchase_unit_price(output)
-			if not 0 <= output.purchase_unit_price < 10000:
-				frappe.throw(
-					_("Immediate expense requires a purchase price below 10,000 baht per stock unit.")
-				)
+			if output.purchase_unit_price < 0:
+				frappe.throw(_("The purchase price cannot be negative."))
+			for validator in validators:
+				frappe.get_attr(validator)(self, output)
 			if not output.expense_account:
 				frappe.throw(_("Row {0}: Select a Demo Expense Account.").format(output.idx))
 			account = frappe.get_cached_doc("Account", output.expense_account)
@@ -1112,10 +1106,6 @@ class StocktoAssetConversion(StockController):
 			workflow = get_workflow(self.doctype)
 			submitted_states = {state.state for state in workflow.states if cint(state.doc_status) == 1}
 			transitions = get_transitions(self, workflow)
-			if "connect_diagnostics_setup" in frappe.get_installed_apps():
-				from connect_diagnostics_setup.workflows.step_authority import filter_transitions
-
-				transitions = filter_transitions(self, transitions)
 			eligible = [
 				transition
 				for transition in transitions

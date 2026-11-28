@@ -265,7 +265,7 @@ class TestReopenOverPicks(Base):
 			patch.object(module.frappe, "get_all", return_value=list(others)),
 			patch.object(module, "_", side_effect=lambda text: text),
 			patch(
-				"connect_diagnostics_setup.stock.outgoing_inspection.rejected_moved_by_row",
+				"erpnext.stock.outgoing_inspection.rejected_moved_by_row",
 				return_value=moved or {},
 			),
 		):
@@ -322,7 +322,7 @@ class TestReopenShortages(Base):
 			patch.object(module.frappe, "get_all", return_value=list(serials_in_warehouse)),
 			patch.object(module, "_", side_effect=lambda text: text),
 			patch(
-				"connect_diagnostics_setup.stock.outgoing_inspection.rejected_moved_by_row",
+				"erpnext.stock.outgoing_inspection.rejected_moved_by_row",
 				return_value=moved or {},
 			),
 		):
@@ -461,7 +461,7 @@ class TestPickedQtySql(Base):
 		patch.object(frappe, "qb", get_query_builder("mariadb")).start()
 		patch.object(QueryBuilder, "run", fake_run, create=True).start()
 		patch(
-			"connect_diagnostics_setup.stock.outgoing_inspection.adjust_picked_totals",
+			"erpnext.stock.outgoing_inspection.adjust_picked_totals",
 			lambda rows, packed: rows,
 		).start()
 		module.get_picked_items_qty(["ROW-1"])
@@ -595,7 +595,7 @@ class TestReopenReservations(Base):
 			patch.object(module.frappe, "get_all", return_value=entries),
 			patch.object(module, "_", side_effect=lambda text: text),
 			patch(
-				"connect_diagnostics_setup.stock.outgoing_inspection.rejected_moved_by_row",
+				"erpnext.stock.outgoing_inspection.rejected_moved_by_row",
 				return_value=moved or {},
 			),
 		):
@@ -636,7 +636,7 @@ class TestReopenReservations(Base):
 		sales_order = MagicMock()
 		with (
 			patch(
-				"connect_diagnostics_setup.stock.outgoing_inspection.rejected_moved_by_row", return_value={}
+				"erpnext.stock.outgoing_inspection.rejected_moved_by_row", return_value={}
 			),
 			patch.object(module.frappe, "get_all", return_value=[]),
 			patch.object(module.frappe, "get_doc", return_value=sales_order),
@@ -787,7 +787,7 @@ class TestBundleRows(BundleBase):
 			patch.object(module.frappe, "get_all", return_value=[]),
 			patch.object(module, "open_reservations_by_row", return_value=held),
 			patch(
-				"connect_diagnostics_setup.stock.outgoing_inspection.rejected_moved_by_row", return_value={}
+				"erpnext.stock.outgoing_inspection.rejected_moved_by_row", return_value={}
 			),
 			patch.object(module, "_", side_effect=lambda text: text),
 		):
@@ -806,7 +806,7 @@ class TestBundleRows(BundleBase):
 			patch.object(module.frappe, "get_all", return_value=[]),
 			patch.object(module, "_", side_effect=lambda text: text),
 			patch(
-				"connect_diagnostics_setup.stock.outgoing_inspection.rejected_moved_by_row", return_value={}
+				"erpnext.stock.outgoing_inspection.rejected_moved_by_row", return_value={}
 			),
 		):
 			self.assertEqual(module.get_reopen_shortages(doc), [])
@@ -822,7 +822,7 @@ class TestBundleRows(BundleBase):
 			patch.object(module.frappe, "get_all", return_value=["PL-2"]),
 			patch.object(module, "_", side_effect=lambda text: text),
 			patch(
-				"connect_diagnostics_setup.stock.outgoing_inspection.rejected_moved_by_row", return_value={}
+				"erpnext.stock.outgoing_inspection.rejected_moved_by_row", return_value={}
 			),
 		):
 			return module.get_reopen_over_picks(doc)

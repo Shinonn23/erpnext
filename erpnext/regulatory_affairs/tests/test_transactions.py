@@ -1157,4 +1157,4 @@ class TestClassification(unittest.TestCase):
 		item_path = Path(__file__).resolve().parents[2] / "stock/doctype/item/item.json"
 		fields = json.loads(item_path.read_text())["fields"]
 		assessment = next(field for field in fields if field["fieldname"] == "registration_requirement")
-		self.assertFalse(assessment.get("depends_on"))
+		self.assertEqual(assessment.get("depends_on"), "is_sales_item")

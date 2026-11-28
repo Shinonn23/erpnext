@@ -19,7 +19,7 @@ from erpnext.borrowing.doctype.borrowing import borrowing_core as core
 from erpnext.borrowing.doctype.borrowing import borrowing_tracking as tracking
 from erpnext.stock import warehouse_policy
 
-REJECTED = core.CONVERSION_REJECTED_STATE
+REJECTED = "Conversion Returned for Revision"
 
 
 class Doc(frappe._dict):
@@ -76,7 +76,11 @@ def item(qty, bundle=None):
 class ConversionRowsTest(unittest.TestCase):
 	def rows(self, parents, items, entries=None, **kwargs):
 		get_all, db = fake_db(parents, items, entries)
-		with patch.object(frappe, "get_all", side_effect=get_all), patch.object(frappe, "db", db):
+		with (
+			patch.object(frappe, "get_all", side_effect=get_all),
+			patch.object(frappe, "db", db),
+			patch("erpnext.borrowing.policy.workflow_state_rules", return_value=("workflow_state", {REJECTED})),
+		):
 			return core.loan_conversion_rows("CL-1", "CLI-1", **kwargs)
 
 	def test_a_draft_reserves_and_a_rejected_draft_does_not(self):
@@ -122,12 +126,20 @@ class ConversionRowsTest(unittest.TestCase):
 
 	def test_before_the_fork_field_exists_nothing_is_read(self):
 		get_all, db = fake_db([parent("STAC-1", 0)], {"STAC-1": [item(1)]}, has_column=False)
-		with patch.object(frappe, "get_all", side_effect=get_all), patch.object(frappe, "db", db):
+		with (
+			patch.object(frappe, "get_all", side_effect=get_all),
+			patch.object(frappe, "db", db),
+			patch("erpnext.borrowing.policy.workflow_state_rules", return_value=("workflow_state", {REJECTED})),
+		):
 			self.assertEqual(core.loan_conversion_rows("CL-1"), [])
 
 	def test_a_quantity_is_in_loan_units(self):
 		get_all, db = fake_db([parent("STAC-1", 0)], {"STAC-1": [item(6)]}, factor=3)
-		with patch.object(frappe, "get_all", side_effect=get_all), patch.object(frappe, "db", db):
+		with (
+			patch.object(frappe, "get_all", side_effect=get_all),
+			patch.object(frappe, "db", db),
+			patch("erpnext.borrowing.policy.workflow_state_rules", return_value=("workflow_state", {REJECTED})),
+		):
 			self.assertEqual(core.loan_conversion_rows("CL-1", "CLI-1")[0].qty, 2)
 
 

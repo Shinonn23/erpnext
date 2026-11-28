@@ -562,20 +562,12 @@ def item_query(doctype: Any, txt: str | None, searchfield: Any, start: int, page
 	elif reference_doctype == "Asset Repair":
 		if not filters.get("reference_name"):
 			return []
-		from connect_diagnostics_setup.workflows.repair_reinspection import _repair
+		from erpnext.assets.doctype.asset_repair.reinspection import get_reinspection_source
 
-		_, row = _repair(filters["reference_name"])
-		items = frappe.get_list(
-			"Item",
-			filters={"name": row.item_code},
-			or_filters={"name": ["like", f"%{txt or ''}%"], "item_name": ["like", f"%{txt or ''}%"]},
-			fields=["name", "item_name"],
-			limit_start=start,
-			limit_page_length=page_len,
-		)
-		return [(item.name, item.item_name) for item in items]
+		_, row = get_reinspection_source(filters["reference_name"])
+		return search_inspection_items([row.item_code], txt, start, page_len)
 	elif reference_doctype == "Pick List":
-		from connect_diagnostics_setup.stock.outgoing_inspection import required, source_rows
+		from erpnext.stock.outgoing_inspection import required, source_rows
 
 		if not filters.get("reference_name"):
 			return []

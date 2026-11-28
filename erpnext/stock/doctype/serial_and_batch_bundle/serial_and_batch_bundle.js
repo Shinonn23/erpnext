@@ -216,7 +216,7 @@ frappe.ui.form.on("Serial and Batch Bundle", {
 
 		frm.set_query("serial_no", "entries", (doc, cdt, cdn) => {
 			if (doc.voucher_type === "Pick List" && doc.type_of_transaction === "Outward") {
-				return { query: "connect_diagnostics_setup.stock.pick_stock.selector_serial_query", filters: {
+				return { query: "erpnext.stock.pick_stock.selector_serial_query", filters: {
 					item_code: doc.item_code, warehouse: doc.warehouse,
 					storage_location: locals[cdt][cdn].storage_location || "", batch_no: locals[cdt][cdn].batch_no || "",
 					pick_list: doc.voucher_no || "",
@@ -231,7 +231,7 @@ frappe.ui.form.on("Serial and Batch Bundle", {
 
 		frm.set_query("batch_no", "entries", (doc, cdt, cdn) => {
 			if (doc.voucher_type === "Pick List" && doc.type_of_transaction === "Outward") {
-				return { query: "connect_diagnostics_setup.stock.pick_stock.batch_query", filters: {
+				return { query: "erpnext.stock.pick_stock.batch_query", filters: {
 					item_code: doc.item_code, warehouse: doc.warehouse,
 					storage_location: locals[cdt][cdn].storage_location || "", pick_list: doc.voucher_no || "",
 				} };

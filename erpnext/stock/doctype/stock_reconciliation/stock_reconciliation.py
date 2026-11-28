@@ -13,6 +13,7 @@ from frappe.utils import add_to_date, cint, cstr, flt, get_datetime, now
 import erpnext
 from erpnext.accounts.utils import get_company_default
 from erpnext.controllers.stock_controller import StockController
+from erpnext.stock.count_variance import apply_count_variance
 from erpnext.stock.doctype.batch.batch import get_available_batches, get_batch_qty
 from erpnext.stock.doctype.inventory_dimension.inventory_dimension import get_inventory_dimensions
 from erpnext.stock.doctype.serial_and_batch_bundle.serial_and_batch_bundle import (
@@ -72,6 +73,7 @@ class StockReconciliation(StockController):
 		self.head_row = ["Item Code", "Warehouse", "Quantity", "Valuation Rate"]
 
 	def validate(self):
+		apply_count_variance(self)
 		self.validate_stock_count_rows_kept()
 		self.set_department()
 		if self.purpose == ADJUSTMENT_ENTRY:

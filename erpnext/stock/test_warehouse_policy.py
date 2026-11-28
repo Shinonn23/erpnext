@@ -14,6 +14,27 @@ import frappe
 from erpnext.stock import warehouse_policy
 
 
+def outgoing_roles(roles=None):
+	return {kind: [roles or "Stock Manager"] for kind in ("Found", "Frozen", "Lost", "Quarantine", "Write-Off")}
+
+
+def _site_hooks(name):
+	if name == "warehouse_outgoing_roles":
+		return outgoing_roles()
+	return ["site.outgoing_waiver"] if name == "warehouse_outgoing_role_waivers" else []
+
+
+def waive_site_role(doc, warehouse, policy):
+	return any(
+		is_eligible(doc, warehouse)
+		for is_eligible in (
+			warehouse_policy.is_write_off_from_lost,
+			warehouse_policy.is_disposal_from_write_off,
+			warehouse_policy.is_rejected_return_from_quarantine,
+		)
+	)
+
+
 class TestWarehousePolicy(unittest.TestCase):
 	def setUp(self):
 		self.warehouse = frappe._dict(is_group=0, warehouse_type="Stock")
@@ -26,7 +47,8 @@ class TestWarehousePolicy(unittest.TestCase):
 			),
 		).start()
 		patch.object(frappe, "get_roles", return_value=["Stock User"]).start()
-		patch.object(frappe, "get_hooks", return_value=[]).start()
+		patch.object(frappe, "get_hooks", side_effect=_site_hooks).start()
+		patch.object(frappe, "get_attr", return_value=waive_site_role).start()
 		patch.object(
 			frappe,
 			"throw",
@@ -91,7 +113,13 @@ class TestWarehousePolicy(unittest.TestCase):
 		owned, other = Mock(name="owned"), Mock(name="other")
 		waiver = Mock(side_effect=lambda doc, warehouse, policy: doc is owned)
 		with (
-			patch.object(frappe, "get_hooks", return_value=["app.waiver"]) as hooks,
+			patch.object(
+				frappe,
+				"get_hooks",
+				side_effect=lambda name: ["app.waiver"]
+				if name == "warehouse_outgoing_role_waivers"
+				else _site_hooks(name),
+			) as hooks,
 			patch.object(frappe, "get_attr", return_value=waiver),
 		):
 			warehouse_policy.validate_warehouse_operation("WH", "transfer", outgoing=True, doc=owned)
@@ -154,6 +182,17 @@ class TestWarehousePolicy(unittest.TestCase):
 		# the type alone is not enough: another warehouse type keeps its own policy
 		self.warehouse.warehouse_type = "Quarantine"
 		with self.assertRaises(frappe.ValidationError):
+			warehouse_policy.validate_warehouse_operation("WH", "issue", outgoing=True, doc=write_off)
+
+	def test_native_stock_write_off_requires_outgoing_authority_without_a_site_waiver(self):
+		self.warehouse.warehouse_type = "Lost"
+		write_off = frappe._dict(
+			doctype="Stock Entry", purpose="Material Issue", stock_entry_type="Stock Write-Off"
+		)
+		with (
+			patch.object(frappe, "get_hooks", return_value=[]),
+			self.assertRaises(frappe.PermissionError),
+		):
 			warehouse_policy.validate_warehouse_operation("WH", "issue", outgoing=True, doc=write_off)
 
 	def test_a_disposal_issue_leaves_a_write_off_warehouse_and_nothing_else_does(self):
@@ -820,7 +859,7 @@ class TestWarehouseTypeSummary(unittest.TestCase):
 	def setUp(self):
 		self.addCleanup(patch.stopall)
 		patch.object(frappe, "has_permission", return_value=True).start()
-		patch.object(frappe, "get_hooks", return_value=[]).start()
+		patch.object(frappe, "get_hooks", side_effect=_site_hooks).start()
 		patch.object(warehouse_policy, "_", side_effect=lambda text: text).start()
 
 	def test_summary_lists_the_code_waivers_of_the_type(self):

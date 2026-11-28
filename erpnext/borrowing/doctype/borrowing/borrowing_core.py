@@ -9,6 +9,7 @@ from frappe.model.document import Document
 from frappe.model.workflow import set_workflow_state_on_action
 from frappe.utils import cint, flt, getdate
 
+from erpnext.borrowing.demo_consumption import expense_account
 from erpnext.borrowing.doctype.borrowing.borrowing_tracking import (
 	conversion_factors,
 	get_balances,
@@ -701,7 +702,7 @@ class Borrowing(Document):
 			loan_item.valuation_rate = rows[0].incoming_rate or rows[0].rate
 			loan_item.db_update()
 
-	def update_issued_quantities(self):
+	def update_issued_quantities(self, *, persist=True):
 		is_received = transaction_is_received(self.delivery_note, self.asset_movement)
 		issued_by_item = {}
 		if is_received and self.loan_type == "Stock" and self.delivery_note:
@@ -722,7 +723,7 @@ class Borrowing(Document):
 		for row in self.items:
 			issued_qty = issued_by_item.get(row.name, 0)
 			row.issued_qty = issued_qty
-			if row.name and self.docstatus == 1:
+			if persist and row.name and self.docstatus == 1:
 				frappe.db.set_value("Borrowing Item", row.name, "issued_qty", issued_qty)
 
 	def make_asset_issue(self):
@@ -773,15 +774,15 @@ class Borrowing(Document):
 		self.db_set("status", "Cancelled")
 		self.update_material_request_status()
 
-	def refresh_balances(self):
-		self.update_issued_quantities()
+	def refresh_balances(self, *, persist=True):
+		self.update_issued_quantities(persist=persist)
 		for row in self.items:
 			returned, adjusted, sold = get_loan_item_balances(self.name, row.name)
 			row.returned_qty = returned
 			row.adjusted_qty = adjusted
 			row.sold_qty = sold
 			row.outstanding_qty = max(flt(row.issued_qty) - returned - adjusted - sold, 0)
-			if row.name and self.docstatus == 1:
+			if persist and row.name and self.docstatus == 1:
 				frappe.db.set_value(
 					"Borrowing Item",
 					row.name,
@@ -792,7 +793,8 @@ class Borrowing(Document):
 						"outstanding_qty": row.outstanding_qty,
 					},
 				)
-		sync_tracking_table(self)
+		if persist:
+			sync_tracking_table(self)
 
 	def update_status(self):
 		if self.docstatus == 2:
@@ -1640,8 +1642,6 @@ class BorrowingAdjustment(Document):
 		):
 			frappe.throw(_("Demo consumption identity cannot be changed after creation."))
 		if self.get("demo_consumption"):
-			from connect_diagnostics_setup.stock.loan_consumables import expense_account
-
 			if (
 				loan.borrower_type != "Employee"
 				or frappe.db.get_value("Employee", loan.borrower, "user_id") != self.get("demo_confirmed_by")
@@ -2969,9 +2969,6 @@ def loan_item_available_to_adjust(loan_name, loan_item, *, exclude_adjustment=No
 	return max(flt(loan_item.qty) - returned - adjusted - sold - reserved, 0)
 
 
-CONVERSION_REJECTED_STATE = "Stock to Asset Conversion Rejected"
-
-
 def loan_conversion_rows(loan_name, loan_item_name=None, *, submitted=None, exclude=None):
 	"""The Stock to Asset Conversions of a loan's units (Connect Diagnostics, Siwat 16 Nov 2026: a Borrow unit becomes a
 	Demo Asset). A Draft that is not Rejected reserves the unit, a submitted one settles it like an adjustment, a
@@ -2986,13 +2983,23 @@ def loan_conversion_rows(loan_name, loan_item_name=None, *, submitted=None, excl
 		filters["borrowing_item"] = loan_item_name
 	if exclude:
 		filters["name"] = ["!=", exclude]
+	fields = ["name", "docstatus", "borrowing_item"]
+	state_field, rejected_states = None, set()
+	if 0 in docstatus:
+		from erpnext.borrowing.policy import workflow_state_rules
+
+		state_field, rejected_states = workflow_state_rules(
+			"Stock to Asset Conversion", "release_conversion_reservation"
+		)
+		if rejected_states and frappe.db.has_column("Stock to Asset Conversion", state_field):
+			fields.append(state_field)
 	rows = []
 	for parent in frappe.get_all(
 		"Stock to Asset Conversion",
 		filters=filters,
-		fields=["name", "docstatus", "borrowing_item", "workflow_state"],
+		fields=fields,
 	):
-		if parent.docstatus == 0 and parent.workflow_state == CONVERSION_REJECTED_STATE:
+		if parent.docstatus == 0 and state_field and parent.get(state_field) in rejected_states:
 			continue
 		factor = (
 			flt(

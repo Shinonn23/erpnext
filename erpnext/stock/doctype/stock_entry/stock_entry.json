@@ -82,6 +82,7 @@
   "operation_request_column",
   "maintenance_visit",
   "operation_evidence_section",
+  "repair_return_issue",
   "operation_receipt_document",
   "operation_evidence_column",
   "operation_receipt_reference",
@@ -1005,6 +1006,15 @@
    "fieldname": "operation_evidence_section",
    "fieldtype": "Section Break",
    "label": "Supporting Documents"
+  },
+  {
+   "depends_on": "eval:doc.repair_return_issue",
+   "fieldname": "repair_return_issue",
+   "fieldtype": "Link",
+   "label": "Original Repair Parts Issue",
+   "no_copy": 1,
+   "options": "Stock Entry",
+   "read_only": 1
   },
   {
    "depends_on": "eval:doc.purpose == 'Material Receipt' || doc.operation_receipt_document",

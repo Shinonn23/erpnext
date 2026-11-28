@@ -121,7 +121,7 @@ WAREHOUSE_TYPE_OPERATIONS = {
 	QUARANTINE_WAREHOUSE_TYPE: {"receipt", "transfer"},
 	WRITE_OFF_WAREHOUSE_TYPE: {"receipt", "reconciliation", "transfer"},
 }
-STOCK_MANAGER_WAREHOUSE_TYPES = {
+CONTROLLED_OUTGOING_WAREHOUSE_TYPES = {
 	"Found",
 	"Frozen",
 	LOST_WAREHOUSE_TYPE,
@@ -137,19 +137,17 @@ CODE_WAIVERS = (
 	(
 		LOST_WAREHOUSE_TYPE,
 		"issue",
-		"A Stock Entry of type Stock Write-Off (Material Issue) writes off what the Lost warehouse holds, without the"
-		" outgoing role",
+		"A Stock Entry of type Stock Write-Off (Material Issue) writes off what the Lost warehouse holds",
 	),
 	(
 		WRITE_OFF_WAREHOUSE_TYPE,
 		"issue",
-		"A Material Issue with Issue Type Disposal disposes of what the warehouse holds, without the outgoing role",
+		"A Material Issue with Issue Type Disposal disposes of what the warehouse holds",
 	),
 	(
 		QUARANTINE_WAREHOUSE_TYPE,
 		"issue",
-		"A Purchase Return of goods whose Quality Inspection is Rejected sends them back to the supplier, without the"
-		" outgoing role",
+		"A Purchase Return of goods whose Quality Inspection is Rejected sends them back to the supplier",
 	),
 	(
 		None,
@@ -171,7 +169,10 @@ def warehouse_type_allows(warehouse_type, operation):
 
 
 def warehouse_type_outgoing_role(warehouse_type):
-	return "Stock Manager" if warehouse_type in STOCK_MANAGER_WAREHOUSE_TYPES else None
+	configured = frappe.get_hooks("warehouse_outgoing_roles") or {}
+	if roles := configured.get(warehouse_type):
+		return roles[-1]
+	return "System Manager" if warehouse_type in CONTROLLED_OUTGOING_WAREHOUSE_TYPES else None
 
 
 def warehouse_allows(warehouse, operation):
@@ -373,12 +374,6 @@ def outgoing_role_waived(doc, warehouse, policy):
 	# The Stock Entry a Stock Count posts itself when it is approved (moving found stock back out of Lost): the count
 	# is the evidence and its approval the decision, by identity of that one document (Connect Diagnostics, 5 Nov 2026).
 	if is_count_posting(doc):
-		return True
-	if is_write_off_from_lost(doc, warehouse):
-		return True
-	if is_disposal_from_write_off(doc, warehouse):
-		return True
-	if is_rejected_return_from_quarantine(doc, warehouse):
 		return True
 	return any(
 		frappe.get_attr(path)(doc, warehouse, policy)

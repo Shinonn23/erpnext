@@ -1,0 +1,14 @@
+{
+ "doctype": "Page",
+ "modified": "2026-11-13 00:00:00.000000",
+ "module": "Borrowing",
+ "name": "my-demo-consumption",
+ "page_name": "my-demo-consumption",
+ "roles": [
+  {
+   "role": "Desk User"
+  }
+ ],
+ "standard": "Yes",
+ "title": "My Demo Consumables"
+}

@@ -15,6 +15,7 @@ from frappe.utils.nestedset import NestedSet
 from pypika.terms import ExistsCriterion
 
 from erpnext.stock import get_warehouse_account, get_warehouse_account_map
+from erpnext.stock.count_variance import validate_warehouse_count_variance
 from erpnext.stock.warehouse_policy import WAREHOUSE_TYPE_OPERATIONS
 
 RETIRED_ZONE_WAREHOUSE_TYPES = ("Frozen", "Lost", "Found", "Quarantine", "Write-Off")
@@ -127,6 +128,7 @@ class Warehouse(NestedSet):
 		self.validate_warehouse_account()
 		self.validate_inventory_account()
 		self.warn_about_multiple_warehouse_account()
+		validate_warehouse_count_variance(self)
 
 	def validate_warehouse_type(self):
 		if (

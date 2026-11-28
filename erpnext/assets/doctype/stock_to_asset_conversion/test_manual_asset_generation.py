@@ -4,6 +4,7 @@ from unittest import TestCase
 from unittest.mock import Mock, patch
 
 import frappe
+from frappe.model.workflow import get_transitions
 
 from erpnext.assets.doctype.stock_to_asset_conversion.stock_to_asset_conversion import StocktoAssetConversion
 
@@ -15,7 +16,7 @@ class TestManualAssetGeneration(TestCase):
 		)
 
 	def setUp(self):
-		self.doc = Mock(doctype="Stock to Asset Conversion", docstatus=0, stock_items=[])
+		self.doc = Mock(spec=StocktoAssetConversion, doctype="Stock to Asset Conversion", docstatus=0, stock_items=[])
 		self.doc.name = "CONV-1"
 		self.doc.assets = [frappe._dict(asset="ASSET-1"), frappe._dict(asset="ASSET-2")]
 		self.doc.is_new.return_value = False
@@ -31,7 +32,6 @@ class TestManualAssetGeneration(TestCase):
 			patch("frappe.model.workflow.has_approval_access", return_value=True),
 			patch.object(frappe, "session", frappe._dict(user="accounting@example.com")),
 			patch.object(frappe, "has_permission"),
-			patch.object(frappe, "get_installed_apps", return_value=[]),
 			patch.object(frappe, "throw", side_effect=frappe.ValidationError),
 		):
 			patcher.start()
@@ -69,14 +69,25 @@ class TestManualAssetGeneration(TestCase):
 			StocktoAssetConversion.create_assets(self.doc)
 		self.doc.sync_draft_assets.assert_not_called()
 
-	def test_accounting_grant_is_required_when_app_is_installed(self):
+	def test_generation_uses_the_filtered_workflow_transitions(self):
+		filter_transitions = Mock(return_value=[])
+		self.workflow.transitions = [
+			Mock(
+				state=self.doc.get.return_value,
+				allowed="Accounts User",
+				condition=None,
+				**{"as_dict.return_value": self.transition},
+			)
+		]
 		with (
-			patch.object(frappe, "get_installed_apps", return_value=["connect_diagnostics_setup"]),
-			patch("connect_diagnostics_setup.workflows.step_authority.filter_transitions", return_value=[]),
-			patch.object(frappe, "session", frappe._dict(user="stock@example.com")),
+			patch.object(frappe, "get_roles", return_value=["Accounts User"]),
+			patch.object(frappe, "get_hooks", return_value=["example.filter_transitions"]),
+			patch.object(frappe, "get_attr", return_value=filter_transitions),
+			patch("frappe.model.workflow.get_transitions", wraps=get_transitions),
 		):
 			with self.assertRaises(frappe.ValidationError):
 				StocktoAssetConversion.create_assets(self.doc)
+		filter_transitions.assert_called_once_with(self.doc, [self.transition], workflow=self.workflow)
 		self.doc.sync_draft_assets.assert_not_called()
 
 	def test_delete_refuses_a_submitted_generated_receipt(self):

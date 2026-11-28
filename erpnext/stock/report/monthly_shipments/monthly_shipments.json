@@ -1,0 +1,21 @@
+{
+ "add_total_row": 0,
+ "disable_prepared_report": 1,
+ "docstatus": 0,
+ "doctype": "Report",
+ "modified": "2026-11-19 12:00:00.000000",
+ "is_standard": "Yes",
+ "module": "Stock",
+ "name": "Monthly Shipments",
+ "ref_doctype": "Shipment",
+ "report_name": "Monthly Shipments",
+ "report_type": "Script Report",
+ "roles": [
+  {"role": "Stock User"},
+  {"role": "Stock Manager"},
+  {"role": "Accounts User"},
+  {"role": "Accounts Manager"},
+  {"role": "Managing Director"},
+  {"role": "Chief Executive Officer"}
+ ]
+}

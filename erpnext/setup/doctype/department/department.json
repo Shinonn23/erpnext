@@ -15,6 +15,7 @@
   "company",
   "is_group",
   "disabled",
+  "department_manager",
   "lft",
   "rgt",
   "old_parent"
@@ -60,6 +61,14 @@
    "fieldname": "disabled",
    "fieldtype": "Check",
    "label": "Disabled"
+  },
+  {
+   "description": "An active employee of this company who manages this department.",
+   "fieldname": "department_manager",
+   "fieldtype": "Link",
+   "label": "Department Manager",
+   "no_copy": 1,
+   "options": "Employee"
   },
   {
    "fieldname": "lft",

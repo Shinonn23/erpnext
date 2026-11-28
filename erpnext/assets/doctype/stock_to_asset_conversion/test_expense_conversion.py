@@ -116,9 +116,13 @@ class TestExpenseConversion(TestCase):
 		with patch.object(frappe, "get_doc", return_value=purchase), self.assertRaises(ValueError):
 			conversion.StocktoAssetConversion.set_purchase_unit_price(doc, output)
 
-	def test_expense_threshold_is_strictly_below_10000(self):
-		self.database.get_value.return_value = "Customer Demo"
-		for price, allowed in ((9999.99, True), (10000, False), (-1, False)):
+	def test_immediate_expense_uses_the_company_policy_and_keeps_the_native_price_check(self):
+		def site_policy(doc, row):
+			self.assertEqual(doc.company, "CD")
+			if row.purchase_unit_price >= 2500:
+				raise ValueError("site policy")
+
+		for price, allowed in ((2499.99, True), (2500, False), (-1, False)):
 			output = frappe._dict(
 				accounting_treatment="Expense Immediately",
 				purchase_unit_price=price,
@@ -133,7 +137,8 @@ class TestExpenseConversion(TestCase):
 			)
 			with (
 				patch.object(conversion.erpnext, "is_perpetual_inventory_enabled", return_value=True),
-				patch.object(frappe, "get_cached_value", return_value="THB"),
+				patch.object(frappe, "get_hooks", return_value=["site.expense_policy"]),
+				patch.object(frappe, "get_attr", return_value=site_policy),
 				patch.object(
 					frappe,
 					"get_cached_doc",
@@ -145,6 +150,11 @@ class TestExpenseConversion(TestCase):
 				else:
 					with self.assertRaises(ValueError):
 						conversion.StocktoAssetConversion.validate_accounting_treatments(doc)
+
+	def test_unconfigured_immediate_expense_is_refused(self):
+		doc = SimpleNamespace(assets=[frappe._dict(accounting_treatment="Expense Immediately")])
+		with patch.object(frappe, "get_hooks", return_value=[]), self.assertRaises(ValueError):
+			conversion.StocktoAssetConversion.validate_accounting_treatments(doc)
 
 	def test_zero_value_exception_requires_matching_conversion_unit(self):
 		output = frappe._dict(
@@ -235,6 +245,7 @@ class TestExpenseConversion(TestCase):
 			name="CONV-1",
 			company="CD",
 			material_request=None,
+			borrowing=None,
 			pick_list=None,
 			assets=[output],
 			stock_items=[frappe._dict(name="ROW-1", item_code="STOCK", warehouse="Warehouse", serial_and_batch_bundle="BUNDLE", idx=1)],

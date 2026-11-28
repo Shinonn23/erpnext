@@ -4,8 +4,8 @@ Two rules, one place:
 
 - ``identity_at_location``: when the picker changes a row's Storage Location, which of the row's Batch No, Serial Nos
   and bundle the new place still holds. The form clears only what it does not hold (``pick_list.js``), so a batch or
-  serial chosen first is kept when its place is filled in after it. The app overrides the method with its own count
-  of pickable stock (open picks netted, Receiving locations left out).
+  serial chosen first is kept when its place is filled in after it. The picker uses the same available-stock count as Auto Pick,
+  with open picks deducted and restricted locations excluded.
 - ``pick_mismatch``: a Delivery Note row made from a Pick List row delivers from the same warehouse and Storage
   Location, and only the batches and serial nos that row picked (a part of them for a part delivery). Used by the
   Borrowing Delivery Note check (``borrowing_core.validate_borrowing_delivery_note``) and by the app's Delivery Note
@@ -14,7 +14,7 @@ Two rules, one place:
 
 import frappe
 from frappe import _
-from frappe.utils import cstr, flt
+from frappe.utils import cstr
 
 
 def _serials(text):
@@ -113,35 +113,6 @@ def refuse_mismatch(row, pick_row):
 		)
 
 
-def _held_qty(item_code, warehouse, storage_location, batch_no):
-	row = frappe.db.sql(
-		"""select sum(coalesce(sbe.qty, sle.actual_qty))
-		from `tabStock Ledger Entry` sle
-		left join `tabSerial and Batch Entry` sbe on sbe.parent = sle.serial_and_batch_bundle
-		where sle.item_code = %(item_code)s and sle.warehouse = %(warehouse)s and sle.is_cancelled = 0
-		and coalesce(nullif(sbe.storage_location, ''), sle.storage_location) = %(location)s
-		and coalesce(nullif(sbe.batch_no, ''), sle.batch_no) = %(batch_no)s""",
-		{"item_code": item_code, "warehouse": warehouse, "location": storage_location, "batch_no": batch_no},
-	)
-	return flt(row[0][0]) if row else 0
-
-
-def _serial_place(serial, warehouse):
-	"""Where a Serial No last came into the warehouse (None when it is not in the warehouse now)."""
-	if frappe.db.get_value("Serial No", serial, "warehouse") != warehouse:
-		return None
-	row = frappe.db.sql(
-		"""select coalesce(nullif(entry.storage_location, ''), sle.storage_location)
-		from `tabStock Ledger Entry` sle
-		left join `tabSerial and Batch Entry` entry on entry.parent = sle.serial_and_batch_bundle
-		where sle.warehouse = %(warehouse)s and sle.is_cancelled = 0 and sle.actual_qty > 0
-		and (entry.serial_no = %(serial)s or sle.serial_no = %(serial)s)
-		order by sle.posting_datetime desc, sle.creation desc limit 1""",
-		{"serial": serial, "warehouse": warehouse},
-	)
-	return row[0][0] if row and row[0][0] else None
-
-
 @frappe.whitelist()
 def identity_at_location(
 	item_code,
@@ -152,25 +123,81 @@ def identity_at_location(
 	serial_and_batch_bundle=None,
 	pick_list=None,
 ):
-	"""Which of the row's batch, serial nos and bundle the Storage Location holds: ``{"batch_no": bool,
-	"serial_nos": [held], "bundle": bool}``."""
+	"""Which picked identities the new storage location can supply after open picks are deducted."""
 	frappe.has_permission("Pick List", "read", throw=True)
+	from erpnext.stock.pick_stock import _pickable_serial_rows, get_stock_lines
+
 	result = {"batch_no": True, "serial_nos": [], "bundle": True}
 	if not (item_code and warehouse and storage_location):
 		return result
+	pick_list = pick_list or None
+
+	def batch_there(batch):
+		return bool(
+			get_stock_lines(item_code, [warehouse], storage_location, batch, exclude_pick_list=pick_list)
+		)
+
+	serials_there = None
+
+	def serial_there(serial):
+		nonlocal serials_there
+		if serials_there is None:
+			serials_there = {
+				row.serial_no
+				for row in _pickable_serial_rows(item_code, warehouse, storage_location, pick_list=pick_list)
+			}
+		return serial in serials_there
+
 	if batch_no:
-		result["batch_no"] = _held_qty(item_code, warehouse, storage_location, batch_no) > 0
+		result["batch_no"] = batch_there(batch_no)
 	result["serial_nos"] = [
-		serial for serial in _serials(serial_no) if _serial_place(serial, warehouse) == storage_location
+		serial for serial in _serials(serial_no) if serial and serial_there(serial)
 	]
 	if serial_and_batch_bundle:
 		result["bundle"] = all(
 			(entry.storage_location or storage_location) == storage_location
-			and (
-				_serial_place(entry.serial_no, warehouse) == storage_location
-				if entry.serial_no
-				else _held_qty(item_code, warehouse, storage_location, entry.batch_no) > 0
-			)
+			and (serial_there(entry.serial_no) if entry.serial_no else batch_there(entry.batch_no))
 			for entry in bundle_entries(serial_and_batch_bundle)
 		)
 	return result
+
+
+def validate_against_pick(doc, method=None):
+	"""Delivery Note validate: a row made from a Pick List row delivers what was picked there, the same warehouse,
+	Storage Location, batch and serial nos (a part of them for a part delivery), whatever the form or an import sent
+	(UX WP2; the rule is the fork's ``pick_identity.pick_mismatch``, which the Borrowing Delivery Note check uses too).
+	A return, and a row of a non-stock Item (a product bundle's parent), are not compared."""
+	if doc.get("is_return") or frappe.flags.in_patch or frappe.flags.in_install:
+		return
+	rows = [row for row in doc.get("items") or [] if row.get("pick_list_item")]
+	if not rows:
+		return
+	picked = {
+		pick_row.name: pick_row
+		for pick_row in frappe.get_all(
+			"Pick List Item",
+			filters={"name": ("in", sorted({row.pick_list_item for row in rows}))},
+			fields=[
+				"name",
+				"parent",
+				"item_code",
+				"warehouse",
+				"storage_location",
+				"batch_no",
+				"serial_no",
+				"serial_and_batch_bundle",
+			],
+		)
+	}
+	for row in rows:
+		pick_row = picked.get(row.pick_list_item)
+		if not pick_row or not frappe.get_cached_value("Item", row.item_code, "is_stock_item"):
+			continue
+		if pick_row.item_code != row.item_code:
+			frappe.throw(
+				_("Row {0}: {1} is not the Item picked on Pick List {2}.").format(
+					row.idx, frappe.bold(row.item_code), pick_row.parent
+				),
+				title=_("Not as picked"),
+			)
+		refuse_mismatch(row, pick_row)

@@ -48,6 +48,7 @@ frappe.ui.form.on("Borrowing", {
 		frm.set_intro("");
 		show_loan_summary(frm);
 		if (frm.doc.docstatus !== 1) return;
+		const demo_consumption_button = add_demo_consumption_button(frm);
 		if (frm.doc.status === "Pending Pick") {
 			frm.set_intro(
 				__(
@@ -111,7 +112,7 @@ frappe.ui.form.on("Borrowing", {
 				});
 			}
 		}
-		if (!["Active", "Partially Returned"].includes(frm.doc.status)) return;
+		if (!["Active", "Partially Returned"].includes(frm.doc.status)) return demo_consumption_button;
 		const return_doctype = frm.doc.loan_type === "Asset" ? "Asset Movement" : "Delivery Note";
 		if (frappe.model.can_create(return_doctype)) {
 			frm.add_custom_button(__("Return"), () => make_borrowing_return(frm), __("Create"), return_doctype);
@@ -131,6 +132,7 @@ frappe.ui.form.on("Borrowing", {
 				"Sales Invoice"
 			);
 		}
+		return demo_consumption_button;
 	},
 });
 
@@ -158,6 +160,32 @@ function configure_item_columns(frm) {
 	grid.visible_columns = null;
 	grid.setup_visible_columns?.();
 	grid.refresh();
+}
+
+async function add_demo_consumption_button(frm) {
+	const { name, status, loan_type, borrower_type } = frm.doc;
+	if (
+		loan_type !== "Stock" ||
+		borrower_type !== "Employee" ||
+		!["Active", "Partially Returned"].includes(status)
+	) {
+		return;
+	}
+	const { message: allowed } = await frappe.call({
+		method: "erpnext.borrowing.demo_consumption.can_confirm",
+		args: { name },
+	});
+	if (allowed && frm.doc.name === name && frm.doc.docstatus === 1 && frm.doc.status === status) {
+		frm.add_custom_button(
+			__("Demo Consumption"),
+			async () => {
+				await frappe.require("/assets/erpnext/js/loan_demo_consumption.js");
+				erpnext.borrowing.demo_consumption.open(name, () => frm.reload_doc());
+			},
+			__("Create"),
+			false
+		);
+	}
 }
 
 // Who answers for the items, how many are still out, and the grid columns that fit the loan type.

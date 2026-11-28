@@ -20,6 +20,7 @@ from erpnext.controllers.buying_controller import BuyingController
 from erpnext.controllers.mapper import get_qty_already_mapped
 from erpnext.stock import get_warehouse_account
 from erpnext.stock.doctype.delivery_note.delivery_note import make_inter_company_transaction
+from erpnext.stock.doctype.serial_no.serial_no import get_serial_nos
 from erpnext.stock.doctype.stock_reservation_entry.stock_reservation_entry import StockReservation
 from erpnext.stock.serial_batch_bundle import (
 	SerialBatchCreation,
@@ -265,6 +266,7 @@ class PurchaseReceipt(BuyingController):
 			_apply_putaway_rule(self.doctype, self.get("items"), self.company)
 
 	def validate(self):
+		refuse_duplicate_serial_numbers(self)
 		self.validate_posting_time()
 		self.validate_posting_date_with_po()
 		super().validate()
@@ -1198,6 +1200,23 @@ class PurchaseReceipt(BuyingController):
 			elif frappe.db.has_column("Stock Ledger Entry", "storage_location"):
 				query = query.where(sle_table.storage_location.isnull())
 			query.run()
+
+
+def refuse_duplicate_serial_numbers(doc):
+	"""Check serials entered on accepted and rejected receipt rows before creating bundles."""
+	seen = {}
+	for row in doc.get("items") or []:
+		idx = row.get("idx")
+		for field in ("serial_no", "rejected_serial_no"):
+			for serial in get_serial_nos(str(row.get(field) or "").replace("\r", "")):
+				if serial in seen:
+					first = seen[serial]
+					if first == idx:
+						message = _("Row {0}: Serial No {1} is entered twice.").format(idx, serial)
+					else:
+						message = _("Row {0}: Serial No {1} is already entered in row {2}.").format(idx, serial, first)
+					frappe.throw(message, title=_("Duplicate Serial No"))
+				seen[serial] = idx
 
 
 def get_stock_value_difference(voucher_no, voucher_detail_no, warehouse, storage_location=None):

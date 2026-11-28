@@ -31,6 +31,11 @@ user to review, save and submit; preparing or submitting a Borrowing never posts
 - Convert to Demo Asset stays (below). Billing: Create > Asset Sale Invoice and Create > Consumption Invoice open unsaved
   invoices for accounting, through normal invoice approvals; consumption billing requires the write-off Stock Entry.
 
+For an Employee Stock Borrowing, Create > Demo Consumption and My Demo Consumables use the same confirmation.
+The borrower selects eligible items, a customer, and a demo date. The confirmation submits a Borrowing Adjustment
+and posts its Material Issue using the company's demo expense account and the site's active Stock Entry workflow.
+Repeating the same confirmation returns the existing documents once both are submitted.
+
 There is no Borrowing Return document, no "Receiving Delivery Note" step and no Batch Exchange: the DocTypes Borrowing
 Return and Borrowing Return Item are removed (`patches/v16_0/remove_borrowing_return.py`, schema only; a site with
 records keeps them until the Connect Diagnostics seed step that settles them, `e2e/data_access/borrowing_return_chain`,

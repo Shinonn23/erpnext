@@ -2,7 +2,7 @@
 
 import frappe
 
-from erpnext.stock.warehouse_policy import WAREHOUSE_TYPE_OPERATIONS, warehouse_type_outgoing_role
+from erpnext.stock.warehouse_policy import CONTROLLED_OUTGOING_WAREHOUSE_TYPES, WAREHOUSE_TYPE_OPERATIONS
 
 DOCTYPE = "Warehouse Type"
 TYPE_FIELDS = {"Warehouse": "warehouse_type", "Stock Entry Detail": "t_warehouse_type"}
@@ -62,7 +62,12 @@ def check_existing_policy():
 		different = [
 			kind
 			for kind in sorted(active_types & old_roles.keys())
-			if (old_roles[kind] or None) != warehouse_type_outgoing_role(LEGACY_TYPES.get(kind, kind))
+			if (old_roles[kind] or None)
+			!= (
+				"Stock Manager"
+				if LEGACY_TYPES.get(kind, kind) in CONTROLLED_OUTGOING_WAREHOUSE_TYPES
+				else None
+			)
 		]
 		if different:
 			frappe.throw(f"Review the existing Outgoing Role for {', '.join(different)} before retiring Warehouse Type.")

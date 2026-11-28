@@ -1890,7 +1890,7 @@ class StockController(AccountsController):
 			and frappe.db.get_value("Quality Inspection", row.quality_inspection, "reference_type")
 			== "Pick List"
 		):
-			from connect_diagnostics_setup.stock.outgoing_inspection import validate_delivery
+			from erpnext.stock.outgoing_inspection import validate_delivery
 
 			validate_delivery(self)
 			return

@@ -327,6 +327,16 @@ class Employee(NestedSet):
 	def on_trash(self):
 		self.update_nsm_model()
 		delete_events(self.doctype, self.name)
+		permissions = frappe.db.get_values(
+			"User Permission", {"allow": "Employee", "for_value": self.name}, "name", pluck=True, for_update=True
+		)
+		for name in permissions:
+			frappe.delete_doc("User Permission", name, ignore_permissions=True)
+		if frappe.db.has_column("Department", "department_manager"):
+			filters = {"department_manager": self.name}
+			if frappe.db.get_value("Department", filters, "name", for_update=True):
+				frappe.db.set_value("Department", filters, "department_manager", None)
+				self.run_method("on_department_manager_unassigned")
 
 	def validate_preferred_email(self):
 		if self.prefered_contact_email and not self.get(scrub(self.prefered_contact_email)):

@@ -22,6 +22,8 @@
   "customer",
   "stock_control_section",
   "warehouse_type",
+  "operating_department",
+  "incoming_qi_team",
   "default_storage_location",
   "transit_section",
   "default_in_transit_warehouse",
@@ -162,6 +164,23 @@
    "label": "Warehouse Type",
    "description": "Select a Warehouse Type to define the permitted stock operations.",
    "options": "\nStock\nTransit\nBorrowed\nFrozen\nLost\nFound\nQuarantine\nWrite-Off"
+  },
+  {
+   "depends_on": "eval:!!doc.operating_department || !doc.is_group",
+   "description": "The department responsible for operating this warehouse.",
+   "fieldname": "operating_department",
+   "fieldtype": "Link",
+   "label": "Operating Department",
+   "no_copy": 1,
+   "options": "Department"
+  },
+  {
+   "depends_on": "eval:!doc.is_group || !!doc.incoming_qi_team",
+   "description": "Inspects purchases delivered to this warehouse. Leave empty to use the item's team.",
+   "fieldname": "incoming_qi_team",
+   "fieldtype": "Link",
+   "label": "Incoming Quality Inspection Team",
+   "options": "Quality Inspection Team"
   },
   {
    "fieldname": "column_break_3",

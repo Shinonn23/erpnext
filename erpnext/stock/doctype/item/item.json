@@ -17,12 +17,12 @@
   "item_name",
   "item_group",
   "product_group",
-  "registration_requirement",
   "stock_uom",
   "image",
   "column_break0",
   "disabled",
   "is_stock_item",
+  "loan_consumable",
   "is_deposit_item",
   "is_fixed_asset",
   "auto_create_assets",
@@ -148,12 +148,16 @@
   "default_asset_item_for_conversion",
   "quality_tab",
   "inspection_required_before_purchase",
+  "incoming_qi_team",
   "purchase_inspection_granularity",
   "column_break_pxjh",
   "inspection_required_before_delivery",
+  "outgoing_qi_team",
+  "outgoing_inspection_granularity",
   "qi_template_section",
   "quality_inspection_template",
   "regulatory_tab",
+  "registration_requirement",
   "regulatory_product_category",
   "regulatory_other_category",
   "medical_device_category",
@@ -283,6 +287,13 @@
    "oldfieldname": "is_stock_item",
    "oldfieldtype": "Select",
    "read_only_depends_on": "eval:doc.is_fixed_asset"
+  },
+  {
+   "depends_on": "eval:doc.is_stock_item",
+   "description": "May be consumed for a customer demonstration from an employee's stock borrowing.",
+   "fieldname": "loan_consumable",
+   "fieldtype": "Check",
+   "label": "Consumable for Customer Demonstration"
   },
   {
    "default": "1",
@@ -851,12 +862,36 @@
    "show_description_on_click": 1
   },
   {
+   "depends_on": "eval:doc.inspection_required_before_purchase",
+   "description": "Overrides the Product Group's default Quality Inspection team for this direction only.",
+   "fieldname": "incoming_qi_team",
+   "fieldtype": "Link",
+   "label": "Incoming Quality Inspection Team",
+   "options": "Quality Inspection Team"
+  },
+  {
    "default": "0",
    "description": "A quality inspection must be completed before generating a Delivery Note for this item.",
    "fieldname": "inspection_required_before_delivery",
    "fieldtype": "Check",
    "label": "Inspection Required before Delivery",
    "show_description_on_click": 1
+  },
+  {
+   "depends_on": "eval:doc.inspection_required_before_delivery",
+   "description": "Overrides the Product Group's default Quality Inspection team for this direction only.",
+   "fieldname": "outgoing_qi_team",
+   "fieldtype": "Link",
+   "label": "Outgoing Quality Inspection Team",
+   "options": "Quality Inspection Team"
+  },
+  {
+   "default": "Batch/Lot",
+   "depends_on": "eval:doc.inspection_required_before_delivery",
+   "fieldname": "outgoing_inspection_granularity",
+   "fieldtype": "Select",
+   "label": "Delivery Inspection By",
+   "options": "Batch/Lot\nSerial Number"
   },
   {
    "fieldname": "qi_template_section",
@@ -1209,6 +1244,15 @@
    "label": "Regulatory"
   },
   {
+   "depends_on": "is_sales_item",
+   "fieldname": "registration_requirement",
+   "fieldtype": "Select",
+   "label": "Registration Requirement for Sale",
+   "options": "\nPending Assessment\nRequired\nNot Required",
+   "description": "Purchasing or an Item Manager assesses whether this Item requires registration before sale. Regulatory Affairs confirms compliance.",
+   "no_copy": 1
+  },
+  {
    "default": "Not Regulated",
    "description": "Defaults to Not Regulated, which needs no regulatory documents for sales or receiving. Regulatory Affairs selects a Thai FDA product group when registration is required.",
    "fieldname": "regulatory_product_category",
@@ -1279,14 +1323,6 @@
    "fieldname": "is_deposit_item",
    "fieldtype": "Check",
    "label": "Is Deposit Item"
-  },
-  {
-   "fieldname": "registration_requirement",
-   "fieldtype": "Select",
-   "label": "Registration Requirement for Sale",
-   "options": "\nPending Assessment\nRequired\nNot Required",
-   "description": "Purchasing or an Item Manager assesses whether this Item requires registration before sale. Regulatory Affairs confirms compliance.",
-   "no_copy": 1
   },
   {
    "fieldname": "purchase_inspection_granularity",

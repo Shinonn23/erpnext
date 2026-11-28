@@ -58,7 +58,7 @@ erpnext.SerialBatchPackageSelector = class SerialNoBatchBundleUpdate {
 				if (this.item.serial_no && !this.item.serial_and_batch_bundle) {
 					let serial_nos = this.item.serial_no.split("\n");
 					if (this.frm.doc.doctype === "Pick List" && serial_nos.length > 1) {
-						frappe.call({ method: "connect_diagnostics_setup.stock.pick_stock.selector_validate_entries",
+						frappe.call({ method: "erpnext.stock.pick_stock.selector_validate_entries",
 							args: this.pick_list_validation_args(serial_nos.filter(Boolean).map((serial_no) => ({ serial_no }))),
 							callback: (r) => { this.set_data(r.message); frappe.model.set_value(this.item.doctype, this.item.name, "serial_no", ""); } });
 					} else if (serial_nos.length > 1) {
@@ -337,7 +337,7 @@ erpnext.SerialBatchPackageSelector = class SerialNoBatchBundleUpdate {
 			frappe.throw(__("Please enter Serial Nos"));
 		}
 		if (this.frm.doc.doctype === "Pick List") {
-			frappe.call({ method: "connect_diagnostics_setup.stock.pick_stock.selector_validate_entries",
+			frappe.call({ method: "erpnext.stock.pick_stock.selector_validate_entries",
 				args: this.pick_list_validation_args(upload_serial_nos.split(/\r?\n/).map((serial_no) => serial_no.trim()).filter(Boolean).map((serial_no) => ({ serial_no }))),
 				callback: (r) => { this.dialog.fields_dict.entries.df.data = []; this.set_data(r.message); this.update_bundle_entries(); } });
 			return;
@@ -381,7 +381,7 @@ erpnext.SerialBatchPackageSelector = class SerialNoBatchBundleUpdate {
 		const file_path = this.dialog.get_value("attach_serial_batch_csv");
 		if (this.frm.doc.doctype === "Pick List") {
 			const { entries, ...args } = this.pick_list_validation_args([]);
-			frappe.call({ method: "connect_diagnostics_setup.stock.pick_stock.selector_import_csv",
+			frappe.call({ method: "erpnext.stock.pick_stock.selector_import_csv",
 				args: { ...args, file_path }, callback: (r) => this.set_data(r.message) });
 			return;
 		}
@@ -434,7 +434,7 @@ erpnext.SerialBatchPackageSelector = class SerialNoBatchBundleUpdate {
 	get_batch_qty(batch_no, callback) {
 		let warehouse = this.item.s_warehouse || this.item.t_warehouse || this.item.warehouse;
 		if (this.frm.doc.doctype === "Pick List") {
-			frappe.call({ method: "connect_diagnostics_setup.stock.pick_stock.get_pickable_stock",
+			frappe.call({ method: "erpnext.stock.pick_stock.get_pickable_stock",
 				args: { item_code: this.item.item_code, warehouse, batch_no,
 					storage_location: this.item.storage_location, pick_list: this.frm.is_new() ? "" : this.frm.doc.name },
 				callback: (r) => callback((r.message || []).reduce((sum, row) => sum + flt(row.qty), 0)) });
@@ -470,7 +470,7 @@ erpnext.SerialBatchPackageSelector = class SerialNoBatchBundleUpdate {
 				in_list_view: 1,
 				get_query: () => {
 					if (this.frm.doc.doctype === "Pick List") {
-						return { query: "connect_diagnostics_setup.stock.pick_stock.selector_serial_query", filters: {
+						return { query: "erpnext.stock.pick_stock.selector_serial_query", filters: {
 							item_code: this.item.item_code, warehouse: this.item.warehouse,
 							storage_location: this.item.storage_location || "", batch_no: this.item.batch_no || "",
 							pick_list: this.frm.is_new() ? "" : this.frm.doc.name,
@@ -508,7 +508,7 @@ erpnext.SerialBatchPackageSelector = class SerialNoBatchBundleUpdate {
 					},
 					get_query: () => {
 						if (this.frm.doc.doctype === "Pick List") {
-							return { query: "connect_diagnostics_setup.stock.pick_stock.batch_query", filters: {
+							return { query: "erpnext.stock.pick_stock.batch_query", filters: {
 								item_code: this.item.item_code, warehouse: this.item.warehouse,
 								storage_location: this.item.storage_location || "", pick_list: this.frm.is_new() ? "" : this.frm.doc.name,
 							} };
@@ -600,7 +600,7 @@ erpnext.SerialBatchPackageSelector = class SerialNoBatchBundleUpdate {
 		}
 
 		if (qty && this.frm.doc.doctype === "Pick List") {
-			frappe.call({ method: "connect_diagnostics_setup.stock.pick_stock.selector_pickable_data",
+			frappe.call({ method: "erpnext.stock.pick_stock.selector_pickable_data",
 				args: { item_code: this.item.item_code, warehouse, qty, has_serial_no: this.item.has_serial_no,
 					storage_location: this.item.storage_location, batch_no: this.item.batch_no,
 					pick_list: this.frm.is_new() ? "" : this.frm.doc.name },
@@ -642,7 +642,7 @@ erpnext.SerialBatchPackageSelector = class SerialNoBatchBundleUpdate {
 
 		this.dialog.set_value("enter_manually", 0);
 		if (this.frm.doc.doctype === "Pick List" && (scan_serial_no || scan_batch_no)) {
-			frappe.call({ method: "connect_diagnostics_setup.stock.pick_stock.selector_is_pickable",
+			frappe.call({ method: "erpnext.stock.pick_stock.selector_is_pickable",
 				args: { item_code: this.item.item_code, warehouse: this.item.warehouse,
 					storage_location: this.item.storage_location, batch_no: scan_batch_no || this.item.batch_no,
 					serial_no: scan_serial_no, pick_list: this.frm.is_new() ? "" : this.frm.doc.name },
@@ -754,7 +754,7 @@ erpnext.SerialBatchPackageSelector = class SerialNoBatchBundleUpdate {
 			frappe.throw(__("Please select a Warehouse"));
 		}
 		if (this.frm.doc.doctype === "Pick List") {
-			entries = await frappe.xcall("connect_diagnostics_setup.stock.pick_stock.selector_validate_entries",
+			entries = await frappe.xcall("erpnext.stock.pick_stock.selector_validate_entries",
 				this.pick_list_validation_args(entries));
 		}
 

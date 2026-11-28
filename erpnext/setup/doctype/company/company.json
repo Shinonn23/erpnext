@@ -130,6 +130,7 @@
   "valuation_method",
   "column_break_32",
   "stock_adjustment_account",
+  "demo_consumable_expense_account",
   "stock_received_but_not_billed",
   "default_provisional_account",
   "manufacturing_section",
@@ -516,6 +517,12 @@
    "ignore_user_permissions": 1,
    "label": "Stock Adjustment Account",
    "no_copy": 1,
+   "options": "Account"
+  },
+  {
+   "fieldname": "demo_consumable_expense_account",
+   "fieldtype": "Link",
+   "label": "Customer Demo Consumable Expense Account",
    "options": "Account"
   },
   {

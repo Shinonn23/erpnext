@@ -47,6 +47,8 @@
   "batch_no",
   "inspection_section",
   "quality_inspection",
+  "outgoing_qi",
+  "outgoing_pick_component",
   "sampling_section",
   "retain_sample",
   "sampling_column",
@@ -92,6 +94,7 @@
   "borrowing_item",
   "pick_list_item",
   "original_item",
+  "repair_return_issue_row",
   "putaway_rule",
   "column_break_51",
   "reference_purchase_receipt",
@@ -367,6 +370,22 @@
    "options": "Quality Inspection"
   },
   {
+   "fieldname": "outgoing_qi",
+   "fieldtype": "Link",
+   "label": "Outgoing Quality Inspection",
+   "no_copy": 1,
+   "options": "Quality Inspection",
+   "read_only": 1
+  },
+  {
+   "fieldname": "outgoing_pick_component",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Picked Component Row",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
    "fieldname": "accounting",
    "fieldtype": "Section Break",
    "label": "Accounting"
@@ -486,6 +505,14 @@
    "no_copy": 1,
    "options": "Item",
    "print_hide": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "repair_return_issue_row",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Original Repair Issue Row",
+   "no_copy": 1,
    "read_only": 1
   },
   {

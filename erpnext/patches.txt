@@ -263,6 +263,9 @@ erpnext.patches.v15_0.rename_subcontracting_fields
 erpnext.patches.v15_0.unset_incorrect_additional_discount_percentage
 erpnext.patches.v16_0.rename_custody_loan_to_borrowing
 erpnext.patches.v16_0.rename_stock_count_lost_fields
+erpnext.patches.v16_0.move_my_demo_consumption_to_borrowing
+erpnext.patches.v16_0.move_setup_reports_to_erpnext
+erpnext.patches.v16_0.move_quality_inspection_teams
 
 [post_model_sync]
 erpnext.patches.v16_0.rename_item_asset_conversion_fields
@@ -561,3 +564,5 @@ erpnext.patches.v16_0.unhide_accounting_dimensions_section
 erpnext.patches.v16_0.remove_warehouse_zone_links
 erpnext.patches.v16_0.retire_warehouse_type
 erpnext.patches.v16_0.remove_retired_party_fields
+erpnext.patches.v16_0.move_customer_demo_fulfillment_to_borrowing
+erpnext.patches.v16_0.move_setup_reports_sidebar_to_erpnext

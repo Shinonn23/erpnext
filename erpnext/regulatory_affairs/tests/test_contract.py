@@ -152,9 +152,12 @@ class TestRegulatoryFields(unittest.TestCase):
 			self.assertEqual(sorted(document["field_order"]), sorted(fieldnames), doctype)
 			specs, order = ra_specs(doctype)
 			self.assertEqual([spec["fieldname"] for spec in specs], list(names), doctype)
-			start = order.index(names[0])
+			block = list(names)
+			if doctype == "Item":
+				block.insert(1, "registration_requirement")
+			start = order.index(block[0])
 			self.assertEqual(
-				order[start : start + len(names)], list(names), f"{doctype}: block is not contiguous"
+				order[start : start + len(block)], block, f"{doctype}: block is not contiguous"
 			)
 
 	def test_the_fields_are_not_made_as_custom_fields_any_more(self):
@@ -202,9 +205,15 @@ class TestRegulatoryFields(unittest.TestCase):
 
 	def test_item_tab_sits_between_quality_and_pricing(self):
 		_, order = ra_specs("Item")
+		start = order.index("regulatory_tab")
 		self.assertEqual(
-			order[order.index("regulatory_tab") - 2 : order.index("regulatory_tab")],
-			["quality_inspection_template", "registration_requirement"],
+			order[start - 1 : start + 3],
+			[
+				"quality_inspection_template",
+				"regulatory_tab",
+				"registration_requirement",
+				"regulatory_product_category",
+			],
 		)
 		self.assertEqual(order[order.index("current_registration_status") + 1], "pricing_tab")
 

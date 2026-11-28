@@ -30,6 +30,9 @@
   "qty",
   "stock_qty",
   "picked_qty",
+  "outgoing_inspection_granularity",
+  "outgoing_inspection_requirement",
+  "outgoing_inspection_subject",
   "stock_reserved_qty",
   "column_break_11",
   "uom",
@@ -64,6 +67,31 @@
    "fieldtype": "Float",
    "in_list_view": 1,
    "label": "Picked Qty (in Stock UOM)"
+  },
+  {
+   "fieldname": "outgoing_inspection_granularity",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Delivery Inspection By",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "outgoing_inspection_requirement",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Delivery Inspection Requirement",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "outgoing_inspection_subject",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Delivery Inspection Item",
+   "no_copy": 1,
+   "options": "Item",
+   "read_only": 1
   },
   {
    "fieldname": "warehouse",

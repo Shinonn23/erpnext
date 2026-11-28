@@ -64375,3 +64375,42 @@ msgstr "เลือกทุกเงื่อนไขที่ตำแหน
 
 msgid "Disable when storage locations are selected using Item storage preferences instead of capacity-based Putaway Rules."
 msgstr "ปิดเมื่อเลือกตำแหน่งจากรายการแนะนำในสินค้าแทน Putaway Rule ที่จัดสรรตามความจุ"
+
+msgid "My Demo Consumables"
+msgstr "วัสดุสิ้นเปลืองสำหรับสาธิตของฉัน"
+
+msgid "No demo consumables remain on this borrowing."
+msgstr "ใบยืมนี้ไม่มีวัสดุสิ้นเปลืองสำหรับสาธิตเหลืออยู่"
+
+msgid "Confirm Customer Demo Consumption"
+msgstr "ยืนยันการใช้วัสดุสำหรับสาธิตให้ลูกค้า"
+
+msgid "Demo Date"
+msgstr "วันที่สาธิต"
+
+msgid "Serial Number"
+msgstr "หมายเลขซีเรียล"
+
+msgid "Confirm and Issue"
+msgstr "ยืนยันและเบิกวัสดุ"
+
+msgid "Demo consumption recorded. Stock Entry: {0}"
+msgstr "บันทึกการใช้วัสดุสำหรับสาธิตแล้ว เอกสารเคลื่อนไหวสต็อก: {0}"
+
+msgid "Demo Consumption"
+msgstr "ใช้วัสดุสำหรับสาธิต"
+
+msgid "You have no outstanding borrowed stock."
+msgstr "คุณไม่มีสินค้ายืมคงค้าง"
+
+msgid "My Outstanding Borrowed Stock"
+msgstr "สินค้ายืมคงค้างของฉัน"
+
+msgid "Consumables Available for Customer Demo"
+msgstr "วัสดุสิ้นเปลืองที่ใช้สาธิตให้ลูกค้าได้"
+
+msgid "No borrowed consumables are available for demo consumption."
+msgstr "ไม่มีวัสดุสิ้นเปลืองที่ยืมไว้และสามารถใช้สาธิตได้"
+
+msgid "Use for Customer Demo"
+msgstr "ใช้สาธิตให้ลูกค้า"

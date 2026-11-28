@@ -73,10 +73,28 @@ web_include_icons = [
 
 doctype_js = {
 	"Address": "public/js/address.js",
+	"Asset": "public/js/asset_inspection_hold.js",
+	"Asset Repair": ["public/js/repair_parts_request.js", "public/js/repair_connections.js"],
 	"Item": "regulatory_affairs/item.js",
-	"Material Request": "assets/doctype/material_request/material_request.js",
-	"Asset Movement": "assets/doctype/asset_movement/asset_movement.js",
+	"Material Request": [
+		"assets/doctype/material_request/material_request.js",
+		"public/js/demo_reservations.js",
+		"public/js/loan_release.js",
+		"public/js/loan_set_return.js",
+	],
+	"Pick List": "public/js/pick_list_stock_picker.js",
+	"Stock Entry": ["public/js/repair_parts_return.js", "public/js/repair_connections.js", "public/js/stock_entry_quarantine.js"],
+	"Asset Movement": ["assets/doctype/asset_movement/asset_movement.js", "public/js/borrowing_inspections.js"],
+	"Borrowing": [
+		"public/js/borrowing_placement.js",
+		"public/js/loan_demo_conversion.js",
+		"public/js/demo_reservations.js",
+		"public/js/borrowing_inspections.js",
+	],
 	"Borrowing Adjustment": "borrowing/doctype/borrowing_adjustment/borrowing_adjustment.js",
+	"Stock to Asset Conversion": "public/js/loan_demo_conversion.js",
+	"Delivery Note": ["public/js/borrowing_inspections.js", "public/js/receipt_quarantine.js"],
+	"Purchase Receipt": ["public/js/purchase_receipt_rejected.js", "public/js/receipt_quarantine.js"],
 	"Communication": "public/js/communication.js",
 	"Event": "public/js/event.js",
 	"Newsletter": "public/js/newsletter.js",
@@ -84,16 +102,17 @@ doctype_js = {
 	"Journal Entry": "public/js/thailand/journal_entry.js",
 	"Payment Entry": "public/js/thailand/payment_entry.js",
 	"Expense Claim": "public/js/thailand/expense_claim.js",
-	"Purchase Invoice": "public/js/thailand/purchase_invoice.js",
+	"Purchase Invoice": ["public/js/thailand/purchase_invoice.js", "public/js/receipt_quarantine.js"],
 	"Sales Order": "public/js/thailand/sales_order.js",
 	"Purchase Order": "public/js/thailand/purchase_order.js",
-	"Sales Invoice": "public/js/thailand/sales_invoice.js",
+	"Sales Invoice": ["public/js/thailand/sales_invoice.js", "public/js/receipt_quarantine.js"],
 	"Purchase Tax Invoice": "public/js/thailand/purchase_tax_invoice.js",
 	"Sales Tax Invoice": "public/js/thailand/sales_tax_invoice.js",
 	"Currency Exchange Settings": "public/js/thailand/currency_exchange_settings.js",
 	"Tax Withholding Category": "public/js/thailand/tax_withholding_category.js",
 }
 doctype_list_js = {
+	"Asset": "public/js/asset_list_inspection_hold.js",
 	"Stock Entry": "stock/doctype/stock_entry/stock_entry_list.js",
 	"Asset Movement": "assets/doctype/asset_movement/asset_movement_list.js",
 	"Code List": [
@@ -107,14 +126,21 @@ doctype_list_js = {
 page_js = {"print": "public/js/print.js"}
 
 extend_doctype_class = {
+	"Material Request": "erpnext.borrowing.demo_reservations.DemoMaterialRequestMixin",
 	"Address": "erpnext.accounts.custom.address.ERPNextAddress",
 	"Payment Entry": "erpnext.regional.thailand.custom.payment_entry.PaymentEntry",
-	"Quality Inspection": "erpnext.borrowing.doctype.borrowing.borrowing_core.BorrowingQualityInspectionMixin",
+	"Pick List": "erpnext.stock.pick_stock.PickListFefoMixin",
+	"Quality Inspection": [
+		"erpnext.borrowing.doctype.borrowing.borrowing_core.BorrowingQualityInspectionMixin",
+		"erpnext.borrowing.loan_inspection.LoanInspectionMixin",
+		"erpnext.assets.doctype.asset_repair.reinspection.RepairInspectionMixin",
+	],
 	# a Pay Account and a Receive Account per company, required by Applies To
 	"Tax Withholding Category": "erpnext.regional.thailand.custom.withholding.TaxWithholdingCategory",
 }
 
 override_whitelisted_methods = {
+	"erpnext.controllers.stock_controller.make_quality_inspections": "erpnext.borrowing.loan_inspection.make_quality_inspections",
 	"frappe.www.contact.send_message": "erpnext.templates.utils.send_message",
 	"erpnext.accounts.doctype.payment_entry.payment_entry.get_outstanding_reference_documents": "erpnext.regional.thailand.custom.payment_entry.get_outstanding_reference_documents",
 }
@@ -338,6 +364,8 @@ on_print_pdf = "erpnext.regional.thailand.custom.print_utils.add_comment_on_prin
 
 # Connections of a payment / journal: its Withholding Tax Certs and Thai tax invoices (Voucher Type / Voucher No)
 override_doctype_dashboards = {
+	"Asset Repair": "erpnext.assets.doctype.asset_repair.parts_dashboard.asset_repair",
+	"Stock Entry": "erpnext.assets.doctype.asset_repair.parts_dashboard.stock_entry",
 	"Payment Entry": "erpnext.regional.thailand.custom.dashboard_overrides.get_dashboard_data_for_payment_entry",
 	"Journal Entry": "erpnext.regional.thailand.custom.dashboard_overrides.get_dashboard_data_for_journal_entry",
 	"Sales Invoice": "erpnext.regional.thailand.custom.dashboard_overrides.get_dashboard_data_for_sales_invoice",
@@ -583,11 +611,35 @@ period_closing_doctypes = [
 ]
 
 sqlite_search = ["erpnext.stock.doctype.item.item_search.ItemSearch"]
+company_data_to_be_ignored = ["Quality Inspection Team"]
 
 doc_events = {
 	"Pick List": {
+		"before_validate": "erpnext.stock.pick_stock.locate_draft_rows",
+		"validate": [
+			"erpnext.stock.pick_stock.refuse_receiving_picks",
+			"erpnext.stock.pick_stock.refuse_save_without_warehouse",
+		],
+		"before_submit": [
+			"erpnext.stock.pick_stock.validate_pick_list_stock",
+			"erpnext.stock.outgoing_inspection.freeze",
+		],
+		"before_cancel": "erpnext.stock.outgoing_inspection.cancel_pick",
 		"on_trash": "erpnext.borrowing.doctype.borrowing.borrowing_core.unlink_deleted_loan_transaction",
 	},
+	"Quality Inspection": {
+		"validate": [
+			"erpnext.stock.outgoing_inspection.validate_inspection",
+			"erpnext.stock.quarantine.receipt_quarantine.refuse_unsubmitted_receipt",
+			"erpnext.borrowing.loan_inspection.validate_loan_note_inspection",
+		],
+		"before_submit": "erpnext.stock.outgoing_inspection.validate_inspection",
+		"before_cancel": [
+			"erpnext.stock.outgoing_inspection.refuse_cancel",
+			"erpnext.stock.quarantine.quarantine_inspection.refuse_cancel_zone_inspection",
+		],
+	},
+	"Serial and Batch Bundle": {"validate": "erpnext.stock.pick_stock.validate_pick_bundle"},
 	"*": {
 		"validate": [
 			"erpnext.support.doctype.service_level_agreement.service_level_agreement.apply",
@@ -607,35 +659,99 @@ doc_events = {
 		"before_validate": [
 			"erpnext.borrowing.doctype.borrowing.borrowing_core.validate_generated_transaction",
 			"erpnext.stock.doctype.stock_entry.shipment_stock_entry.prepare_stock_entry_for_shipment",
+			"erpnext.stock.outgoing_inspection.validate_rejected_transfer",
+			"erpnext.assets.doctype.asset_repair.parts.validate_parts_return",
+			"erpnext.stock.quarantine.quarantine_release.refuse_manual_move_out",
 		],
+		"before_submit": "erpnext.assets.doctype.asset_repair.parts.validate_parts_return",
 		"before_cancel": [
 			"erpnext.borrowing.doctype.borrowing.borrowing_core.validate_generated_transaction_cancellation",
 			"erpnext.stock.doctype.stock_entry.shipment_stock_entry.validate_stock_entry_shipment_cancel",
+			"erpnext.assets.doctype.asset_repair.parts.validate_issue_cancel",
 		],
 		"validate": [
 			"erpnext.borrowing.doctype.borrowing.borrowing_core.validate_generated_transaction",
 			"erpnext.assets.doctype.material_request.material_request.validate_stock_entry_request",
 			"erpnext.stock.doctype.stock_entry.shipment_stock_entry.validate_stock_entry_shipment",
+			"erpnext.stock.quarantine.quarantine_release.refuse_staging_target",
+			"erpnext.stock.quarantine.quarantine_release.refuse_quarantine_extras",
 		],
 		"on_submit": [
 			"erpnext.stock.doctype.material_request.material_request.update_completed_and_requested_qty",
 			"erpnext.borrowing.doctype.borrowing.borrowing_core.update_borrowing_status",
+			"erpnext.stock.outgoing_inspection.sync_picked_after_reject",
 		],
 		"on_cancel": [
 			"erpnext.stock.doctype.material_request.material_request.update_completed_and_requested_qty",
 			"erpnext.borrowing.doctype.borrowing.borrowing_core.update_borrowing_status",
+			"erpnext.stock.outgoing_inspection.sync_picked_after_reject",
 		],
+	},
+	"Material Request": {
+		"validate": [
+			"erpnext.assets.doctype.asset_repair.parts.validate_parts_request",
+			"erpnext.borrowing.demo_reservations.validate_request",
+		],
+		"before_submit": "erpnext.assets.doctype.asset_repair.parts.validate_parts_request",
+		"before_update_after_submit": "erpnext.borrowing.demo_reservations.validate_request",
+		"on_update": "erpnext.borrowing.demo_reservations.sync_reservations",
+		"on_submit": "erpnext.borrowing.loan_automation.issue_approved_request",
+		"on_cancel": "erpnext.borrowing.demo_reservations.release_reservations",
+		"on_trash": "erpnext.borrowing.demo_reservations.release_reservations",
+	},
+	"Asset": {
+		"validate": "erpnext.borrowing.demo_reservations.validate_asset_reservation_fields",
+	},
+	"Asset Repair": {
+		"validate": [
+			"erpnext.borrowing.loan_inspection.validate_return_repair",
+			"erpnext.assets.doctype.asset_repair.reinspection.hold_repaired_asset",
+		],
+		"before_submit": "erpnext.assets.doctype.asset_repair.parts.prevent_duplicate_asset_consumption",
+		"before_cancel": "erpnext.assets.doctype.asset_repair.reinspection.validate_repair_cancel",
+		"on_update": "erpnext.borrowing.demo_reservations.on_return_event",
+	},
+	"Borrowing": {
+		"before_validate": "erpnext.borrowing.demo_reservations.prepare_loan_location",
+		"before_delivery": "erpnext.borrowing.loan_inspection.validate_asset_loan_inspections",
+		"validate": [
+			"erpnext.borrowing.demo_reservations.validate_loan",
+			"erpnext.borrowing.placement.validate_placement",
+		],
+		"before_update_after_submit": [
+			"erpnext.borrowing.demo_reservations.validate_loan",
+			"erpnext.borrowing.placement.validate_placement",
+		],
+		"before_cancel": "erpnext.borrowing.demo_reservations.validate_loan",
+		"on_submit": "erpnext.borrowing.demo_reservations.on_loan_submit",
+	},
+	"Stock to Asset Conversion": {
+		"on_submit": "erpnext.borrowing.loan_release.adopt_converted_assets",
 	},
 	"Asset Movement": {
 		"on_trash": "erpnext.borrowing.doctype.borrowing.borrowing_core.unlink_deleted_loan_transaction",
 		"validate": "erpnext.borrowing.doctype.borrowing.borrowing_core.validate_generated_transaction",
-		"before_cancel": "erpnext.borrowing.doctype.borrowing.borrowing_core.validate_generated_transaction_cancellation",
-		"on_submit": "erpnext.borrowing.doctype.borrowing.borrowing_core.update_borrowing_status",
-		"on_cancel": "erpnext.borrowing.doctype.borrowing.borrowing_core.update_borrowing_status",
+		"before_cancel": [
+			"erpnext.borrowing.doctype.borrowing.borrowing_core.validate_generated_transaction_cancellation",
+			"erpnext.assets.inspection_hold.validate_receipt_cancellation",
+		],
+		"on_submit": [
+			"erpnext.borrowing.doctype.borrowing.borrowing_core.update_borrowing_status",
+			"erpnext.assets.inspection_hold.hold_received_assets",
+			"erpnext.borrowing.demo_reservations.on_return_event",
+		],
+		"on_cancel": [
+			"erpnext.borrowing.doctype.borrowing.borrowing_core.update_borrowing_status",
+			"erpnext.assets.inspection_hold.release_received_asset_holds",
+		],
 	},
 	"Delivery Note": {
 		"on_trash": "erpnext.borrowing.doctype.borrowing.borrowing_core.unlink_deleted_loan_transaction",
-		"validate": "erpnext.borrowing.doctype.borrowing.borrowing_core.validate_generated_transaction",
+		"before_validate": "erpnext.stock.outgoing_inspection.validate_delivery",
+		"validate": [
+			"erpnext.borrowing.doctype.borrowing.borrowing_core.validate_generated_transaction",
+			"erpnext.stock.doctype.pick_list.pick_identity.validate_against_pick",
+		],
 		"before_submit": "erpnext.borrowing.doctype.borrowing.borrowing_core.post_return_batch_swaps",
 		"before_cancel": "erpnext.borrowing.doctype.borrowing.borrowing_core.validate_generated_transaction_cancellation",
 		"on_submit": "erpnext.borrowing.doctype.borrowing.borrowing_core.update_borrowing_status",
@@ -747,6 +863,7 @@ scheduler_events = {
 	],
 	"daily": [
 		"erpnext.regulatory_affairs.alerts.run_daily_expiry_processing",
+		"erpnext.borrowing.demo_reservations.send_demo_reminders",
 	],
 	"daily_long": [],
 	"daily_maintenance": [
@@ -1081,6 +1198,27 @@ for _doctype in (
 		"erpnext.stock.doctype.storage_location.storage_location.set_default_storage_locations",
 		*_existing,
 	]
+
+# Route receipt rows after locating them. Materialize authorized Stock Entry bundles before the final
+# quarantine check so it verifies the exact lots and quantities that will be posted.
+for _doctype in ("Purchase Receipt", "Purchase Invoice", "Delivery Note", "Sales Invoice"):
+	doc_events[_doctype]["before_validate"].append(
+		"erpnext.stock.quarantine.receipt_quarantine.route_receipt_rows"
+	)
+for _doctype in ("Purchase Receipt", "Purchase Invoice"):
+	_events = doc_events[_doctype]
+	for _event in ("validate", "before_submit"):
+		_existing = _events.get(_event, [])
+		_existing = _existing if isinstance(_existing, list) else [_existing]
+		_events[_event] = [
+			*_existing,
+			"erpnext.stock.quarantine.receipt_quarantine.validate_hold_purchase_return",
+		]
+_stock_submit = doc_events["Stock Entry"]["before_submit"]
+doc_events["Stock Entry"]["before_submit"] = [
+	*(_stock_submit if isinstance(_stock_submit, list) else [_stock_submit]),
+	"erpnext.stock.quarantine.quarantine_release.prepare_and_validate_stock_entry",
+]
 
 # Data Import
 # -----------

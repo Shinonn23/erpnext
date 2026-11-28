@@ -52,8 +52,8 @@ the same code does not inherit coverage.
 registration in force) or **Not Regulated** (sales, purchases and receipts need no regulatory documents).
 New and legacy blank Items take the default when saved; an existing classification cannot be cleared. Only
 Regulatory Affairs may change a classified Item to a different category. Purchasing or an Item Manager assesses
-**Registration Requirement for Sale** in Item Details; its visibility does not depend on enabling Quality Inspection.
-It also remains visible when Product Category is **Not Regulated**. Choosing **Required** keeps such an Item
+**Registration Requirement for Sale** at the top of the Item's Regulatory tab. The assessment is shown for sales Items,
+including those with Product Category **Not Regulated**. Choosing **Required** keeps such an Item
 out of sales selectors and blocks sales saves, including API saves, until Regulatory Affairs assigns a regulated
 category and the Item has valid registration coverage. A Not Regulated Item assessed **Not Required** keeps its exemption.
 Every **Required** Item needs valid registration coverage even for Administrator, when a document's validation
@@ -75,7 +75,7 @@ unclassified. The Item form displays current coverage from the regulatory regist
 *Coverage Matrix* shows the underlying mappings. Verify and Activate sets Last Verified On.
 
 The **Regulatory** tab also has `regulatory_other_category` (for Other), `medical_device_category` (only for Medical Device); an Item names no Regulatory Owner (a person is no master data: the default owner of Regulatory Settings is asked). Each item row of the six guarded transactions
-(not the Quotation) gets a collapsed, read-only **Regulatory Snapshot** section (`regulatory_*` fields listed in `custom_fields.SNAPSHOT_FIELDNAMES`). The 70 RA fields are DocFields in the DocType JSON of Item and of
+(not the Quotation) gets a collapsed, read-only **Regulatory Snapshot** section (`regulatory_*` fields listed in `custom_fields.SNAPSHOT_FIELDNAMES`). The RA fields are DocFields in the DocType JSON of Item and of
 the six item tables, not Custom Fields (migrate does only schema: Role Profile Authority Design 12.1, batch e); `custom_fields.RA_FIELDS` lists
 their names. A site that made them as Custom Fields loses those rows to the schema patch `move_fork_only_fields_e` of the Connect Diagnostics
 app (the column and its data stay, what the site changed in Customize Form stays as a Property Setter). The legacy Item fields *Thai FDA Assessment Status* (`custom_thai_fda_applicability`)

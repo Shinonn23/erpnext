@@ -14,6 +14,7 @@ from frappe.query_builder import DocType
 from frappe.query_builder.functions import Coalesce, Sum
 from frappe.utils import flt, get_datetime, get_time, getdate, now_datetime, strip_html
 
+from erpnext.stock.count_variance import mark_count_reconciliation, validate_variance_account
 from erpnext.stock.doctype.inventory_dimension.inventory_dimension import get_inventory_dimensions
 from erpnext.stock.doctype.serial_and_batch_bundle.serial_and_batch_bundle import (
 	get_serial_nos_based_on_posting_date,
@@ -1012,6 +1013,7 @@ class StockCount(Document):
 		reconciliation.stock_count = self.name
 		if self.posts_variance():
 			self.set_variance_account(reconciliation)
+			mark_count_reconciliation(reconciliation)
 		self.set_reconciliation_department(reconciliation)
 		if reconciliation.meta.has_field("stock_adjustment_reason"):
 			reconciliation.stock_adjustment_reason = _(
@@ -1257,26 +1259,6 @@ def get_count_variance_account(warehouse):
 	if not warehouse or not frappe.db.has_column("Warehouse", "stock_adjustment_account"):
 		return None
 	return frappe.db.get_value("Warehouse", warehouse, "stock_adjustment_account") or None
-
-
-def validate_variance_account(account, company):
-	data = frappe.db.get_value(
-		"Account", account, ["company", "root_type", "is_group", "account_type", "disabled"], as_dict=True
-	)
-	if (
-		not data
-		or data.company != company
-		or data.root_type != "Expense"
-		or data.is_group
-		or data.disabled
-		or data.account_type == "Stock"
-	):
-		frappe.throw(
-			_(
-				"Count Variance Account {0} must be an enabled expense account of {1}, "
-				"not a group or Stock account."
-			).format(account, company)
-		)
 
 
 @frappe.whitelist()

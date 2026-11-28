@@ -1,0 +1,79 @@
+{
+ "autoname": "field:team_name",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "section_team",
+  "team_name",
+  "company",
+  "column_team",
+  "disabled",
+  "section_members",
+  "members"
+ ],
+ "fields": [
+  {
+   "fieldname": "section_team",
+   "fieldtype": "Section Break",
+   "label": "Team Details"
+  },
+  {
+   "fieldname": "team_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Team Name",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_team",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "disabled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Disabled"
+  },
+  {
+   "fieldname": "section_members",
+   "fieldtype": "Section Break",
+   "label": "Team Members"
+  },
+  {
+   "fieldname": "members",
+   "fieldtype": "Table",
+   "label": "Team Members",
+   "options": "Quality Inspection Team Member",
+   "description": "Eligible inspectors share the inspection queue. Opening an inspection does not reserve or assign it."
+  }
+ ],
+ "module": "Quality Management",
+ "name": "Quality Inspection Team",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "role": "System Manager",
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "Employee"
+  }
+ ],
+ "sort_field": "team_name",
+ "sort_order": "ASC",
+ "title_field": "team_name",
+ "track_changes": 1
+}

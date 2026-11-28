@@ -926,7 +926,7 @@ class PickList(TransactionBase):
 			frappe.throw(_("Closed Pick List cannot reserve stock. Reopen it first."))
 		if self.status in ("Open", "Partly Delivered"):
 			# what a Close or a delivery left: only what is still to deliver is reserved, never a delivered unit
-			from connect_diagnostics_setup.stock.outgoing_inspection import rejected_moved_by_row
+			from erpnext.stock.outgoing_inspection import rejected_moved_by_row
 
 			delivered = delivered_by_row(self)
 			moved = rejected_moved_by_row(self.name)
@@ -1488,7 +1488,7 @@ def open_reservations_by_row(pick_list) -> dict[str, float]:
 def get_reopen_unreserved(pick) -> list[str]:
 	"""One line for each row of a Pick List whose reservation, after a Reopen, holds more or less than the row still
 	has to deliver (picked less delivered, less what a rejected movement took out): it holds exactly that."""
-	from connect_diagnostics_setup.stock.outgoing_inspection import rejected_moved_by_row
+	from erpnext.stock.outgoing_inspection import rejected_moved_by_row
 
 	moved = rejected_moved_by_row(pick.name)
 	delivered = delivered_by_row(pick)
@@ -1604,7 +1604,7 @@ def get_reopen_over_picks(pick) -> list[str]:
 	"""One line for each Sales Order Item that an open Pick List (another one, made after this was closed) already
 	picks for, so that the remaining quantity of this closed pick would make the order picked twice. The Sales Order
 	Item's picked quantity no longer counts this pick's remainder while it is closed."""
-	from connect_diagnostics_setup.stock.outgoing_inspection import rejected_moved_by_row
+	from erpnext.stock.outgoing_inspection import rejected_moved_by_row
 
 	moved = rejected_moved_by_row(pick.name)
 	delivered = delivered_by_row(pick)
@@ -1674,7 +1674,7 @@ def get_reopen_shortages(pick) -> list[str]:
 	"""One line for each row of a closed Pick List whose remaining quantity (picked less delivered) is not free any
 	more: the warehouse, Storage Location, Batch and Serial Nos it names, less what other open Pick Lists hold.
 	Empty when everything is still there."""
-	from connect_diagnostics_setup.stock.outgoing_inspection import rejected_moved_by_row
+	from erpnext.stock.outgoing_inspection import rejected_moved_by_row
 
 	from erpnext.stock.doctype.storage_location.storage_location import location_stock
 
@@ -1849,7 +1849,7 @@ def get_picked_items_qty(items, contains_packed_items=False) -> list[dict]:
 			pi_item.sales_order,
 		).where(pi_item.sales_order_item.isin(items))
 
-	from connect_diagnostics_setup.stock.outgoing_inspection import adjust_picked_totals
+	from erpnext.stock.outgoing_inspection import adjust_picked_totals
 
 	return adjust_picked_totals(query.run(as_dict=True), contains_packed_items)
 
@@ -2440,7 +2440,7 @@ def create_delivery_wo_so(pick_list, target, target_doc=None):
 	}
 	map_pl_locations(pick_list, item_table_mapper_without_so, target_doc)
 	if target == "Delivery Note":
-		from connect_diagnostics_setup.stock.outgoing_inspection import prepare_delivery
+		from erpnext.stock.outgoing_inspection import prepare_delivery
 
 		prepare_delivery(target_doc, pick_list)
 	target_doc.flags.ignore_mandatory = True
@@ -2505,7 +2505,7 @@ def create_delivery_with_so(sales_dict, pick_list, target):
 		document = create_delivery_from_so(pick_list, sales_dict[key], target)
 		if document:
 			if target == "Delivery Note":
-				from connect_diagnostics_setup.stock.outgoing_inspection import prepare_delivery
+				from erpnext.stock.outgoing_inspection import prepare_delivery
 
 				prepare_delivery(document, pick_list)
 			document.flags.ignore_mandatory = True

@@ -1,0 +1,1 @@
+{"doctype":"Report","modified":"2026-11-19 12:00:00.000000","name":"Repair Parts Ledger","report_name":"Repair Parts Ledger","module":"Support","ref_doctype":"Asset Repair","report_type":"Script Report","is_standard":"Yes","roles":[{"role":"Maintenance User"},{"role":"Maintenance Manager"},{"role":"Stock User"},{"role":"Stock Manager"}]}

@@ -13,6 +13,8 @@
   "naming_series",
   "title",
   "material_request_type",
+  "repair_source_type",
+  "repair_source",
   "loan_approval_band",
   "loan_group_approver_roles",
   "loan_release_pending",
@@ -135,6 +137,24 @@
    "label": "Purpose",
    "options": "Purchase\nMaterial Transfer\nMaterial Issue\nAsset Transfer\nCustomer Demo\nBorrow\nCustomer Borrow",
    "reqd": 1
+  },
+  {
+   "depends_on": "eval:doc.repair_source_type",
+   "fieldname": "repair_source_type",
+   "fieldtype": "Select",
+   "label": "Repair Type",
+   "no_copy": 1,
+   "options": "\nAsset Repair",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.repair_source_type",
+   "fieldname": "repair_source",
+   "fieldtype": "Dynamic Link",
+   "label": "Repair",
+   "no_copy": 1,
+   "options": "repair_source_type",
+   "read_only": 1
   },
   {
    "depends_on": "eval:['Customer Demo', 'Borrow', 'Customer Borrow'].includes(doc.material_request_type)",

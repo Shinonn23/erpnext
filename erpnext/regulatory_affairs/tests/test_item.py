@@ -20,7 +20,7 @@ COVERAGE = dict(
 
 
 class TestAssessmentVisibility(unittest.TestCase):
-	def test_registration_assessment_has_no_qi_dependent_container(self):
+	def test_sales_item_checkbox_controls_the_assessment_on_the_regulatory_tab(self):
 		path = Path(__file__).resolve().parents[2] / "stock/doctype/item/item.json"
 		metadata = json.loads(path.read_text())
 		fields = {field["fieldname"]: field for field in metadata["fields"]}
@@ -32,11 +32,12 @@ class TestAssessmentVisibility(unittest.TestCase):
 			elif field["fieldtype"] == "Section Break":
 				section = field
 			if name == "registration_requirement":
+				self.assertEqual(tab["fieldname"], "regulatory_tab")
 				for container in (tab, section):
 					if container:
 						self.assertFalse(container.get("depends_on"))
 						self.assertFalse(container.get("hidden"))
-				self.assertIn("regulatory_product_category", field["depends_on"])
+				self.assertEqual(field["depends_on"], "is_sales_item")
 				break
 		else:
 			self.fail("Registration assessment field is missing")

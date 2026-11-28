@@ -143,6 +143,7 @@
    "in_list_view": 1
   },
   {
+   "allow_on_submit": 1,
    "fieldname": "expected_return_date",
    "fieldtype": "Date",
    "label": "Expected Return Date",
@@ -523,5 +524,6 @@
  ],
  "sort_field": "modified",
  "sort_order": "DESC",
+ "track_changes": 1,
  "modified": "2026-11-19 10:00:00.000000"
 }
